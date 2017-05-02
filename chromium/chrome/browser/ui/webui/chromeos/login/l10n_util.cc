@@ -25,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
@@ -321,6 +322,13 @@ void GetKeyboardLayoutsForResolvedLocale(
        it != layouts.end(); ++it) {
     const input_method::InputMethodDescriptor* ime =
         util->GetInputMethodDescriptorFromId(*it);
+    // TODO(tbarzic): This is added to avoid crash loop on starting public
+    //     session. The problem should be properly fixed, and this workaround
+    //     removed.
+    if (!ime) {
+      LOG(WARNING) << *it << " layout not found.";
+      continue;
+    }
     if (!InsertString(ime->id(), &input_methods_added))
       continue;
     input_methods_list->Append(CreateInputMethodsEntry(*ime, selected));

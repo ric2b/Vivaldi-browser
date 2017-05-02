@@ -214,7 +214,12 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
    */
   __gCrWeb.fillPasswordFormWithData =
       function(formData, username, password, win, opt_normalizedOrigin) {
-    var doc = win.document;
+    var doc = null;
+
+    try {
+      doc = win.document;
+    } catch(e) {
+    }
 
     // If unable to read the 'document' property from a frame in a different
     // origin, do nothing.
@@ -338,10 +343,14 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
    *    look for password forms.
    */
   __gCrWeb.getPasswordFormDataList = function(formDataList, win) {
-    var doc = win.document;
+    var doc = null;
 
-    // We may not be allowed to read the 'document' property from a frame
-    // that is in a different domain.
+    try {
+      // Security violations may generate an exception or null to be returned.
+      doc = win.document;
+    } catch(e) {
+    }
+
     if (!doc) {
       return;
     }

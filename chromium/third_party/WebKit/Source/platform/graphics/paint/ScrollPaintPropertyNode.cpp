@@ -10,8 +10,25 @@ ScrollPaintPropertyNode* ScrollPaintPropertyNode::root() {
   DEFINE_STATIC_REF(ScrollPaintPropertyNode, root,
                     (ScrollPaintPropertyNode::create(
                         nullptr, TransformPaintPropertyNode::root(), IntSize(),
-                        IntSize(), false, false)));
+                        IntSize(), false, false, 0)));
   return root;
+}
+
+String ScrollPaintPropertyNode::toString() const {
+  FloatSize scrollOffset =
+      m_scrollOffsetTranslation->matrix().to2DTranslation();
+  std::string mainThreadScrollingReasonsAsText =
+      MainThreadScrollingReason::mainThreadScrollingReasonsAsText(
+          m_mainThreadScrollingReasons);
+  return String::format(
+      "parent=%p scrollOffsetTranslation=%s clip=%s bounds=%s "
+      "userScrollableHorizontal=%s"
+      " userScrollableVertical=%s mainThreadScrollingReasons=%s",
+      m_parent.get(), scrollOffset.toString().ascii().data(),
+      m_clip.toString().ascii().data(), m_bounds.toString().ascii().data(),
+      m_userScrollableHorizontal ? "yes" : "no",
+      m_userScrollableVertical ? "yes" : "no",
+      mainThreadScrollingReasonsAsText.c_str());
 }
 
 }  // namespace blink

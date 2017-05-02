@@ -4,22 +4,22 @@
 //
 // TCP cubic send side congestion algorithm, emulates the behavior of TCP cubic.
 
-#ifndef NET_QUIC_CONGESTION_CONTROL_TCP_CUBIC_SENDER_PACKETS_H_
-#define NET_QUIC_CONGESTION_CONTROL_TCP_CUBIC_SENDER_PACKETS_H_
+#ifndef NET_QUIC_CORE_CONGESTION_CONTROL_TCP_CUBIC_SENDER_PACKETS_H_
+#define NET_QUIC_CORE_CONGESTION_CONTROL_TCP_CUBIC_SENDER_PACKETS_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/congestion_control/cubic.h"
 #include "net/quic/core/congestion_control/hybrid_slow_start.h"
 #include "net/quic/core/congestion_control/prr_sender.h"
 #include "net/quic/core/congestion_control/tcp_cubic_sender_base.h"
 #include "net/quic/core/quic_bandwidth.h"
 #include "net/quic/core/quic_connection_stats.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -29,7 +29,7 @@ namespace test {
 class TcpCubicSenderPacketsPeer;
 }  // namespace test
 
-class NET_EXPORT_PRIVATE TcpCubicSenderPackets : public TcpCubicSenderBase {
+class QUIC_EXPORT_PRIVATE TcpCubicSenderPackets : public TcpCubicSenderBase {
  public:
   // Reno option and max_tcp_congestion_window are provided for testing.
   TcpCubicSenderPackets(const QuicClock* clock,
@@ -41,6 +41,8 @@ class NET_EXPORT_PRIVATE TcpCubicSenderPackets : public TcpCubicSenderBase {
   ~TcpCubicSenderPackets() override;
 
   // Start implementation of SendAlgorithmInterface.
+  void SetFromConfig(const QuicConfig& config,
+                     Perspective perspective) override;
   void SetNumEmulatedConnections(int num_connections) override;
   void OnConnectionMigration() override;
   QuicByteCount GetCongestionWindow() const override;
@@ -63,7 +65,8 @@ class NET_EXPORT_PRIVATE TcpCubicSenderPackets : public TcpCubicSenderBase {
                     QuicByteCount prior_in_flight) override;
   void MaybeIncreaseCwnd(QuicPacketNumber acked_packet_number,
                          QuicByteCount acked_bytes,
-                         QuicByteCount prior_in_flight) override;
+                         QuicByteCount prior_in_flight,
+                         QuicTime event_time) override;
   void HandleRetransmissionTimeout() override;
 
  private:
@@ -102,4 +105,4 @@ class NET_EXPORT_PRIVATE TcpCubicSenderPackets : public TcpCubicSenderBase {
 
 }  // namespace net
 
-#endif  // NET_QUIC_CONGESTION_CONTROL_TCP_CUBIC_SENDER_H_
+#endif  // NET_QUIC_CORE_CONGESTION_CONTROL_TCP_CUBIC_SENDER_PACKETS_H_

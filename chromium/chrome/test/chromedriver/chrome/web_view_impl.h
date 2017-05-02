@@ -31,17 +31,13 @@ class NetworkConditionsOverrideManager;
 class HeapSnapshotTaker;
 struct KeyEvent;
 struct MouseEvent;
-class NavigationTracker;
-class NonBlockingNavigationTracker;
 class PageLoadStrategy;
 class Status;
 
 class WebViewImpl : public WebView {
  public:
   WebViewImpl(const std::string& id,
-              const BrowserInfo* browser_info,
-              std::unique_ptr<DevToolsClient> client);
-  WebViewImpl(const std::string& id,
+              const bool w3c_compliant,
               const BrowserInfo* browser_info,
               std::unique_ptr<DevToolsClient> client,
               const DeviceMetrics* device_metrics,
@@ -132,6 +128,7 @@ class WebViewImpl : public WebView {
   Status StopProfileInternal();
 
   std::string id_;
+  bool w3c_compliant_;
   const BrowserInfo* browser_info_;
   std::unique_ptr<DomTracker> dom_tracker_;
   std::unique_ptr<FrameTracker> frame_tracker_;
@@ -174,7 +171,8 @@ Status GetNodeIdFromFunction(DevToolsClient* client,
                              const std::string& function,
                              const base::ListValue& args,
                              bool* found_node,
-                             int* node_id);
+                             int* node_id,
+                             bool w3c_compliant);
 
 }  // namespace internal
 

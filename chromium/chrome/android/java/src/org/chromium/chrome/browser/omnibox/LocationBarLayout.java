@@ -14,7 +14,6 @@ import android.animation.ObjectAnimator;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -151,7 +150,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     protected TintedImageButton mDeleteButton;
     protected TintedImageButton mMicButton;
     protected UrlBar mUrlBar;
-    private ActionModeController mActionModeController = null;
+    private ActionModeController mActionModeController;
 
     private AutocompleteController mAutocomplete;
 
@@ -887,9 +886,11 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         boolean isOffline = getCurrentTab() != null && getCurrentTab().isOfflinePage();
         boolean isTablet = DeviceFormFactor.isTablet(getContext());
 
-        if (mUrlHasFocus) {
-            return isTablet ? BUTTON_TYPE_NAVIGATION_ICON : BUTTON_TYPE_NONE;
-        }
+        // The navigation icon type is only applicable on tablets.  While smaller form factors do
+        // not have an icon visible to the user when the URL is focused, BUTTON_TYPE_NONE is not
+        // returned as it will trigger an undesired jump during the animation as it attempts to
+        // hide the icon.
+        if (mUrlHasFocus && isTablet) return BUTTON_TYPE_NAVIGATION_ICON;
 
         return getSecurityIconResource(getSecurityLevel(), !isTablet, isOffline) != 0
                 ? BUTTON_TYPE_SECURITY_ICON
@@ -1029,13 +1030,13 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         if (hasFocus && currentTab != null && !currentTab.isIncognito()) {
             if (mNativeInitialized
                     && TemplateUrlService.getInstance().isDefaultSearchEngineGoogle()) {
-                GeolocationHeader.primeLocationForGeoHeader(getContext());
+                GeolocationHeader.primeLocationForGeoHeader();
             } else {
                 mDeferredNativeRunnables.add(new Runnable() {
                     @Override
                     public void run() {
                         if (TemplateUrlService.getInstance().isDefaultSearchEngineGoogle()) {
-                            GeolocationHeader.primeLocationForGeoHeader(getContext());
+                            GeolocationHeader.primeLocationForGeoHeader();
                         }
                     }
                 });
@@ -1273,7 +1274,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     public static int getSecurityIconResource(
             int securityLevel, boolean isSmallDevice, boolean isOfflinePage) {
         // Both conditions should be met, because isOfflinePage might take longer to be cleared.
-        if (securityLevel == ConnectionSecurityLevel.NONE && isOfflinePage) {
+        // HTTP_SHOW_WARNING added because of field trail causing http://crbug.com/671453.
+        if ((securityLevel == ConnectionSecurityLevel.NONE
+                    || securityLevel == ConnectionSecurityLevel.HTTP_SHOW_WARNING)
+                && isOfflinePage) {
             return R.drawable.offline_pin_round;
         }
         switch (securityLevel) {
@@ -1423,10 +1427,11 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      */
     private void updateVerboseStatusVisibility() {
         // Because is offline page is cleared a bit slower, we also ensure that connection security
-        // level is NONE.
+        // level is NONE or HTTP_SHOW_WARNING (http://crbug.com/671453).
         boolean verboseStatusVisible = !mUrlHasFocus && getCurrentTab() != null
                 && getCurrentTab().isOfflinePage()
-                && getSecurityLevel() == ConnectionSecurityLevel.NONE;
+                && (getSecurityLevel() == ConnectionSecurityLevel.NONE
+                           || getSecurityLevel() == ConnectionSecurityLevel.HTTP_SHOW_WARNING);
 
         int verboseStatusVisibility = verboseStatusVisible ? VISIBLE : GONE;
 
@@ -2191,8 +2196,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         // Loads the |url| in the current ContentView and gives focus to the ContentView.
         if (currentTab != null && !url.isEmpty()) {
             LoadUrlParams loadUrlParams = new LoadUrlParams(url);
-            loadUrlParams.setVerbatimHeaders(
-                    GeolocationHeader.getGeoHeader(getContext(), url, currentTab.isIncognito()));
+            loadUrlParams.setVerbatimHeaders(GeolocationHeader.getGeoHeader(url, currentTab));
             loadUrlParams.setTransitionType(transition | PageTransition.FROM_ADDRESS_BAR);
             currentTab.loadUrl(loadUrlParams);
 
@@ -2471,8 +2475,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     // WindowAndroid.IntentCallback implementation:
     @Override
-    public void onIntentCompleted(WindowAndroid window, int resultCode,
-            ContentResolver contentResolver, Intent data) {
+    public void onIntentCompleted(WindowAndroid window, int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK) return;
         if (data.getExtras() == null) return;
 

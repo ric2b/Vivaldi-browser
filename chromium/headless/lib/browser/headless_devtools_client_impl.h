@@ -115,7 +115,8 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
       const char* method,
       base::Callback<void(const base::Value&)> callback) override;
 
-  void AttachToHost(content::DevToolsAgentHost* agent_host);
+  bool AttachToHost(content::DevToolsAgentHost* agent_host);
+  void ForceAttachToHost(content::DevToolsAgentHost* agent_host);
   void DetachFromHost(content::DevToolsAgentHost* agent_host);
 
  private:
@@ -162,6 +163,8 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   std::unordered_map<int, Callback> pending_messages_;
 
   EventHandlerMap event_handlers_;
+
+  bool renderer_crashed_;
 
   accessibility::ExperimentalDomain accessibility_domain_;
   animation::ExperimentalDomain animation_domain_;

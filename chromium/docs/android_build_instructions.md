@@ -1,126 +1,180 @@
-# Android Build Instructions
+# Checking out and building Chromium for Android
+
+There are instructions for other platforms linked from the
+[get the code](get_the_code.md) page.
+
+## Instructions for Google Employees
+
+Are you a Google employee? See
+[go/building-chrome](https://goto.google.com/building-chrome) instead.
 
 [TOC]
 
-## Prerequisites
+## System requirements
 
-A Linux build machine capable of building [Chrome for
-Linux](https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions_prerequisites.md).
-Other (Mac/Windows) platforms are not supported for Android.
+* A 64-bit Intel machine running Linux with at least 8GB of RAM. More
+  than 16GB is highly recommended.
+* At least 100GB of free disk space.
+* You must have Git and Python installed already.
 
-## Getting the code
+Most development is done on Ubuntu. Other distros may or may not work;
+see the [Linux instructions](linux_build_instructions.md) for some suggestions.
 
-First, check out and install the [depot\_tools
-package](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).
+Building the Android client on Windows or Mac is not supported and doesn't work.
 
-Then, if you have no existing checkout, create your source directory and
-get the code:
+## Install `depot_tools`
+
+Clone the `depot_tools` repository:
 
 ```shell
-mkdir ~/chromium && cd ~/chromium
-fetch --nohooks android # This will take 30 minutes on a fast connection
+$ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 ```
+
+Add `depot_tools` to the end of your PATH (you will probably want to put this
+in your `~/.bashrc` or `~/.zshrc`). Assuming you cloned `depot_tools`
+to `/path/to/depot_tools`:
+
+```shell
+$ export PATH="$PATH:/path/to/depot_tools"
+```
+
+## Get the code
+
+Create a `chromium` directory for the checkout and change to it (you can call
+this whatever you like and put it wherever you like, as
+long as the full path has no spaces):
+
+```shell
+$ mkdir ~/chromium && cd ~/chromium
+$ fetch --nohooks android
+```
+
+If you don't want the full repo history, you can save a lot of time by
+adding the `--no-history` flag to `fetch`.
+
+Expect the command to take 30 minutes on even a fast connection, and many
+hours on slower ones.
+
+If you've already installed the build dependencies on the machine (from another
+checkout, for example), you can omit the `--nohooks` flag and `fetch`
+will automatically execute `gclient runhooks` at the end.
+
+When `fetch` completes, it will have created a hidden `.gclient` file and a
+directory called `src` in the working directory. The remaining instructions
+assume you have switched to the `src` directory:
+
+```shell
+$ cd src
+```
+
+### Converting an existing Linux checkout
 
 If you have an existing Linux checkout, you can add Android support by
-appending `target_os = ['android']` to your .gclient file (in the
-directory above src):
+appending `target_os = ['android']` to your `.gclient` file (in the
+directory above `src`):
 
 ```shell
-cat > .gclient <<EOF
- solutions = [ ...existing stuff in here... ]
- target_os = [ 'android' ] # Add this to get Android stuff checked out.
-EOF
+$ echo "target_os = [ 'android' ]" >> ../.gclient
 ```
 
-Then run gclient sync to get the Android stuff checked out:
+Then run `gclient sync` to pull the new Android dependencies:
 
 ```shell
-gclient sync
+$ gclient sync
 ```
 
-## (Optional) Check out LKGR
+(This is the only difference between `fetch android` and `fetch chromium`.)
 
-If you want a single build of Chromium in a known good state, sync to
-the LKGR ("last known good revision"). You can find it
-[here](http://chromium-status.appspot.com/lkgr), and the last 100
-[here](http://chromium-status.appspot.com/revisions). Run:
+### Install additional build dependencies
+
+Once you have checked out the code, run
 
 ```shell
-gclient sync --nohooks -r <lkgr-sha1>
+$ build/install-build-deps-android.sh
 ```
 
-This is not needed for a typical developer workflow; only for one-time
-builds of Chromium.
+to get all of the dependencies you need to build on Linux, *plus* all of the
+Android-specific dependencies (you need some of the regular Linux dependencies
+because an Android build includes a bunch of the Linux tools and utilities).
 
-## Configure GN
+### Run the hooks
 
-Create a build directory and set the build flags with:
+Once you've run `install-build-deps` at least once, you can now run the
+Chromium-specific hooks, which will download additional binaries and other
+things you might need:
 
 ```shell
-gn args out/Default
+$ gclient runhooks
 ```
 
- You can replace out/Default with another name you choose inside the out
-directory.
+*Optional*: You can also [install API
+keys](https://www.chromium.org/developers/how-tos/api-keys) if you want your
+build to talk to some Google services, but this is not necessary for most
+development and testing purposes.
 
-Also be aware that some scripts (e.g. tombstones.py, adb_gdb.py)
-require you to set `CHROMIUM_OUTPUT_DIR=out/Default`.
-
-This command will bring up your editor with the GN build args. In this
-file add:
-
-```
-target_os = "android"
-target_cpu = "arm"  # (default)
-is_debug = true  # (default)
-
-# Other args you may want to set:
-is_component_build = true
-is_clang = true
-symbol_level = 1  # Faster build with fewer symbols. -g1 rather than -g2
-enable_incremental_javac = true  # Much faster; experimental
-```
-
-You can also specify `target_cpu` values of "x86" and "mipsel". Re-run
-gn args on that directory to edit the flags in the future. See the [GN
-build
-configuration](https://www.chromium.org/developers/gn-build-configuration)
-page for other flags you may want to set.
-
-### Install build dependencies
-
-Update the system packages required to build by running:
-
-```shell
-./build/install-build-deps-android.sh
-```
+### Configure the JDK
 
 Make also sure that OpenJDK 1.7 is selected as default:
 
-`sudo update-alternatives --config javac`
-`sudo update-alternatives --config java`
-`sudo update-alternatives --config javaws`
-`sudo update-alternatives --config javap`
-`sudo update-alternatives --config jar`
-`sudo update-alternatives --config jarsigner`
-
-### Synchronize sub-directories.
-
 ```shell
-gclient sync
+$ sudo update-alternatives --config javac
+$ sudo update-alternatives --config java
+$ sudo update-alternatives --config javaws
+$ sudo update-alternatives --config javap
+$ sudo update-alternatives --config jar
+$ sudo update-alternatives --config jarsigner
 ```
 
-## Build and install the APKs
+## Setting up the build
 
-If the `adb_install_apk.py` script below fails, make sure aapt is in
-your PATH. If not, add aapt's path to your PATH environment variable (it
-should be
+Chromium uses [Ninja](https://ninja-build.org) as its main build tool along
+with a tool called [GN](../tools/gn/docs/quick_start.md) to generate `.ninja`
+files. You can create any number of *build directories* with different
+configurations. To create a build directory which builds Chrome for Android,
+run:
+
+```shell
+$ gn gen '--args="target_os="android"' out/Default
+```
+
+* You only have to run this once for each new build directory, Ninja will
+  update the build files as needed.
+* You can replace `Default` with another name, but
+  it should be a subdirectory of `out`.
+* For other build arguments, including release settings, see [GN build
+  configuration](https://www.chromium.org/developers/gn-build-configuration).
+  The default will be a debug component build matching the current host
+  operating system and CPU.
+* For more info on GN, run `gn help` on the command line or read the
+  [quick start guide](../tools/gn/docs/quick_start.md).
+
+Also be aware that some scripts (e.g. `tombstones.py`, `adb_gdb.py`)
+require you to set `CHROMIUM_OUTPUT_DIR=out/Default`.
+
+## Build Chromium
+
+Build Chromium with Ninja using the command:
+
+```shell
+$ ninja -C out/Default chrome_public_apk
+```
+
+You can get a list of all of the other build targets from GN by running `gn ls
+out/Default` from the command line. To compile one, pass the GN label to Ninja
+with no preceding "//" (so, for `//chrome/test:unit_tests` use `ninja -C
+out/Default chrome/test:unit_tests`).
+
+## Installing and Running Chromium on a device
+
+If the `adb_install_apk.py` script below fails, make sure `aapt` is in your
+PATH. If not, add `aapt`'s parent directory to your `PATH` environment variable
+(it should be
 `/path/to/src/third_party/android_tools/sdk/build-tools/{latest_version}/`).
 
 Prepare the environment:
 
 ```shell
-. build/android/envsetup.sh
+$ . build/android/envsetup.sh
 ```
 
 ### Plug in your Android device
@@ -164,7 +218,7 @@ The app will appear on the device as "Chromium".
 ### Build Content shell
 
 Wraps the content module (but not the /chrome embedder). See
-[http://www.chromium.org/developers/content-module](http://www.chromium.org/developers/content-module)
+[https://www.chromium.org/developers/content-module](https://www.chromium.org/developers/content-module)
 for details on the content module and content shell.
 
 ```shell
@@ -185,9 +239,9 @@ export CHROMIUM_OUT_DIR=out_android
 
 ### Build WebView shell
 
-[Android WebView](http://developer.android.com/reference/android/webkit/WebView.html)
+[Android WebView](https://developer.android.com/reference/android/webkit/WebView.html)
 is a system framework component. Since Android KitKat, it is implemented using
-Chromium code (based off the [content module](http://dev.chromium.org/developers/content-module)).
+Chromium code (based off the [content module](https://dev.chromium.org/developers/content-module)).
 It is possible to test modifications to WebView using a simple test shell. The
 WebView shell is a view with a URL bar at the top (see [code](https://code.google.com/p/chromium/codesearch#chromium/src/android_webview/test/shell/src/org/chromium/android_webview/test/AwTestContainerView.java))
 and is **independent** of the WebView **implementation in the Android system** (
@@ -199,7 +253,7 @@ ninja -C out/Release android_webview_apk
 build/android/adb_install_apk.py out/Release/apks/AndroidWebView.apk
 ```
 
-If, instead, you want to build the complete Android WebView framework component and test the effect of your chromium changes in other Android app using the WebView, you should follow the [Android AOSP + chromium WebView instructions](http://www.chromium.org/developers/how-tos/build-instructions-android-webview)
+If, instead, you want to build the complete Android WebView framework component and test the effect of your chromium changes in other Android app using the WebView, you should follow the [Android AOSP + chromium WebView instructions](https://www.chromium.org/developers/how-tos/build-instructions-android-webview)
 
 ### Running
 
@@ -227,7 +281,7 @@ build/android/adb_run_android_webview_shell http://example.com
 
 Logging is often the easiest way to understand code flow. In C++ you can print
 log statements using the LOG macro or printf(). In Java, you can print log
-statements using [android.util.Log](http://developer.android.com/reference/android/util/Log.html):
+statements using [android.util.Log](https://developer.android.com/reference/android/util/Log.html):
 
 `Log.d("sometag", "Reticulating splines progress = " + progress);`
 
@@ -256,11 +310,12 @@ For information on running tests, see [android\_test\_instructions.md](https://c
 ### Faster Edit/Deploy (GN only)
 
 GN's "incremental install" uses reflection and side-loading to speed up the edit
-& deploy cycle (normally < 10 seconds).
+& deploy cycle (normally < 10 seconds). The initial launch of the apk will be
+a little slower since updated dex files are installed manually.
 
 *   Make sure to set` is_component_build = true `in your GN args
 *   All apk targets have \*`_incremental` targets defined (e.g.
-    `chrome_public_apk_incremental`)
+    `chrome_public_apk_incremental`) except for Webview and Monochrome
 
 Here's an example:
 
@@ -290,9 +345,30 @@ To uninstall:
 out/Default/bin/install_chrome_public_apk_incremental -v --uninstall
 ```
 
-### Miscellaneous
+A subtly erroneous flow arises when you build a regular apk but install an
+incremental apk (e.g.
+`ninja -C out/Default foo_apk && out/Default/bin/install_foo_apk_incremental`).
+Setting `incremental_apk_by_default = true` in your GN args aliases regular
+targets as their incremental counterparts. With this arg set, the commands
+above become:
 
-#### Rebuilding libchrome.so for a particular release
+```shell
+ninja -C out/Default chrome_public_apk
+out/Default/bin/install_chrome_public_apk
+
+ninja -C out/Default base_unittests
+out/Default/bin/run_base_unittests
+
+ninja -C out/Default chrome_public_test_apk
+out/Default/bin/run_chrome_public_test_apk
+```
+
+If you want to build a non-incremental apk you'll need to remove
+`incremental_apk_by_default` from your GN args.
+
+## Tips, tricks, and troubleshooting
+
+### Rebuilding libchrome.so for a particular release
 
 These instructions are only necessary for Chrome 51 and earlier.
 

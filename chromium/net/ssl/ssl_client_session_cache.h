@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_SSL_SSL_CLIENT_SESSION_CACHE_H
-#define NET_SSL_SSL_CLIENT_SESSION_CACHE_H
+#ifndef NET_SSL_SSL_CLIENT_SESSION_CACHE_H_
+#define NET_SSL_SSL_CLIENT_SESSION_CACHE_H_
 
 #include <stddef.h>
 #include <time.h>
@@ -24,6 +24,9 @@
 
 namespace base {
 class Clock;
+namespace trace_event {
+class ProcessMemoryDump;
+}
 }
 
 namespace net {
@@ -43,8 +46,14 @@ class NET_EXPORT SSLClientSessionCache : public base::MemoryCoordinatorClient {
   size_t size() const;
 
   // Returns the session associated with |cache_key| and moves it to the front
-  // of the MRU list. Returns nullptr if there is none.
-  bssl::UniquePtr<SSL_SESSION> Lookup(const std::string& cache_key);
+  // of the MRU list. Returns nullptr if there is none. If |count| is non-null,
+  // |*count| will contain the number of times this session has been looked up
+  // (including this call).
+  bssl::UniquePtr<SSL_SESSION> Lookup(const std::string& cache_key, int* count);
+
+  // Resets the count returned by Lookup to 0 for the session associated with
+  // |cache_key|.
+  void ResetLookupCount(const std::string& cache_key);
 
   // Inserts |session| into the cache at |cache_key|. If there is an existing
   // one, it is released. Every |expiration_check_count| calls, the cache is
@@ -56,7 +65,20 @@ class NET_EXPORT SSLClientSessionCache : public base::MemoryCoordinatorClient {
 
   void SetClockForTesting(std::unique_ptr<base::Clock> clock);
 
+  // Dumps memory allocation stats. |pmd| is the ProcessMemoryDump of the
+  // browser process.
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd);
+
  private:
+  struct Entry {
+    Entry();
+    Entry(Entry&&);
+    ~Entry();
+
+    int lookups;
+    bssl::UniquePtr<SSL_SESSION> session;
+  };
+
   // base::MemoryCoordinatorClient implementation:
   void OnMemoryStateChange(base::MemoryState state) override;
 
@@ -72,7 +94,7 @@ class NET_EXPORT SSLClientSessionCache : public base::MemoryCoordinatorClient {
 
   std::unique_ptr<base::Clock> clock_;
   Config config_;
-  base::HashingMRUCache<std::string, bssl::UniquePtr<SSL_SESSION>> cache_;
+  base::HashingMRUCache<std::string, Entry> cache_;
   size_t lookups_since_flush_;
 
   // TODO(davidben): After https://crbug.com/458365 is fixed, replace this with
@@ -87,4 +109,4 @@ class NET_EXPORT SSLClientSessionCache : public base::MemoryCoordinatorClient {
 
 }  // namespace net
 
-#endif  // NET_SSL_SSL_CLIENT_SESSION_CACHE_H
+#endif  // NET_SSL_SSL_CLIENT_SESSION_CACHE_H_

@@ -14,6 +14,10 @@
 #include "ui/aura/aura_export.h"
 #include "ui/aura/mus/mus_types.h"
 
+namespace cc {
+class SurfaceInfo;
+}
+
 namespace gfx {
 class Rect;
 }
@@ -26,7 +30,6 @@ enum class OrderDirection;
 
 namespace aura {
 
-struct SurfaceInfo;
 class Window;
 class WindowTreeClient;
 
@@ -79,8 +82,11 @@ class AURA_EXPORT WindowMus {
   virtual void SetPredefinedCursorFromServer(ui::mojom::Cursor cursor) = 0;
   virtual void SetPropertyFromServer(const std::string& property_name,
                                      const std::vector<uint8_t>* data) = 0;
-  virtual void SetSurfaceIdFromServer(
-      std::unique_ptr<SurfaceInfo> surface_info) = 0;
+  virtual void SetSurfaceInfoFromServer(
+      const cc::SurfaceInfo& surface_info) = 0;
+  // The window was deleted on the server side. DestroyFromServer() should
+  // result in deleting |this|.
+  virtual void DestroyFromServer() = 0;
   virtual void AddTransientChildFromServer(WindowMus* child) = 0;
   virtual void RemoveTransientChildFromServer(WindowMus* child) = 0;
   // Called when a window was added/removed as a transient child.
@@ -96,6 +102,16 @@ class AURA_EXPORT WindowMus {
       const gfx::Rect& bounds) = 0;
   virtual std::unique_ptr<WindowMusChangeData> PrepareForServerVisibilityChange(
       bool value) = 0;
+
+  // Called when the window on the server has been destroyed and the client code
+  // is going to delete the window. The client may not immediately delete the
+  // window (as compared to DestroyFromServer()).
+  virtual void PrepareForDestroy() = 0;
+
+  // See TransientWindowClientObserver::OnWillRestackTransientChildAbove() for
+  // details on this and OnTransientRestackDone().
+  virtual void PrepareForTransientRestack(WindowMus* window) = 0;
+  virtual void OnTransientRestackDone(WindowMus* window) = 0;
 
   virtual void NotifyEmbeddedAppDisconnected() = 0;
 

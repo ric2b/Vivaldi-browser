@@ -12,7 +12,7 @@
 var ImageTransformation;
 
 /**
- * Each property of MetadataItem has error property also.
+ * Metadata of a file.
  * @constructor
  * @struct
  */
@@ -24,19 +24,9 @@ function MetadataItem() {
   this.size;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.sizeError;
-
-  /**
    * @public {!Date|undefined}
    */
   this.modificationTime;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.modificationTimeError;
 
   /**
    * Thumbnail URL obtained from external provider.
@@ -61,29 +51,14 @@ function MetadataItem() {
   this.imageWidth;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.imageWidthError;
-
-  /**
    * @public {number|undefined}
    */
   this.imageHeight;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.imageHeightError;
-
-  /**
    * @public {number|undefined}
    */
   this.imageRotation;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.imageRotationError;
 
   /**
    * Thumbnail obtained from content provider.
@@ -125,11 +100,6 @@ function MetadataItem() {
   this.pinned;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.pinnedError;
-
-  /**
    * Whether the entry is cached locally.
    * @public {boolean|undefined}
    */
@@ -147,20 +117,10 @@ function MetadataItem() {
   this.hosted;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.hostedError;
-
-  /**
    * Whether the entry is modified locally and not synched yet.
    * @public {boolean|undefined}
    */
   this.dirty;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.dirtyError;
 
   /**
    * Whether the entry is present or hosted;
@@ -169,19 +129,9 @@ function MetadataItem() {
   this.availableOffline;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.availableOfflineError;
-
-  /**
    * @public {boolean|undefined}
    */
   this.availableWhenMetered;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.availableWhenMeteredError;
 
   /**
    * @public {string|undefined}
@@ -199,20 +149,10 @@ function MetadataItem() {
   this.contentMimeType;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.contentMimeTypeError;
-
-  /**
    * Whether the entry is shared explicitly with me.
    * @public {boolean|undefined}
    */
   this.sharedWithMe;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.sharedWithMeError;
 
   /**
    * Whether the entry is shared publicly.
@@ -221,30 +161,15 @@ function MetadataItem() {
   this.shared;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.sharedError;
-
-  /**
    * URL for open a file in browser tab.
    * @public {string|undefined}
    */
   this.externalFileUrl;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.externalFileUrlError;
-
-  /**
    * @public {string|undefined}
    */
-  this.mediaTitle;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.mediaTitleError;
+  this.mediaAlbum;
 
   /**
    * @public {string|undefined}
@@ -252,9 +177,30 @@ function MetadataItem() {
   this.mediaArtist;
 
   /**
-   * @public {Error|undefined}
+   * Audio or video duration in seconds.
+   * @public {number|undefined}
    */
-  this.mediaArtistError;
+  this.mediaDuration;
+
+  /**
+   * @public {string|undefined}
+   */
+  this.mediaGenre;
+
+  /**
+   * @public {string|undefined}
+   */
+  this.mediaTitle;
+
+  /**
+   * @public {string|undefined}
+   */
+  this.mediaTrack;
+
+  /**
+   * @public {string|undefined}
+   */
+  this.mediaYearRecorded;
 
   /**
    * Mime type obtained by content provider based on URL.
@@ -264,28 +210,13 @@ function MetadataItem() {
   this.mediaMimeType;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.mediaMimeTypeError;
-
-  /**
    * "Image File Directory" obtained from EXIF header.
    * @public {!Object|undefined}
    */
   this.ifd;
 
   /**
-   * @public {Error|undefined}
-   */
-  this.ifdError;
-
-  /**
    * @public {boolean|undefined}
    */
   this.exifLittleEndian;
-
-  /**
-   * @public {Error|undefined}
-   */
-  this.exifLittleEndianError;
 }

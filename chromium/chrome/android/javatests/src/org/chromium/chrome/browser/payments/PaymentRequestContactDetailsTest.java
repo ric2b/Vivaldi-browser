@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.content.DialogInterface;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -13,7 +12,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
-import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -32,12 +30,31 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
             throws InterruptedException, ExecutionException, TimeoutException {
         AutofillTestHelper helper = new AutofillTestHelper();
         // The user has valid payer name, phone number and email address on disk.
-        String billingAddressId = helper.setProfile(new AutofillProfile("", "https://example.com",
-                true, "Jon Doe", "Google", "340 Main St", "CA", "Los Angeles", "", "90291", "",
-                "US", "555-555-5555", "jon.doe@google.com", "en-US"));
-        helper.setCreditCard(new CreditCard("", "https://example.com", true, true, "Jon Doe",
-                "4111111111111111", "1111", "12", "2050", "visa", R.drawable.pr_visa,
-                billingAddressId, "" /* serverId */));
+        helper.setProfile(new AutofillProfile("", "https://example.com", true, "Jon Doe", "Google",
+                "340 Main St", "CA", "Los Angeles", "", "90291", "", "US", "555-555-5555",
+                "jon.doe@google.com", "en-US"));
+
+        // Add the same profile but with a different address.
+        helper.setProfile(new AutofillProfile("", "https://example.com", true, "", "Google",
+                "999 Main St", "CA", "Los Angeles", "", "90291", "", "US", "555-555-5555",
+                "jon.doe@google.com", "en-US"));
+
+        // Add the same profile but without a phone number.
+        helper.setProfile(new AutofillProfile("", "https://example.com", true, "Jon Doe", "Google",
+                "340 Main St", "CA", "Los Angeles", "", "90291", "", "US", "" /* phone_number */,
+                "jon.doe@google.com", "en-US"));
+
+        // Add the same profile but without an email.
+        helper.setProfile(new AutofillProfile("", "https://example.com", true, "Jon Doe", "Google",
+                "340 Main St", "CA", "Los Angeles", "", "90291", "", "US", "555-555-5555",
+                "" /* emailAddress */, "en-US"));
+
+        // Add the same profile but without a name.
+        helper.setProfile(new AutofillProfile("" /* name */, "https://example.com", true, "",
+                "Google", "340 Main St", "CA", "Los Angeles", "", "90291", "", "US", "555-555-5555",
+                "jon.doe@google.com", "en-US"));
+
+        installPaymentApp(HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE);
     }
 
     /** Provide the existing valid payer name, phone number and email address to the merchant. */
@@ -45,9 +62,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
     @Feature({"Payments"})
     public void testPay() throws InterruptedException, ExecutionException, TimeoutException {
         triggerUIAndWait(mReadyToPay);
-        clickAndWait(R.id.button_primary, mReadyForUnmaskInput);
-        setTextInCardUnmaskDialogAndWait(R.id.card_unmask_input, "123", mReadyToUnmask);
-        clickCardUnmaskButtonAndWait(DialogInterface.BUTTON_POSITIVE, mDismissed);
+        clickAndWait(R.id.button_primary, mDismissed);
         expectResultContains(new String[] {"Jon Doe", "555-555-5555", "jon.doe@google.com"});
     }
 
@@ -61,7 +76,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         clickInContactInfoAndWait(R.id.payments_add_option_button, mReadyToEdit);
         setTextInEditorAndWait(new String[] {"", "+++", "jane.jones"}, mEditorTextUpdate);
         clickInEditorAndWait(R.id.payments_edit_done_button, mEditorValidationError);
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -77,9 +92,8 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         setTextInEditorAndWait(new String[] {"Jane Jones", "999-999-9999", "jane.jones@google.com"},
                 mEditorTextUpdate);
         clickInEditorAndWait(R.id.payments_edit_done_button, mReadyToPay);
-        clickAndWait(R.id.button_primary, mReadyForUnmaskInput);
-        setTextInCardUnmaskDialogAndWait(R.id.card_unmask_input, "123", mReadyToUnmask);
-        clickCardUnmaskButtonAndWait(DialogInterface.BUTTON_POSITIVE, mDismissed);
+
+        clickAndWait(R.id.button_primary, mDismissed);
         expectResultContains(new String[] {"Jane Jones", "999-999-9999", "jane.jones@google.com"});
     }
 
@@ -103,7 +117,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -131,6 +145,40 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         expectResultContains(new String[] {"Request cancelled"});
     }
 
+    /** Test that going into the editor and cancelling will leave the row checked. */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testEditContactAndCancelEditorShouldKeepContactSelected()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        triggerUIAndWait(mReadyToPay);
+        clickInContactInfoAndWait(R.id.payments_section, mReadyForInput);
+        expectContactDetailsRowIsSelected(0);
+        clickInContactInfoAndWait(R.id.payments_open_editor_pencil_button, mReadyToEdit);
+
+        // Cancel the editor.
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
+
+        // Expect the row to still be selected in the Contact Details section.
+        expectContactDetailsRowIsSelected(0);
+    }
+
+    /** Test that going into the "add" flow and cancelling will leave existing row checked. */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testAddContactAndCancelEditorShouldKeepContactSelected()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        triggerUIAndWait(mReadyToPay);
+        clickInContactInfoAndWait(R.id.payments_section, mReadyForInput);
+        expectContactDetailsRowIsSelected(0);
+        clickInContactInfoAndWait(R.id.payments_add_option_button, mReadyToEdit);
+
+        // Cancel the editor.
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
+
+        // Expect the existing row to still be selected in the Contact Details section.
+        expectContactDetailsRowIsSelected(0);
+    }
+
     /** Quickly pressing on "add contact info" and then "cancel" should not crash. */
     @MediumTest
     @Feature({"Payments"})
@@ -151,7 +199,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -177,6 +225,19 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         mDismissed.waitForCallback(callCount);
 
         expectResultContains(new String[] {"Request cancelled"});
+    }
+
+    /**
+     * Makes sure that suggestions that are equal to or subsets of other suggestions are not shown
+     * to the user.
+     */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testSuggestionsDeduped()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        triggerUIAndWait(mReadyToPay);
+        clickInContactInfoAndWait(R.id.payments_section, mReadyForInput);
+        assertEquals(1, getNumberOfContactDetailSuggestions());
     }
 
     /**

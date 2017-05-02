@@ -15,14 +15,12 @@
 #include "chrome/browser/ui/views/frame/browser_header_painter_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
-#include "chrome/browser/ui/views/frame/web_app_left_header_view_ash.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/grit/theme_resources.h"
 #include "content/public/browser/web_contents.h"
-#include "services/ui/public/cpp/window.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -36,6 +34,7 @@
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/layout_constants.h"
+#include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -135,11 +134,6 @@ gfx::Rect BrowserNonClientFrameViewMus::GetBoundsForTabStrip(
   if (!tabstrip)
     return gfx::Rect();
 
-  // When the tab strip is painted in the immersive fullscreen light bar style,
-  // the caption buttons and the avatar button are not visible. However, their
-  // bounds are still used to compute the tab strip bounds so that the tabs have
-  // the same horizontal position when the tab strip is painted in the immersive
-  // light bar style as when the top-of-window views are revealed.
   int left_inset = GetTabStripLeftInset();
   int right_inset = GetTabStripRightInset();
   return gfx::Rect(left_inset, GetTopInset(false),
@@ -148,8 +142,17 @@ gfx::Rect BrowserNonClientFrameViewMus::GetBoundsForTabStrip(
 }
 
 int BrowserNonClientFrameViewMus::GetTopInset(bool restored) const {
-  if (!ShouldPaint() || UseImmersiveLightbarHeaderStyle())
+  if (!ShouldPaint()) {
+    // When immersive fullscreen unrevealed, tabstrip is offscreen with normal
+    // tapstrip bounds, the top inset should reach this topmost edge.
+    const ImmersiveModeController* const immersive_controller =
+        browser_view()->immersive_mode_controller();
+    if (immersive_controller->IsEnabled() &&
+        !immersive_controller->IsRevealed()) {
+      return (-1) * browser_view()->GetTabStripHeight();
+    }
     return 0;
+  }
 
   if (browser_view()->IsTabStripVisible()) {
     return ((frame()->IsMaximized() || frame()->IsFullscreen()) && !restored)
@@ -173,13 +176,6 @@ int BrowserNonClientFrameViewMus::GetThemeBackgroundXInset() const {
 void BrowserNonClientFrameViewMus::UpdateThrobber(bool running) {
   if (window_icon_)
     window_icon_->Update();
-}
-
-void BrowserNonClientFrameViewMus::UpdateToolbar() {
-}
-
-views::View* BrowserNonClientFrameViewMus::GetLocationIconView() const {
-  return nullptr;
 }
 
 views::View* BrowserNonClientFrameViewMus::GetProfileSwitcherView() const {
@@ -257,16 +253,9 @@ void BrowserNonClientFrameViewMus::OnPaint(gfx::Canvas* canvas) {
   if (!ShouldPaint())
     return;
 
-  // TODO(sky): get immersive mode working.
-
-  if (UseImmersiveLightbarHeaderStyle()) {
-    PaintImmersiveLightbarStyleHeader(canvas);
-    return;
-  }
-
   if (browser_view()->IsToolbarVisible())
     PaintToolbarBackground(canvas);
-  else if (!UsePackagedAppHeaderStyle() && !UseWebAppHeaderStyle())
+  else if (!UsePackagedAppHeaderStyle())
     PaintContentEdge(canvas);
 }
 
@@ -333,19 +322,16 @@ gfx::ImageSkia BrowserNonClientFrameViewMus::GetFaviconForTabIconView() {
 // BrowserNonClientFrameView:
 void BrowserNonClientFrameViewMus::UpdateProfileIcons() {
 #if defined(FRAME_AVATAR_BUTTON)
-  if (browser_view()->IsRegularOrGuestSession())
+  if (browser_view()->IsRegularOrGuestSession()) {
     profile_switcher_.Update(AvatarButtonStyle::NATIVE);
-  else
+    return;
+  }
 #endif
-    UpdateProfileIndicatorIcon();
+  UpdateProfileIndicatorIcon();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewMus, private:
-
-ui::Window* BrowserNonClientFrameViewMus::mus_window() {
-  return static_cast<BrowserFrameMus*>(frame()->native_widget())->window();
-}
 
 void BrowserNonClientFrameViewMus::UpdateClientArea() {
   std::vector<gfx::Rect> additional_client_area;
@@ -356,9 +342,10 @@ void BrowserNonClientFrameViewMus::UpdateClientArea() {
       additional_client_area.push_back(tab_strip_bounds);
     }
   }
-  mus_window()->SetClientArea(
-      views::WindowManagerFrameValues::instance().normal_insets,
-      additional_client_area);
+  static_cast<aura::WindowTreeHostMus*>(
+      GetWidget()->GetNativeWindow()->GetHost())
+      ->SetClientArea(views::WindowManagerFrameValues::instance().normal_insets,
+                      additional_client_area);
 }
 
 void BrowserNonClientFrameViewMus::TabStripMaxXChanged(TabStrip* tab_strip) {
@@ -371,11 +358,12 @@ void BrowserNonClientFrameViewMus::TabStripDeleted(TabStrip* tab_strip) {
 }
 
 int BrowserNonClientFrameViewMus::GetTabStripLeftInset() const {
-  const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
-  const int avatar_right = profile_indicator_icon()
-      ? (insets.left() + GetIncognitoAvatarIcon().width())
-      : 0;
-  return avatar_right + insets.right() + frame_values().normal_insets.left();
+  const int avatar_right =
+      profile_indicator_icon()
+          ? (kAvatarIconPadding + GetIncognitoAvatarIcon().width())
+          : 0;
+  return avatar_right + kAvatarIconPadding +
+         frame_values().normal_insets.left();
 }
 
 int BrowserNonClientFrameViewMus::GetTabStripRightInset() const {
@@ -393,28 +381,11 @@ int BrowserNonClientFrameViewMus::GetTabStripRightInset() const {
   return right_inset;
 }
 
-bool BrowserNonClientFrameViewMus::UseImmersiveLightbarHeaderStyle() const {
-  ImmersiveModeController* immersive_controller =
-      browser_view()->immersive_mode_controller();
-  return immersive_controller->IsEnabled() &&
-         !immersive_controller->IsRevealed() &&
-         browser_view()->IsTabStripVisible();
-}
-
 bool BrowserNonClientFrameViewMus::UsePackagedAppHeaderStyle() const {
-  Browser* browser = browser_view()->browser();
-  // For non tabbed trusted source windows, e.g. Settings, use the packaged
-  // app style frame.
-  if (!browser->is_type_tabbed() && browser->is_trusted_source())
-    return true;
-  // Use the packaged app style for apps that aren't using the newer WebApp
-  // style.
-  return browser->is_app() && !UseWebAppHeaderStyle();
-}
-
-bool BrowserNonClientFrameViewMus::UseWebAppHeaderStyle() const {
-  return browser_view()->browser()->SupportsWindowFeature(
-      Browser::FEATURE_WEBAPPFRAME);
+  // Use for non tabbed trusted source windows, e.g. Settings, as well as apps.
+  const Browser* const browser = browser_view()->browser();
+  return (!browser->is_type_tabbed() && browser->is_trusted_source()) ||
+         browser->is_app();
 }
 
 void BrowserNonClientFrameViewMus::LayoutIncognitoButton() {
@@ -424,21 +395,15 @@ void BrowserNonClientFrameViewMus::LayoutIncognitoButton() {
   DCHECK(browser_view()->IsTabStripVisible());
 #endif
   gfx::ImageSkia incognito_icon = GetIncognitoAvatarIcon();
-  gfx::Insets avatar_insets = GetLayoutInsets(AVATAR_ICON);
   int avatar_bottom = GetTopInset(false) + browser_view()->GetTabStripHeight() -
-                      avatar_insets.bottom();
+                      kAvatarIconPadding;
   int avatar_y = avatar_bottom - incognito_icon.height();
+  int avatar_height = incognito_icon.height();
 
-  // Hide the incognito icon in immersive fullscreen when the tab light bar is
-  // visible because the header is too short for the icognito icon to be
-  // recognizable.
-  bool avatar_visible = !UseImmersiveLightbarHeaderStyle();
-  int avatar_height = avatar_visible ? incognito_icon.height() : 0;
-
-  gfx::Rect avatar_bounds(avatar_insets.left(), avatar_y,
-                          incognito_icon.width(), avatar_height);
+  gfx::Rect avatar_bounds(kAvatarIconPadding, avatar_y, incognito_icon.width(),
+                          avatar_height);
   profile_indicator_icon()->SetBoundsRect(avatar_bounds);
-  profile_indicator_icon()->SetVisible(avatar_visible);
+  profile_indicator_icon()->SetVisible(true);
 }
 
 void BrowserNonClientFrameViewMus::LayoutProfileSwitcher() {
@@ -454,18 +419,13 @@ bool BrowserNonClientFrameViewMus::ShouldPaint() const {
   if (!frame()->IsFullscreen())
     return true;
 
-  // We need to paint when in immersive fullscreen and either:
-  // - The top-of-window views are revealed.
-  // - The lightbar style tabstrip is visible.
+  // We need to paint when the top-of-window views are revealed in immersive
+  // fullscreen.
   ImmersiveModeController* immersive_mode_controller =
       browser_view()->immersive_mode_controller();
   return immersive_mode_controller->IsEnabled() &&
-         (immersive_mode_controller->IsRevealed() ||
-          UseImmersiveLightbarHeaderStyle());
+         immersive_mode_controller->IsRevealed();
 }
-
-void BrowserNonClientFrameViewMus::PaintImmersiveLightbarStyleHeader(
-    gfx::Canvas* canvas) {}
 
 void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
   gfx::Rect toolbar_bounds(browser_view()->GetToolbarBounds());
@@ -493,7 +453,7 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
   gfx::ScopedCanvas scoped_canvas(canvas);
   gfx::Rect tabstrip_bounds(GetBoundsForTabStrip(browser_view()->tabstrip()));
   tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
-  canvas->ClipRect(tabstrip_bounds, SkRegion::kDifference_Op);
+  canvas->ClipRect(tabstrip_bounds, SkClipOp::kDifference);
   const gfx::Rect separator_rect(toolbar_bounds.x(), tabstrip_bounds.bottom(),
                                  toolbar_bounds.width(), 0);
   BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
@@ -508,7 +468,7 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
 }
 
 void BrowserNonClientFrameViewMus::PaintContentEdge(gfx::Canvas* canvas) {
-  DCHECK(!UsePackagedAppHeaderStyle() && !UseWebAppHeaderStyle());
+  DCHECK(!UsePackagedAppHeaderStyle());
   const int bottom = frame_values().normal_insets.bottom();
   canvas->FillRect(
       gfx::Rect(0, bottom, width(), kClientEdgeThickness),

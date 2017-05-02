@@ -32,6 +32,7 @@
 #include "content/renderer/media/peer_connection_tracker.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "content/renderer/media/webrtc/processed_local_audio_source.h"
+#include "content/renderer/media/webrtc/rtc_stats.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
@@ -149,7 +150,7 @@ class MockPeerConnectionTracker : public PeerConnectionTracker {
                     const std::string& sdp, const std::string& type,
                     Source source));
   MOCK_METHOD2(
-      TrackUpdateIce,
+      TrackSetConfiguration,
       void(RTCPeerConnectionHandler* pc_handler,
            const webrtc::PeerConnectionInterface::RTCConfiguration& config));
   MOCK_METHOD4(TrackAddIceCandidate,
@@ -183,6 +184,11 @@ class MockPeerConnectionTracker : public PeerConnectionTracker {
       TrackIceGatheringStateChange,
       void(RTCPeerConnectionHandler* pc_handler,
            WebRTCPeerConnectionHandlerClient::ICEGatheringState state));
+  MOCK_METHOD4(TrackSessionDescriptionCallback,
+               void(RTCPeerConnectionHandler* pc_handler,
+                    Action action,
+                    const std::string& type,
+                    const std::string& value));
   MOCK_METHOD1(TrackOnRenegotiationNeeded,
                void(RTCPeerConnectionHandler* pc_handler));
   MOCK_METHOD2(TrackCreateDTMFSender,
@@ -295,10 +301,10 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
                              media::AudioParameters::kAudioCDSampleRate,
                              media::CHANNEL_LAYOUT_STEREO,
                              media::AudioParameters::kAudioCDSampleRate / 100),
+            MockConstraintFactory().CreateWebMediaConstraints(),
+            base::Bind(&RTCPeerConnectionHandlerTest::OnAudioSourceStarted),
             mock_dependency_factory_.get());
     audio_source->SetAllowInvalidRenderFrameIdForTesting(true);
-    audio_source->SetSourceConstraints(
-        MockConstraintFactory().CreateWebMediaConstraints());
     blink_audio_source.setExtraData(audio_source);  // Takes ownership.
 
     blink::WebMediaStreamSource video_source;
@@ -364,6 +370,10 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
     for (const auto& track : video_tracks)
       MediaStreamVideoTrack::GetVideoTrack(track)->Stop();
   }
+
+  static void OnAudioSourceStarted(MediaStreamSource* source,
+                                   MediaStreamRequestResult result,
+                                   const blink::WebString& result_name) {}
 
   base::MessageLoop message_loop_;
   std::unique_ptr<ChildProcess> child_process_;
@@ -478,6 +488,36 @@ TEST_F(RTCPeerConnectionHandlerTest, setLocalDescription) {
   EXPECT_EQ(kDummySdpType, mock_peer_connection_->local_description()->type());
   mock_peer_connection_->local_description()->ToString(&sdp_string);
   EXPECT_EQ(kDummySdp, sdp_string);
+
+  // TODO(deadbeef): Also mock the "success" callback from the PeerConnection
+  // and ensure that the sucessful result is tracked by PeerConnectionTracker.
+}
+
+// Test that setLocalDescription with invalid SDP will result in a failure, and
+// is tracked as a failure with PeerConnectionTracker.
+TEST_F(RTCPeerConnectionHandlerTest, setLocalDescriptionParseError) {
+  blink::WebRTCVoidRequest request;
+  blink::WebRTCSessionDescription description;
+  description.initialize(kDummySdpType, kDummySdp);
+  testing::InSequence sequence;
+  // Expect two "Track" calls, one for the start of the attempt and one for the
+  // failure.
+  EXPECT_CALL(
+      *mock_tracker_.get(),
+      TrackSetSessionDescription(pc_handler_.get(), kDummySdp, kDummySdpType,
+                                 PeerConnectionTracker::SOURCE_LOCAL));
+  EXPECT_CALL(
+      *mock_tracker_.get(),
+      TrackSessionDescriptionCallback(
+          pc_handler_.get(),
+          PeerConnectionTracker::ACTION_SET_LOCAL_DESCRIPTION, "OnFailure", _));
+
+  // Used to simulate a parse failure.
+  mock_dependency_factory_->SetFailToCreateSessionDescription(true);
+  pc_handler_->setLocalDescription(request, description);
+  base::RunLoop().RunUntilIdle();
+  // A description that failed to be applied shouldn't be stored.
+  EXPECT_TRUE(pc_handler_->localDescription().sdp().isEmpty());
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, setRemoteDescription) {
@@ -504,16 +544,47 @@ TEST_F(RTCPeerConnectionHandlerTest, setRemoteDescription) {
   EXPECT_EQ(kDummySdpType, mock_peer_connection_->remote_description()->type());
   mock_peer_connection_->remote_description()->ToString(&sdp_string);
   EXPECT_EQ(kDummySdp, sdp_string);
+
+  // TODO(deadbeef): Also mock the "success" callback from the PeerConnection
+  // and ensure that the sucessful result is tracked by PeerConnectionTracker.
 }
 
-TEST_F(RTCPeerConnectionHandlerTest, updateICE) {
+// Test that setRemoteDescription with invalid SDP will result in a failure, and
+// is tracked as a failure with PeerConnectionTracker.
+TEST_F(RTCPeerConnectionHandlerTest, setRemoteDescriptionParseError) {
+  blink::WebRTCVoidRequest request;
+  blink::WebRTCSessionDescription description;
+  description.initialize(kDummySdpType, kDummySdp);
+  testing::InSequence sequence;
+  // Expect two "Track" calls, one for the start of the attempt and one for the
+  // failure.
+  EXPECT_CALL(
+      *mock_tracker_.get(),
+      TrackSetSessionDescription(pc_handler_.get(), kDummySdp, kDummySdpType,
+                                 PeerConnectionTracker::SOURCE_REMOTE));
+  EXPECT_CALL(*mock_tracker_.get(),
+              TrackSessionDescriptionCallback(
+                  pc_handler_.get(),
+                  PeerConnectionTracker::ACTION_SET_REMOTE_DESCRIPTION,
+                  "OnFailure", _));
+
+  // Used to simulate a parse failure.
+  mock_dependency_factory_->SetFailToCreateSessionDescription(true);
+  pc_handler_->setRemoteDescription(request, description);
+  base::RunLoop().RunUntilIdle();
+  // A description that failed to be applied shouldn't be stored.
+  EXPECT_TRUE(pc_handler_->remoteDescription().sdp().isEmpty());
+}
+
+TEST_F(RTCPeerConnectionHandlerTest, setConfiguration) {
   blink::WebRTCConfiguration config;
 
-  EXPECT_CALL(*mock_tracker_.get(), TrackUpdateIce(pc_handler_.get(), _));
+  EXPECT_CALL(*mock_tracker_.get(),
+              TrackSetConfiguration(pc_handler_.get(), _));
   // TODO(perkj): Test that the parameters in |config| can be translated when a
   // WebRTCConfiguration can be constructed. It's WebKit class and can't be
   // initialized from a test.
-  EXPECT_TRUE(pc_handler_->updateICE(config));
+  EXPECT_TRUE(pc_handler_->setConfiguration(config));
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, addICECandidate) {
@@ -672,6 +743,8 @@ TEST_F(RTCPeerConnectionHandlerTest, GetStatsWithBadSelector) {
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, GetRTCStats) {
+  WhitelistStatsForTesting(webrtc::RTCTestStats::kType);
+
   rtc::scoped_refptr<webrtc::RTCStatsReport> report =
       webrtc::RTCStatsReport::Create();
 

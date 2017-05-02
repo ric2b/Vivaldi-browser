@@ -26,7 +26,7 @@
 
 // https://html.spec.whatwg.org/#the-window-object
 
-// FIXME: explain all uses of [DoNotCheckSecurity]
+// FIXME: explain all uses of [CrossOrigin]
 [
     CheckSecurity=Receiver,
     ImplementedAs=DOMWindow,
@@ -34,11 +34,11 @@
 ] interface Window : EventTarget {
     // the current browsing context
     // FIXME: The spec uses the WindowProxy type for this and many other attributes.
-    [Unforgeable, DoNotCheckSecurity] readonly attribute Window window;
-    [Replaceable, DoNotCheckSecurity] readonly attribute Window self;
+    [Unforgeable, CrossOrigin] readonly attribute Window window;
+    [Replaceable, CrossOrigin] readonly attribute Window self;
     [Unforgeable, CachedAccessor] readonly attribute Document document;
     attribute DOMString name;
-    [PutForwards=href, Unforgeable, DoNotCheckSecurity] readonly attribute Location location;
+    [PutForwards=href, Unforgeable, CrossOrigin=(Getter,Setter)] readonly attribute Location location;
     readonly attribute History history;
     [Replaceable, MeasureAs=BarPropLocationbar] readonly attribute BarProp locationbar;
     [Replaceable, MeasureAs=BarPropMenubar] readonly attribute BarProp menubar;
@@ -47,25 +47,25 @@
     [Replaceable, MeasureAs=BarPropStatusbar] readonly attribute BarProp statusbar;
     [Replaceable, MeasureAs=BarPropToolbar] readonly attribute BarProp toolbar;
     attribute DOMString status;
-    [DoNotCheckSecurity, CallWith=ExecutionContext] void close();
-    [DoNotCheckSecurity] readonly attribute boolean closed;
+    [CrossOrigin, CallWith=ExecutionContext] void close();
+    [CrossOrigin] readonly attribute boolean closed;
     void stop();
-    [DoNotCheckSecurity, CallWith=ExecutionContext] void focus();
-    [DoNotCheckSecurity] void blur();
+    [CrossOrigin, CallWith=ExecutionContext] void focus();
+    [CrossOrigin] void blur();
 
     // other browsing contexts
-    [Replaceable, DoNotCheckSecurity] readonly attribute Window frames;
-    [Replaceable, DoNotCheckSecurity] readonly attribute unsigned long length;
-    [Unforgeable, DoNotCheckSecurity] readonly attribute Window top;
+    [Replaceable, CrossOrigin] readonly attribute Window frames;
+    [Replaceable, CrossOrigin] readonly attribute unsigned long length;
+    [Unforgeable, CrossOrigin] readonly attribute Window? top;
     // FIXME: opener should be of type any.
-    [DoNotCheckSecurity, Custom=Setter] attribute Window opener;
-    [Replaceable, DoNotCheckSecurity] readonly attribute Window parent;
+    [CrossOrigin, Custom=Setter] attribute Window opener;
+    [Replaceable, CrossOrigin] readonly attribute Window? parent;
     [CheckSecurity=ReturnValue, Custom=Getter] readonly attribute Element? frameElement;
     // FIXME: open() should have 4 optional arguments with defaults.
     [Custom] Window? open(DOMString url, DOMString target, optional DOMString features);
     // FIXME: These getters should not have [NotEnumerable].
-    [NotEnumerable, DoNotCheckSecurity] getter Window (unsigned long index);
-    [Custom, NotEnumerable, DoNotCheckSecurity] getter object (DOMString name);
+    [NotEnumerable, CrossOrigin] getter Window (unsigned long index);
+    [Custom, NotEnumerable, CrossOrigin] getter object (DOMString name);
 
     // the user agent
     [LogActivity=GetterOnly] readonly attribute Navigator navigator;
@@ -84,10 +84,10 @@
     [Measure] long requestIdleCallback(IdleRequestCallback callback, optional IdleRequestOptions options);
     void cancelIdleCallback(long handle);
 
-    [DoNotCheckSecurity, Custom, RaisesException] void postMessage(any message, DOMString targetOrigin, optional sequence<Transferable> transfer);
+    [CrossOrigin, Custom, RaisesException] void postMessage(any message, DOMString targetOrigin, optional sequence<Transferable> transfer);
 
     // Custom elements
-    // http://w3c.github.io/webcomponents/spec/custom/#custom-elements-api
+    // https://w3c.github.io/webcomponents/spec/custom/#custom-elements-api
     [RuntimeEnabled=CustomElementsV1, CallWith=ScriptState] readonly attribute CustomElementRegistry customElements;
 
     // HTML obsolete features
@@ -98,12 +98,12 @@
     [Replaceable, SameObject] readonly attribute External external;
 
     // CSS Object Model (CSSOM)
-    // http://dev.w3.org/csswg/cssom/#extensions-to-the-window-interface
+    // https://dev.w3.org/csswg/cssom/#extensions-to-the-window-interface
     // FIXME: The optional pseudoElt argument should have no default.
     [NewObject] CSSStyleDeclaration getComputedStyle(Element elt, optional DOMString? pseudoElt = null);
 
     // CSSOM View Module
-    // http://dev.w3.org/csswg/cssom-view/#extensions-to-the-window-interface
+    // https://dev.w3.org/csswg/cssom-view/#extensions-to-the-window-interface
     [NewObject] MediaQueryList matchMedia(DOMString query);
     [SameObject, Replaceable] readonly attribute Screen screen;
 
@@ -141,7 +141,7 @@
     [Replaceable] readonly attribute double devicePixelRatio;
 
     // Selection API
-    // http://w3c.github.io/selection-api/#extensions-to-window-interface
+    // https://w3c.github.io/selection-api/#extensions-to-window-interface
     Selection? getSelection();
 
     // Console API
@@ -174,7 +174,6 @@
     [MeasureAs=WindowOrientation, RuntimeEnabled=OrientationEvent] readonly attribute long orientation;
     [DeprecateAs=PrefixedRequestAnimationFrame] long webkitRequestAnimationFrame(FrameRequestCallback callback);
     [DeprecateAs=PrefixedCancelAnimationFrame, ImplementedAs=cancelAnimationFrame] void webkitCancelAnimationFrame(long id);
-    [DeprecateAs=PrefixedCancelRequestAnimationFrame, ImplementedAs=cancelAnimationFrame] void webkitCancelRequestAnimationFrame(long id);
     [MeasureAs=PrefixedTransitionEventConstructor] attribute TransitionEventConstructor WebKitTransitionEvent;
     [Measure] attribute AnimationEventConstructor WebKitAnimationEvent;
     [DeprecateAs=PrefixedWindowURL] attribute URLConstructor webkitURL;
@@ -197,16 +196,16 @@
     readonly attribute boolean isSecureContext;
 };
 
-// http://www.whatwg.org/specs/web-apps/current-work/#transferable-objects
+// https://html.spec.whatwg.org/#transferable-objects
 //
-// Expressing the Transferable typedef in IDL depends on http://crbug.com/240176.
+// Expressing the Transferable typedef in IDL depends on https://crbug.com/240176.
 // The postMessage() methods taking a Transferable array argument have custom
 // binding code that is able to handle the Transferables that we currently
 // recognize. To be able to declare a postMessage() signature that matches
 // the implementation, we provide a Transferable typedef but with an
 // incomplete type.
 //
-// FIXME: make this typedef accurate once enough of http://crbug.com/240176
+// FIXME: make this typedef accurate once enough of https://crbug.com/240176
 // is in place.
 // FIXME: consider putting this typedef in an .idl file containing spec-wide
 // utility type definitions.

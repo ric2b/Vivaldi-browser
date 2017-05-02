@@ -22,6 +22,7 @@
 #endif
 
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 
 using extensions::AppWindow;
@@ -311,8 +312,9 @@ void NativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
   extensions::WebViewGuest *current_webviewguest =
       vivaldi::ui_tools::GetActiveWebViewGuest(this);
   if (current_webviewguest) {
-    content::NativeWebKeyboardEvent synth_event;
-    synth_event.type = blink::WebInputEvent::RawKeyDown;
+    content::NativeWebKeyboardEvent synth_event(
+        blink::WebInputEvent::RawKeyDown, blink::WebInputEvent::NoModifiers,
+        ui::EventTimeForNow());
     synth_event.windowsKeyCode = code;
     current_webviewguest->web_contents()->GetDelegate()
         ->HandleKeyboardEvent(web_view_->GetWebContents(), synth_event);

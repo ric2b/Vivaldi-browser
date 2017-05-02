@@ -1,4 +1,6 @@
+import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
+import("//build/config/locales.gni")
 
 import("resources/vivaldi_grit.gni")
 
@@ -55,4 +57,12 @@ grit("vivaldi_unscaled_native_resources") {
                               rebase_path(resource_ids, root_build_dir),
                             ],
                         "list lines")
+}
+
+action("write_translation_xml_generation_script") {
+  script = "//vivaldi/app/resources/gen_write_translations_script.py"
+  inputs = [ script ]
+  outputs = [ "$root_out_dir/generate_translation_xml.py" ]
+
+  args = rebase_path(outputs, root_out_dir) + locales + vivaldi_pending_locales
 }

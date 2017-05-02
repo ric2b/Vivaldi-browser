@@ -29,7 +29,8 @@ namespace chromeos {
 TermsOfServiceScreen::TermsOfServiceScreen(
     BaseScreenDelegate* base_screen_delegate,
     TermsOfServiceScreenActor* actor)
-    : BaseScreen(base_screen_delegate), actor_(actor) {
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_TERMS_OF_SERVICE),
+      actor_(actor) {
   DCHECK(actor_);
   if (actor_)
     actor_->SetDelegate(this);
@@ -38,9 +39,6 @@ TermsOfServiceScreen::TermsOfServiceScreen(
 TermsOfServiceScreen::~TermsOfServiceScreen() {
   if (actor_)
     actor_->SetDelegate(NULL);
-}
-
-void TermsOfServiceScreen::PrepareToShow() {
 }
 
 void TermsOfServiceScreen::Show() {
@@ -62,10 +60,6 @@ void TermsOfServiceScreen::Show() {
 void TermsOfServiceScreen::Hide() {
   if (actor_)
     actor_->Hide();
-}
-
-std::string TermsOfServiceScreen::GetName() const {
-  return WizardController::kTermsOfServiceScreenName;
 }
 
 void TermsOfServiceScreen::OnDecline() {

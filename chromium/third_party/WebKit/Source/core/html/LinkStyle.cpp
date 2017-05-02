@@ -5,16 +5,16 @@
 #include "core/html/LinkStyle.h"
 
 #include "core/css/StyleSheetContents.h"
-#include "core/fetch/CSSStyleSheetResource.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/SubresourceIntegrity.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/HTMLLinkElement.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "platform/ContentType.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
-#include "platform/MIMETypeRegistry.h"
+#include "platform/network/mime/ContentType.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 
 namespace blink {
 
@@ -107,8 +107,8 @@ void LinkStyle::setCSSStyleSheet(
     }
   }
 
-  CSSParserContext parserContext(m_owner->document(), nullptr, baseURL,
-                                 charset);
+  CSSParserContext* parserContext =
+      CSSParserContext::create(m_owner->document(), baseURL, charset);
 
   DEFINE_STATIC_LOCAL(EnumerationHistogram, restoredCachedStyleSheetHistogram,
                       ("Blink.RestoredCachedStyleSheet", 2));
@@ -236,40 +236,41 @@ void LinkStyle::removePendingSheet() {
 void LinkStyle::setDisabledState(bool disabled) {
   LinkStyle::DisabledState oldDisabledState = m_disabledState;
   m_disabledState = disabled ? Disabled : EnabledViaScript;
-  if (oldDisabledState != m_disabledState) {
-    // If we change the disabled state while the sheet is still loading, then we
-    // have to perform three checks:
-    if (styleSheetIsLoading()) {
-      // Check #1: The sheet becomes disabled while loading.
-      if (m_disabledState == Disabled)
-        removePendingSheet();
+  if (oldDisabledState == m_disabledState)
+    return;
 
-      // Check #2: An alternate sheet becomes enabled while it is still loading.
-      if (m_owner->relAttribute().isAlternate() &&
-          m_disabledState == EnabledViaScript)
-        addPendingSheet(Blocking);
+  // If we change the disabled state while the sheet is still loading, then we
+  // have to perform three checks:
+  if (styleSheetIsLoading()) {
+    // Check #1: The sheet becomes disabled while loading.
+    if (m_disabledState == Disabled)
+      removePendingSheet();
 
-      // Check #3: A main sheet becomes enabled while it was still loading and
-      // after it was disabled via script. It takes really terrible code to make
-      // this happen (a double toggle for no reason essentially). This happens
-      // on virtualplastic.net, which manages to do about 12 enable/disables on
-      // only 3 sheets. :)
-      if (!m_owner->relAttribute().isAlternate() &&
-          m_disabledState == EnabledViaScript && oldDisabledState == Disabled)
-        addPendingSheet(Blocking);
+    // Check #2: An alternate sheet becomes enabled while it is still loading.
+    if (m_owner->relAttribute().isAlternate() &&
+        m_disabledState == EnabledViaScript)
+      addPendingSheet(Blocking);
 
-      // If the sheet is already loading just bail.
-      return;
-    }
+    // Check #3: A main sheet becomes enabled while it was still loading and
+    // after it was disabled via script. It takes really terrible code to make
+    // this happen (a double toggle for no reason essentially). This happens
+    // on virtualplastic.net, which manages to do about 12 enable/disables on
+    // only 3 sheets. :)
+    if (!m_owner->relAttribute().isAlternate() &&
+        m_disabledState == EnabledViaScript && oldDisabledState == Disabled)
+      addPendingSheet(Blocking);
 
-    if (m_sheet) {
-      m_sheet->setDisabled(disabled);
-      return;
-    }
-
-    if (m_disabledState == EnabledViaScript && m_owner->shouldProcessStyle())
-      process();
+    // If the sheet is already loading just bail.
+    return;
   }
+
+  if (m_sheet) {
+    m_sheet->setDisabled(disabled);
+    return;
+  }
+
+  if (m_disabledState == EnabledViaScript && m_owner->shouldProcessStyle())
+    process();
 }
 
 void LinkStyle::setCrossOriginStylesheetStatus(CSSStyleSheet* sheet) {
@@ -306,8 +307,7 @@ LinkStyle::LoadReturnValue LinkStyle::loadStylesheetIfNeeded(
   String title = m_owner->title();
   if (!title.isEmpty() && !m_owner->isAlternate() &&
       m_disabledState != EnabledViaScript && m_owner->isInDocumentTree()) {
-    document().styleEngine().setPreferredStylesheetSetNameIfNotSet(
-        title, StyleEngine::DontUpdateActiveSheets);
+    document().styleEngine().setPreferredStylesheetSetNameIfNotSet(title);
   }
 
   bool mediaQueryMatches = true;
@@ -387,16 +387,12 @@ void LinkStyle::process() {
 
   if (loadStylesheetIfNeeded(builder, type) == NotNeeded && m_sheet) {
     // we no longer contain a stylesheet, e.g. perhaps rel or type was changed
-    StyleSheet* removedSheet = m_sheet.get();
     clearSheet();
-    document().styleEngine().setNeedsActiveStyleUpdate(removedSheet,
-                                                       FullStyleUpdate);
+    document().styleEngine().setNeedsActiveStyleUpdate(m_owner->treeScope());
   }
 }
 
-void LinkStyle::setSheetTitle(
-    const String& title,
-    StyleEngine::ActiveSheetsUpdate updateActiveSheets) {
+void LinkStyle::setSheetTitle(const String& title) {
   if (!m_owner->isInDocumentTree() || !m_owner->relAttribute().isStyleSheet())
     return;
 
@@ -406,11 +402,9 @@ void LinkStyle::setSheetTitle(
   if (title.isEmpty() || !isUnset() || m_owner->isAlternate())
     return;
 
-  KURL href = m_owner->getNonEmptyURLAttribute(hrefAttr);
-  if (href.isValid() && !href.isEmpty()) {
-    document().styleEngine().setPreferredStylesheetSetNameIfNotSet(
-        title, updateActiveSheets);
-  }
+  const KURL& href = m_owner->getNonEmptyURLAttribute(hrefAttr);
+  if (href.isValid() && !href.isEmpty())
+    document().styleEngine().setPreferredStylesheetSetNameIfNotSet(title);
 }
 
 void LinkStyle::ownerRemoved() {

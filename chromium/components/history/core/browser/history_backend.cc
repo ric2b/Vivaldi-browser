@@ -1189,11 +1189,16 @@ void HistoryBackend::QueryDownloads(std::vector<DownloadRow>* rows) {
 }
 
 // Update a particular download entry.
-void HistoryBackend::UpdateDownload(const DownloadRow& data) {
+void HistoryBackend::UpdateDownload(
+    const DownloadRow& data,
+    bool should_commit_immediately) {
   if (!db_)
     return;
   db_->UpdateDownload(data);
-  ScheduleCommit();
+  if (should_commit_immediately)
+    Commit();
+  else
+    ScheduleCommit();
 }
 
 bool HistoryBackend::CreateDownload(const DownloadRow& history_info) {

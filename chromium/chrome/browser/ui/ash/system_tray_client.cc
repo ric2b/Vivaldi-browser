@@ -5,33 +5,39 @@
 #include "chrome/browser/ui/ash/system_tray_client.h"
 
 #include "ash/common/login_status.h"
-#include "ash/common/session/session_state_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/options/network_config_view.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/set_time_dialog.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/chromeos/ui/choose_mobile_network_dialog.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/browser/ui/ash/system_tray_delegate_chromeos.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/upgrade_detector.h"
 #include "chrome/common/url_constants.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/login_state.h"
+#include "components/session_manager/core/session_manager.h"
+#include "components/user_manager/user_manager.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/service_manager_connection.h"
+#include "extensions/browser/api/vpn_provider/vpn_service.h"
+#include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
 #include "net/base/escape.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/property_type_converters.h"
@@ -56,12 +62,45 @@ void ShowSettingsSubPageForActiveUser(const std::string& sub_page) {
                                         sub_page);
 }
 
+// Returns the severity of a pending Chrome / Chrome OS update.
+ash::mojom::UpdateSeverity GetUpdateSeverity(UpgradeDetector* detector) {
+  switch (detector->upgrade_notification_stage()) {
+    case UpgradeDetector::UPGRADE_ANNOYANCE_NONE:
+      return ash::mojom::UpdateSeverity::NONE;
+    case UpgradeDetector::UPGRADE_ANNOYANCE_LOW:
+      return ash::mojom::UpdateSeverity::LOW;
+    case UpgradeDetector::UPGRADE_ANNOYANCE_ELEVATED:
+      return ash::mojom::UpdateSeverity::ELEVATED;
+    case UpgradeDetector::UPGRADE_ANNOYANCE_HIGH:
+      return ash::mojom::UpdateSeverity::HIGH;
+    case UpgradeDetector::UPGRADE_ANNOYANCE_SEVERE:
+      return ash::mojom::UpdateSeverity::SEVERE;
+    case UpgradeDetector::UPGRADE_ANNOYANCE_CRITICAL:
+      return ash::mojom::UpdateSeverity::CRITICAL;
+  }
+  NOTREACHED();
+  return ash::mojom::UpdateSeverity::CRITICAL;
+}
+
 }  // namespace
 
-SystemTrayClient::SystemTrayClient() {
+SystemTrayClient::SystemTrayClient() : binding_(this) {
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash_util::GetAshServiceName(), &system_tray_);
+  // Register this object as the client interface implementation.
+  system_tray_->SetClient(binding_.CreateInterfacePtrAndBind());
+
   // If this observes clock setting changes before ash comes up the IPCs will
   // be queued on |system_tray_|.
   g_browser_process->platform_part()->GetSystemClock()->AddObserver(this);
+
+  registrar_.Add(this, chrome::NOTIFICATION_UPGRADE_RECOMMENDED,
+                 content::NotificationService::AllSources());
+
+  // If an upgrade is available at startup then tell ash about it.
+  if (UpgradeDetector::GetInstance()->notify_upgrade())
+    HandleUpdateAvailable();
 
   DCHECK(!g_instance);
   g_instance = this;
@@ -120,15 +159,11 @@ int SystemTrayClient::GetDialogParentContainerId() {
     return ash::kShellWindowId_LockSystemModalContainer;
   }
 
-  // TODO(mash): Need replacement for SessionStateDelegate. crbug.com/648964
-  if (chrome::IsRunningInMash())
-    return ash::kShellWindowId_SystemModalContainer;
-
-  ash::WmShell* wm_shell = ash::WmShell::Get();
-  const bool session_started =
-      wm_shell->GetSessionStateDelegate()->IsActiveUserSessionStarted();
+  session_manager::SessionManager* const session_manager =
+      session_manager::SessionManager::Get();
+  const bool session_started = session_manager->IsSessionStarted();
   const bool is_in_secondary_login_screen =
-      wm_shell->GetSessionStateDelegate()->IsInSecondaryLoginScreen();
+      session_manager->IsInSecondaryLoginScreen();
 
   if (!session_started || is_in_secondary_login_screen)
     return ash::kShellWindowId_LockSystemModalContainer;
@@ -147,7 +182,7 @@ Widget* SystemTrayClient::CreateUnownedDialogWidget(
   int container_id = GetDialogParentContainerId();
   if (chrome::IsRunningInMash()) {
     using ui::mojom::WindowManager;
-    params.mus_properties[WindowManager::kInitialContainerId_Property] =
+    params.mus_properties[WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(container_id);
   } else {
     params.parent = ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
@@ -156,6 +191,19 @@ Widget* SystemTrayClient::CreateUnownedDialogWidget(
   Widget* widget = new Widget;  // Owned by native widget.
   widget->Init(params);
   return widget;
+}
+
+void SystemTrayClient::SetFlashUpdateAvailable() {
+  flash_update_available_ = true;
+  HandleUpdateAvailable();
+}
+
+void SystemTrayClient::SetPrimaryTrayEnabled(bool enabled) {
+  system_tray_->SetPrimaryTrayEnabled(enabled);
+}
+
+void SystemTrayClient::SetPrimaryTrayVisible(bool visible) {
+  system_tray_->SetPrimaryTrayVisible(visible);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,11 +281,8 @@ void SystemTrayClient::ShowPublicAccountInfo() {
 
 void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
   // UI is not available at the lock screen.
-  // TODO(mash): Need replacement for SessionStateDelegate. crbug.com/648964
-  if (!chrome::IsRunningInMash() &&
-      ash::WmShell::Get()->GetSessionStateDelegate()->IsScreenLocked()) {
+  if (session_manager::SessionManager::Get()->IsScreenLocked())
     return;
-  }
 
   // Dialog will default to the primary display.
   chromeos::NetworkConfigView::ShowForNetworkId(network_id,
@@ -253,14 +298,27 @@ void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
   chromeos::NetworkConfigView::ShowForType(type, nullptr /* parent */);
 }
 
+void SystemTrayClient::ShowThirdPartyVpnCreate(
+    const std::string& extension_id) {
+  const user_manager::User* primary_user =
+      user_manager::UserManager::Get()->GetPrimaryUser();
+  if (!primary_user)
+    return;
+
+  Profile* profile =
+      chromeos::ProfileHelper::Get()->GetProfileByUser(primary_user);
+  if (!profile)
+    return;
+
+  // Request that the third-party VPN provider show its "add network" dialog.
+  chromeos::VpnServiceFactory::GetForBrowserContext(profile)
+      ->SendShowAddDialogToExtension(extension_id);
+}
+
 void SystemTrayClient::ShowNetworkSettings(const std::string& network_id) {
-  if (!chrome::IsRunningInMash()) {
-    // TODO(mash): Need replacement for SessionStateDelegate. crbug.com/648964
-    if (!LoginState::Get()->IsUserLoggedIn() ||
-        ash::WmShell::Get()
-            ->GetSessionStateDelegate()
-            ->IsInSecondaryLoginScreen())
-      return;
+  if (!LoginState::Get()->IsUserLoggedIn() ||
+      session_manager::SessionManager::Get()->IsInSecondaryLoginScreen()) {
+    return;
   }
 
   std::string page = chrome::kInternetOptionsSubPage;
@@ -283,8 +341,27 @@ void SystemTrayClient::SignOut() {
 }
 
 void SystemTrayClient::RequestRestartForUpdate() {
-  // We expect that UpdateEngine is in "Reboot for update" state now.
-  chrome::NotifyAndTerminate(true /* fast_path */);
+  // Flash updates on Chrome OS require device reboot.
+  const chrome::RebootPolicy reboot_policy =
+      flash_update_available_ ? chrome::RebootPolicy::kForceReboot
+                              : chrome::RebootPolicy::kOptionalReboot;
+
+  chrome::NotifyAndTerminate(true /* fast_path */, reboot_policy);
+}
+
+void SystemTrayClient::HandleUpdateAvailable() {
+  // Show an update icon for Chrome updates and Flash component updates.
+  UpgradeDetector* detector = UpgradeDetector::GetInstance();
+  DCHECK(detector->notify_upgrade() || flash_update_available_);
+
+  // Get the Chrome update severity.
+  ash::mojom::UpdateSeverity severity = GetUpdateSeverity(detector);
+
+  // Flash updates are low severity unless the Chrome severity is higher.
+  if (flash_update_available_)
+    severity = std::max(severity, ash::mojom::UpdateSeverity::LOW);
+
+  system_tray_->ShowUpdateIcon(severity, detector->is_factory_reset_required());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -292,28 +369,12 @@ void SystemTrayClient::RequestRestartForUpdate() {
 
 void SystemTrayClient::OnSystemClockChanged(
     chromeos::system::SystemClock* clock) {
-  ConnectToSystemTray();
   system_tray_->SetUse24HourClock(clock->ShouldUse24HourClock());
 }
 
-void SystemTrayClient::ConnectToSystemTray() {
-  if (system_tray_.is_bound())
-    return;
-
-  service_manager::Connector* connector =
-      content::ServiceManagerConnection::GetForProcess()->GetConnector();
-  // Under mash the SystemTray interface is in the ash process. In classic ash
-  // we provide it to ourself.
-  if (chrome::IsRunningInMash())
-    connector->ConnectToInterface("ash", &system_tray_);
-  else
-    connector->ConnectToInterface("content_browser", &system_tray_);
-
-  // Tolerate ash crashing and coming back up.
-  system_tray_.set_connection_error_handler(base::Bind(
-      &SystemTrayClient::OnClientConnectionError, base::Unretained(this)));
-}
-
-void SystemTrayClient::OnClientConnectionError() {
-  system_tray_.reset();
+void SystemTrayClient::Observe(int type,
+                               const content::NotificationSource& source,
+                               const content::NotificationDetails& details) {
+  DCHECK_EQ(chrome::NOTIFICATION_UPGRADE_RECOMMENDED, type);
+  HandleUpdateAvailable();
 }

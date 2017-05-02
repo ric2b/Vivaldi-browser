@@ -15,11 +15,11 @@ namespace blink {
 void V8ResizeObserverCallback::handleEvent(
     const HeapVector<Member<ResizeObserverEntry>>& entries,
     ResizeObserver* observer) {
-  if (!canInvokeCallback())
-    return;
-
   v8::Isolate* isolate = m_scriptState->isolate();
-
+  ExecutionContext* executionContext = m_scriptState->getExecutionContext();
+  if (!executionContext || executionContext->isContextSuspended() ||
+      executionContext->isContextDestroyed())
+    return;
   if (!m_scriptState->contextIsValid())
     return;
   ScriptState::Scope scope(m_scriptState.get());
@@ -27,14 +27,14 @@ void V8ResizeObserverCallback::handleEvent(
   if (m_callback.isEmpty())
     return;
 
-  v8::Local<v8::Value> observerHandle = toV8(
+  v8::Local<v8::Value> observerHandle = ToV8(
       observer, m_scriptState->context()->Global(), m_scriptState->isolate());
   if (!observerHandle->IsObject())
     return;
 
   v8::Local<v8::Object> thisObject =
       v8::Local<v8::Object>::Cast(observerHandle);
-  v8::Local<v8::Value> entriesHandle = toV8(
+  v8::Local<v8::Value> entriesHandle = ToV8(
       entries, m_scriptState->context()->Global(), m_scriptState->isolate());
   if (entriesHandle.IsEmpty())
     return;
@@ -43,7 +43,7 @@ void V8ResizeObserverCallback::handleEvent(
   v8::TryCatch exceptionCatcher(m_scriptState->isolate());
   exceptionCatcher.SetVerbose(true);
   V8ScriptRunner::callFunction(m_callback.newLocal(isolate),
-                               getExecutionContext(), thisObject,
+                               m_scriptState->getExecutionContext(), thisObject,
                                WTF_ARRAY_LENGTH(argv), argv, isolate);
 }
 

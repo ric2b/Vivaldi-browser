@@ -41,16 +41,16 @@ class MockCanvasAsyncBlobCreator : public CanvasAsyncBlobCreator {
   void createBlobAndReturnResult() override{};
   void createNullAndReturnResult() override{};
   void signalAlternativeCodePathFinishedForTesting() override;
-  void postDelayedTaskToMainThread(const WebTraceLocation&,
-                                   std::unique_ptr<WTF::Closure>,
-                                   double delayMs) override;
+  void postDelayedTaskToCurrentThread(const WebTraceLocation&,
+                                      std::unique_ptr<WTF::Closure>,
+                                      double delayMs) override;
 };
 
 void MockCanvasAsyncBlobCreator::signalAlternativeCodePathFinishedForTesting() {
   testing::exitRunLoop();
 }
 
-void MockCanvasAsyncBlobCreator::postDelayedTaskToMainThread(
+void MockCanvasAsyncBlobCreator::postDelayedTaskToCurrentThread(
     const WebTraceLocation& location,
     std::unique_ptr<WTF::Closure> task,
     double delayMs) {
@@ -200,7 +200,7 @@ void CanvasAsyncBlobCreatorTest::
 
 void CanvasAsyncBlobCreatorTest::prepareMockCanvasAsyncBlobCreatorFailPng() {
   IntSize testSize(0, 0);
-  ImageData* imageData = ImageData::create(testSize);
+  ImageData* imageData = ImageData::createForTest(testSize);
 
   // We reuse the class MockCanvasAsyncBlobCreatorWithoutCompletePng because
   // this test case is expected to fail at initialization step before
@@ -229,7 +229,7 @@ void CanvasAsyncBlobCreatorTest::
 
 void CanvasAsyncBlobCreatorTest::prepareMockCanvasAsyncBlobCreatorFailJpeg() {
   IntSize testSize(0, 0);
-  ImageData* imageData = ImageData::create(testSize);
+  ImageData* imageData = ImageData::createForTest(testSize);
 
   // We reuse the class MockCanvasAsyncBlobCreatorWithoutCompleteJpeg because
   // this test case is expected to fail at initialization step before

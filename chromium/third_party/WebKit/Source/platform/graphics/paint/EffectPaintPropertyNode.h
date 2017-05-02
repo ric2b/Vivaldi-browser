@@ -7,12 +7,14 @@
 
 #include "cc/layers/layer.h"
 #include "platform/PlatformExport.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
+#include "wtf/text/WTFString.h"
 
 #include <iosfwd>
 
@@ -26,6 +28,7 @@ namespace blink {
 class PLATFORM_EXPORT EffectPaintPropertyNode
     : public RefCounted<EffectPaintPropertyNode> {
  public:
+  // This node is really a sentinel, and does not represent a real effect.
   static EffectPaintPropertyNode* root();
 
   static PassRefPtr<EffectPaintPropertyNode> create(
@@ -33,17 +36,25 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
       PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
       PassRefPtr<const ClipPaintPropertyNode> outputClip,
       CompositorFilterOperations filter,
-      float opacity) {
+      float opacity,
+      SkBlendMode blendMode,
+      CompositingReasons directCompositingReasons = CompositingReasonNone,
+      const CompositorElementId& compositorElementId = CompositorElementId()) {
     return adoptRef(new EffectPaintPropertyNode(
         std::move(parent), std::move(localTransformSpace),
-        std::move(outputClip), std::move(filter), opacity));
+        std::move(outputClip), std::move(filter), opacity, blendMode,
+        directCompositingReasons, compositorElementId));
   }
 
-  void update(PassRefPtr<const EffectPaintPropertyNode> parent,
-              PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
-              PassRefPtr<const ClipPaintPropertyNode> outputClip,
-              CompositorFilterOperations filter,
-              float opacity) {
+  void update(
+      PassRefPtr<const EffectPaintPropertyNode> parent,
+      PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
+      PassRefPtr<const ClipPaintPropertyNode> outputClip,
+      CompositorFilterOperations filter,
+      float opacity,
+      SkBlendMode blendMode,
+      CompositingReasons directCompositingReasons = CompositingReasonNone,
+      CompositorElementId compositorElementId = CompositorElementId()) {
     DCHECK(!isRoot());
     DCHECK(parent != this);
     m_parent = parent;
@@ -51,6 +62,9 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
     m_outputClip = outputClip;
     m_filter = std::move(filter);
     m_opacity = opacity;
+    m_blendMode = blendMode;
+    m_directCompositingReasons = directCompositingReasons;
+    m_compositorElementId = compositorElementId;
   }
 
   const TransformPaintPropertyNode* localTransformSpace() const {
@@ -58,6 +72,7 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   }
   const ClipPaintPropertyNode* outputClip() const { return m_outputClip.get(); }
 
+  SkBlendMode blendMode() const { return m_blendMode; }
   float opacity() const { return m_opacity; }
   const CompositorFilterOperations& filter() const { return m_filter; }
 
@@ -72,18 +87,33 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   // an effect node before it has been updated, to later detect changes.
   PassRefPtr<EffectPaintPropertyNode> clone() const {
     return adoptRef(new EffectPaintPropertyNode(
-        m_parent, m_localTransformSpace, m_outputClip, m_filter, m_opacity));
+        m_parent, m_localTransformSpace, m_outputClip, m_filter, m_opacity,
+        m_blendMode, m_directCompositingReasons, m_compositorElementId));
   }
 
   // The equality operator is used by FindPropertiesNeedingUpdate.h for checking
-  // if an effect node has changed.
+  // if an effect node has changed. It ignores changes of reference filters
+  // because SkImageFilter doesn't have an equality operator.
   bool operator==(const EffectPaintPropertyNode& o) const {
     return m_parent == o.m_parent &&
            m_localTransformSpace == o.m_localTransformSpace &&
-           m_outputClip == o.m_outputClip && m_filter == o.m_filter &&
-           m_opacity == o.m_opacity;
+           m_outputClip == o.m_outputClip &&
+           m_filter.equalsIgnoringReferenceFilters(o.m_filter) &&
+           m_opacity == o.m_opacity && m_blendMode == o.m_blendMode &&
+           m_directCompositingReasons == o.m_directCompositingReasons &&
+           m_compositorElementId == o.m_compositorElementId;
   }
 #endif
+
+  String toString() const;
+
+  bool hasDirectCompositingReasons() const {
+    return m_directCompositingReasons != CompositingReasonNone;
+  }
+
+  const CompositorElementId& compositorElementId() const {
+    return m_compositorElementId;
+  }
 
  private:
   EffectPaintPropertyNode(
@@ -91,12 +121,18 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
       PassRefPtr<const TransformPaintPropertyNode> localTransformSpace,
       PassRefPtr<const ClipPaintPropertyNode> outputClip,
       CompositorFilterOperations filter,
-      float opacity)
+      float opacity,
+      SkBlendMode blendMode,
+      CompositingReasons directCompositingReasons,
+      CompositorElementId compositorElementId)
       : m_parent(parent),
         m_localTransformSpace(localTransformSpace),
         m_outputClip(outputClip),
         m_filter(std::move(filter)),
-        m_opacity(opacity) {}
+        m_opacity(opacity),
+        m_blendMode(blendMode),
+        m_directCompositingReasons(directCompositingReasons),
+        m_compositorElementId(compositorElementId) {}
 
   RefPtr<const EffectPaintPropertyNode> m_parent;
   // The local transform space serves two purposes:
@@ -114,6 +150,7 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   // === Begin of effects ===
   CompositorFilterOperations m_filter;
   float m_opacity;
+  SkBlendMode m_blendMode;
   // === End of effects ===
 
   // TODO(trchen): Remove the dummy layer.
@@ -122,6 +159,9 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   // be removed in favor of a stable ID once cc::LayerImpl no longer owns
   // RenderSurfaceImpl.
   mutable scoped_refptr<cc::Layer> m_dummyLayer;
+
+  CompositingReasons m_directCompositingReasons;
+  CompositorElementId m_compositorElementId;
 };
 
 // Redeclared here to avoid ODR issues.

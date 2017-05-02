@@ -69,12 +69,12 @@ HeapVector<Member<EventTarget>>& TreeScopeEventContext::ensureEventPath(
   LocalDOMWindow* window = path.windowEventContext().window();
   m_eventPath->reserveCapacity(path.size() + (window ? 1 : 0));
 
-  for (size_t i = 0; i < path.size(); ++i) {
-    if (path[i].treeScopeEventContext().isUnclosedTreeOf(*this))
-      m_eventPath->append(path[i].node());
+  for (auto& context : path.nodeEventContexts()) {
+    if (context.treeScopeEventContext().isUnclosedTreeOf(*this))
+      m_eventPath->push_back(context.node());
   }
   if (window)
-    m_eventPath->append(window);
+    m_eventPath->push_back(window);
   return *m_eventPath;
 }
 
@@ -112,10 +112,10 @@ int TreeScopeEventContext::calculateTreeOrderAndSetNearestAncestorClosedTree(
       (rootNode().isShadowRoot() && !toShadowRoot(rootNode()).isOpenOrV0())
           ? this
           : nearestAncestorClosedTreeScopeEventContext;
-  for (size_t i = 0; i < m_children.size(); ++i)
-    orderNumber =
-        m_children[i]->calculateTreeOrderAndSetNearestAncestorClosedTree(
-            orderNumber + 1, containingClosedShadowTree());
+  for (const auto& context : m_children) {
+    orderNumber = context->calculateTreeOrderAndSetNearestAncestorClosedTree(
+        orderNumber + 1, containingClosedShadowTree());
+  }
   m_postOrder = orderNumber + 1;
 
   return orderNumber + 1;

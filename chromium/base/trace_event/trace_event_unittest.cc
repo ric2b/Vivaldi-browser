@@ -30,8 +30,12 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
+#include "base/trace_event/event_name_filter.h"
+#include "base/trace_event/heap_profiler_event_filter.h"
 #include "base/trace_event/trace_buffer.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/trace_event_filter.h"
+#include "base/trace_event/trace_event_filter_test_utils.h"
 #include "base/trace_event/trace_event_synthetic_delay.h"
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -260,7 +264,7 @@ DictionaryValue* TraceEventTestFixture::FindMatchingTraceEntry(
   for (size_t i = 0; i < trace_parsed_count; i++) {
     Value* value = NULL;
     trace_parsed_.Get(i, &value);
-    if (!value || value->GetType() != Value::TYPE_DICTIONARY)
+    if (!value || value->GetType() != Value::Type::DICTIONARY)
       continue;
     DictionaryValue* dict = static_cast<DictionaryValue*>(value);
 
@@ -278,7 +282,7 @@ void TraceEventTestFixture::DropTracedMetadataRecords() {
   for (size_t i = 0; i < old_trace_parsed_size; i++) {
     Value* value = nullptr;
     old_trace_parsed->Get(i, &value);
-    if (!value || value->GetType() != Value::TYPE_DICTIONARY) {
+    if (!value || value->GetType() != Value::Type::DICTIONARY) {
       trace_parsed_.Append(value->CreateDeepCopy());
       continue;
     }
@@ -367,7 +371,7 @@ const DictionaryValue* FindTraceEntry(
          match_after_this_item = NULL;
       continue;
     }
-    if (!value || value->GetType() != Value::TYPE_DICTIONARY)
+    if (!value || value->GetType() != Value::Type::DICTIONARY)
       continue;
     const DictionaryValue* dict = static_cast<const DictionaryValue*>(value);
 
@@ -385,7 +389,7 @@ std::vector<const DictionaryValue*> FindTraceEntries(
   for (size_t i = 0; i < trace_parsed_count; i++) {
     const Value* value = NULL;
     trace_parsed.Get(i, &value);
-    if (!value || value->GetType() != Value::TYPE_DICTIONARY)
+    if (!value || value->GetType() != Value::Type::DICTIONARY)
       continue;
     const DictionaryValue* dict = static_cast<const DictionaryValue*>(value);
 
@@ -524,6 +528,8 @@ void TraceWithAllMacroVariants(WaitableEvent* task_complete_event) {
                    TRACE_ID_LOCAL(0x2000));
     TRACE_LINK_IDS("all", "TRACE_LINK_IDS to a global ID", 0x1000,
                    TRACE_ID_GLOBAL(0x2000));
+    TRACE_LINK_IDS("all", "TRACE_LINK_IDS to a composite ID", 0x1000,
+                   TRACE_ID_WITH_SCOPE("scope 1", 0x2000, 0x3000));
 
     TRACE_EVENT_ASYNC_BEGIN0("all", "async default process scope", 0x1000);
     TRACE_EVENT_ASYNC_BEGIN0("all", "async local id", TRACE_ID_LOCAL(0x2000));
@@ -1044,6 +1050,25 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_EQ("0x2000", id2);
   }
 
+  EXPECT_FIND_("TRACE_LINK_IDS to a composite ID");
+  {
+    std::string ph;
+    EXPECT_TRUE((item && item->GetString("ph", &ph)));
+    EXPECT_EQ("=", ph);
+
+    EXPECT_FALSE(item->HasKey("scope"));
+    std::string id1;
+    EXPECT_TRUE(item->GetString("id", &id1));
+    EXPECT_EQ("0x1000", id1);
+
+    std::string scope;
+    EXPECT_TRUE(item->GetString("args.linked_id.scope", &scope));
+    EXPECT_EQ("scope 1", scope);
+    std::string id2;
+    EXPECT_TRUE(item->GetString("args.linked_id.id", &id2));
+    EXPECT_EQ(id2, "0x2000/0x3000");
+  }
+
   EXPECT_FIND_("async default process scope");
   {
     std::string ph;
@@ -1114,7 +1139,7 @@ void ValidateInstantEventPresentOnEveryThread(const ListValue& trace_parsed,
   for (size_t i = 0; i < trace_parsed_count; i++) {
     const Value* value = NULL;
     trace_parsed.Get(i, &value);
-    if (!value || value->GetType() != Value::TYPE_DICTIONARY)
+    if (!value || value->GetType() != Value::Type::DICTIONARY)
       continue;
     const DictionaryValue* dict = static_cast<const DictionaryValue*>(value);
     std::string name;
@@ -2320,7 +2345,7 @@ TEST_F(TraceEventTestFixture, PrimitiveArgs) {
   dict->GetDictionary("args", &args_dict);
   ASSERT_TRUE(args_dict);
   EXPECT_TRUE(args_dict->Get("float_one", &value));
-  EXPECT_TRUE(value->IsType(Value::TYPE_DOUBLE));
+  EXPECT_TRUE(value->IsType(Value::Type::DOUBLE));
   EXPECT_TRUE(value->GetAsDouble(&double_value));
   EXPECT_EQ(1, double_value);
 
@@ -2330,7 +2355,7 @@ TEST_F(TraceEventTestFixture, PrimitiveArgs) {
   dict->GetDictionary("args", &args_dict);
   ASSERT_TRUE(args_dict);
   EXPECT_TRUE(args_dict->Get("float_half", &value));
-  EXPECT_TRUE(value->IsType(Value::TYPE_DOUBLE));
+  EXPECT_TRUE(value->IsType(Value::Type::DOUBLE));
   EXPECT_TRUE(value->GetAsDouble(&double_value));
   EXPECT_EQ(0.5, double_value);
 
@@ -2340,7 +2365,7 @@ TEST_F(TraceEventTestFixture, PrimitiveArgs) {
   dict->GetDictionary("args", &args_dict);
   ASSERT_TRUE(args_dict);
   EXPECT_TRUE(args_dict->Get("float_neghalf", &value));
-  EXPECT_TRUE(value->IsType(Value::TYPE_DOUBLE));
+  EXPECT_TRUE(value->IsType(Value::Type::DOUBLE));
   EXPECT_TRUE(value->GetAsDouble(&double_value));
   EXPECT_EQ(-0.5, double_value);
 
@@ -2956,45 +2981,6 @@ TEST_F(TraceEventTestFixture, SyntheticDelayConfigurationToString) {
   EXPECT_EQ(filter, config.ToCategoryFilterString());
 }
 
-class TestEventFilter : public TraceLog::TraceEventFilter {
- public:
-  bool FilterTraceEvent(const TraceEvent& trace_event) const override {
-    filter_trace_event_hit_count_++;
-    return filter_return_value_;
-  }
-
-  void EndEvent(const char* category_group, const char* name) override {
-    end_event_hit_count_++;
-  }
-
-  static void set_filter_return_value(bool value) {
-    filter_return_value_ = value;
-  }
-
-  static size_t filter_trace_event_hit_count() {
-    return filter_trace_event_hit_count_;
-  }
-  static size_t end_event_hit_count() { return end_event_hit_count_; }
-
-  static void clear_counts() {
-    filter_trace_event_hit_count_ = 0;
-    end_event_hit_count_ = 0;
-  }
-
- private:
-  static size_t filter_trace_event_hit_count_;
-  static size_t end_event_hit_count_;
-  static bool filter_return_value_;
-};
-
-size_t TestEventFilter::filter_trace_event_hit_count_ = 0;
-size_t TestEventFilter::end_event_hit_count_ = 0;
-bool TestEventFilter::filter_return_value_ = false;
-
-std::unique_ptr<TraceLog::TraceEventFilter> ConstructTestEventFilter() {
-  return WrapUnique(new TestEventFilter);
-}
-
 TEST_F(TraceEventTestFixture, TraceFilteringMode) {
   const char config_json[] =
       "{"
@@ -3007,8 +2993,9 @@ TEST_F(TraceEventTestFixture, TraceFilteringMode) {
       "}";
 
   // Run RECORDING_MODE within FILTERING_MODE:
+  TestEventFilter::HitsCounter filter_hits_counter;
   TestEventFilter::set_filter_return_value(true);
-  TraceLog::SetTraceEventFilterConstructorForTesting(ConstructTestEventFilter);
+  TraceLog::GetInstance()->SetFilterFactoryForTesting(TestEventFilter::Factory);
 
   // Only filtering mode is enabled with test filters.
   TraceLog::GetInstance()->SetEnabled(TraceConfig(config_json),
@@ -3048,10 +3035,10 @@ TEST_F(TraceEventTestFixture, TraceFilteringMode) {
   EXPECT_FALSE(FindMatchingValue("name", "name1"));
   EXPECT_TRUE(FindMatchingValue("cat", "c2"));
   EXPECT_TRUE(FindMatchingValue("name", "name2"));
-  EXPECT_EQ(6u, TestEventFilter::filter_trace_event_hit_count());
-  EXPECT_EQ(3u, TestEventFilter::end_event_hit_count());
+  EXPECT_EQ(6u, filter_hits_counter.filter_trace_event_hit_count);
+  EXPECT_EQ(3u, filter_hits_counter.end_event_hit_count);
   Clear();
-  TestEventFilter::clear_counts();
+  filter_hits_counter.Reset();
 
   // Run FILTERING_MODE within RECORDING_MODE:
   // Only recording mode is enabled and all events must be recorded.
@@ -3090,10 +3077,9 @@ TEST_F(TraceEventTestFixture, TraceFilteringMode) {
   EXPECT_TRUE(FindMatchingValue("name", "name2"));
   EXPECT_FALSE(FindMatchingValue("cat", "c1"));
   EXPECT_FALSE(FindMatchingValue("name", "name1"));
-  EXPECT_EQ(1u, TestEventFilter::filter_trace_event_hit_count());
-  EXPECT_EQ(1u, TestEventFilter::end_event_hit_count());
+  EXPECT_EQ(1u, filter_hits_counter.filter_trace_event_hit_count);
+  EXPECT_EQ(1u, filter_hits_counter.end_event_hit_count);
   Clear();
-  TestEventFilter::clear_counts();
 }
 
 TEST_F(TraceEventTestFixture, EventFiltering) {
@@ -3111,8 +3097,10 @@ TEST_F(TraceEventTestFixture, EventFiltering) {
       "  ]"
       "}";
 
+  TestEventFilter::HitsCounter filter_hits_counter;
   TestEventFilter::set_filter_return_value(true);
-  TraceLog::SetTraceEventFilterConstructorForTesting(ConstructTestEventFilter);
+  TraceLog::GetInstance()->SetFilterFactoryForTesting(TestEventFilter::Factory);
+
   TraceConfig trace_config(config_json);
   TraceLog::GetInstance()->SetEnabled(
       trace_config, TraceLog::RECORDING_MODE | TraceLog::FILTERING_MODE);
@@ -3127,9 +3115,8 @@ TEST_F(TraceEventTestFixture, EventFiltering) {
 
   EndTraceAndFlush();
 
-  EXPECT_EQ(3u, TestEventFilter::filter_trace_event_hit_count());
-  EXPECT_EQ(1u, TestEventFilter::end_event_hit_count());
-  TestEventFilter::clear_counts();
+  EXPECT_EQ(3u, filter_hits_counter.filter_trace_event_hit_count);
+  EXPECT_EQ(1u, filter_hits_counter.end_event_hit_count);
 }
 
 TEST_F(TraceEventTestFixture, EventWhitelistFiltering) {
@@ -3150,7 +3137,7 @@ TEST_F(TraceEventTestFixture, EventWhitelistFiltering) {
       "    "
       "  ]"
       "}",
-      TraceLog::TraceEventFilter::kEventWhitelistPredicate);
+      EventNameFilter::kName);
 
   TraceConfig trace_config(config_json);
   TraceLog::GetInstance()->SetEnabled(
@@ -3182,7 +3169,7 @@ TEST_F(TraceEventTestFixture, HeapProfilerFiltering) {
       "     }"
       "  ]"
       "}",
-      TraceLog::TraceEventFilter::kHeapProfilerPredicate);
+      HeapProfilerEventFilter::kName);
 
   TraceConfig trace_config(config_json);
   TraceLog::GetInstance()->SetEnabled(

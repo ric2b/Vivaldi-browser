@@ -6,17 +6,44 @@
  * UMA exporter for Quick View.
  *
  * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!DialogType} dialogType
  *
  * @constructor
  */
-function QuickViewUma(volumeManager) {
+function QuickViewUma(volumeManager, dialogType) {
 
   /**
    * @type {!VolumeManagerWrapper}
    * @private
    */
   this.volumeManager_ = volumeManager;
+  /**
+   * @type {DialogType}
+   * @private
+   */
+  this.dialogType_ = dialogType;
 }
+
+/**
+ * In which way quick view was opened.
+ * @enum {string}
+ * @const
+ */
+QuickViewUma.WayToOpen = {
+  CONTEXT_MENU: 'contextMenu',
+  SPACE_KEY: 'spaceKey',
+};
+
+/**
+ * The order should be consistnet with the definition  in histograms.xml.
+ *
+ * @const {!Array<QuickViewUma.WayToOpen>}
+ * @private
+ */
+QuickViewUma.WayToOpenValues_ = [
+  QuickViewUma.WayToOpen.CONTEXT_MENU,
+  QuickViewUma.WayToOpen.SPACE_KEY,
+];
 
 /**
  * Keep the order of this in sync with FileManagerVolumeType in
@@ -32,6 +59,7 @@ QuickViewUma.VolumeType = [
   VolumeManagerCommon.VolumeType.ARCHIVE,
   VolumeManagerCommon.VolumeType.PROVIDED,
   VolumeManagerCommon.VolumeType.MTP,
+  VolumeManagerCommon.VolumeType.MEDIA_VIEW,
 ];
 
 /**
@@ -63,9 +91,13 @@ QuickViewUma.prototype.onEntryChanged = function(entry) {
  * Exports UMA based on the entry selected when Quick View is opened.
  *
  * @param {!FileEntry} entry
+ * @param {QuickViewUma.WayToOpen} wayToOpen
  */
-QuickViewUma.prototype.onOpened = function(entry) {
+QuickViewUma.prototype.onOpened = function(entry, wayToOpen) {
   this.exportFileType_(entry, 'QuickView.FileTypeOnLaunch');
+  metrics.recordEnum(
+      'QuickView.WayToOpen', wayToOpen, QuickViewUma.WayToOpenValues_);
+
   var volumeType = this.volumeManager_.getVolumeInfo(entry).volumeType;
   if (QuickViewUma.VolumeType.includes(volumeType)) {
     metrics.recordEnum(
@@ -73,4 +105,13 @@ QuickViewUma.prototype.onOpened = function(entry) {
   } else {
     console.error('Unknown volume type: ' + volumeType);
   }
+  // Record stats of dialog types. It must be in sync with
+  // FileDialogType enum in tools/metrics/histograms/histogram.xml.
+  metrics.recordEnum('QuickView.DialogType', this.dialogType_,
+      [DialogType.SELECT_FOLDER,
+       DialogType.SELECT_UPLOAD_FOLDER,
+       DialogType.SELECT_SAVEAS_FILE,
+       DialogType.SELECT_OPEN_FILE,
+       DialogType.SELECT_OPEN_MULTI_FILE,
+       DialogType.FULL_PAGE]);
 };

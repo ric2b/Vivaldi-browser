@@ -30,7 +30,6 @@
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/download/download_stats.h"
-#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -44,7 +43,6 @@
 #include "content/common/child_process_host_impl.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
-#include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/render_process_messages.h"
 #include "content/common/view_messages.h"
@@ -61,8 +59,8 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
 #include "media/base/media_log_event.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/io_buffer.h"
-#include "net/base/keygen_handler.h"
 #include "net/base/mime_util.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_cache.h"
@@ -144,7 +142,6 @@ RenderMessageFilter::RenderMessageFilter(
       resource_context_(browser_context->GetResourceContext()),
       render_widget_helper_(render_widget_helper),
       dom_storage_context_(dom_storage_context),
-      gpu_process_id_(0),
       render_process_id_(render_process_id),
       media_internals_(media_internals),
       cache_storage_context_(cache_storage_context),
@@ -158,12 +155,6 @@ RenderMessageFilter::RenderMessageFilter(
 RenderMessageFilter::~RenderMessageFilter() {
   // This function should be called on the IO thread.
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager =
-      BrowserGpuMemoryBufferManager::current();
-  if (gpu_memory_buffer_manager)
-    gpu_memory_buffer_manager->ProcessRemoved(PeerHandle(), render_process_id_);
-  discardable_memory::DiscardableSharedMemoryManager::current()->ClientRemoved(
-      render_process_id_);
 }
 
 bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
@@ -183,34 +174,12 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
         ViewHostMsg_SetNeedsBeginFrames,
         ResizeHelperPostMsgToUIThread(render_process_id_, message))
 #endif
-    // NB: The SyncAllocateGpuMemoryBuffer and DeletedGpuMemoryBuffer IPCs are
-    // handled here for renderer processes. For non-renderer child processes,
-    // they are handled in ChildProcessHostImpl.
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(
-        ChildProcessHostMsg_SyncAllocateSharedBitmap, OnAllocateSharedBitmap)
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(
-        ChildProcessHostMsg_SyncAllocateGpuMemoryBuffer,
-        OnAllocateGpuMemoryBuffer)
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(ChildProcessHostMsg_EstablishGpuChannel,
-                                    OnEstablishGpuChannel)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(ChildProcessHostMsg_HasGpuProcess,
                                     OnHasGpuProcess)
-    IPC_MESSAGE_HANDLER(ChildProcessHostMsg_DeletedGpuMemoryBuffer,
-                        OnDeletedGpuMemoryBuffer)
-    IPC_MESSAGE_HANDLER(ChildProcessHostMsg_AllocatedSharedBitmap,
-                        OnAllocatedSharedBitmap)
-    IPC_MESSAGE_HANDLER(ChildProcessHostMsg_DeletedSharedBitmap,
-                        OnDeletedSharedBitmap)
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(
-        ChildProcessHostMsg_SyncAllocateLockedDiscardableSharedMemory,
-        OnAllocateLockedDiscardableSharedMemory)
-    IPC_MESSAGE_HANDLER(ChildProcessHostMsg_DeletedDiscardableSharedMemory,
-                        OnDeletedDiscardableSharedMemory)
 #if defined(OS_LINUX)
     IPC_MESSAGE_HANDLER(ChildProcessHostMsg_SetThreadPriority,
                         OnSetThreadPriority)
 #endif
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(RenderProcessHostMsg_Keygen, OnKeygen)
     IPC_MESSAGE_HANDLER(RenderProcessHostMsg_DidGenerateCacheableMetadata,
                         OnCacheableMetadataAvailable)
     IPC_MESSAGE_HANDLER(
@@ -246,24 +215,13 @@ void RenderMessageFilter::CreateNewWindow(
     mojom::CreateNewWindowParamsPtr params,
     const CreateNewWindowCallback& callback) {
   bool no_javascript_access;
-  bool can_create_window =
-      GetContentClient()->browser()->CanCreateWindow(
-          params->opener_url,
-          params->opener_top_level_frame_url,
-          params->opener_security_origin,
-          params->window_container_type,
-          params->target_url,
-          params->referrer,
-          params->frame_name,
-          params->disposition,
-          params->features,
-          params->user_gesture,
-          params->opener_suppressed,
-          resource_context_,
-          render_process_id_,
-          params->opener_id,
-          params->opener_render_frame_id,
-          &no_javascript_access);
+  bool can_create_window = GetContentClient()->browser()->CanCreateWindow(
+      render_process_id_, params->opener_render_frame_id, params->opener_url,
+      params->opener_top_level_frame_url, params->opener_security_origin,
+      params->window_container_type, params->target_url, params->referrer,
+      params->frame_name, params->disposition, params->features,
+      params->user_gesture, params->opener_suppressed, resource_context_,
+      &no_javascript_access);
 
   mojom::CreateNewWindowReplyPtr reply = mojom::CreateNewWindowReply::New();
   if (!can_create_window) {
@@ -281,7 +239,7 @@ void RenderMessageFilter::CreateNewWindow(
   reply->cloned_session_storage_namespace_id = cloned_namespace->id();
 
   render_widget_helper_->CreateNewWindow(
-      std::move(params), no_javascript_access, PeerHandle(), &reply->route_id,
+      std::move(params), no_javascript_access, &reply->route_id,
       &reply->main_frame_route_id, &reply->main_frame_widget_route_id,
       cloned_namespace.get());
   callback.Run(std::move(reply));
@@ -334,79 +292,19 @@ void RenderMessageFilter::SendLoadFontReply(IPC::Message* reply,
 
 #endif  // defined(OS_MACOSX)
 
-void RenderMessageFilter::AllocateSharedBitmapOnFileThread(
-    uint32_t buffer_size,
-    const cc::SharedBitmapId& id,
-    IPC::Message* reply_msg) {
-  base::SharedMemoryHandle handle;
-  bitmap_manager_client_.AllocateSharedBitmapForChild(PeerHandle(), buffer_size,
-                                                      id, &handle);
-  ChildProcessHostMsg_SyncAllocateSharedBitmap::WriteReplyParams(reply_msg,
-                                                                 handle);
-  Send(reply_msg);
-}
-
-void RenderMessageFilter::OnAllocateSharedBitmap(uint32_t buffer_size,
-                                                 const cc::SharedBitmapId& id,
-                                                 IPC::Message* reply_msg) {
-  BrowserThread::PostTask(
-      BrowserThread::FILE_USER_BLOCKING,
-      FROM_HERE,
-      base::Bind(&RenderMessageFilter::AllocateSharedBitmapOnFileThread,
-                 this,
-                 buffer_size,
-                 id,
-                 reply_msg));
-}
-
-void RenderMessageFilter::OnAllocatedSharedBitmap(
-    size_t buffer_size,
-    const base::SharedMemoryHandle& handle,
+void RenderMessageFilter::AllocatedSharedBitmap(
+    mojo::ScopedSharedBufferHandle buffer,
     const cc::SharedBitmapId& id) {
-  bitmap_manager_client_.ChildAllocatedSharedBitmap(buffer_size, handle, id);
+  base::SharedMemoryHandle memory_handle;
+  size_t size;
+  MojoResult result = mojo::UnwrapSharedMemoryHandle(
+      std::move(buffer), &memory_handle, &size, NULL);
+  DCHECK_EQ(result, MOJO_RESULT_OK);
+  bitmap_manager_client_.ChildAllocatedSharedBitmap(size, memory_handle, id);
 }
 
-void RenderMessageFilter::OnDeletedSharedBitmap(const cc::SharedBitmapId& id) {
+void RenderMessageFilter::DeletedSharedBitmap(const cc::SharedBitmapId& id) {
   bitmap_manager_client_.ChildDeletedSharedBitmap(id);
-}
-
-void RenderMessageFilter::AllocateLockedDiscardableSharedMemoryOnFileThread(
-    uint32_t size,
-    discardable_memory::DiscardableSharedMemoryId id,
-    IPC::Message* reply_msg) {
-  base::SharedMemoryHandle handle;
-  discardable_memory::DiscardableSharedMemoryManager::current()
-      ->AllocateLockedDiscardableSharedMemoryForClient(
-          PeerHandle(), render_process_id_, size, id, &handle);
-  ChildProcessHostMsg_SyncAllocateLockedDiscardableSharedMemory::
-      WriteReplyParams(reply_msg, handle);
-  Send(reply_msg);
-}
-
-void RenderMessageFilter::OnAllocateLockedDiscardableSharedMemory(
-    uint32_t size,
-    discardable_memory::DiscardableSharedMemoryId id,
-    IPC::Message* reply_msg) {
-  BrowserThread::PostTask(
-      BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
-      base::Bind(&RenderMessageFilter::
-                     AllocateLockedDiscardableSharedMemoryOnFileThread,
-                 this, size, id, reply_msg));
-}
-
-void RenderMessageFilter::DeletedDiscardableSharedMemoryOnFileThread(
-    discardable_memory::DiscardableSharedMemoryId id) {
-  discardable_memory::DiscardableSharedMemoryManager::current()
-      ->ClientDeletedDiscardableSharedMemory(id, render_process_id_);
-}
-
-void RenderMessageFilter::OnDeletedDiscardableSharedMemory(
-    discardable_memory::DiscardableSharedMemoryId id) {
-  BrowserThread::PostTask(
-      BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
-      base::Bind(
-          &RenderMessageFilter::DeletedDiscardableSharedMemoryOnFileThread,
-          this, id));
 }
 
 #if defined(OS_LINUX)
@@ -494,76 +392,6 @@ void RenderMessageFilter::OnCacheStorageOpenCallback(
                        url, expected_response_time, buf, buf_len);
 }
 
-void RenderMessageFilter::OnKeygen(uint32_t key_size_index,
-                                   const std::string& challenge_string,
-                                   const GURL& url,
-                                   const GURL& top_origin,
-                                   IPC::Message* reply_msg) {
-  if (!resource_context_)
-    return;
-
-  // Map displayed strings indicating level of keysecurity in the <keygen>
-  // menu to the key size in bits. (See SSLKeyGeneratorChromium.cpp in WebCore.)
-  int key_size_in_bits;
-  switch (key_size_index) {
-    case 0:
-      key_size_in_bits = 2048;
-      break;
-    case 1:
-      key_size_in_bits = 1024;
-      break;
-    default:
-      DCHECK(false) << "Illegal key_size_index " << key_size_index;
-      RenderProcessHostMsg_Keygen::WriteReplyParams(reply_msg, std::string());
-      Send(reply_msg);
-      return;
-  }
-
-  if (!GetContentClient()->browser()->AllowKeygen(top_origin,
-                                                  resource_context_)) {
-    RenderProcessHostMsg_Keygen::WriteReplyParams(reply_msg, std::string());
-    Send(reply_msg);
-    return;
-  }
-
-  resource_context_->CreateKeygenHandler(
-      key_size_in_bits,
-      challenge_string,
-      url,
-      base::Bind(
-          &RenderMessageFilter::PostKeygenToWorkerThread, this, reply_msg));
-}
-
-void RenderMessageFilter::PostKeygenToWorkerThread(
-    IPC::Message* reply_msg,
-    std::unique_ptr<net::KeygenHandler> keygen_handler) {
-  VLOG(1) << "Dispatching keygen task to worker pool.";
-  // Dispatch to worker pool, so we do not block the IO thread.
-  if (!base::WorkerPool::PostTask(
-           FROM_HERE,
-           base::Bind(&RenderMessageFilter::OnKeygenOnWorkerThread,
-                      this,
-                      base::Passed(&keygen_handler),
-                      reply_msg),
-           true)) {
-    NOTREACHED() << "Failed to dispatch keygen task to worker pool";
-    RenderProcessHostMsg_Keygen::WriteReplyParams(reply_msg, std::string());
-    Send(reply_msg);
-  }
-}
-
-void RenderMessageFilter::OnKeygenOnWorkerThread(
-    std::unique_ptr<net::KeygenHandler> keygen_handler,
-    IPC::Message* reply_msg) {
-  DCHECK(reply_msg);
-
-  // Generate a signed public key and challenge, then send it back.
-  RenderProcessHostMsg_Keygen::WriteReplyParams(
-      reply_msg,
-      keygen_handler->GenKeyAndSignChallenge());
-  Send(reply_msg);
-}
-
 void RenderMessageFilter::OnMediaLogEvents(
     const std::vector<media::MediaLogEvent>& events) {
   // OnMediaLogEvents() is always dispatched to the UI thread for handling.
@@ -573,95 +401,11 @@ void RenderMessageFilter::OnMediaLogEvents(
     media_internals_->OnMediaEvents(render_process_id_, events);
 }
 
-void RenderMessageFilter::OnAllocateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
-                                                    uint32_t width,
-                                                    uint32_t height,
-                                                    gfx::BufferFormat format,
-                                                    gfx::BufferUsage usage,
-                                                    IPC::Message* reply) {
-  DCHECK(BrowserGpuMemoryBufferManager::current());
-
-  base::CheckedNumeric<int> size = width;
-  size *= height;
-  if (!size.IsValid()) {
-    GpuMemoryBufferAllocated(reply, gfx::GpuMemoryBufferHandle());
-    return;
-  }
-
-  BrowserGpuMemoryBufferManager::current()
-      ->AllocateGpuMemoryBufferForChildProcess(
-          id, gfx::Size(width, height), format, usage, PeerHandle(),
-          render_process_id_,
-          base::Bind(&RenderMessageFilter::GpuMemoryBufferAllocated, this,
-                     reply));
-}
-
-void RenderMessageFilter::GpuMemoryBufferAllocated(
-    IPC::Message* reply,
-    const gfx::GpuMemoryBufferHandle& handle) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  ChildProcessHostMsg_SyncAllocateGpuMemoryBuffer::WriteReplyParams(reply,
-                                                                    handle);
-  Send(reply);
-}
-
-void RenderMessageFilter::OnEstablishGpuChannel(
-    CauseForGpuLaunch cause_for_gpu_launch,
-    IPC::Message* reply_ptr) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  std::unique_ptr<IPC::Message> reply(reply_ptr);
-
-  GpuProcessHost* host = GpuProcessHost::FromID(gpu_process_id_);
-  if (!host) {
-    host = GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-                               true, cause_for_gpu_launch);
-    if (!host) {
-      reply->set_reply_error();
-      Send(reply.release());
-      return;
-    }
-
-    gpu_process_id_ = host->host_id();
-  }
-
-  bool preempts = false;
-  bool allow_view_command_buffers = false;
-  bool allow_real_time_streams = false;
-  const GpuProcessHost::EstablishChannelCallback callback =
-      base::Bind(&RenderMessageFilter::EstablishChannelCallback,
-                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&reply));
-  if (cause_for_gpu_launch != CAUSE_FOR_GPU_LAUNCH_PLATFORM_MEDIA_PIPELINE)
-    host->EstablishGpuChannel(
-       render_process_id_,
-       ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
-           render_process_id_),
-       preempts, allow_view_command_buffers, allow_real_time_streams,
-      callback);
-  else
-    host->EstablishGpuChannelIgnoreDisallowedGpu(
-      render_process_id_,
-      ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
-          render_process_id_),
-      preempts, allow_view_command_buffers, allow_real_time_streams,
-      callback);
-}
-
 void RenderMessageFilter::OnHasGpuProcess(IPC::Message* reply_ptr) {
   std::unique_ptr<IPC::Message> reply(reply_ptr);
   GpuProcessHost::GetProcessHandles(
       base::Bind(&RenderMessageFilter::GetGpuProcessHandlesCallback,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&reply)));
-}
-
-void RenderMessageFilter::EstablishChannelCallback(
-    std::unique_ptr<IPC::Message> reply,
-    const IPC::ChannelHandle& channel,
-    const gpu::GPUInfo& gpu_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  ChildProcessHostMsg_EstablishGpuChannel::WriteReplyParams(
-      reply.get(), render_process_id_, channel, gpu_info);
-  Send(reply.release());
 }
 
 void RenderMessageFilter::GetGpuProcessHandlesCallback(
@@ -671,15 +415,6 @@ void RenderMessageFilter::GetGpuProcessHandlesCallback(
   ChildProcessHostMsg_HasGpuProcess::WriteReplyParams(reply.get(),
                                                       has_gpu_process);
   Send(reply.release());
-}
-
-void RenderMessageFilter::OnDeletedGpuMemoryBuffer(
-    gfx::GpuMemoryBufferId id,
-    const gpu::SyncToken& sync_token) {
-  DCHECK(BrowserGpuMemoryBufferManager::current());
-
-  BrowserGpuMemoryBufferManager::current()->ChildProcessDeletedGpuMemoryBuffer(
-      id, PeerHandle(), render_process_id_, sync_token);
 }
 
 }  // namespace content

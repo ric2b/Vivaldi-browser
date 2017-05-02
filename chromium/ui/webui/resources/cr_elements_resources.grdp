@@ -19,8 +19,11 @@
   <structure name="IDR_CR_ELEMENTS_CR_DIALOG_JS"
              file="../../webui/resources/cr_elements/cr_dialog/cr_dialog.js"
              type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_EXPAND_BUTTON_CSS"
-             file="../../webui/resources/cr_elements/cr_expand_button/cr_expand_button.css"
+  <structure name="IDR_CR_ELEMENTS_CR_DRAWER_HTML"
+             file="../../webui/resources/cr_elements/cr_drawer/cr_drawer.html"
+             type="chrome_html" />
+  <structure name="IDR_CR_ELEMENTS_CR_DRAWER_JS"
+             file="../../webui/resources/cr_elements/cr_drawer/cr_drawer.js"
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_EXPAND_BUTTON_HTML"
              file="../../webui/resources/cr_elements/cr_expand_button/cr_expand_button.html"
@@ -75,6 +78,10 @@
     <structure name="IDR_CR_ELEMENTS_CR_ONC_TYPES_JS"
                file="../../webui/resources/cr_elements/network/cr_onc_types.js"
                type="chrome_html" />
+    <structure name="IDR_CR_ELEMENTS_NETWORK_ICONS_HTML"
+               file="../../webui/resources/cr_elements/network/network_icons.html"
+               type="chrome_html"
+               preprocess="true" />
   </if>
   <structure name="IDR_CR_ELEMENTS_CR_POLICY_INDICATOR_CSS"
              file="../../webui/resources/cr_elements/policy/cr_policy_indicator.css"
@@ -132,24 +139,10 @@
   <structure name="IDR_CR_ELEMENTS_CR_SEARCH_FIELD_BEHAVIOR_JS"
              file="../../webui/resources/cr_elements/cr_search_field/cr_search_field_behavior.js"
              type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_SEARCH_FIELD_CSS"
-             file="../../webui/resources/cr_elements/cr_search_field/cr_search_field.css"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_SEARCH_FIELD_HTML"
-             file="../../webui/resources/cr_elements/cr_search_field/cr_search_field.html"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_SEARCH_FIELD_JS"
-             file="../../webui/resources/cr_elements/cr_search_field/cr_search_field.js"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_SHARED_MENU_HTML"
-             file="../../webui/resources/cr_elements/cr_shared_menu/cr_shared_menu.html"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_SHARED_MENU_JS"
-             file="../../webui/resources/cr_elements/cr_shared_menu/cr_shared_menu.js"
-             type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_SHARED_STYLE_CSS_HTML"
              file="../../webui/resources/cr_elements/shared_style_css.html"
-             type="chrome_html" />
+             type="chrome_html"
+             flattenhtml="true" />
   <structure name="IDR_CR_ELEMENTS_CR_SHARED_VARS_CSS_HTML"
              file="../../webui/resources/cr_elements/shared_vars_css.html"
              type="chrome_html" />
@@ -170,8 +163,5 @@
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_TOOLBAR_SEARCH_FIELD_JS"
              file="../../webui/resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_SHARED_CSS"
-             file="../../webui/resources/cr_elements/shared.css"
              type="chrome_html" />
 </grit-part>

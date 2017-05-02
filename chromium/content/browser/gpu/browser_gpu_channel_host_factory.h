@@ -40,6 +40,10 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   gpu::GpuChannelHost* GetGpuChannel();
   int GetGpuChannelId() { return gpu_client_id_; }
 
+  // Closes the channel to the GPU process. This should be called before the IO
+  // thread stops.
+  void CloseChannel();
+
   // Used to skip GpuChannelHost tests when there can be no GPU process.
   static bool CanUseForTesting();
 
@@ -48,7 +52,7 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   // shutdown.
   void EstablishGpuChannel(
       const gpu::GpuChannelEstablishedCallback& callback) override;
-  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
+  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync(bool force_access_to_gpu = false) override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 
  private:

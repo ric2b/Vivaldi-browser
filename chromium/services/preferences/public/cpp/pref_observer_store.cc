@@ -4,25 +4,27 @@
 
 #include "services/preferences/public/cpp/pref_observer_store.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "mojo/common/common_custom_types.mojom.h"
-#include "mojo/public/cpp/bindings/array.h"
 #include "services/service_manager/public/cpp/connector.h"
 
-PrefObserverStore::PrefObserverStore(
-    prefs::mojom::PreferencesManagerPtr prefs_manager_ptr)
-    : prefs_binding_(this),
-      prefs_manager_ptr_(std::move(prefs_manager_ptr)),
-      initialized_(false) {}
+namespace preferences {
 
-void PrefObserverStore::Init(const std::set<std::string>& keys) {
-  DCHECK(!initialized_);
-  keys_ = keys;
+PrefObserverStore::PrefObserverStore(
+    prefs::mojom::PreferencesFactoryPtr pref_factory_ptr)
+    : prefs_binding_(this),
+      pref_factory_ptr_(std::move(pref_factory_ptr)),
+      initialized_(false) {
+  pref_factory_ptr_->Create(prefs_binding_.CreateInterfacePtrAndBind(),
+                            mojo::MakeRequest(&prefs_manager_ptr_));
+}
+
+void PrefObserverStore::Subscribe(const std::set<std::string>& keys) {
+  keys_.insert(keys.begin(), keys.end());
 
   std::vector<std::string> pref_array;
   std::copy(keys_.begin(), keys_.end(), std::back_inserter(pref_array));
-  prefs_manager_ptr_->AddObserver(pref_array,
-                                  prefs_binding_.CreateInterfacePtrAndBind());
+  prefs_manager_ptr_->Subscribe(pref_array);
 }
 
 bool PrefObserverStore::GetValue(const std::string& key,
@@ -79,23 +81,24 @@ void PrefObserverStore::SetValueOnPreferenceManager(const std::string& key,
   if (keys_.find(key) == keys_.end())
     return;
 
-  base::DictionaryValue prefs;
-  prefs.Set(key, value.CreateDeepCopy());
-  prefs_manager_ptr_->SetPreferences(prefs);
+  auto prefs = base::MakeUnique<base::DictionaryValue>();
+  prefs->Set(key, value.CreateDeepCopy());
+  prefs_manager_ptr_->SetPreferences(std::move(prefs));
 }
 
 void PrefObserverStore::OnPreferencesChanged(
-    const base::DictionaryValue& preferences) {
-  for (base::DictionaryValue::Iterator it(preferences); !it.IsAtEnd();
-       it.Advance()) {
-    if (keys_.find(it.key()) == keys_.end())
-      continue;
-    // We deliberately call the parent to avoid notifying the server again.
-    ValueMapPrefStore::SetValue(it.key(), it.value().CreateDeepCopy(), 0);
-  }
-
+    std::unique_ptr<base::DictionaryValue> preferences) {
   if (!initialized_) {
     initialized_ = true;
     NotifyInitializationCompleted();
   }
+
+  for (base::DictionaryValue::Iterator it(*preferences); !it.IsAtEnd();
+       it.Advance()) {
+    if (keys_.find(it.key()) == keys_.end())
+      continue;
+    ValueMapPrefStore::SetValue(it.key(), it.value().CreateDeepCopy(), 0);
+  }
 }
+
+}  // namespace preferences

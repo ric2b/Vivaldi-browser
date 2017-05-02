@@ -58,7 +58,7 @@ bool UnderlyingSourceBase::hasPendingActivity() const {
   return m_controller && m_controller->isActive() && m_isStreamLocked;
 }
 
-void UnderlyingSourceBase::contextDestroyed() {
+void UnderlyingSourceBase::contextDestroyed(ExecutionContext*) {
   if (m_controller) {
     m_controller->noteHasBeenCanceled();
     m_controller.clear();
@@ -66,7 +66,7 @@ void UnderlyingSourceBase::contextDestroyed() {
 }
 
 DEFINE_TRACE(UnderlyingSourceBase) {
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   visitor->trace(m_controller);
 }
 

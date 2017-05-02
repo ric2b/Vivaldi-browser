@@ -15,7 +15,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -113,8 +112,9 @@ void BackgroundPrintingManager::DeletePreviewContents(
                     content::Source<WebContents>(preview_contents));
   printing_contents_map_.erase(i);
 
-  // ... and mortally wound the contents. (Deletion immediately is not a good
-  // idea in case this was called from RenderViewGone.)
+  // ... and mortally wound the contents. Deletion immediately is not a good
+  // idea in case this was triggered by |preview_contents| far up the
+  // callstack. (Trace where the NOTIFICATION_PRINT_JOB_RELEASED comes from.)
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, preview_contents);
 }
 

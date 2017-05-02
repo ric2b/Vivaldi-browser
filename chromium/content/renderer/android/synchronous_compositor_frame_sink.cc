@@ -48,7 +48,8 @@ namespace content {
 namespace {
 
 const int64_t kFallbackTickTimeoutInMilliseconds = 100;
-const cc::FrameSinkId kFrameSinkId(1, 1);
+const cc::FrameSinkId kRootFrameSinkId(1, 1);
+const cc::FrameSinkId kChildFrameSinkId(1, 2);
 
 // Do not limit number of resources, so use an unrealistically high value.
 const size_t kNumResourcesLimit = 10 * 1000 * 1000;
@@ -89,7 +90,8 @@ class SynchronousCompositorFrameSink::SoftwareOutputSurface
   void Reshape(const gfx::Size& size,
                float scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override {}
+               bool has_alpha,
+               bool use_stencil) override {}
   uint32_t GetFramebufferCopyTextureFormat() override { return 0; }
   cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
     return nullptr;
@@ -122,8 +124,12 @@ SynchronousCompositorFrameSink::SynchronousCompositorFrameSink(
       frame_swap_message_queue_(frame_swap_message_queue),
       surface_manager_(new cc::SurfaceManager),
       surface_id_allocator_(new cc::SurfaceIdAllocator()),
-      surface_factory_(
-          new cc::SurfaceFactory(kFrameSinkId, surface_manager_.get(), this)),
+      root_factory_(new cc::SurfaceFactory(kRootFrameSinkId,
+                                           surface_manager_.get(),
+                                           this)),
+      child_factory_(new cc::SurfaceFactory(kChildFrameSinkId,
+                                            surface_manager_.get(),
+                                            this)),
       begin_frame_source_(std::move(begin_frame_source)) {
   DCHECK(registry_);
   DCHECK(sender_);
@@ -168,8 +174,10 @@ bool SynchronousCompositorFrameSink::BindToClient(
                  base::Unretained(this)));
   registry_->RegisterCompositorFrameSink(routing_id_, this);
 
-  surface_manager_->RegisterFrameSinkId(kFrameSinkId);
-  surface_manager_->RegisterSurfaceFactoryClient(kFrameSinkId, this);
+  surface_manager_->RegisterFrameSinkId(kRootFrameSinkId);
+  surface_manager_->RegisterFrameSinkId(kChildFrameSinkId);
+  surface_manager_->RegisterSurfaceFactoryClient(kRootFrameSinkId, this);
+  surface_manager_->RegisterSurfaceFactoryClient(kChildFrameSinkId, this);
 
   cc::RendererSettings software_renderer_settings;
 
@@ -184,8 +192,9 @@ bool SynchronousCompositorFrameSink::BindToClient(
   display_.reset(new cc::Display(
       nullptr /* shared_bitmap_manager */,
       nullptr /* gpu_memory_buffer_manager */, software_renderer_settings,
-      kFrameSinkId, nullptr /* begin_frame_source */, std::move(output_surface),
-      nullptr /* scheduler */, nullptr /* texture_mailbox_deleter */));
+      kRootFrameSinkId, nullptr /* begin_frame_source */,
+      std::move(output_surface), nullptr /* scheduler */,
+      nullptr /* texture_mailbox_deleter */));
   display_->Initialize(&display_client_, surface_manager_.get());
   display_->SetVisible(true);
   return true;
@@ -198,15 +207,16 @@ void SynchronousCompositorFrameSink::DetachFromClient() {
   begin_frame_source_ = nullptr;
   registry_->UnregisterCompositorFrameSink(routing_id_, this);
   client_->SetTreeActivationCallback(base::Closure());
-  if (root_local_frame_id_.is_valid()) {
-    surface_factory_->Destroy(root_local_frame_id_);
-    surface_factory_->Destroy(child_local_frame_id_);
-  }
-  surface_manager_->UnregisterSurfaceFactoryClient(kFrameSinkId);
-  surface_manager_->InvalidateFrameSinkId(kFrameSinkId);
+  root_factory_->EvictSurface();
+  child_factory_->EvictSurface();
+  surface_manager_->UnregisterSurfaceFactoryClient(kRootFrameSinkId);
+  surface_manager_->UnregisterSurfaceFactoryClient(kChildFrameSinkId);
+  surface_manager_->InvalidateFrameSinkId(kRootFrameSinkId);
+  surface_manager_->InvalidateFrameSinkId(kChildFrameSinkId);
   software_output_surface_ = nullptr;
   display_ = nullptr;
-  surface_factory_ = nullptr;
+  child_factory_ = nullptr;
+  root_factory_ = nullptr;
   surface_id_allocator_ = nullptr;
   surface_manager_ = nullptr;
   cc::CompositorFrameSink::DetachFromClient();
@@ -221,7 +231,7 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
   DCHECK(sync_client_);
 
   if (fallback_tick_running_) {
-    DCHECK(frame.delegated_frame_data->resource_list.empty());
+    DCHECK(frame.resource_list.empty());
     cc::ReturnedResourceArray return_resources;
     ReturnResources(return_resources);
     did_submit_frame_ = true;
@@ -237,9 +247,7 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
 
     if (!root_local_frame_id_.is_valid()) {
       root_local_frame_id_ = surface_id_allocator_->GenerateId();
-      surface_factory_->Create(root_local_frame_id_);
       child_local_frame_id_ = surface_id_allocator_->GenerateId();
-      surface_factory_->Create(child_local_frame_id_);
     }
 
     display_->SetLocalFrameId(root_local_frame_id_,
@@ -248,8 +256,7 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     // The layer compositor should be giving a frame that covers the
     // |sw_viewport_for_current_draw_| but at 0,0.
     gfx::Size child_size = sw_viewport_for_current_draw_.size();
-    DCHECK(gfx::Rect(child_size) ==
-           frame.delegated_frame_data->render_pass_list.back()->output_rect);
+    DCHECK(gfx::Rect(child_size) == frame.render_pass_list.back()->output_rect);
 
     // Make a size that covers from 0,0 and includes the area coming from the
     // layer compositor.
@@ -269,16 +276,13 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     // the CompositorFrameSink client too? (We'd have to do the same for
     // hardware frames in SurfacesInstance?)
     cc::CompositorFrame embed_frame;
-    embed_frame.delegated_frame_data =
-        base::MakeUnique<cc::DelegatedFrameData>();
-    embed_frame.delegated_frame_data->render_pass_list.push_back(
-        cc::RenderPass::Create());
+    embed_frame.render_pass_list.push_back(cc::RenderPass::Create());
 
     // The embedding RenderPass covers the entire Display's area.
-    const auto& embed_render_pass =
-        embed_frame.delegated_frame_data->render_pass_list.back();
-    embed_render_pass->SetAll(cc::RenderPassId(1, 1), gfx::Rect(display_size),
-                              gfx::Rect(display_size), gfx::Transform(), false);
+    const auto& embed_render_pass = embed_frame.render_pass_list.back();
+    embed_render_pass->SetNew(1, gfx::Rect(display_size),
+                              gfx::Rect(display_size), gfx::Transform());
+    embed_render_pass->has_transparent_background = false;
 
     // The RenderPass has a single SurfaceDrawQuad (and SharedQuadState for it).
     auto* shared_quad_state =
@@ -288,16 +292,16 @@ void SynchronousCompositorFrameSink::SubmitCompositorFrame(
     shared_quad_state->SetAll(
         child_transform, child_size, gfx::Rect(child_size),
         gfx::Rect() /* clip_rect */, false /* is_clipped */, 1.f /* opacity */,
-        SkXfermode::kSrcOver_Mode, 0 /* sorting_context_id */);
-    surface_quad->SetNew(shared_quad_state, gfx::Rect(child_size),
-                         gfx::Rect(child_size),
-                         cc::SurfaceId(kFrameSinkId, child_local_frame_id_));
+        SkBlendMode::kSrcOver, 0 /* sorting_context_id */);
+    surface_quad->SetNew(
+        shared_quad_state, gfx::Rect(child_size), gfx::Rect(child_size),
+        cc::SurfaceId(kChildFrameSinkId, child_local_frame_id_));
 
-    surface_factory_->SubmitCompositorFrame(
+    child_factory_->SubmitCompositorFrame(
         child_local_frame_id_, std::move(frame), base::Bind(&NoOpDrawCallback));
-    surface_factory_->SubmitCompositorFrame(root_local_frame_id_,
-                                            std::move(embed_frame),
-                                            base::Bind(&NoOpDrawCallback));
+    root_factory_->SubmitCompositorFrame(root_local_frame_id_,
+                                         std::move(embed_frame),
+                                         base::Bind(&NoOpDrawCallback));
     display_->DrawAndSwap();
   } else {
     // For hardware draws we send the whole frame to the client so it can draw

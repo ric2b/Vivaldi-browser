@@ -19,9 +19,6 @@
       Ak je toto pravidlo nastavené na hodnotu False alebo nie je nakonfigurované, súbory cookie nastavené poskytovateľom identity sa prenesú do profilu používateľa iba počas prvého prihlásenia používateľa na zariadení.
 
       Toto pravidlo má vplyv iba na používateľov, ktorých doména sa zhoduje s doménou registrácie zariadenia. Pre všetkých ostatných používateľov platí, že súbory cookie nastavené poskytovateľom identity sa prenesú do profilu používateľa iba počas prvého prihlásenia používateľa na zariadení.</translation>
-<translation id="1029536946382325801">Ak je pravidlo nastavené na hodnotu True, používateľ môže pomocou hardvéru zariadení Chrome diaľkovo overiť identitu pre certifikačnú autoritu ochrany údajov prostredníctvom metódy chrome.enterprise.platformKeys.challengeUserKey() rozhrania Enterprise Platform Keys API.
-
-          Ak je hodnota pravidla nastavená na možnosť False alebo pravidlo nie je nastavené vôbec, volania rozhrania API zlyhajú a nahlásia kód chyby.</translation>
 <translation id="1040446814317236570">Aktivovať odstraňovanie častí z webových adries pred odoslaním do skriptov PAC (pre adresy https://)</translation>
 <translation id="1044878202534415707">Nahlasovanie štatistík hardvéru, napríklad využitia CPU/RAM.
       Ak je pravidlo nastavené na možnosť False, štatistiky nebudú hlásené.
@@ -159,6 +156,7 @@
 <translation id="1522425503138261032">Povoliť stránkam sledovať fyzickú polohu používateľov</translation>
 <translation id="152657506688053119">Zoznam alternatívnych webových adries pre predvoleného poskytovateľa vyhľadávania</translation>
 <translation id="1530812829012954197">Vždy vykresliť nasledujúce vzory webových adries v hostiteľskom prehliadači</translation>
+<translation id="1547635088210394207">Nastaví maximálnu dĺžku kódu PIN na uzamknutej obrazovke.</translation>
 <translation id="1553684822621013552">Keď je toto pravidlo nastavené na hodnotu True, bude pre používateľa povolená funkcia ARC (táto možnosť podlieha ďalším kontrolám nastavení pravidiel – ak je v aktuálnej relácii používateľa povolený buď režim dočasných profilov, alebo viacnásobné prihlásenie, funkcia ARC nebude dostupná).
 
 Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť podnikoví používatelia používať funkciu ARC.</translation>
@@ -170,6 +168,15 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 <translation id="163200210584085447">Vzory v tomto zozname sa porovnajú s pôvodom zabezpečenia webovej adresy, ktorá odoslala žiadosť. Ak sa nájde zhoda, prístup k zariadeniam na zaznamenávanie videa sa udelí na prihlasovacích stránkach SAML. Ak sa zhoda nenájde, prístup bude automaticky odmietnutý. Vzory zástupných znakov nie sú povolené.</translation>
 <translation id="1655229863189977773">Nastaviť veľkosť vyrovnávacej pamäte disku v bajtoch</translation>
 <translation id="166427968280387991">Server proxy</translation>
+<translation id="1668836044817793277">Ovláda, či má byť povolené verejnej aplikácii, ktorá sa spúšťa automaticky s nulovým oneskorením, ovládať verziu systému <ph name="PRODUCT_OS_NAME" />.
+
+      Toto pravidlo ovláda, či má byť povolené verejnej aplikácii, ktorá sa spúšťa automaticky s nulovým oneskorením, ovládať verziu systému <ph name="PRODUCT_OS_NAME" /> deklarovaním hodnoty required_platform_version v jej manifeste a jej používaním ako predpony cieľovej verzie automatickej aktualizácie.
+
+      Ak je toto pravidlo nastavené na hodnotu True, hodnota kľúča manifestu required_platform_version verejnej aplikácie, ktorá sa spúšťa automaticky s nulovým oneskorením, sa použije ako predpona cieľovej verzie automatickej aktualizácie.
+
+      Ak toto pravidlo nie je nakonfigurované alebo je nastavené na hodnotu False, kľúč manifestu required_platform_version sa bude ignorovať a automatická aktualizácia prebehne ako zvyčajne.
+
+      Upozornenie: Neodporúča sa delegovať ovládanie verzie systému <ph name="PRODUCT_OS_NAME" /> verejnej aplikácii, pretože môže zariadeniu zabrániť získavať aktualizácie softvéru a kritické opravy chýb zabezpečenia. Delegovanie ovládania verzie systému <ph name="PRODUCT_OS_NAME" /> môže používateľov vystaviť riziku.</translation>
 <translation id="1675002386741412210">Podporované na:</translation>
 <translation id="1679420586049708690">Verejná relácia pre automatické prihlásenie</translation>
 <translation id="1680029600835707254">Toto pravidlo ovláda, kto môže začať novú reláciu systému <ph name="PRODUCT_OS_NAME" />. Nezabráni používateľom prihlasovať sa do ďalších účtov Google v rámci Androidu. Ak chcete zabrániť tomuto správaniu, nakonfigurujte pravidlo Androidu <ph name="CLOUDDPC_ACCOUNT_MANAGEMENT_POLICY" /> ako súčasť pravidla <ph name="ARC_POLICY" />.</translation>
@@ -201,6 +208,7 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 <translation id="1808715480127969042">Blokovať súbory cookie na týchto webových stránkach</translation>
 <translation id="1827523283178827583">Použiť fixné servery proxy</translation>
 <translation id="1843117931376765605">Frekvencia obnovenia pravidiel pre používateľov</translation>
+<translation id="1844620919405873871">Nakonfiguruje pravidlá súvisiace s rýchlym odomknutím.</translation>
 <translation id="1847960418907100918">Určuje parametre, ktoré sa použijú pri okamžitom vyhľadávaní pomocou metódy POST. Pozostáva z párov názov/hodnota oddelených čiarkami. Ak je hodnota parameter šablóny, napr. hodnota {searchTerms} v príklade vyššie, bude nahradená údajmi skutočných vyhľadávaných výrazov.
 
           Toto pravidlo je voliteľné. Ak nie je nastavené, žiadosť o okamžité vyhľadávanie sa odošle pomocou metódy GET.
@@ -306,6 +314,10 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 <translation id="2168397434410358693">Oneskorenie režimu nečinnosti pri používaní napájacieho zdroja</translation>
 <translation id="2170233653554726857">Povoliť optimalizáciu pomocou protokolu WPAD</translation>
 <translation id="2178899310296064282">Vynútiť aspoň stredný obmedzený režim v službe YouTube</translation>
+<translation id="2183294522275408937">Toto nastavenie ovláda, ako často bude zámka obrazovky požadovať zadanie hesla na ďalšie používanie rýchleho odomknutia. Ak prebehlo posledné zadanie hesla neskôr ako toto nastavenie, nebude rýchle odomknutie pri vstupe na uzamknutú obrazovku k dispozícii. Ak používateľ zostane na uzamknutej obrazovke dlhšie ako toto časové obdobie, pri zadaní nesprávneho kódu alebo pri opätovnom prístupe na uzamknutú obrazovku (podľa toho, čo nastane prvé) sa bude vyžadovať heslo.
+      Ak je toto nastavenie nakonfigurované, používatelia využívajúci rýchle odomknutie budú musieť na uzamknutej obrazovke zadať svoje heslo v závislosti od tohto nastavenia.
+
+      Ak toto nastavenie nie je nakonfigurované, používatelia využívajúci rýchle odomknutie budú musieť na uzamknutej obrazovke zadávať heslo každý deň.</translation>
 <translation id="2188979373208322108">Povoľuje v prehliadači <ph name="PRODUCT_NAME" /> panel so záložkami.
 
       Ak toto nastavenie povolíte, prehliadač <ph name="PRODUCT_NAME" /> zobrazí panel so záložkami.
@@ -643,15 +655,6 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 <translation id="2884728160143956392">Povoliť na týchto stránkach súbory cookie platné len pre reláciu</translation>
 <translation id="2893546967669465276">Odosielanie denníkov systému na správcovský server</translation>
 <translation id="2899002520262095963">Aplikácie pre Android môžu používať konfigurácie siete a certifikáty CA nastavené prostredníctvom tohto pravidla, nemajú však prístup k rovnakým možnostiam konfigurácie.</translation>
-<translation id="2901399514673504930">Umožňuje nastaviť externé úložné zariadenia ako „Iba na čítanie“.
-
-      Toto pravidlo platí iba vtedy, keď je parameter ExternalStorageDisabled nastavený na možnosť False alebo keď nie je nakonfigurovaný.
-
-      Ak ho nastavíte na možnosť True, používatelia nebudú môcť na externé úložné zariadenia nič zapísať.
-
-      Ak toto nastavenie zakážete alebo ho nenakonfigurujete, používatelia môžu vytvárať a upravovať súbory externých úložných zariadení, ktoré sú fyzicky zapísateľné.
-
-      Dynamické obnovovanie tohto pravidla je podporované vo verzii M56 a starších.</translation>
 <translation id="2906874737073861391">Zoznam rozšírení AppPack</translation>
 <translation id="2908277604670530363">Maximálny počet súčasných pripojení k serveru proxy</translation>
 <translation id="2948087343485265211">Určuje, či prehrávanie zvuku ovplyvňuje správu napájania.
@@ -816,9 +819,6 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 <translation id="3322771899429619102">Umožňuje nastaviť zoznam vzorov webových adries určujúcich webové stránky, ktoré môžu používať generovanie kľúčov. Ak sa vzor webovej adresy nachádza v zozname KeygenBlockedForUrls, tieto výnimky sa prepíšu.
 
           Ak toto pravidlo ponecháte nenastavené, pre všetky stránky sa použije globálna predvolená hodnota buď z pravidla DefaultKeygenSetting (ak je nastavené), alebo z osobnej konfigurácie používateľa.</translation>
-<translation id="3322902067538988734">Ak toto pravidlo nastavíte na možnosť True, používateľ sa musí prihlásiť do prehliadača <ph name="PRODUCT_NAME" /> pomocou svojho profilu ešte predtým, ako ho začne používať. Predvolená hodnota parametra BrowserGuestModeEnabled bude nastavená na možnosť False.
-
-      Ak toto pravidlo nastavíte na možnosť False alebo ho nenakonfigurujete, používateľ môže používať prehliadač <ph name="PRODUCT_NAME" /> bez prihlásenia.</translation>
 <translation id="3347687541825006165">Nastaví, ako často musí používateľ zadávať heslo na používanie rýchleho odomknutia.</translation>
 <translation id="3381968327636295719">V predvolenom nastavení použiť hosťovský prehliadač</translation>
 <translation id="3417418267404583991">Ak je toto pravidlo nastavené na hodnotu true alebo je nenakonfigurované, systém <ph name="PRODUCT_OS_NAME" /> povolí prihlásenie hostí. Prihlásenia hostí predstavujú relácie anonymných používateľov a nevyžadujú heslo.
@@ -849,6 +849,7 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
           Ak je toto pravidlo nastavené na hodnotu False alebo nastavené nie je, oneskorenia správy napájania a limit dĺžky relácie sa spustia hneď na začiatku relácie.</translation>
 <translation id="3478024346823118645">Vymazať údaje používateľa po odhlásení</translation>
 <translation id="348495353354674884">Povoliť virtuálnu klávesnicu</translation>
+<translation id="3495440981030194931">Nastaví minimálnu dĺžku kódu PIN na uzamknutej obrazovke.</translation>
 <translation id="3496296378755072552">Správca hesiel</translation>
 <translation id="349667858031092827">Časové pásmo automaticky nezisťovať.</translation>
 <translation id="350443680860256679">Konfigurovať ARC</translation>
@@ -879,6 +880,17 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
 <translation id="3547954654003013442">Nastavenia servera proxy</translation>
 <translation id="3570008976476035109">Blokovať doplnky na týchto stránkach</translation>
 <translation id="3591584750136265240">Konfigurácia správania pri overovaní prihlasovacích údajov</translation>
+<translation id="3601614035698083789">Umožňuje konfigurovať zoznam spravovaných záložiek.
+
+      Toto pravidlo tvorí zoznam záložiek, pričom každá záložka je
+      slovník s kľúčmi <ph name="NAME" /> a <ph name="URL_LABEL" />, v ktorých je názov záložky a jej cieľ.
+      Môžete nakonfigurovať podpriečinok definovaním záložky bez kľúča <ph name="URL_LABEL" />, ale uvedením dodatočného kľúča <ph name="CHILDREN" />, ktorý obsahuje zoznam
+      záložiek definovaných vyššie (znova platí, že niektoré môžu byť priečinky). <ph name="PRODUCT_NAME" /> doplní neúplné webové adresy,
+      ako keby boli odoslané prostredníctvom všeobecného poľa, napríklad adresu <ph name="GOOGLE_COM" /> zmení na <ph name="HTTPS_GOOGLE_COM" />.
+
+      Tieto záložky sú umiestnené do priečinka Spravované záložky, ktorý používateľ nemôže upravovať, ale môže ho na paneli so záložkami skryť. Spravované záložky nie sú synchronizované s účtom používateľa a rozšírenia ich nemôžu upravovať.
+
+      Počnúc vydaním 51 je možné prispôsobiť názov priečinka so záložkami. Stačí pridať položku zoznamu – {"toplevel_name": "some name"}.</translation>
 <translation id="3627678165642179114">Povoliť alebo zakázať webovú službu kontroly pravopisu</translation>
 <translation id="3646859102161347133">Nastavenie typu lupy obrazovky</translation>
 <translation id="3653237928288822292">Ikona predvoleného poskytovateľa vyhľadávania</translation>
@@ -992,6 +1004,7 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
       Ak ho zakážete, povolíte tým používanie protokolu SPDY.
 
       Ak toto pravidlo ponecháte nenastavené, protokol SPDY bude k dispozícii.</translation>
+<translation id="3890999316834333174">Pravidlá rýchleho odomknutia</translation>
 <translation id="3891357445869647828">Povoliť kód JavaScript</translation>
 <translation id="3891953007921334498">Zakáže Nástroje pre vývojárov a konzolu JavaScript.
 
@@ -1045,6 +1058,11 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
 
       Ak je toto pravidlo nastavené na hodnotu false, používatelia si nebudú môcť uplatniť ponuky.</translation>
 <translation id="4010738624545340900">Povolenie vyvolania dialógových okien na výber súborov</translation>
+<translation id="4012737788880122133">Ak je pravidlo nastavené na hodnotu True, zakáže automatické aktualizácie.
+
+      Ak je toto nastavenie nenakonfigurované, alebo je nastavené na hodnotu False, budú zariadenia so systémom <ph name="PRODUCT_OS_NAME" /> automaticky kontrolovať aktualizácie.
+
+      Upozornenie: Odporúča sa ponechať automatické aktualizácie povolené, aby mohli používatelia získavať aktualizácie softvéru a kritické opravy chýb zabezpečenia. Vypnutie automatických aktualizácií môže vystaviť používateľov riziku.</translation>
 <translation id="4020682745012723568">Aplikácie pre Android nemajú prístup k súborom cookie preneseným do profilu používateľa.</translation>
 <translation id="4025586928523884733">Blokuje súbory cookie tretej strany.
 
@@ -1123,6 +1141,16 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
           Toto pravidlo je voliteľné. Ak nie je nastavené, žiadosť o vyhľadávanie obrázka sa odošle pomocou metódy GET.
 
           Toto pravidlo sa rešpektuje iba v prípade, ak je povolené pravidlo DefaultSearchProviderEnabled.</translation>
+<translation id="4294280661005713627">Nastaví cieľovú verziu pre automatické aktualizácie.
+
+      Špecifikuje predponu, na ktorú by sa mala cieľová verzia systému <ph name="PRODUCT_OS_NAME" /> aktualizovať. Ak je na zariadení verzia, ktorá predchádza špecifikovanej predpone, bude aktualizovaná na najnovšiu verziu s danou predponou. Ak je na zariadení novšia verzia, nevykoná sa žiadna akcia (t. j. nedôjde k prechodu na staršiu verziu) a na zariadení zostane aktuálna verzia. Formát predpony funguje na základe komponentov. Príklad:
+
+      "" (alebo nenakonfigurované): aktualizácia na najnovšiu dostupnú verziu.
+      "1412.": aktualizácia na akúkoľvek malú verziu verzie 1412 (napr.. 1412.24.34 alebo 1412.60.2)
+      "1412.2.": aktualizácia na akúkoľvek malú verziu verzie 1412.2 (napr. 1412.2.34 alebo 1412.2.2)
+      "1412.24.34": aktualizácia iba na túto konkrétnu verziu
+
+      Upozornenie: Neodporúča sa konfigurovať obmedzenia verzií, pretože to môže používateľom zabrániť získavať aktualizácie softvéru a kritické opravy chýb zabezpečenia. Obmedzenie aktualizácií na konkrétnu predponu verzie môže používateľov vystaviť riziku.</translation>
 <translation id="4309640770189628899">Ovláda, či sú v protokole TLS povolené šifrovacie súpravy DHE</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 alebo novší</translation>
 <translation id="4322842393287974810">Povoliť verejnej aplikácii, ktorá sa spúšťa automaticky s nulovým oneskorením, ovládať verziu systému <ph name="PRODUCT_OS_NAME" /></translation>
@@ -1220,6 +1248,11 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
           Príklady vzorov nájdete na adrese http://www.chromium.org/developers/how-tos/chrome-frame-getting-started.</translation>
 <translation id="467449052039111439">Otvoriť zoznam webových adries</translation>
 <translation id="4680961954980851756">Povoliť automatické dopĺňanie</translation>
+<translation id="4722399051042571387">Ak je toto nastavenie nakonfigurované na možnosť False, používatelia nebudú môcť nastaviť slabé ani ľahko uhádnuteľné kódy PIN.
+
+          Niekoľko príkladov slabých kódov PIN: kódy PIN obsahujúce iba jedno číslo (1111), kódy PIN so vzostupným radom po sebe nasledujúcich čísel (1234), kódy PIN so zostupnými radom po sebe nasledujúcich čísel (4321) a také, ktoré sa bežne používajú.
+
+          Ak bude kód PIN považovaný za slabý, používatelia predvolene dostanú upozornenie, nie chybové hlásenie.</translation>
 <translation id="4723829699367336876">Povoliť prechod cez bránu firewall v smere od klienta vzdialeného prístupu</translation>
 <translation id="4725528134735324213">Povolenie služby Android Backup Service</translation>
 <translation id="4733471537137819387">Pravidlá týkajúce sa integrovaného overenia pomocou protokolu HTTP</translation>
@@ -1366,6 +1399,10 @@ Ak toto pravidlo nie je nastavené alebo je prázdne, akýkoľvek používateľ 
           Hodnota * v zozname zakázaných položiek znamená, že všetci hostitelia pre odosielanie natívnych správ sú zakázaní. Povolení budú iba tí, ktorí sú výslovne uvedení na bielej listine.
 
           Ak toto pravidlo nebude nastavené, produkt <ph name="PRODUCT_NAME" /> načíta všetkých nainštalovaných hostiteľov pre odosielanie natívnych správ.</translation>
+<translation id="5272684451155669299">Ak pravidlo nastavíte na hodnotu True, používateľ môže pomocou hardvéru zariadení Chrome diaľkovo overiť svoju identitu pre certifikačnú autoritu (CA) ochrany súkromia prostredníctvom metódy <ph name="CHALLENGE_USER_KEY_FUNCTION" /> rozhrania <ph name="ENTERPRISE_PLATFORM_KEYS_API" />.
+
+          Ak je nastavené na možnosť False alebo nie je nenastavené, 
+volania rozhrania API zlyhajú a nahlásia kód chyby.</translation>
 <translation id="5288772341821359899">Ak toto pravidlo nastavíte, rozsah portov UDP používaných rozhraním WebRTC bude obmedzovaný na špecifikovaný interval portov (vrátane koncových bodov).
 
       Ak toto pravidlo nenastavíte, použijete prázdny reťazec alebo neplatný rozsah portov, rozhranie WebRTC bude môcť použiť ľubovoľný dostupný miestny port UDP.</translation>
@@ -1623,6 +1660,7 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
       Ak toto pravidlo nastavené nie je alebo je nastavené na hodnotu False, príkazy na tlač spustia obrazovku ukážky tlače.</translation>
 <translation id="6022948604095165524">Akcia pri spustení</translation>
 <translation id="602728333950205286">Webová adresa dynamického vyhľadávania predvoleného poskytovateľa vyhľadávania</translation>
+<translation id="6029664378608427609">Povoľuje používateľom nastaviť slabé kódy PIN na uzamknutej obrazovke.</translation>
 <translation id="603410445099326293">Parametre pre webovú adresu návrhov, ktorá používa metódu POST</translation>
 <translation id="6036523166753287175">Povoliť prechod cez bránu firewall v smere od hostiteľa vzdialeného prístupu</translation>
 <translation id="6059543311891422586">Použiť hardvérovú akceleráciu, keď je dostupná.
@@ -1677,12 +1715,6 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
 <translation id="6155936611791017817">Nastaviť predvolený stav veľkého kurzora na prihlasovacej obrazovke</translation>
 <translation id="6157537876488211233">Zoznam pravidiel vynechania servera proxy oddelených čiarkami</translation>
 <translation id="6158324314836466367">Názov Internetového obchodu pre podniky (podpora je ukončená)</translation>
-<translation id="6166832345529129545">Ovláda, ktoré režimy rýchleho odomknutia je možné nastaviť a používať.
-      Toto nastavenie pridá do zoznamu povolených nastavení povolené režimy rýchleho odomknutia, ktoré je možné nastaviť a používať na odomykanie uzamknutej obrazovky. Daná hodnota je zoznam týchto reťazcov: „všetky“, „PIN“. Keď vyberiete reťazec „všetky“, budú k dispozícii všetky podporované rýchle režimy. Inak budú k dispozícii iba režimy uvedené v zozname.
-
-      Ak je toto nastavenie nakonfigurované, nie je možné nastaviť ani používať typy režimov rýchleho odomknutia, ktoré nie sú v zozname.
-
-      Ak toto nastavenie nie je nenakonfigurované, bude aktivovaný režim „PIN“ a všetky ostatné režimy budú zakázané.</translation>
 <translation id="6167074305866468481">Upozornenie: Podpora protokolu SSLv3 bude v prehliadači <ph name="PRODUCT_NAME" /> od verzie 43 kompletne ukončená (okolo júla 2015) a zároveň bude odstránené toto pravidlo.
 
       Ak toto pravidlo nenastavíte, prehliadač <ph name="PRODUCT_NAME" /> použije predvolenú minimálnu verziu, teda protokol SSLv3 v prehliadači <ph name="PRODUCT_NAME" /> verzie 39 a protokol TLS 1.0 v neskorších verziách.
@@ -1690,14 +1722,6 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
       V opačnom prípade môžete nastaviť jednu z nasledujúcich hodnôt: sslv3, tls1, tls1.1 alebo tls1.2. Ak túto hodnotu nastavíte, prehliadač <ph name="PRODUCT_NAME" /> nepoužije protokol SSL alebo TLS v nižšej ako zadanej verzii. Nerozpoznaná hodnota sa bude ignorovať.
 
       Upozorňujeme, že napriek vyššiemu číslu predstavuje protokol sslv3 staršiu verziu ako protokol tls1.</translation>
-<translation id="6177482277304066047">Nastavuje cieľovú verziu automatických aktualizácií.
-
-      Určuje predponu cieľovej verzie, na ktorú sa má systém <ph name="PRODUCT_OS_NAME" /> aktualizovať. Ak zariadenie obsahuje staršiu verziu, ako určuje predpona, bude systém aktualizovaný na poslednú verziu s danou predponou. Ak už zariadenie obsahuje novšiu verziu, nestane sa nič (t.j. nedôjde k prechodu na nižšiu verziu) a zariadenie zostane pri existujúcej verzii. Formát predpony funguje na základe komponentu, ako ukazuje nasledujúci príklad:
-
-      "" (alebo nie je nakonfigurované): aktualizovať na najnovšiu dostupnú verziu.
-      "1412.": aktualizovať na ľubovoľnú podverziu verzie 1412 (napr. 1412.24.34 alebo 1412.60.2)
-      "1412.2.": aktualizovať na ľubovolnú podverziu verzie 1412.2 (napr. 1412.2.34 alebo 1412.2.2)
-      "1412.24.34": aktualizovať iba na túto konkrétnu verziu</translation>
 <translation id="6190022522129724693">Predvolené nastavenie kontextových okien</translation>
 <translation id="6197453924249895891">Poskytne rozšíreniam prístup k podnikovým kľúčom.
 
@@ -1727,6 +1751,46 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
 <translation id="6282799760374509080">Povoliť alebo zakázať zaznamenávanie zvuku</translation>
 <translation id="6284362063448764300">TLS 1.1</translation>
 <translation id="6310223829319187614">Povolenie automatického dopĺňania názvu domény počas prihlasovania používateľa</translation>
+<translation id="6312861131491040487">
+          Umožňuje určiť zoznam aplikácií a rozšírení, ktoré sa inštalujú potichu,
+          bez interakcie s používateľom, a ktoré používateľ nemôže odinštalovať.
+          Všetky povolenia vyžadované aplikáciami/rozšíreniami sú bezpodmienečne
+          udelené bez interakcie s používateľom, a to vrátane všetkých ďalších
+          povolení vyžiadaných budúcimi verziami daných aplikácií/rozšírení.
+          Ďalej sa udeľujú povolenia pre rozhrania API rozšírení
+          enterprise.deviceAttributes a enterprise.platformKeys.
+          (Tieto dve rozhrania sú k dispozícii iba pre aplikácie/rozšírenia, ktorých
+          inštalácia bola vynútená.)
+
+          Toto pravidlo má prednosť v prípade potenciálneho konfliktu
+          s pravidlom ExtensionsInstallBlacklist. Ak je z tohto zoznamu odstránená
+          aplikácia alebo rozšírenie, ktorého inštalácia v minulosti bola vynútená,
+          <ph name="PRODUCT_NAME" /> ich automaticky odinštaluje.
+
+          V prípade inštancií systému Windows nepripojených k doméne Active 
+          Directory sa vynucuje inštalácia iba rozšírení uvedených
+          v Internetovom obchode Chrome.
+
+          Všimnite si, že zdrojový kód každého rozšírenia je možné pozmeniť
+          pomocou nástrojov pre vývojárov (t. j. potenciálne tým znefunkčniť
+          dané rozšírenie). Ak sa toho obávate, nastavte pravidlo
+          DeveloperToolsDisabled.
+
+          Všetky položky v zozname v rámci tohto pravidla sú reťazce obsahujúce
+          identifikátor rozšírenia a webovú adresu aktualizácie oddelené bodkočiarkou (<ph name="SEMICOLON" />). Identifikátor
+          rozšírenia je reťazec z 32 písmen, ktorý nájdete na stránke <ph name="CHROME_EXTENSIONS_LINK" />,
+          keď použijete režim pre vývojárov. Webová adresa aktualizácie by mala
+          odkazovať na dokument XML s manifestom aktualizácií, ktorého popis nájdete na adrese
+          <ph name="LINK_TO_EXTENSION_DOC1" />. Upozorňujeme, že webová adresa aktualizácie nastavená v tomto pravidle
+          sa použije iba pri prvotnej inštalácii. Ďalšie aktualizácie rozšírenia využívajú webovú adresu
+          uvedenú v jeho manifeste.
+
+          Príklad: <ph name="EXTENSION_POLICY_EXAMPLE" />
+          nainštaluje aplikáciu <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> zo štandardnej webovej adresy
+          na aktualizáciu z Internetového obchodu Chrome. Ďalšie informácie o hostiteľských rozšíreniach nájdete na adrese <ph name="LINK_TO_EXTENSION_DOC2" />.
+
+          Ak toto pravidlo nenastavíte, nebudú sa automaticky inštalovať žiadne aplikácie
+          ani rozšírenia a používateľ môže odinštalovať ľubovoľnú aplikáciu alebo rozšírenie v prehliadači <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6315673513957120120">Keď používateľ prejde na weby, ktoré obsahujú chyby protokolu SSL, Chrome zobrazí stránku s upozornením. V predvolenom nastavení alebo vtedy, keď je toto pravidlo nastavené na možnosť True, môžu používatelia preskočiť tieto stránky s upozornením prostredníctvom kliknutia.
       Nastavením tohto pravidla na možnosť False zakážete používateľom, aby mohli stránku s upozornením preskočiť kliknutím.</translation>
 <translation id="6353901068939575220">Určuje parametre, ktoré sa použijú vyhľadávaní webovej adresy pomocou metódy POST. Pozostáva z párov názov/hodnota oddelených čiarkami. Ak je hodnota parameter šablóny, napr. hodnota {searchTerms} v príklade vyššie, bude nahradená údajmi skutočných vyhľadávaných výrazov.
@@ -1737,9 +1801,6 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
 <translation id="6367755442345892511">Či má byť kanál na vydávanie nových verzií konfigurovateľný používateľom</translation>
 <translation id="6368011194414932347">Konfigurovať webovú adresu domovskej stránky</translation>
 <translation id="6368403635025849609">Povoliť jazyk JavaScript na týchto stránkach</translation>
-<translation id="6373222873250380826">Ak je pravidlo nastavené na hodnotu true, zakáže automatické aktualizácie.
-
-      Ak je toto nastavenie nenakonfigurované, alebo je nastavené na hodnotu false, budú zariadenia so systémom <ph name="PRODUCT_OS_NAME" /> automaticky kontrolovať aktualizácie.</translation>
 <translation id="6376659517206731212">Môže byť povinné</translation>
 <translation id="6378076389057087301">Určuje, či prehrávanie zvuku ovplyvňuje správu napájania</translation>
 <translation id="637934607141010488">Nahlásenie zoznamu používateľov zariadenia, ktorí sa nedávno prihlásili.
@@ -1757,6 +1818,22 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
 <translation id="6417861582779909667">Umožňuje nastaviť zoznam vzorov webových adries určujúcich webové stránky, ktoré nemôžu nastavovať súbory cookie.
 
           Ak toto pravidlo ponecháte nenastavené, použije sa v prípade všetkých webových stránok globálna predvolená hodnota buď z pravidla „DefaultCookiesSetting“ (ak je nastavené), alebo z osobnej konfigurácie používateľa.</translation>
+<translation id="6426205278746959912">Aplikácie pre Android nemôžete donútiť používať proxy server. Tieto aplikácie však majú k dispozícii podmnožinu nastavení proxy servera, ktoré môžu dobrovoľne využiť:
+
+          Ak zvolíte možnosť „Nikdy nepoužívať proxy server“, aplikácie pre Android budú informované, že nie je nakonfigurovaný žiaden proxy server.
+
+          Ak zvolíte možnosť „Používať systémové nastavenia proxy servera“ alebo „Pevne daný proxy server“, aplikácie pre Android budú mať k dispozícii adresu a port proxy servera HTTP.
+
+          Ak zvolíte možnosť „Automaticky zisťovať proxy server“, aplikácie pre Android budú mať k dispozícii webovú adresu skriptu http://wpad/wpad.dat. Nepoužije sa žiadna iná časť protokolu automatického zisťovania proxy servera.
+
+          Ak zvolíte, že chcete používať skript .pac proxy servera, budú mať aplikácie pre Android k dispozícii webovú adresu skriptu.</translation>
+<translation id="6435127182262044446">Toto nastavenie ovláda maximálnu dĺžku kódu PIN.
+
+          Ak je toto nastavenie 0 alebo menej, maximálna dĺžka sa nepoužíva. Používateľ teda môže nastaviť ľubovoľne dlhý kód PIN.
+
+          Ak je toto nastavenie menšie ako hodnota uvedená v parametri PinUnlockMinimumLength, ale väčšie ako 0, maximálna dĺžka je rovnaká ako minimálna dĺžka.
+
+          Toto nastavenie predvolene nepoužíva maximálnu dĺžku.</translation>
 <translation id="6467433935902485842">Umožňuje nastaviť zoznam vzorov webových adries určujúcich webové stránky, ktoré nemôžu spúšťať doplnky.
 
           Ak toto pravidlo ponecháte nenastavené, použije sa v prípade všetkých webových stránok globálna predvolená hodnota buď z pravidla „DefaultPluginsSetting“ (ak je nastavené), alebo z osobnej konfigurácie používateľa.</translation>
@@ -1881,6 +1958,7 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
 <translation id="6770454900105963262">Nahlásiť informácie o aktívnych reláciách verejného terminálu</translation>
 <translation id="6774533686631353488">Povolenie hostiteľov zasielania natívnych správ na používateľskej úrovni (nainštalovaných bez administrátorských povolení).</translation>
 <translation id="6786747875388722282">Rozšírenia</translation>
+<translation id="6786967369487349613">Nastaviť adresár roamingového profilu</translation>
 <translation id="6810445994095397827">Blokovať jazyk JavaScript na týchto webových stránkach</translation>
 <translation id="681446116407619279">Podporované schémy overenia</translation>
 <translation id="6828905844648501476">Ak je toto pravidlo nastavené na možnosť True alebo nie je nakonfigurované, prehliadač <ph name="PRODUCT_NAME" /> povolí pridanie osoby prostredníctvom správcu používateľov.
@@ -2056,6 +2134,7 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 <translation id="7249828445670652637">Povoliť certifikáty CA systému <ph name="PRODUCT_OS_NAME" /> v aplikáciách ARC</translation>
 <translation id="7258823566580374486">Povoliť blokovanie hostiteľov so vzdialeným prístupom</translation>
 <translation id="7260277299188117560">Protokol p2p na automatické aktualizácie je povolený</translation>
+<translation id="7261252191178797385">Obrázok tapety zariadenia</translation>
 <translation id="7267809745244694722">Zmena predvoleného správania klávesov pre médiá na funkčné klávesy</translation>
 <translation id="7271085005502526897">Import domovskej stránky z predvoleného prehliadača pri prvom spustení</translation>
 <translation id="7273823081800296768">Ak je toto nastavenie povolené alebo nie je nakonfigurované, používatelia môžu aktivovať párovanie klientov a hostiteľov v čase pripojenia, čím predídu opakovanému zadávaniu kódu PIN.
@@ -2100,13 +2179,6 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 <translation id="7336878834592315572">Uchovať súbory cookie počas trvania relácie</translation>
 <translation id="7340034977315324840">Hlásiť časy aktivity zariadenia</translation>
 <translation id="7384999953864505698">Povolenie protokolu QUIC</translation>
-<translation id="7406651467768226499">Ovláda, či má byť povolené verejnej aplikácii, ktorá sa spúšťa automaticky s nulovým oneskorením, ovládať verziu systému <ph name="PRODUCT_OS_NAME" />.
-
-      Toto pravidlo ovláda, či má byť povolené verejnej aplikácii, ktorá sa spúšťa automaticky s nulovým oneskorením, ovládať verziu systému <ph name="PRODUCT_OS_NAME" /> deklarovaním hodnoty required_platform_version v jej manifeste a jej používaním ako predpony cieľovej verzie automatickej aktualizácie.
-
-      Ak je toto pravidlo nastavené na hodnotu True, hodnota kľúča manifestu required_platform_version verejnej aplikácie, ktorá sa spúšťa automaticky s nulovým oneskorením, sa použije ako predpona cieľovej verzie automatickej aktualizácie.
-
-      Ak toto pravidlo nie je nakonfigurované alebo je nastavené na hodnotu False, kľúč manifestu required_platform_version sa bude ignorovať a automatická aktualizácia prebehne ako zvyčajne.</translation>
 <translation id="7417972229667085380">Percento predĺženia oneskorenia režimu nečinnosti v režime prezentácie (podpora je ukončená)</translation>
 <translation id="7421483919690710988">Nastaviť veľkosť vyrovnávacej pamäte média v bajtoch</translation>
 <translation id="7424751532654212117">Zoznam výnimiek zo zoznamu zakázaných doplnkov</translation>
@@ -2141,6 +2213,15 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
       Upozorňujeme, že toto pravidlo je závislé od balíka súborov na overovanie totožnosti certifikátov operačných systémov, ktorý povoľuje podpisy algoritmom SHA-1. Ak sa v dôsledku aktualizácie operačného systému zmení spracovávanie certifikátov SHA-1 operačným systémom, toto pravidlo nemusí byť uplatňované. Toto pravidlo má fungovať ako dočasné riešenie, ktoré podnikom poskytne viac času na ukončenie používania algoritmu SHA-1. Bude odstránené približne 1. januára 2019.
 
       Ak toto pravidlo nenastavíte alebo nastavíte na možnosť False, prehliadač <ph name="PRODUCT_NAME" /> bude nasledovať zverejnený plán ukončenia podpory algoritmu SHA-1.</translation>
+<translation id="7589150663293249656">Povoľuje vytváranie roamingových kópií údajov profilu <ph name="PRODUCT_NAME" />.
+
+      Ak povolíte toto nastavenie, nastavenia uložené v profiloch <ph name="PRODUCT_NAME" /> (napr. záložky, údaje automatického dopĺňania, heslá atď.) sa zapíšu tiež do súboru uloženého v priečinku roamingového používateľského profilu alebo v umiestnení špecifikovanom správcom prostredníctvom pravidla <ph name="ROAMINGPROFILELOCATION_POLICY_NAME" />.
+
+      Keď je toto pravidlo povolené, služba Google Sync je automaticky vypnutá.
+
+      Ak chcete zabrániť náhodným únikom údajov, odporúčame tiež nastaviť pravidlo <ph name="SIGNINALLOWED_POLICY_NAME" /> na hodnotu False.
+
+      Ak je toto pravidlo zakázané alebo nie je nastavené, budú sa používať iba miestne profily.</translation>
 <translation id="7593523670408385997">Umožňuje nakonfigurovať veľkosť vyrovnávacej pamäte, ktorú služba <ph name="PRODUCT_NAME" /> použije na ukladanie súborov vo vyrovnávacej pamäti na disk.
 
       Ak nastavíte toto pravidlo, služba <ph name="PRODUCT_NAME" /> použije uvedenú veľkosť vyrovnávacej pamäte bez ohľadu na to, či používateľ určil príznak --disk-cache-size. Hodnota určená v tomto pravidle nie je pevnou hraničnou hodnotou, ale skôr návrhom pre systém ukladania do vyrovnávacej pamäte. Každá hodnota menšia ako niekoľko megabajtov je príliš malá a zaokrúhli sa smerom nahor na rozumné minimum.
@@ -2152,6 +2233,9 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 <translation id="7611372873040492235">Zadanie hesla sa vyžaduje každých dvanásť hodín.</translation>
 <translation id="7612157962821894603">Príznaky v celom systéme, ktoré sa používajú pri spúšťaní prehliadača <ph name="PRODUCT_NAME" /></translation>
 <translation id="7614663184588396421">Zoznam zakázaných schém protokolu</translation>
+<translation id="7617319494457709698">Toto pravidlo určuje, pre ktoré rozšírenia bude povolené vzdialené prihlásenie pomocou metódy <ph name="CHALLENGE_USER_KEY_FUNCTION" /> rozhrania <ph name="ENTERPRISE_PLATFORM_KEYS_API" />. Rozšírenia môžu používať toto rozhranie API, keď sú pridané do tohto zoznamu.
+
+          Ak sa rozšírenie v zozname nenachádza alebo zoznam nie je vytvorený, volania rozhrania API zlyhajú a nahlásia kód chyby.</translation>
 <translation id="7625444193696794922">Určuje, aký kanál verzie by mal byť v zariadení uzamknutý.</translation>
 <translation id="7632724434767231364">Názov knižnice GSSAPI</translation>
 <translation id="7635471475589566552">Slúži na konfiguráciu miestneho nastavenia aplikácie v prehliadači <ph name="PRODUCT_NAME" /> a bráni používateľom miestne nastavenie zmeniť.
@@ -2252,6 +2336,13 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 
       Ak ho ponecháte nenastavené, používatelia budú môcť službu Android Backup Service zapnúť a vypnúť v aplikácii Nastavenia systému Android.</translation>
 <translation id="7818131573217430250">Nastaviť predvolený stav režimu vysokého kontrastu na prihlasovacej obrazovke</translation>
+<translation id="7822837118545582721">Ak je toto pravidlo nastavené na možnosť True, používatelia nemôžu zapisovať na externé úložné zariadenia.
+
+      Ak je toto nastavenie nastavené na hodnotu False alebo nie je nakonfigurované, používatelia môžu vytvárať a upravovať súbory na externých úložných zariadeniach, na ktoré ide fyzicky zapisovať.
+
+      Pravidlo ExternalStorageDisabled má prednosť pred týmto pravidlom. Ak je pravidlo ExternalStorageDisabled nastavené na hodnotu True, bude všetok prístup k externým úložiskám zakázaný a toto pravidlo sa bude ignorovať.
+
+      Dynamické obnovenie tohto pravidla je podporované vo verzii M56 a novších.</translation>
 <translation id="7831595031698917016">Určuje maximálne oneskorenie v milisekundách medzi prijatím zrušenia platnosti pravidla a načítaním nového pravidla zo služby správy zariadenia.
 
       Nastavenie tohto pravidla prepíše predvolenú hodnotu 5 000 milisekúnd. Platné hodnoty pre toto pravidlo sú v rozsahu od 1 000 (1 sekunda) do 300 000 (5 minút). Všetky hodnoty mimo tohto rozsahu budú upravené k zodpovedajúcej hranici.
@@ -2310,9 +2401,6 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
           k doméne Active Directory.</translation>
 <translation id="7937766917976512374">Povoliť alebo zakázať zaznamenávanie videa</translation>
 <translation id="7941975817681987555">Nepredpovedať akcie siete pri sieťovom pripojení</translation>
-<translation id="7942429005743031780">Toto pravidlo určuje, pre ktoré rozšírenia bude povolené vzdialené prihlásenie pomocou metódy chrome.enterprise.platformKeys.challengeUserKey() rozhrania Enterprise Platform Keys API. Na to, aby mohli rozšírenia používať toto rozhranie API, musia byť pridané do príslušného zoznamu.
-
-          Ak sa rozšírenie na zozname nenachádza alebo zoznam nie je vytvorený, volania rozhrania API zlyhajú a nahlásia kód chyby.</translation>
 <translation id="7953256619080733119">Spravované výnimky hostiteľov ručne nastavené používateľom</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Toto pravidlo už nie je podporované.
@@ -2379,6 +2467,7 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
       Ak používateľ povolil synchronizáciu, všetky tieto dáta zostanú uchované v synchronizovanom profile, rovnako ako v prípade bežných profilov. K dispozícii je aj anonymný režim (ak nie je vyslovene zakázaný pomocou pravidla).
 
       Ak je toto pravidlo zakázané alebo ponechané nenastavené, budú sa používať bežné profily.</translation>
+<translation id="8158758865057576716">Povoľuje vytváranie roamingových kópií údajov profilu <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8164246350636985940">Predvolené správanie stránok, ktoré sa nenachádzajú v žiadnom obsahovom balíku.
 
           Toto pravidlo sa vzťahuje len na interné používanie prehliadača <ph name="PRODUCT_NAME" />.</translation>
@@ -2433,6 +2522,7 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 
       V budúcnosti by malo byť toto prepísanie odstránené.</translation>
 <translation id="8285435910062771358">Lupa v režime na celú obrazovku je povolená</translation>
+<translation id="8288199156259560552">Povoliť službu určovania polohy Google v aplikáciách pre Android</translation>
 <translation id="8294750666104911727">Stránky s prvkom X-UA-Compatible nastaveným na hodnotu chrome=1 sa obvykle vykreslia v rámci služby <ph name="PRODUCT_FRAME_NAME" /> bez ohľadu na pravidlo ChromeFrameRendererSettings.
 
           Ak toto nastavenie povolíte, na stránkach sa nebudú hľadať metaznačky.
@@ -2470,6 +2560,9 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 
       Ak je toto pravidlo nastavené na možnosť False, prehliadač nebude po prechode na vyššiu verziu OS zobrazovať uvítaciu stránku pri prvom spustení.</translation>
 <translation id="8369602308428138533">Oneskorenie vypnutia obrazovky pri používaní napájacieho zdroja</translation>
+<translation id="8370471134641900314">Ak toto pravidlo nastavíte na možnosť True, používateľ sa musí prihlásiť do prehliadača <ph name="PRODUCT_NAME" /> pomocou svojho profilu ešte predtým, ako ho začne používať. Predvolená hodnota parametra BrowserGuestModeEnabled bude nastavená na možnosť False.
+
+      Ak toto pravidlo nastavíte na možnosť False alebo ho nenakonfigurujete, používateľ môže používať prehliadač <ph name="PRODUCT_NAME" /> bez prihlásenia.</translation>
 <translation id="8382184662529825177">Povoliť použitie vzdialeného overenia na ochranu obsahu pre zariadenie</translation>
 <translation id="838870586332499308">Povoliť roaming pre dátové prenosy</translation>
 <translation id="8390049129576938611">Zakáže v prehliadači <ph name="PRODUCT_NAME" /> interný zobrazovač súborov PDF. Súbory PDF sa budú sťahovať a používateľ ich bude môcť otvoriť v predvolenej aplikácii.
@@ -2511,6 +2604,17 @@ Tieto pravidlá sú výhradne určené na použitie pri konfigurácii inštanci�
 Odporúčaný spôsob nastavenia pravidiel v systéme Windows je prostredníctvom objektu pravidiel skupiny (GPO). Spravovanie pravidiel prostredníctvom registrov je však v inštanciách systému Windows pripojených k doméne Active Directory naďalej podporované.</translation>
 <translation id="8566842294717252664">Skryť internetový obchod zo stránky na novej karte a zo spúšťača aplikácií</translation>
 <translation id="8587229956764455752">Povoliť vytváranie nových používateľských účtov</translation>
+<translation id="8613640727149655305">Keď je toto pravidlo nastavené na hodnotu True, služba určovania polohy Google v aplikáciách pre Android je povolená. Aplikácie pre Android tak budú môcť používať svoje údaje na určenie polohy zariadenia a tiež bude povolené odosielanie anonymných údajov o polohe do Googlu.
+
+      Keď je toto pravidlo nastavené na hodnotu False, služba určovania polohy Google v aplikáciách pre Android bude vypnutá.
+
+      Ak je toto nastavenie nakonfigurované, používatelia ho sami nemôžu zmeniť.
+
+      Ak toto nastavenie nie je nakonfigurované, budú môcť používatelia službu určovania polohy v Androide zapnúť alebo vypnúť v aplikácii Nastavenia.
+
+      Upozorňujeme, že hodnota tohto pravidla môže byť prepísaná pravidlom <ph name="DEFAULTGEOLOCATIONSETTING_POLICY_NAME" /> (ak je nastavené na hodnotu <ph name="BLOCK_GEOLOCATION_SETTING" />).
+
+      Toto pravidlo má vplyv iba na používateľov, ktorí môžu spúšťať aplikácie pre Android.</translation>
 <translation id="8614804915612153606">Zakáže automatickú aktualizáciu</translation>
 <translation id="8631434304112909927">po verziu <ph name="UNTIL_VERSION" /></translation>
 <translation id="863319402127182273">V prípade aplikácií pre Android toto pravidlo ovplyvňuje iba vstavaný fotoaparát. Keď je pravidlo nastavené na hodnotu True, fotoaparát je zakázaný pre všetky aplikácie pre Android (bez výnimiek).</translation>
@@ -2588,15 +2692,6 @@ Odporúčaný spôsob nastavenia pravidiel v systéme Windows je prostredníctv
 <translation id="8833109046074170275">Overenie totožnosti prostredníctvom predvoleného postupu GAIA</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> ukladá do vyrovnávacej pamäte aplikácie a rozšírenia, ktoré môže nainštalovať viacero používateľov jedného zariadenia. Aplikácie a rozšírenia tak nemusí každý používateľ opätovne sťahovať.
       Ak nie je toto pravidlo nakonfigurované alebo je hodnota nižšia než 1 MB, <ph name="PRODUCT_OS_NAME" /> použije predvolenú veľkosť vyrovnávacej pamäte.</translation>
-<translation id="8858120573534680488">Aplikácie pre Android nemôžete donútiť používať proxy server. Tieto aplikácie však majú k dispozícii podmnožinu nastavení proxy servera, ktoré môžu dobrovoľne využiť:
-
-          Ak zvolíte možnosť „Nikdy nepoužívať proxy server“, aplikácie pre Android budú informované, že nie je nakonfigurovaný žiaden proxy server.
-
-          Ak zvolíte možnosť „Používať systémové nastavenia proxy servera“ alebo „Pevne daný proxy server“, aplikácie pre Android budú mať k dispozícii adresu a port proxy servera HTTP.
-
-          Ak zvolíte možnosť „Automaticky zisťovať proxy server“, aplikácie pre Android budú mať k dispozícii webovú adresu skriptu http://wpad/wpad.dat. Nepoužije sa žiadna iná časť protokolu automatického zisťovania proxy servera.
-
-          Ak zvolíte možnosť „skript pac proxy servera“, budú mať aplikácie pre Android k dispozícii webovú adresu skriptu.</translation>
 <translation id="8858642179038618439">Vynútenie Bezpečnostného režimu v službe YouTube</translation>
 <translation id="8864975621965365890">Potlačí výzvu o zamietnutie, ktorá sa zobrazí pri vykreslení stránky rámcom <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Domovská stránka</translation>
@@ -2648,6 +2743,13 @@ Každá položka zoznamu v pravidlách predstavuje reťazec, ktorý obsahuje ID
 <translation id="8992176907758534924">Zakázať všetkým stránkam zobrazovať obrázky</translation>
 <translation id="9035964157729712237">ID rozšírení, ktoré majú byť zo zoznamu zakázaných rozšírení vyňaté</translation>
 <translation id="9042911395677044526">Umožňuje preniesť konfiguráciu siete, ktorá sa použije pre jednotlivých používateľov v zariadení so systémom <ph name="PRODUCT_OS_NAME" />. Konfigurácia siete je reťazec vo formáte JSON, ktorý sa riadi definíciou formátu Open Network Configuration uvedenou na adrese <ph name="ONC_SPEC_URL" /></translation>
+<translation id="908115901708809140">Umožňuje nakonfigurovať adresár, ktorý <ph name="PRODUCT_NAME" /> použije na ukladanie roamingovej kópie profilov.
+
+      Ak toto pravidlo nastavíte a je povolené pravidlo <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME" />, bude <ph name="PRODUCT_NAME" /> na ukladanie roamingových kópií profilov používať stanovený adresár. Ak pravidlo <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME" /> nie je povolené alebo nastavené, hodnota uložená v tomto pravidle sa nepoužije.
+
+      Zoznam premenných, ktoré sa dajú použiť, nájdete na adrese https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables.
+
+      Ak toto pravidlo nie je nastavené, použije sa predvolená cesta roamingového profilu.</translation>
 <translation id="9084985621503260744">Určuje, či prehrávanie videa ovplyvňuje správu napájania</translation>
 <translation id="9088433379343318874">Povoliť poskytovateľa obsahu pre kontrolovaného používateľa</translation>
 <translation id="9088444059179765143">Konfigurovať spôsob automatického zisťovania časového pásma</translation>
@@ -2660,6 +2762,13 @@ Každá položka zoznamu v pravidlách predstavuje reťazec, ktorý obsahuje ID
           Obslužné nástroje protokolu, ktoré sú registrované týmto pravidlom, budú zlúčené s nástrojmi registrovanými používateľom a budú všetky k dispozícii na použitie. Používateľ môže prepísať obslužné nástroje protokolu nainštalované pravidlom inštaláciou nového predvoleného obslužného nástroja. Obslužný protokol registrovaný pravidlom však nie je možné odstrániť.</translation>
 <translation id="913195841488580904">Blokovať prístup k zoznamu webových adries</translation>
 <translation id="9135033364005346124">Povoliť server proxy <ph name="CLOUD_PRINT_NAME" /></translation>
+<translation id="9136253551939494882">Biela listina ovládajúca, ktoré režimy rýchleho odomknutia môže používateľ nakonfigurovať a použiť na odomknutie uzamknutej obrazovky.
+
+          Táto hodnota je zoznam reťazcov. Platné vstupy v zozname sú: all (Všetko) a PIN. Ak pridáte do zoznamu možnosť all (Všetko), znamená to, že používateľ bude mať k dispozícii všetky režimy rýchleho odomknutia vrátane tých, ktoré budú implementované v budúcnosti. Inak bude mať k dispozícii iba tie režimy rýchleho odomknutia, ktoré sú uvedené v zozname.
+
+          Ak chcete napríklad povoliť všetky režimy rýchleho odomknutia, použitie možnosť ["all"]. Ak chcete povoliť iba odomykanie pomocou kódu PIN, použitie možnosť ["PIN"]. Ak chcete zakázať všetky režimy rýchleho odomknutia, použite [].
+
+          Predvolene nemajú spravované zariadenia k dispozícii žiadne režimy rýchleho odomknutia.</translation>
 <translation id="9147029539363974059">Odosielajte denníky systému na správcovský server, čím umožníte
       správcom monitorovať tieto denníky.
 
@@ -2675,6 +2784,11 @@ Každá položka zoznamu v pravidlách predstavuje reťazec, ktorý obsahuje ID
       Ak toto pravidlo ponecháte nenastavené, povolí sa a používateľ bude môcť režim Inkognito použiť.</translation>
 <translation id="915194831143859291">Ak toto pravidlo nastavíte na možnosť False alebo ho nenakonfigurujete, systém <ph name="PRODUCT_OS_NAME" /> umožní používateľovi vypnúť zariadenie.
       Ak toto pravidlo nastavíte na možnosť True, systém <ph name="PRODUCT_OS_NAME" /> spustí reštart, keď používateľ vypne zariadenie. <ph name="PRODUCT_OS_NAME" /> nahradí v používateľskom rozhraní všetky výskyty tlačidiel na vypnutie tlačidlami na reštartovanie. Ak teda používateľ vypne zariadenie pomocou vypínača, automaticky sa nereštartuje, a to ani vtedy, keď je toto pravidlo povolené.</translation>
+<translation id="917887642534332939">Toto nastavenie ovláda minimálnu dĺžku kódu PIN.
+
+          Absolútna minimálna dĺžka kódu PIN je 1; hodnoty nižšie ako 1 sú spracované ako 1.
+
+          Predvolená a odporúčaná minimálna dĺžka kódu PIN je 6 čísiel.</translation>
 <translation id="9187743794267626640">Zákaz pripojenia externého ukladacieho priestoru</translation>
 <translation id="9197740283131855199">Percentuálna hodnota, o ktorú sa predĺži oneskorenie stmavenia obrazovky, keď sa zaznamená aktivita používateľa po stmavení obrazovky</translation>
 <translation id="9200828125069750521">Parametre pre webovú adresu obrázkov, ktorá používa metódu POST</translation>
@@ -2683,15 +2797,21 @@ Každá položka zoznamu v pravidlách predstavuje reťazec, ktorý obsahuje ID
       Ak je pravidlo povolené, nie je možné zaznamenávať snímky obrazovky pomocou klávesových skratiek ani rozhraní API rozšírení.
 
       Ak je zakázané alebo ak nie je nastavené, zaznamenávania snímok obrazovky je povolené.</translation>
+<translation id="9213347477683611358">Slúži na konfiguráciu obrázku tapety na úrovni zariadenia, ktorý sa bude zobrazovať na obrazovke prihlásenia, ak sa do zariadenia zatiaľ neprihlásil žiadny používateľ. Pravidlo nastavíte určením webovej adresy, z ktorej môže zariadenie so systémom Chrome OS stiahnuť daný obrázok tapety, a určením kryptografickej hodnoty hash, pomocou ktorej sa overí integrita stiahnutého súboru. Obrázok musí byť vo formáte JPEG a jeho veľkosť nesmie prekročiť 16 MB. Webová adresa musí byť prístupná bez overenia totožnosti. Obrázok tapety sa stiahne a uloží do vyrovnávacej pamäte. Obrázok sa stiahne znova v prípade, že sa zmení webová adresa alebo hodnota hash.
+
+      Toto pravidlo je potrebné zadať ako reťazec, ktorý udáva webovú adresu a hodnotu hash vo formáte JSON. Príklad:
+      {
+        "url": "https://example.com/tapeta_zariadenia.jpg",
+        "hash": "hashukazkovejtapety"
+      }
+
+      Ak je pravidlo tapety zariadenia nastavené, zariadenie so systémom Chrome OS stiahne obrázok tapety a použije ho na obrazovke prihlásenia, ak sa do zariadenia zatiaľ neprihlásil žiadny používateľ. Po prihlásení sa použije pravidlo pre tapetu príslušného používateľa.
+
+      Ak pravidlo tapety zariadenia nie je nastavené, zobrazený obrázok závisí od pravidla tapety používateľa (ak je nastavené).</translation>
 <translation id="9217154963008402249">Frekvencia odosielania sledovacích sieťových paketov</translation>
 <translation id="922540222991413931">Konfigurácia zdrojov inštalácie rozšírenia, aplikácie a skriptov používateľa</translation>
 <translation id="924557436754151212">Import uložených hesiel z predvoleného prehliadača pri prvom spustení</translation>
 <translation id="930930237275114205">Nastaviť adresár na údaje používateľov pre aplikáciu <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="944607242500063080">Konfigurovať povolené režimy rýchleho odomknutia</translation>
 <translation id="944817693306670849">Nastaviť veľkosť vyrovnávacej pamäte disku</translation>
-<translation id="969164417253718105">Toto nastavenie ovláda, ako často bude zámka obrazovky požadovať zadanie hesla na ďalšie používanie rýchleho odomknutia. Ak prebehlo posledné zadanie hesla neskôr ako toto nastavenie, nebude rýchle odomknutie pri vstupe na uzamknutú obrazovku k dispozícii. Ak používateľ zostane na uzamknutej obrazovke dlhšie, ako je toto časové obdobie, pri zadaní nesprávneho kódu alebo opätovného prístupu na uzamknutú obrazovku sa bude vyžadovať heslo (podľa toho, čo nastane ako prvé).
-
-      Ak je toto nastavenie nakonfigurované, používatelia, ktorí používajú rýchle odomknutie, budú na uzamknutej obrazovke musieť zadať svoje heslo v závislosti od tohto nastavenia.
-
-      Ak toto nastavenie nie je nakonfigurované, používatelia využívajúci rýchle odomknutie budú musieť na uzamknutej obrazovke zadávať heslo každý deň.</translation>
 </translationbundle>

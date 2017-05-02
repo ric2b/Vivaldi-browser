@@ -9,6 +9,7 @@
 #include <ostream>
 
 #include "base/logging.h"
+#include "base/task_scheduler/scoped_set_task_priority_for_current_thread.h"
 
 namespace base {
 
@@ -16,14 +17,20 @@ namespace base {
 // the header; anything else is subject to change. Tasks should explicitly
 // request defaults if the behavior is critical to the task.
 TaskTraits::TaskTraits()
-    : with_file_io_(false),
-      priority_(TaskPriority::BACKGROUND),
+    : may_block_(false),
+      with_base_sync_primitives_(false),
+      priority_(internal::GetTaskPriorityForCurrentThread()),
       shutdown_behavior_(TaskShutdownBehavior::SKIP_ON_SHUTDOWN) {}
 
 TaskTraits::~TaskTraits() = default;
 
-TaskTraits& TaskTraits::WithFileIO() {
-  with_file_io_ = true;
+TaskTraits& TaskTraits::MayBlock() {
+  may_block_ = true;
+  return *this;
+}
+
+TaskTraits& TaskTraits::WithBaseSyncPrimitives() {
+  with_base_sync_primitives_ = true;
   return *this;
 }
 

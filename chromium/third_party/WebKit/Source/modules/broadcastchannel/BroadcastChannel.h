@@ -15,7 +15,7 @@
 namespace blink {
 
 class BroadcastChannel final : public EventTargetWithInlineData,
-                               public ActiveScriptWrappable,
+                               public ActiveScriptWrappable<BroadcastChannel>,
                                public ContextLifecycleObserver,
                                public mojom::blink::BroadcastChannelClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -46,7 +46,7 @@ class BroadcastChannel final : public EventTargetWithInlineData,
   bool hasPendingActivity() const override;
 
   // ContextLifecycleObserver:
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -54,7 +54,7 @@ class BroadcastChannel final : public EventTargetWithInlineData,
   BroadcastChannel(ExecutionContext*, const String& name);
 
   // mojom::blink::BroadcastChannelClient:
-  void OnMessage(mojo::WTFArray<uint8_t> message) override;
+  void OnMessage(const WTF::Vector<uint8_t>& message) override;
 
   // Called when the mojo binding disconnects.
   void onError();

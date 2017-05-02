@@ -31,7 +31,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
 #include "chrome/browser/ui/cocoa/history_menu_bridge.h"
-#include "chrome/browser/ui/cocoa/run_loop_testing.h"
+#include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/chrome_constants.h"
@@ -44,6 +44,7 @@
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -279,9 +280,15 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
   UserManager::Hide();
 }
 
+#if defined(ADDRESS_SANITIZER)
+// Flaky under ASAN. See https://crbug.com/674475.
+#define MAYBE_GuestProfileReopenWithNoWindows DISABLED_GuestProfileReopenWithNoWindows
+#else
+#define MAYBE_GuestProfileReopenWithNoWindows GuestProfileReopenWithNoWindows
+#endif
 // Test that for a guest last profile, a reopen event opens the User Manager.
 IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
-                       GuestProfileReopenWithNoWindows) {
+                       MAYBE_GuestProfileReopenWithNoWindows) {
   // Create the system profile. Set the guest as the last used profile so the
   // app controller can use it on init.
   CreateAndWaitForSystemProfile();
@@ -305,8 +312,14 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
   UserManager::Hide();
 }
 
+#if defined(ADDRESS_SANITIZER)
+// Flaky under ASAN. See https://crbug.com/674475.
+#define MAYBE_AboutChromeForcesUserManager DISABLED_AboutChromeForcesUserManager
+#else
+#define MAYBE_AboutChromeForcesUserManager AboutChromeForcesUserManager
+#endif
 IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
-                       AboutChromeForcesUserManager) {
+                       MAYBE_AboutChromeForcesUserManager) {
   base::scoped_nsobject<AppController> ac([[AppController alloc] init]);
 
   // Create the guest profile, and set it as the last used profile so the
@@ -381,7 +394,8 @@ class AppControllerOpenShortcutBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(AppControllerOpenShortcutBrowserTest,
                        OpenShortcutOnStartup) {
-  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+  // The two tabs expected are the Welcome page and the desired URL.
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
   EXPECT_EQ(g_open_shortcut_url,
       browser()->tab_strip_model()->GetActiveWebContents()
           ->GetLastCommittedURL());
@@ -408,6 +422,15 @@ IN_PROC_BROWSER_TEST_F(AppControllerReplaceNTPBrowserTest,
   // Ensure that there is exactly 1 tab showing, and the tab is the NTP.
   GURL ntp(chrome::kChromeUINewTabURL);
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
+  browser()->tab_strip_model()->GetActiveWebContents()->GetController().LoadURL(
+      GURL(chrome::kChromeUINewTabURL), content::Referrer(),
+      ui::PageTransition::PAGE_TRANSITION_LINK, std::string());
+
+  // Wait for one navigation on the active web contents.
+  content::TestNavigationObserver ntp_navigation_observer(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  ntp_navigation_observer.Wait();
+
   EXPECT_EQ(ntp,
             browser()
                 ->tab_strip_model()
@@ -417,11 +440,10 @@ IN_PROC_BROWSER_TEST_F(AppControllerReplaceNTPBrowserTest,
   GURL simple(embedded_test_server()->GetURL("/simple.html"));
   SendAppleEventToOpenUrlToAppController(simple);
 
-  // Wait for one navigation on the active web contents.
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
-  content::TestNavigationObserver obs(
-      browser()->tab_strip_model()->GetActiveWebContents(), 1);
-  obs.Wait();
+  content::TestNavigationObserver event_navigation_observer(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  event_navigation_observer.Wait();
 
   EXPECT_EQ(simple,
             browser()

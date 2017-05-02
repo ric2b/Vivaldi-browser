@@ -40,6 +40,9 @@ class RenderViewHost;
 class RenderWidgetHostView;
 class SiteInstance;
 struct FileChooserFileInfo;
+struct FormFieldData;
+
+using FormFieldDataCallback = base::Callback<void(const FormFieldData&)>;
 
 // The interface provides a communication conduit with a frame in the renderer.
 class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
@@ -108,13 +111,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual const GURL& GetLastCommittedURL() = 0;
 
   // Returns the last committed origin of the frame.
-  //
-  // The origin is only available if this RenderFrameHost is current in the
-  // frame tree -- i.e., it would be visited by WebContents::ForEachFrame. In
-  // particular, this method may CHECK if called from
-  // WebContentsObserver::RenderFrameCreated, since non-current frames can be
-  // passed to that observer method.
-  virtual url::Origin GetLastCommittedOrigin() = 0;
+  virtual const url::Origin& GetLastCommittedOrigin() = 0;
 
   // Returns the associated widget's native view.
   virtual gfx::NativeView GetNativeView() = 0;
@@ -221,6 +218,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void RequestTextSurroundingSelection(
       const TextSurroundingSelectionCallback& callback,
       int max_length) = 0;
+
+  // Retrieves the text input info associated with the current form field.
+  virtual void RequestFocusedFormFieldData(FormFieldDataCallback& callback) = 0;
 
  private:
   // This interface should only be implemented inside content.

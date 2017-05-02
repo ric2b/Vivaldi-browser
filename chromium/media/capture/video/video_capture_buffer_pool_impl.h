@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_IMPL_H_
-#define MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_IMPL_H_
+#ifndef MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_POOL_IMPL_H_
+#define MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_POOL_IMPL_H_
 
 #include <stddef.h>
 
@@ -35,12 +35,16 @@ class CAPTURE_EXPORT VideoCaptureBufferPoolImpl
       int count);
 
   // VideoCaptureBufferPool implementation.
-  mojo::ScopedSharedBufferHandle GetHandleForTransit(int buffer_id) override;
-  std::unique_ptr<VideoCaptureBufferHandle> GetBufferHandle(
+  mojo::ScopedSharedBufferHandle GetHandleForInterProcessTransit(
+      int buffer_id) override;
+  base::SharedMemoryHandle GetNonOwnedSharedMemoryHandleForLegacyIPC(
+      int buffer_id) override;
+  std::unique_ptr<VideoCaptureBufferHandle> GetHandleForInProcessAccess(
       int buffer_id) override;
   int ReserveForProducer(const gfx::Size& dimensions,
                          media::VideoPixelFormat format,
                          media::VideoPixelStorage storage,
+                         int frame_feedback_id,
                          int* buffer_id_to_drop) override;
   void RelinquishProducerReservation(int buffer_id) override;
   int ResurrectLastForProducer(const gfx::Size& dimensions,
@@ -57,6 +61,7 @@ class CAPTURE_EXPORT VideoCaptureBufferPoolImpl
   int ReserveForProducerInternal(const gfx::Size& dimensions,
                                  media::VideoPixelFormat format,
                                  media::VideoPixelStorage storage,
+                                 int frame_feedback_id,
                                  int* tracker_id_to_drop);
 
   VideoCaptureBufferTracker* GetTracker(int buffer_id);
@@ -85,4 +90,4 @@ class CAPTURE_EXPORT VideoCaptureBufferPoolImpl
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_IMPL_H_
+#endif  // MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_POOL_IMPL_H_

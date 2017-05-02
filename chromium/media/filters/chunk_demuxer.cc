@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_tracks.h"
@@ -1208,7 +1209,8 @@ bool ChunkDemuxer::IsValidId(const std::string& source_id) const {
 }
 
 void ChunkDemuxer::UpdateDuration(TimeDelta new_duration) {
-  DCHECK(duration_ != new_duration);
+  DCHECK(duration_ != new_duration ||
+         user_specified_duration_ != new_duration.InSecondsF());
   user_specified_duration_ = -1;
   duration_ = new_duration;
   host_->SetDuration(new_duration);
@@ -1248,8 +1250,12 @@ void ChunkDemuxer::DecreaseDurationIfNecessary() {
   if (max_duration.is_zero())
     return;
 
-  if (max_duration < duration_)
+  // Note: be careful to also check |user_specified_duration_|, which may have
+  // higher precision than |duration_|.
+  if (max_duration < duration_ ||
+      max_duration.InSecondsF() < user_specified_duration_) {
     UpdateDuration(max_duration);
+  }
 }
 
 Ranges<TimeDelta> ChunkDemuxer::GetBufferedRanges() const {

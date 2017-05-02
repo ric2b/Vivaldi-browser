@@ -16,16 +16,23 @@
 
 namespace blink {
 
+// Clips for boxes are applied by the box's PaintLayerClipper, if the box has
+// a self-painting PaintLayer. Otherwise the box clips itself.
+// Note that this method is very similar to
+// PaintLayerClipper::shouldClipOverflow for that reason.
+//
+// An exception is control clip, which is currently never applied by
+// PaintLayerClipper.
 static bool boxNeedsClip(const LayoutBox& box) {
-  if (box.hasControlClip())
-    return true;
-  if (box.isSVGRoot() && toLayoutSVGRoot(box).shouldApplyViewportClip())
-    return true;
   if (box.hasLayer() && box.layer()->isSelfPaintingLayer())
     return false;
-  return box.hasOverflowClip() || box.styleRef().containsPaint();
+  if (box.isSVGRoot() && toLayoutSVGRoot(box).shouldApplyViewportClip())
+    return true;
+  return box.hasOverflowClip() || box.styleRef().containsPaint() ||
+         box.hasControlClip();
 }
 
+DISABLE_CFI_PERF
 BoxClipper::BoxClipper(const LayoutBox& box,
                        const PaintInfo& paintInfo,
                        const LayoutPoint& accumulatedOffset,
@@ -44,7 +51,7 @@ BoxClipper::BoxClipper(const LayoutBox& box,
     if (objectProperties && objectProperties->overflowClip()) {
       PaintChunkProperties properties(
           paintInfo.context.getPaintController().currentPaintChunkProperties());
-      properties.clip = objectProperties->overflowClip();
+      properties.propertyTreeState.setClip(objectProperties->overflowClip());
       m_scopedClipProperty.emplace(paintInfo.context.getPaintController(), box,
                                    paintInfo.displayItemTypeForClipping(),
                                    properties);
@@ -88,7 +95,7 @@ BoxClipper::BoxClipper(const LayoutBox& box,
     m_clipType = m_paintInfo.displayItemTypeForClipping();
     Vector<FloatRoundedRect> roundedRects;
     if (hasBorderRadius)
-      roundedRects.append(clipRoundedRect);
+      roundedRects.push_back(clipRoundedRect);
     m_paintInfo.context.getPaintController().createAndAppend<ClipDisplayItem>(
         m_box, m_clipType, pixelSnappedIntRect(clipRect), roundedRects);
   }

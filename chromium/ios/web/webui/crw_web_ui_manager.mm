@@ -4,11 +4,14 @@
 
 #import "ios/web/webui/crw_web_ui_manager.h"
 
+#include <memory>
+#include <vector>
+
 #include "base/json/string_escape.h"
-#include "base/mac/bind_objc_block.h"
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/bind_objc_block.h"
+#import "base/mac/scoped_nsobject.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,12 +19,12 @@
 #include "ios/web/grit/ios_web_resources.h"
 #import "ios/web/net/request_group_util.h"
 #include "ios/web/public/browser_state.h"
-#include "ios/web/public/web_client.h"
+#import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
-#include "ios/web/web_state/web_state_impl.h"
+#import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/webui/crw_web_ui_page_builder.h"
 #include "ios/web/webui/mojo_js_constants.h"
-#include "ios/web/webui/url_fetcher_block_adapter.h"
+#import "ios/web/webui/url_fetcher_block_adapter.h"
 #include "mojo/public/js/constants.h"
 #import "net/base/mac/url_conversions.h"
 
@@ -30,7 +33,7 @@
 #endif
 
 namespace {
-// Prefix for history.requestFavicon JavaScript message.
+// Prefix for JavaScript messages.
 const char kScriptCommandPrefix[] = "webui";
 }
 
@@ -51,9 +54,6 @@ const char kScriptCommandPrefix[] = "webui";
 // Handles JavaScript message from the WebUI page.
 - (BOOL)handleWebUIJSMessage:(const base::DictionaryValue&)message;
 
-// Handles webui.requestFavicon JavaScript message from the WebUI page.
-- (BOOL)handleRequestFavicon:(const base::ListValue*)arguments;
-
 // Handles webui.loadMojo JavaScript message from the WebUI page.
 - (BOOL)handleLoadMojo:(const base::ListValue*)arguments;
 
@@ -72,7 +72,7 @@ const char kScriptCommandPrefix[] = "webui";
 
 @implementation CRWWebUIManager {
   // Set of live WebUI fetchers for retrieving data.
-  ScopedVector<web::URLFetcherBlockAdapter> _fetchers;
+  std::vector<std::unique_ptr<web::URLFetcherBlockAdapter>> _fetchers;
   // Bridge to observe the web state from Objective-C.
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
   // Weak WebStateImpl this CRWWebUIManager is associated with.
@@ -132,7 +132,7 @@ const char kScriptCommandPrefix[] = "webui";
           }];
 }
 
-- (void)webStateDidLoadPage:(web::WebState*)webState {
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(webState, _webState);
   // All WebUI pages are HTML based.
   _webState->SetContentsMimeType("text/html");
@@ -197,40 +197,11 @@ const char kScriptCommandPrefix[] = "webui";
     return NO;
   }
 
-  if (command == "webui.requestFavicon")
-    return [self handleRequestFavicon:arguments];
   if (command == "webui.loadMojo")
     return [self handleLoadMojo:arguments];
 
   DLOG(WARNING) << "Unknown webui command received: " << command;
   return NO;
-}
-
-- (BOOL)handleRequestFavicon:(const base::ListValue*)arguments {
-  std::string favicon;
-  if (!arguments->GetString(0, &favicon)) {
-    DLOG(WARNING) << "JS message parameter not found: Favicon URL";
-    return NO;
-  }
-  GURL faviconURL(favicon);
-  DCHECK(faviconURL.is_valid());
-  // Retrieve favicon resource and set favicon background image via JavaScript.
-  base::WeakNSObject<CRWWebUIManager> weakSelf(self);
-  void (^faviconHandler)(NSData*) = ^void(NSData* data) {
-    base::scoped_nsobject<CRWWebUIManager> strongSelf(weakSelf);
-    if (!strongSelf)
-      return;
-    NSString* base64EncodedResource = [data base64EncodedStringWithOptions:0];
-    NSString* dataURLString = [NSString
-        stringWithFormat:@"data:image/png;base64,%@", base64EncodedResource];
-    NSString* faviconURLString = base::SysUTF8ToNSString(faviconURL.spec());
-    NSString* script =
-        [NSString stringWithFormat:@"chrome.setFaviconBackground('%@', '%@');",
-                                   faviconURLString, dataURLString];
-    [strongSelf webState]->ExecuteJavaScript(base::SysNSStringToUTF16(script));
-  };
-  [self fetchResourceWithURL:faviconURL completionHandler:faviconHandler];
-  return YES;
 }
 
 - (BOOL)handleLoadMojo:(const base::ListValue*)arguments {
@@ -250,11 +221,12 @@ const char kScriptCommandPrefix[] = "webui";
       {mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS},
       {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
       {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
-      {mojo::kConnectionModuleName, IDR_MOJO_CONNECTION_JS},
       {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
+      {mojo::kInterfaceTypesModuleName, IDR_MOJO_INTERFACE_TYPES_JS},
       {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
       {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
       {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
+      {web::kConsoleModuleName, IDR_IOS_CONSOLE_JS},
       {web::kSyncMessageChannelModuleName,
        IDR_IOS_MOJO_SYNC_MESSAGE_CHANNEL_JS},
       {web::kHandleUtilModuleName, IDR_IOS_MOJO_HANDLE_UTIL_JS},
@@ -325,7 +297,11 @@ const char kScriptCommandPrefix[] = "webui";
 }
 
 - (void)removeFetcher:(web::URLFetcherBlockAdapter*)fetcher {
-  _fetchers.erase(std::find(_fetchers.begin(), _fetchers.end(), fetcher));
+  _fetchers.erase(std::find_if(
+      _fetchers.begin(), _fetchers.end(),
+      [fetcher](const std::unique_ptr<web::URLFetcherBlockAdapter>& ptr) {
+        return ptr.get() == fetcher;
+      }));
 }
 
 #pragma mark - Testing-Only Methods
@@ -333,9 +309,8 @@ const char kScriptCommandPrefix[] = "webui";
 - (std::unique_ptr<web::URLFetcherBlockAdapter>)
     fetcherForURL:(const GURL&)URL
 completionHandler:(web::URLFetcherBlockAdapterCompletion)handler {
-  return std::unique_ptr<web::URLFetcherBlockAdapter>(
-      new web::URLFetcherBlockAdapter(
-          URL, _webState->GetBrowserState()->GetRequestContext(), handler));
+  return base::MakeUnique<web::URLFetcherBlockAdapter>(
+      URL, _webState->GetBrowserState()->GetRequestContext(), handler);
 }
 
 @end

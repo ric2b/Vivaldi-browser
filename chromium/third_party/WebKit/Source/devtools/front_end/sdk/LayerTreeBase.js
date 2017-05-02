@@ -17,117 +17,117 @@ SDK.Layer.prototype = {
   /**
    * @return {string}
    */
-  id: function() {},
+  id() {},
 
   /**
    * @return {?string}
    */
-  parentId: function() {},
+  parentId() {},
 
   /**
    * @return {?SDK.Layer}
    */
-  parent: function() {},
+  parent() {},
 
   /**
    * @return {boolean}
    */
-  isRoot: function() {},
+  isRoot() {},
 
   /**
    * @return {!Array.<!SDK.Layer>}
    */
-  children: function() {},
+  children() {},
 
   /**
    * @param {!SDK.Layer} child
    */
-  addChild: function(child) {},
+  addChild(child) {},
 
   /**
    * @return {?SDK.DOMNode}
    */
-  node: function() {},
+  node() {},
 
   /**
    * @return {?SDK.DOMNode}
    */
-  nodeForSelfOrAncestor: function() {},
+  nodeForSelfOrAncestor() {},
 
   /**
    * @return {number}
    */
-  offsetX: function() {},
+  offsetX() {},
 
   /**
    * @return {number}
    */
-  offsetY: function() {},
+  offsetY() {},
 
   /**
    * @return {number}
    */
-  width: function() {},
+  width() {},
 
   /**
    * @return {number}
    */
-  height: function() {},
+  height() {},
 
   /**
    * @return {?Array.<number>}
    */
-  transform: function() {},
+  transform() {},
 
   /**
    * @return {!Array.<number>}
    */
-  quad: function() {},
+  quad() {},
 
   /**
    * @return {!Array.<number>}
    */
-  anchorPoint: function() {},
+  anchorPoint() {},
 
   /**
    * @return {boolean}
    */
-  invisible: function() {},
+  invisible() {},
 
   /**
    * @return {number}
    */
-  paintCount: function() {},
+  paintCount() {},
 
   /**
    * @return {?Protocol.DOM.Rect}
    */
-  lastPaintRect: function() {},
+  lastPaintRect() {},
 
   /**
    * @return {!Array.<!Protocol.LayerTree.ScrollRect>}
    */
-  scrollRects: function() {},
+  scrollRects() {},
 
   /**
    * @return {number}
    */
-  gpuMemoryUsage: function() {},
+  gpuMemoryUsage() {},
 
   /**
    * @param {function(!Array.<string>)} callback
    */
-  requestCompositingReasons: function(callback) {},
+  requestCompositingReasons(callback) {},
 
   /**
    * @return {boolean}
    */
-  drawsContent: function() {},
+  drawsContent() {},
 
   /**
    * @return {!Array<!Promise<?SDK.SnapshotWithRect>>}
    */
-  snapshots: function() {}
+  snapshots() {}
 };
 
 SDK.Layer.ScrollRectType = {
@@ -150,7 +150,7 @@ SDK.LayerTreeBase = class {
     this._layersById = {};
     this._root = null;
     this._contentRoot = null;
-    /** @type Map<number, ?SDK.DOMNode> */
+    /** @type {!Map<number, ?SDK.DOMNode>} */
     this._backendNodeIdToNode = new Map();
   }
 
@@ -217,7 +217,7 @@ SDK.LayerTreeBase = class {
    * @param {!Set<number>} requestedNodeIds
    * @param {function()} callback
    */
-  _resolveBackendNodeIds(requestedNodeIds, callback) {
+  resolveBackendNodeIds(requestedNodeIds, callback) {
     if (!requestedNodeIds.size || !this._domModel) {
       callback();
       return;
@@ -236,6 +236,13 @@ SDK.LayerTreeBase = class {
       }
       callback();
     }
+  }
+
+  /**
+   * @return {!Map<number, ?SDK.DOMNode>}
+   */
+  backendNodeIdToNode() {
+    return this._backendNodeIdToNode;
   }
 
   /**

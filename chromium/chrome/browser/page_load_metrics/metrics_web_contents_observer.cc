@@ -20,6 +20,7 @@
 #include "chrome/common/page_load_metrics/page_load_metrics_messages.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -36,6 +37,23 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(
     page_load_metrics::MetricsWebContentsObserver);
 
 namespace page_load_metrics {
+
+namespace {
+
+UserInitiatedInfo CreateUserInitiatedInfo(
+    content::NavigationHandle* navigation_handle,
+    PageLoadTracker* committed_load) {
+  if (!navigation_handle->IsRendererInitiated())
+    return UserInitiatedInfo::BrowserInitiated();
+
+  return UserInitiatedInfo::RenderInitiated(
+      navigation_handle->HasUserGesture(),
+      committed_load &&
+          committed_load->input_tracker()->FindAndConsumeInputEventsBefore(
+              navigation_handle->NavigationStart()));
+}
+
+}  // namespace
 
 // static
 MetricsWebContentsObserver::MetricsWebContentsObserver(
@@ -64,7 +82,7 @@ MetricsWebContentsObserver* MetricsWebContentsObserver::CreateForWebContents(
 
 MetricsWebContentsObserver::~MetricsWebContentsObserver() {
   // TODO(csharrison): Use a more user-initiated signal for CLOSE.
-  NotifyAbortAllLoads(ABORT_CLOSE, false);
+  NotifyAbortAllLoads(ABORT_CLOSE, UserInitiatedInfo::NotUserInitiated());
 }
 
 void MetricsWebContentsObserver::RegisterInputEventObserver(
@@ -101,11 +119,17 @@ bool MetricsWebContentsObserver::OnMessageReceived(
 
 void MetricsWebContentsObserver::WillStartNavigationRequest(
     content::NavigationHandle* navigation_handle) {
+  // Same-page navigations should never go through WillStartNavigationRequest.
+  DCHECK(!navigation_handle->IsSamePage());
+
   if (!navigation_handle->IsInMainFrame())
     return;
 
+  UserInitiatedInfo user_initiated_info(
+      CreateUserInitiatedInfo(navigation_handle, committed_load_.get()));
   std::unique_ptr<PageLoadTracker> last_aborted =
-      NotifyAbortedProvisionalLoadsNewNavigation(navigation_handle);
+      NotifyAbortedProvisionalLoadsNewNavigation(navigation_handle,
+                                                 user_initiated_info);
 
   int chain_size_same_url = 0;
   int chain_size = 0;
@@ -148,23 +172,78 @@ void MetricsWebContentsObserver::WillStartNavigationRequest(
       navigation_handle,
       base::MakeUnique<PageLoadTracker>(
           in_foreground_, embedder_interface_.get(), currently_committed_url,
-          navigation_handle, chain_size, chain_size_same_url)));
+          navigation_handle, user_initiated_info, chain_size,
+          chain_size_same_url)));
+}
+
+void MetricsWebContentsObserver::WillProcessNavigationResponse(
+    content::NavigationHandle* navigation_handle) {
+  auto it = provisional_loads_.find(navigation_handle);
+  if (it == provisional_loads_.end())
+    return;
+  it->second->WillProcessNavigationResponse(navigation_handle);
+}
+
+PageLoadTracker* MetricsWebContentsObserver::GetTrackerOrNullForRequest(
+    const content::GlobalRequestID& request_id,
+    content::ResourceType resource_type,
+    base::TimeTicks creation_time) {
+  if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME) {
+    // The main frame request can complete either before or after commit, so we
+    // look at both provisional loads and the committed load to find a
+    // PageLoadTracker with a matching request id. See https://goo.gl/6TzCYN for
+    // more details.
+    for (const auto& kv : provisional_loads_) {
+      PageLoadTracker* candidate = kv.second.get();
+      if (candidate->HasMatchingNavigationRequestID(request_id)) {
+        return candidate;
+      }
+    }
+    if (committed_load_ &&
+        committed_load_->HasMatchingNavigationRequestID(request_id)) {
+      return committed_load_.get();
+    }
+  } else {
+    // Non main frame resources are always associated with the currently
+    // committed load. If the resource request was started before this
+    // navigation then it should be ignored.
+
+    // TODO(jkarlin): There is a race here. Consider the following sequence:
+    // 1. renderer has a committed page A
+    // 2. navigation is initiated to page B
+    // 3. page A initiates URLRequests (e.g. in the unload handler)
+    // 4. page B commits
+    // 5. the URLRequests initiated by A complete
+    // In the above example, the URLRequests initiated by A will be attributed
+    // to page load B. This should be relatively rare but we may want to fix
+    // this at some point. We could fix this by comparing the URLRequest
+    // creation time against the committed load's commit time, however more
+    // investigation is needed to confirm that all cases would be handled
+    // correctly (for example Link: preloads).
+    if (committed_load_ &&
+        creation_time >= committed_load_->navigation_start()) {
+      return committed_load_.get();
+    }
+  }
+  return nullptr;
 }
 
 void MetricsWebContentsObserver::OnRequestComplete(
+    const content::GlobalRequestID& request_id,
     content::ResourceType resource_type,
     bool was_cached,
-    int net_error) {
-  // For simplicity, only count subresources. Navigations are hard to attribute
-  // here because we won't have a committed load by the time data streams in
-  // from the IO thread.
-  if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME &&
-      net_error != net::OK) {
-    return;
+    bool used_data_reduction_proxy,
+    int64_t raw_body_bytes,
+    int64_t original_content_length,
+    base::TimeTicks creation_time) {
+  PageLoadTracker* tracker =
+      GetTrackerOrNullForRequest(request_id, resource_type, creation_time);
+  if (tracker) {
+    ExtraRequestInfo extra_request_info(
+        was_cached, raw_body_bytes, used_data_reduction_proxy,
+        was_cached ? 0 : original_content_length);
+    tracker->OnLoadedResource(extra_request_info);
   }
-  if (!committed_load_)
-    return;
-  committed_load_->OnLoadedSubresource(was_cached);
 }
 
 const PageLoadExtraInfo
@@ -206,13 +285,17 @@ void MetricsWebContentsObserver::DidFinishNavigation(
     finished_nav->StopTracking();
 
   if (navigation_handle->HasCommitted()) {
+    UserInitiatedInfo user_initiated_info =
+        finished_nav
+            ? finished_nav->user_initiated_info()
+            : CreateUserInitiatedInfo(navigation_handle, committed_load_.get());
+
     // Notify other loads that they may have been aborted by this committed
     // load. is_certainly_browser_timestamp is set to false because
     // NavigationStart() could be set in either the renderer or browser process.
     NotifyAbortAllLoadsWithTimestamp(
         AbortTypeForPageTransition(navigation_handle->GetPageTransition()),
-        IsNavigationUserInitiated(navigation_handle),
-        navigation_handle->NavigationStart(), false);
+        user_initiated_info, navigation_handle->NavigationStart(), false);
 
     if (should_track) {
       HandleCommittedNavigationForTrackedLoad(navigation_handle,
@@ -242,7 +325,8 @@ void MetricsWebContentsObserver::HandleFailedNavigationForTrackedLoad(
   // net::ERR_ABORTED: An aborted provisional load has error
   // net::ERR_ABORTED.
   if ((error == net::OK) || (error == net::ERR_ABORTED)) {
-    tracker->NotifyAbort(ABORT_OTHER, false, base::TimeTicks::Now(), true);
+    tracker->NotifyAbort(ABORT_OTHER, UserInitiatedInfo::NotUserInitiated(),
+                         base::TimeTicks::Now(), true);
     aborted_provisional_loads_.push_back(std::move(tracker));
   }
 }
@@ -253,8 +337,11 @@ void MetricsWebContentsObserver::HandleCommittedNavigationForTrackedLoad(
   if (!IsNavigationUserInitiated(navigation_handle) &&
       (navigation_handle->GetPageTransition() &
        ui::PAGE_TRANSITION_CLIENT_REDIRECT) != 0 &&
-      committed_load_)
+      committed_load_) {
+    // TODO(bmcquade): consider carrying the user_gesture bit forward to the
+    // redirected navigation.
     committed_load_->NotifyClientRedirectTo(*tracker);
+  }
 
   committed_load_ = std::move(tracker);
   committed_load_->Commit(navigation_handle);
@@ -262,13 +349,13 @@ void MetricsWebContentsObserver::HandleCommittedNavigationForTrackedLoad(
 
 void MetricsWebContentsObserver::NavigationStopped() {
   // TODO(csharrison): Use a more user-initiated signal for STOP.
-  NotifyAbortAllLoads(ABORT_STOP, false);
+  NotifyAbortAllLoads(ABORT_STOP, UserInitiatedInfo::NotUserInitiated());
 }
 
 void MetricsWebContentsObserver::OnInputEvent(
     const blink::WebInputEvent& event) {
   // Ignore browser navigation or reload which comes with type Undefined.
-  if (event.type == blink::WebInputEvent::Type::Undefined)
+  if (event.type() == blink::WebInputEvent::Type::Undefined)
     return;
 
   if (committed_load_)
@@ -276,10 +363,11 @@ void MetricsWebContentsObserver::OnInputEvent(
 }
 
 void MetricsWebContentsObserver::FlushMetricsOnAppEnterBackground() {
-  // Signal to observers that we've been backgrounded, in cases where the
-  // FlushMetricsOnAppEnterBackground callback gets invoked before the
-  // associated WasHidden callback.
-  WasHidden();
+  // Note that, while a call to FlushMetricsOnAppEnterBackground usually
+  // indicates that the app is about to be backgrounded, there are cases where
+  // the app may not end up getting backgrounded. Thus, we should not assume
+  // anything about foreground / background state of the associated tab as part
+  // of this method call.
 
   if (committed_load_)
     committed_load_->FlushMetricsOnAppEnterBackground();
@@ -344,28 +432,29 @@ void MetricsWebContentsObserver::RenderProcessGone(
   aborted_provisional_loads_.clear();
 }
 
-void MetricsWebContentsObserver::NotifyAbortAllLoads(UserAbortType abort_type,
-                                                     bool user_initiated) {
-  NotifyAbortAllLoadsWithTimestamp(abort_type, user_initiated,
+void MetricsWebContentsObserver::NotifyAbortAllLoads(
+    UserAbortType abort_type,
+    UserInitiatedInfo user_initiated_info) {
+  NotifyAbortAllLoadsWithTimestamp(abort_type, user_initiated_info,
                                    base::TimeTicks::Now(), true);
 }
 
 void MetricsWebContentsObserver::NotifyAbortAllLoadsWithTimestamp(
     UserAbortType abort_type,
-    bool user_initiated,
+    UserInitiatedInfo user_initiated_info,
     base::TimeTicks timestamp,
     bool is_certainly_browser_timestamp) {
   if (committed_load_) {
-    committed_load_->NotifyAbort(abort_type, user_initiated, timestamp,
+    committed_load_->NotifyAbort(abort_type, user_initiated_info, timestamp,
                                  is_certainly_browser_timestamp);
   }
   for (const auto& kv : provisional_loads_) {
-    kv.second->NotifyAbort(abort_type, user_initiated, timestamp,
+    kv.second->NotifyAbort(abort_type, user_initiated_info, timestamp,
                            is_certainly_browser_timestamp);
   }
   for (const auto& tracker : aborted_provisional_loads_) {
     if (tracker->IsLikelyProvisionalAbort(timestamp)) {
-      tracker->UpdateAbort(abort_type, user_initiated, timestamp,
+      tracker->UpdateAbort(abort_type, user_initiated_info, timestamp,
                            is_certainly_browser_timestamp);
     }
   }
@@ -374,7 +463,8 @@ void MetricsWebContentsObserver::NotifyAbortAllLoadsWithTimestamp(
 
 std::unique_ptr<PageLoadTracker>
 MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
-    content::NavigationHandle* new_navigation) {
+    content::NavigationHandle* new_navigation,
+    UserInitiatedInfo user_initiated_info) {
   // If there are multiple aborted loads that can be attributed to this one,
   // just count the latest one for simplicity. Other loads will fall into the
   // OTHER bucket, though there shouldn't be very many.
@@ -391,7 +481,7 @@ MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
   if (last_aborted_load->IsLikelyProvisionalAbort(timestamp)) {
     last_aborted_load->UpdateAbort(
         AbortTypeForPageTransition(new_navigation->GetPageTransition()),
-        IsNavigationUserInitiated(new_navigation), timestamp, false);
+        user_initiated_info, timestamp, false);
   }
 
   aborted_provisional_loads_.clear();

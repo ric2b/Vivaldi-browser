@@ -39,10 +39,11 @@ CSSPaintDefinition* CSSPaintDefinition::create(
     v8::Local<v8::Function> paint,
     Vector<CSSPropertyID>& nativeInvalidationProperties,
     Vector<AtomicString>& customInvalidationProperties,
+    Vector<CSSSyntaxDescriptor>& inputArgumentTypes,
     bool hasAlpha) {
-  return new CSSPaintDefinition(scriptState, constructor, paint,
-                                nativeInvalidationProperties,
-                                customInvalidationProperties, hasAlpha);
+  return new CSSPaintDefinition(
+      scriptState, constructor, paint, nativeInvalidationProperties,
+      customInvalidationProperties, inputArgumentTypes, hasAlpha);
 }
 
 CSSPaintDefinition::CSSPaintDefinition(
@@ -51,6 +52,7 @@ CSSPaintDefinition::CSSPaintDefinition(
     v8::Local<v8::Function> paint,
     Vector<CSSPropertyID>& nativeInvalidationProperties,
     Vector<AtomicString>& customInvalidationProperties,
+    Vector<CSSSyntaxDescriptor>& inputArgumentTypes,
     bool hasAlpha)
     : m_scriptState(scriptState),
       m_constructor(scriptState->isolate(), constructor),
@@ -59,6 +61,7 @@ CSSPaintDefinition::CSSPaintDefinition(
       m_hasAlpha(hasAlpha) {
   m_nativeInvalidationProperties.swap(nativeInvalidationProperties);
   m_customInvalidationProperties.swap(customInvalidationProperties);
+  m_inputArgumentTypes.swap(inputArgumentTypes);
 }
 
 CSSPaintDefinition::~CSSPaintDefinition() {}
@@ -83,7 +86,7 @@ PassRefPtr<Image> CSSPaintDefinition::paint(const LayoutObject& layoutObject,
   DCHECK(layoutObject.node());
 
   PaintRenderingContext2D* renderingContext = PaintRenderingContext2D::create(
-      ImageBuffer::create(wrapUnique(
+      ImageBuffer::create(WTF::wrapUnique(
           new RecordingImageBufferSurface(size, nullptr /* fallbackFactory */,
                                           m_hasAlpha ? NonOpaque : Opaque))),
       m_hasAlpha, zoom);
@@ -93,9 +96,9 @@ PassRefPtr<Image> CSSPaintDefinition::paint(const LayoutObject& layoutObject,
       m_nativeInvalidationProperties, m_customInvalidationProperties);
 
   v8::Local<v8::Value> argv[] = {
-      toV8(renderingContext, m_scriptState->context()->Global(), isolate),
-      toV8(paintSize, m_scriptState->context()->Global(), isolate),
-      toV8(styleMap, m_scriptState->context()->Global(), isolate)};
+      ToV8(renderingContext, m_scriptState->context()->Global(), isolate),
+      ToV8(paintSize, m_scriptState->context()->Global(), isolate),
+      ToV8(styleMap, m_scriptState->context()->Global(), isolate)};
 
   v8::Local<v8::Function> paint = m_paint.newLocal(isolate);
 

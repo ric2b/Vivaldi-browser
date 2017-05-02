@@ -88,6 +88,8 @@ component("midi") {
     "midi_port_info.h",
     "midi_scheduler.cc",
     "midi_scheduler.h",
+    "midi_service.cc",
+    "midi_service.h",
     "midi_switches.cc",
     "midi_switches.h",
   ]
@@ -202,15 +204,11 @@ test("midi_unittests") {
 
   if (is_mac) {
     sources += [ "midi_manager_mac_unittest.cc" ]
-    libs = [ "CoreMidi.framework" ]
+    libs = [ "CoreMIDI.framework" ]
   }
 
   if (use_alsa && use_udev) {
     sources += [ "midi_manager_alsa_unittest.cc" ]
-  }
-
-  if (use_x11) {
-    deps += [ "//tools/xdisplaycheck" ]
   }
 
   # This target should not require the Chrome executable to run.

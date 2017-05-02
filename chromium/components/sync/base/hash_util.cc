@@ -32,4 +32,11 @@ std::string GenerateSyncableBookmarkHash(
       BOOKMARKS, originator_cache_guid + originator_client_item_id);
 }
 
+std::string GenerateSyncableNotesHash(
+    const std::string& originator_cache_guid,
+    const std::string& originator_client_item_id) {
+  return GenerateSyncableHash(
+      NOTES, originator_cache_guid + originator_client_item_id);
+}
+
 }  // namespace syncer

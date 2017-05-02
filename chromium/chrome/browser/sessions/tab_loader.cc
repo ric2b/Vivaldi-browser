@@ -12,7 +12,6 @@
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/sessions/session_restore_stats_collector.h"
 #include "chrome/browser/ui/browser.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/memory/tab_manager.h"
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_pref_names.h"
 
@@ -92,6 +92,10 @@ void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
         for (auto& restored_tab : tabs) {
           if (restored_tab.is_pinned()) {
             pinned_tabs.push_back(restored_tab);
+          } else {
+            // if we do not load it mark it as discarded
+            g_browser_process->GetTabManager()->SetIsDiscarded(
+                restored_tab.contents());
           }
         }
         if (!shared_tab_loader_)

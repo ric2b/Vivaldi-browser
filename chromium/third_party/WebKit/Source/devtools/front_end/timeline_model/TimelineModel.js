@@ -104,10 +104,15 @@ TimelineModel.TimelineModel = class {
    * @return {boolean}
    */
   static isMarkerEvent(event) {
-    var recordTypes = TimelineModel.TimelineModel.RecordType;
+    const recordTypes = TimelineModel.TimelineModel.RecordType;
     switch (event.name) {
       case recordTypes.TimeStamp:
       case recordTypes.MarkFirstPaint:
+      case recordTypes.FirstTextPaint:
+      case recordTypes.FirstImagePaint:
+      case recordTypes.FirstMeaningfulPaint:
+      case recordTypes.FirstPaint:
+      case recordTypes.FirstContentfulPaint:
         return true;
       case recordTypes.MarkDOMContent:
       case recordTypes.MarkLoad:
@@ -644,6 +649,21 @@ TimelineModel.TimelineModel = class {
 
     var recordTypes = TimelineModel.TimelineModel.RecordType;
 
+    if (!eventStack.length) {
+      if (this._currentTaskLayoutAndRecalcEvents && this._currentTaskLayoutAndRecalcEvents.length) {
+        var totalTime = this._currentTaskLayoutAndRecalcEvents.reduce((time, event) => time + event.duration, 0);
+        if (totalTime > TimelineModel.TimelineModel.Thresholds.ForcedLayout) {
+          for (var e of this._currentTaskLayoutAndRecalcEvents) {
+            let timelineData = TimelineModel.TimelineData.forEvent(e);
+            timelineData.warning = e.name === recordTypes.Layout ?
+                TimelineModel.TimelineModel.WarningType.ForcedLayout :
+                TimelineModel.TimelineModel.WarningType.ForcedStyle;
+          }
+        }
+      }
+      this._currentTaskLayoutAndRecalcEvents = [];
+    }
+
     if (this._currentScriptEvent && event.startTime > this._currentScriptEvent.endTime)
       this._currentScriptEvent = null;
 
@@ -682,7 +702,7 @@ TimelineModel.TimelineModel = class {
           timelineData.setInitiator(this._lastScheduleStyleRecalculation[event.args['beginData']['frame']]);
         this._lastRecalculateStylesEvent = event;
         if (this._currentScriptEvent)
-          timelineData.warning = TimelineModel.TimelineModel.WarningType.ForcedStyle;
+          this._currentTaskLayoutAndRecalcEvents.push(event);
         break;
 
       case recordTypes.ScheduleStyleInvalidationTracking:
@@ -715,7 +735,18 @@ TimelineModel.TimelineModel = class {
           timelineData.backendNodeId = event.args['endData']['rootNode'];
         this._layoutInvalidate[frameId] = null;
         if (this._currentScriptEvent)
-          timelineData.warning = TimelineModel.TimelineModel.WarningType.ForcedLayout;
+          this._currentTaskLayoutAndRecalcEvents.push(event);
+        break;
+
+      case recordTypes.EventDispatch:
+        if (event.duration > TimelineModel.TimelineModel.Thresholds.RecurringHandler)
+          timelineData.warning = TimelineModel.TimelineModel.WarningType.LongHandler;
+        break;
+
+      case recordTypes.TimerFire:
+      case recordTypes.FireAnimationFrame:
+        if (event.duration > TimelineModel.TimelineModel.Thresholds.RecurringHandler)
+          timelineData.warning = TimelineModel.TimelineModel.WarningType.LongRecurringHandler;
         break;
 
       case recordTypes.FunctionCall:
@@ -724,14 +755,18 @@ TimelineModel.TimelineModel = class {
           eventData['url'] = eventData['scriptName'];
         if (typeof eventData['scriptLine'] === 'number')
           eventData['lineNumber'] = eventData['scriptLine'];
+
       // Fallthrough.
+
       case recordTypes.EvaluateScript:
       case recordTypes.CompileScript:
         if (typeof eventData['lineNumber'] === 'number')
           --eventData['lineNumber'];
         if (typeof eventData['columnNumber'] === 'number')
           --eventData['columnNumber'];
+
       // Fallthrough intended.
+
       case recordTypes.RunMicrotasks:
         // Microtasks technically are not necessarily scripts, but for purpose of
         // forced sync style recalc or layout detection they are.
@@ -828,9 +863,9 @@ TimelineModel.TimelineModel = class {
         break;
 
       case recordTypes.FireIdleCallback:
-        if (event.duration > eventData['allottedMilliseconds'])
+        if (event.duration >
+            eventData['allottedMilliseconds'] + TimelineModel.TimelineModel.Thresholds.IdleCallbackAddon)
           timelineData.warning = TimelineModel.TimelineModel.WarningType.IdleDeadlineExceeded;
-
         break;
     }
     if (SDK.TracingModel.isAsyncPhase(event.phase))
@@ -1172,6 +1207,12 @@ TimelineModel.TimelineModel.RecordType = {
   ConsoleTime: 'ConsoleTime',
   UserTiming: 'UserTiming',
 
+  FirstTextPaint: 'firstTextPaint',
+  FirstImagePaint: 'firstImagePaint',
+  FirstMeaningfulPaint: 'firstMeaningfulPaint',
+  FirstPaint: 'firstPaint',
+  FirstContentfulPaint: 'firstContentfulPaint',
+
   ResourceSendRequest: 'ResourceSendRequest',
   ResourceReceiveResponse: 'ResourceReceiveResponse',
   ResourceReceivedData: 'ResourceReceivedData',
@@ -1250,6 +1291,8 @@ TimelineModel.TimelineModel.WarningType = {
   ForcedStyle: 'ForcedStyle',
   ForcedLayout: 'ForcedLayout',
   IdleDeadlineExceeded: 'IdleDeadlineExceeded',
+  LongHandler: 'LongHandler',
+  LongRecurringHandler: 'LongRecurringHandler',
   V8Deopt: 'V8Deopt'
 };
 
@@ -1272,6 +1315,13 @@ TimelineModel.TimelineModel.DevToolsMetadataEvent = {
   TracingStartedInBrowser: 'TracingStartedInBrowser',
   TracingStartedInPage: 'TracingStartedInPage',
   TracingSessionIdForWorker: 'TracingSessionIdForWorker',
+};
+
+TimelineModel.TimelineModel.Thresholds = {
+  Handler: 150,
+  RecurringHandler: 50,
+  ForcedLayout: 30,
+  IdleCallbackAddon: 5
 };
 
 /**
@@ -1436,6 +1486,7 @@ TimelineModel.TimelineModel.NetworkRequest = class {
   constructor(event) {
     this.startTime = event.name === TimelineModel.TimelineModel.RecordType.ResourceSendRequest ? event.startTime : 0;
     this.endTime = Infinity;
+    this.encodedDataLength = 0;
     /** @type {!Array<!SDK.TracingModel.Event>} */
     this.children = [];
     /** @type {?Object} */
@@ -1468,12 +1519,26 @@ TimelineModel.TimelineModel.NetworkRequest = class {
     if (!this.responseTime &&
         (event.name === recordType.ResourceReceiveResponse || event.name === recordType.ResourceReceivedData))
       this.responseTime = event.startTime;
+    const encodedDataLength = eventData['encodedDataLength'] || 0;
+    if (event.name === recordType.ResourceReceiveResponse) {
+      if (eventData['fromCache'])
+        this.fromCache = true;
+      if (eventData['fromServiceWorker'])
+        this.fromServiceWorker = true;
+      this.encodedDataLength = encodedDataLength;
+    }
+    if (event.name === recordType.ResourceReceivedData)
+      this.encodedDataLength += encodedDataLength;
+    if (event.name === recordType.ResourceFinish && encodedDataLength)
+      this.encodedDataLength = encodedDataLength;
     if (!this.url)
       this.url = eventData['url'];
     if (!this.requestMethod)
       this.requestMethod = eventData['requestMethod'];
     if (!this.timing)
       this.timing = eventData['timing'];
+    if (eventData['fromServiceWorker'])
+      this.fromServiceWorker = true;
   }
 };
 

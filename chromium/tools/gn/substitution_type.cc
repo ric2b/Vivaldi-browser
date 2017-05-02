@@ -21,6 +21,7 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{source_root_relative_dir}}",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
   "{{source_gen_dir}}",  // SUBSTITUTION_SOURCE_GEN_DIR
   "{{source_out_dir}}",  // SUBSTITUTION_SOURCE_OUT_DIR
+  "{{source_target_relative}}",  // SUBSTITUTION_SOURCE_TARGET_RELATIVE
 
   "{{label}}",  // SUBSTITUTION_LABEL
   "{{label_name}}",  // SUBSTITUTION_LABEL_NAME
@@ -70,6 +71,7 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "source_root_relative_dir",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
     "source_gen_dir",            // SUBSTITUTION_SOURCE_GEN_DIR
     "source_out_dir",            // SUBSTITUTION_SOURCE_OUT_DIR
+    "source_target_relative",    // SUBSTITUTION_SOURCE_TARGET_RELATIVE
 
     "label",               // SUBSTITUTION_LABEL
     "label_name",          // SUBSTITUTION_LABEL_NAME
@@ -160,7 +162,13 @@ bool IsValidSourceSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_SOURCE_DIR ||
          type == SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR ||
          type == SUBSTITUTION_SOURCE_GEN_DIR ||
-         type == SUBSTITUTION_SOURCE_OUT_DIR;
+         type == SUBSTITUTION_SOURCE_OUT_DIR ||
+         type == SUBSTITUTION_SOURCE_TARGET_RELATIVE;
+}
+
+bool IsValidScriptArgsSubstitution(SubstitutionType type) {
+  return IsValidSourceSubstitution(type) ||
+      type == SUBSTITUTION_RSP_FILE_NAME;
 }
 
 bool IsValidToolSubstitution(SubstitutionType type) {
@@ -233,14 +241,14 @@ bool IsValidCompileXCassetsSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_BUNDLE_PRODUCT_TYPE;
 }
 
-bool EnsureValidSourcesSubstitutions(
-    const std::vector<SubstitutionType>& types,
-    const ParseNode* origin,
-    Err* err) {
-  for (size_t i = 0; i < types.size(); i++) {
-    if (!IsValidSourceSubstitution(types[i])) {
+bool EnsureValidSubstitutions(const std::vector<SubstitutionType>& types,
+                              bool (*is_valid_subst)(SubstitutionType),
+                              const ParseNode* origin,
+                              Err* err) {
+  for (SubstitutionType type : types) {
+    if (!is_valid_subst(type)) {
       *err = Err(origin, "Invalid substitution type.",
-          "The substitution " + std::string(kSubstitutionNames[types[i]]) +
+          "The substitution " + std::string(kSubstitutionNames[type]) +
           " isn't valid for something\n"
           "operating on a source file such as this.");
       return false;

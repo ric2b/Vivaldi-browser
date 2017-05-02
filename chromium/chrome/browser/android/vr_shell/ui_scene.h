@@ -60,7 +60,8 @@ class UiScene {
   void UpdateTransforms(float screen_tilt, int64_t time_in_micro);
 
   // Handle a batch of commands passed from the UI HTML.
-  void HandleCommands(const base::ListValue* commands, int64_t time_in_micro);
+  void HandleCommands(std::unique_ptr<base::ListValue> commands,
+                      int64_t time_in_micro);
 
   const std::vector<std::unique_ptr<ContentRectangle>>& GetUiElements() const;
 
@@ -68,12 +69,10 @@ class UiScene {
 
   ContentRectangle* GetContentQuad();
 
-  // Return a monotonic time in microseconds for coordinating animations.
-  static int64_t TimeInMicroseconds();
-
  private:
   void ApplyRecursiveTransforms(const ContentRectangle& element,
-                                ReversibleTransform* transform);
+                                ReversibleTransform* transform,
+                                float* opacity);
   void ApplyDictToElement(const base::DictionaryValue& dict,
                           ContentRectangle *element);
 

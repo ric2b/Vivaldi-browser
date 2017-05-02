@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
@@ -42,7 +42,7 @@ public class PaymentRequestFieldTrialTest extends PaymentRequestTestBase {
     @CommandLineFlags.Add("enable-features=NoCreditCardAbort")
     public void testAbortIfNoCard_Enabled_NoApp()
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait(mShowFailed);
+        openPageAndClickBuyAndWait(mShowFailed);
         expectResultContains(new String[] {"The payment method is not supported"});
     }
 

@@ -139,7 +139,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 353
+#   For your editing convenience: highest ID currently used: 363
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -653,14 +653,9 @@
     },
     {
       'name': 'AllowDeletingBrowserHistory',
-      'future': True,
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      # TODO(pamg): Restore the correct 'supported' line when the UI properly
-      # shows that deleting browser history is disabled. Also fix the 'os' line
-      # in policy_test_cases.json.
-      # 'supported_on': ['chrome.*:27-', 'chrome_os:27-'],
-      'supported_on': [],
+      'supported_on': ['chrome.*:57-', 'chrome_os:57-'],
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -668,8 +663,8 @@
       'example_value': True,
       'id': 187,
       'caption': '''Enable deleting browser and download history''',
-      'tags': [],
-      'desc': '''Enables deleting browser history and download history in <ph name="PRODUCT_NAME">$<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
+      'tags': ['local-data-access', 'admin-sharing'],
+      'desc': '''Enables deleting browser history and download history in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
 
       Note that even with this policy disabled, the browsing and download history are not guaranteed to be retained: users may be able to edit or delete the history database files directly, and the browser itself may expire or archive any or all history items at any time.
 
@@ -1479,6 +1474,52 @@
       'arc_support': 'Disabling Google Sync will cause Android Backup and Restore to not function properly.',
     },
     {
+      'name': 'RoamingProfileSupportEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.win:57-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': True,
+      'id': 358,
+      'caption': '''Enable the creation of roaming copies for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profile data.''',
+      'tags': ['local-data-access'],
+      'desc': '''Enables the creation of roaming copies for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profile data.
+
+      If you enable this setting, the settings stored in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profiles like bookmarks, autofill data, passwords, etc. will also be written to a file stored in the Roaming user profile folder or a location specified by the Administrator through the <ph name="ROAMINGPROFILELOCATION_POLICY_NAME">$1<ex>RoamingProfileLocation</ex></ph> policy.
+
+      Google Sync is automatically disabled when this policy is enabled.
+
+      To prevent accidental data leaks it is advisable to also set the <ph name="SIGNINALLOWED_POLICY_NAME">$1<ex>SigninAllowed</ex></ph> policy to False.
+
+      If this policy is disabled or left not set only the regular local profiles will be used.''',
+      'label': '''Enable the creation of roaming copies for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profile data.''',
+    },
+    {
+      'name': 'RoamingProfileLocation',
+      'type': 'string',
+      'schema': { 'type': 'string' },
+      'supported_on': ['chrome.win:57-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': '${roaming_app_data}\\chrome-profile',
+      'id': 359,
+      'caption': '''Set the roaming profile directory''',
+      'tags': ['local-data-access'],
+      'desc': '''Configures the directory that <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use for storing the roaming copy of the profiles.
+
+      If you set this policy, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use the provided directory to store the roaming copy of the profiles if the <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME">$1<ex>RoamingProfileSupportEnabled</ex></ph> policy has been enabled. If the <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME">$1<ex>RoamingProfileSupportEnabled</ex></ph> policy is disabled or left unset the value stored in this policy is not used.
+
+      See https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables for a list of variables that can be used.
+
+      If this policy is left not set the default roaming profile path will be used.''',
+      'label': '''Set the roaming profile directory''',
+    },
+    {
       'name': 'SigninAllowed',
       'type': 'main',
       'schema': { 'type': 'boolean' },
@@ -1766,13 +1807,13 @@
           Leaving this policy not set will allow the users to choose the proxy settings on their own.''',
           'arc_support': '''You cannot force Android apps to use a proxy. A subset of proxy settings is made available to Android apps, which they may voluntarily choose to honor:
 
-          If you choose "never use a proxy server," Android apps are informed that no proxy is configured.
+          If you choose to never use a proxy server, Android apps are informed that no proxy is configured.
 
-          If you choose "use system proxy settings" or "fixed server proxy," Android apps are provided with the http proxy server address and port.
+          If you choose to use system proxy settings or a fixed server proxy, Android apps are provided with the http proxy server address and port.
 
-          If you choose "auto detect proxy server," the script URL "http://wpad/wpad.dat" is provided to Android apps. No other part of the proxy auto-detection protocol is used.
+          If you choose to auto detect the proxy server, the script URL "http://wpad/wpad.dat" is provided to Android apps. No other part of the proxy auto-detection protocol is used.
 
-          If you choose ".pac proxy script," the script URL is provided to Android apps.''',
+          If you choose to use a .pac proxy script, the script URL is provided to Android apps.''',
         },
         {
           'name': 'ProxyServerMode',
@@ -2196,8 +2237,7 @@
           This policy takes precedence over a potentially conflicting
           ExtensionsInstallBlacklist policy. If an app or extension that
           previously had been force-installed is removed from this list, it is
-          automatically uninstalled by <ph name="PRODUCT_NAME">$1<ex>Google
-          Chrome</ex></ph>.
+          automatically uninstalled by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
 
           For Windows instances that are not joined to an Active Directory
           domain, forced installation is limited to apps and extensions listed
@@ -3282,7 +3322,7 @@
               'caption': '''Do not allow any site to use key generation''',
             },
           ],
-          'supported_on': ['chrome.*:49-', 'chrome_os:49-', 'android:49-'],
+          'supported_on': ['chrome.*:49-56', 'chrome_os:49-56', 'android:49-56'],
           'features': {
             'dynamic_refresh': True,
             'per_profile': True,
@@ -3483,7 +3523,7 @@
             'type': 'array',
             'items': { 'type': 'string' },
           },
-          'supported_on': ['chrome.*:49-', 'chrome_os:49-', 'android:49-'],
+          'supported_on': ['chrome.*:49-56', 'chrome_os:49-56', 'android:49-56'],
           'features': {
             'dynamic_refresh': True,
             'per_profile': True,
@@ -3503,7 +3543,7 @@
             'type': 'array',
             'items': { 'type': 'string' },
           },
-          'supported_on': ['chrome.*:49-', 'chrome_os:49-', 'android:49-'],
+          'supported_on': ['chrome.*:49-56', 'chrome_os:49-56', 'android:49-56'],
           'features': {
             'dynamic_refresh': True,
             'per_profile': True,
@@ -5411,7 +5451,9 @@
       'tags': ['system-security'],
       'desc': '''Disables automatic updates when set to True.
 
-      <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> devices automatically check for updates when this setting is not configured or set to False.''',
+      <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> devices automatically check for updates when this setting is not configured or set to False.
+
+      Warning: It is recommended to keep auto-updates enabled so that users receive software updates and critical security fixes. Turning off auto-updates might leave users at risk.''',
     },
     {
       'name': 'DeviceAutoUpdateP2PEnabled',
@@ -5448,7 +5490,9 @@
       "" (or not configured): update to latest version available.
       "1412.": update to any minor version of 1412 (e.g. 1412.24.34 or 1412.60.2)
       "1412.2.": update to any minor version of 1412.2 (e.g. 1412.2.34 or 1412.2.2)
-      "1412.24.34": update to this specific version only''',
+      "1412.24.34": update to this specific version only
+
+      Warning: It is not recommended to configure version restrictions as they may prevent users from receiving software updates and critical security fixes. Restricting updates to a specific version prefix might leave users at risk.''',
     },
     {
       'name': 'DeviceUpdateScatterFactor',
@@ -5811,13 +5855,11 @@
       'tags': [],
       'supported_on': ['chrome_os:54-'],
       'caption': '''Treat external storage devices as read-only.''',
-      'desc': '''Treat external storage devices as read-only.
+      'desc': '''When this policy is set to true, users cannot write anything to external storage devices.
 
-      This policy is effective only when ExternalStorageDisabled is set to false or not configured.
+      If this setting is set to false or not configured, then users can create and modify files of external storage devices which are physically writable.
 
-      When this policy is set to true, users cannot write anything to external storage devices.
-
-      If this setting is disabled or not configured then users can create and modify files of external storage devices which are physically writable.
+      The ExternalStorageDisabled policy takes precedence over this policy - if ExternalStorageDisabled is set to true, then all access to external storage is disabled and this policy is consequently ignored.
 
       Dynamic refresh of this policy is supported in M56 and later.''',
       'features': {
@@ -7505,7 +7547,7 @@
           'id': 200,
           'caption': '''Enable remote attestation for the user''',
           'tags': [],
-          'desc': '''If true, the user can use the hardware on Chrome devices to remote attest its identity to the privacy CA via the Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey().
+          'desc': '''If true, the user can use the hardware on Chrome devices to remote attest its identity to the privacy CA via the <ph name="ENTERPRISE_PLATFORM_KEYS_API">Enterprise Platform Keys API</ph> using <ph name="CHALLENGE_USER_KEY_FUNCTION">chrome.enterprise.platformKeys.challengeUserKey()</ph>.
 
           If it is set to false, or if it is not set, calls to the API will fail with an error code.''',
         },
@@ -7525,7 +7567,7 @@
           'id': 201,
           'caption': '''Extensions allowed to to use the remote attestation API''',
           'tags': [],
-          'desc': '''This policy specifies the allowed extensions to use Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey() for remote attestation. Extensions must be added to this list to use the API.
+          'desc': '''This policy specifies the allowed extensions to use the <ph name="ENTERPRISE_PLATFORM_KEYS_API">Enterprise Platform Keys API</ph> function <ph name="CHALLENGE_USER_KEY_FUNCTION">chrome.enterprise.platformKeys.challengeUserKey()</ph> for remote attestation. Extensions must be added to this list to use the API.
 
           If an extension is not in the list, or the list is not set, the call to the API will fail with an error code.''',
         },
@@ -7781,9 +7823,9 @@
 
       The policy consists of a list of bookmarks whereas each bookmark is a
       dictionary containing the keys <ph name="NAME">"name"</ph> and <ph
-      name="URL">"url"</ph> which hold the bookmark's name and its target. A
+      name="URL_LABEL">"url"</ph> which hold the bookmark's name and its target. A
       subfolder may be configured by defining a bookmark without an <ph
-      name="URL">"url"</ph> key but with an additional <ph
+      name="URL_LABEL">"url"</ph> key but with an additional <ph
       name="CHILDREN">"children"</ph> key which itself contains a list of
       bookmarks as defined above (some of which may be folders again). <ph
       name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> amends incomplete URLs
@@ -8064,7 +8106,7 @@
       'type': 'main',
       'future': True,
       'schema': { 'type': 'boolean' },
-      'supported_on': ['chrome.*:55-'],
+      'supported_on': ['chrome.*:55-', 'android:57-'],
       'features': {
         'dynamic_refresh': False,
         'per_profile': False,
@@ -8073,7 +8115,7 @@
       'id': 346,
       'caption': '''Enables force sign in for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.''',
       'tags': [],
-      'desc': '''If this policy is set to true, user has to sign in to <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> with his or her profile before using the browser. And the default value of BrowserGuestModeEnabled will be set to false.
+      'desc': '''If this policy is set to true, user has to sign in to <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> with their profile before using the browser. And the default value of BrowserGuestModeEnabled will be set to false.
 
       If this policy is set to false or not configured, user can use the browser without sign in to <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.''',
     },
@@ -8581,14 +8623,16 @@
       'example_value': True,
       'id': 319,
       'caption': '''Allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version''',
-      'tags': [],
+      'tags': ['system-security'],
       'desc': '''Whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version.
 
       This policy controls whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version by declaring a required_platform_version in its manifest and use it as the auto update target version prefix.
 
       If the policy is set to true, the value of required_platform_version manifest key of the auto launched with zero delay kiosk app is used as auto update target version prefix.
 
-      If the policy is not configured or set to false, the required_platform_version manifest key is ignored and auto update proceeds as normal.''',
+      If the policy is not configured or set to false, the required_platform_version manifest key is ignored and auto update proceeds as normal.
+
+      Warning: It is not recommended to delegate control of the <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version to a kiosk app as it may prevent the device from receiving software updates and critical security fixes. Delegating control of the <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version might leave users at risk.''',
       'arc_support': 'If the kiosk app is an Android app, it will have no control over the <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> version, even if this policy is set to <ph name="TRUE">True</ph>.',
     },
     {
@@ -9057,6 +9101,32 @@
       If this setting is not configured then users are able to turn Android Backup Service on and off in the Android Settings app.''',
     },
     {
+      'name': 'ArcLocationServiceEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:57-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 363,
+      'caption': '''Enable Android Google Location Service''',
+      'tags': [],
+      'desc':
+      '''When this policy is set to true, the Android Google Location Service is enabled. This will allow Android apps to use its data to find the device location, and also will enable submitting of anonymous location data to Google.
+
+      When this policy is set to false, Android Google Location Service will be switched off.
+
+      If this setting is configured then users are not able change it themselves.
+
+      If this setting is not configured then users are able to turn Google Location Service on and off in the Android Settings app.
+
+      Note that this policy value may be overriden by the <ph name="DEFAULTGEOLOCATIONSETTING_POLICY_NAME">DefaultGeolocationSetting</ph> policy, when the latter is set to <ph name="BLOCK_GEOLOCATION_SETTING">BlockGeolocation</ph>.
+
+      This policy is applicable only to the users that are able to run Android apps.''',
+    },
+    {
       'name': 'NTPContentSuggestionsEnabled',
       'type': 'main',
       'schema': { 'type': 'boolean' },
@@ -9198,78 +9268,179 @@
       configuration of printers by individual users.''',
     },
     {
-      'name': 'QuickUnlockModeWhitelist',
-      'type': 'list',
-      'schema': {
-        'type': 'array',
-        'items': {
-          'type': 'string',
-          'enum': [
-            'all',
-            'PIN'
+      'name': 'QuickUnlock',
+      'type': 'group',
+      'caption': '''Quick unlock policies''',
+      'desc': '''Configures quick unlock related policies.''',
+      'policies': [
+        {
+          'name': 'QuickUnlockModeWhitelist',
+          'type': 'list',
+          'schema': {
+            'type': 'array',
+            'items': {
+              'type': 'string',
+              'enum': [
+                'all',
+                'PIN'
+              ],
+            },
+            'id': 'QuickUnlockModeWhitelist',
+          },
+          'supported_on': ['chrome_os:56-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': ['PIN'],
+          'default_for_enterprise_users': [],
+          'id': 352,
+          'caption': '''Configure allowed quick unlock modes.''',
+          'tags': [],
+          'desc': '''A whitelist controlling which quick unlock modes the user can configure and use to unlock the lock screen.
+
+          This value is a list of strings; valid list entries are: "all", "PIN". Adding "all" to the list means that every quick unlock mode is available to the user, including ones implemented in the future. Otherwise, only the quick unlock modes present in the list will be available.
+
+          For example, to allow every quick unlock mode, use ["all"]. To allow only PIN unlock, use ["PIN"]. To disable all quick unlock modes, use [].
+
+          By default, no quick unlock modes are available for managed devices.''',
+        },
+        {
+          'name': 'QuickUnlockTimeout',
+          'type': 'int-enum',
+          'schema': {
+            'type': 'integer',
+            'enum': [ 0, 1, 2, 3 ],
+          },
+          'items': [
+            {
+              'name': 'SixHours',
+              'value': 0,
+              'caption': '''Password entry is required every six hours.''',
+            },
+            {
+              'name': 'TweleveHours',
+              'value': 1,
+              'caption': '''Password entry is required every twelve hours.''',
+            },
+            {
+              'name': 'Day',
+              'value': 2,
+              'caption': '''Password entry is required every day (24 hours).''',
+            },
+            {
+              'name': 'Week',
+              'value': 3,
+              'caption': '''Password entry is required every week (168 hours).''',
+            },
           ],
-        },
-        'id': 'QuickUnlockModeWhitelist',
-      },
-      'supported_on': ['chrome_os:56-'],
-      'features': {
-        'dynamic_refresh': True,
-        'per_profile': True,
-      },
-      'example_value': ['PIN'],
-      'id': 352,
-      'caption': '''Configure allowed quick unlock modes.''',
-      'tags': [],
-      'desc': '''Controls which quick unlock modes are allowed to be set up and used.
-      This setting white-lists the allowed quick unlock modes that can be set up and used to unlock the lock screen. The value is a list of strings, each of which should be one of the following: "all", "PIN". If "all" is selected, then all supported quick modes will be available, otherwise the modes in the list will be the ones available.
+          'supported_on': ['chrome_os:57-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': 2,
+          'id': 353,
+          'caption': '''Sets how often user has to enter password to use quick unlock.''',
+          'tags': [],
+          'desc': '''This setting controls how often the lock screen will request the password to be entered in order to continue using quick unlock. Each time the lock screen is entered, if the last password entry was more than this setting, the quick unlock will not be available on entering the lock screen. Should the user stay on the lock screen past this period of time, a password will be requested next time the user enters the wrong code, or re-enters the lock screen, whichever comes first.
 
-      If this setting is configured, quick unlock modes which have a type that is not on this list can not be set up or used.
+          If this setting is configured, users using quick unlock will be requested to enter their passwords on the lock screen depending on this setting.
 
-      If this setting is left not configured, "PIN" mode will be enabled, and all other modes will be disabled.''',
-    },
-    {
-      'name': 'QuickUnlockTimeout',
-      'type': 'int-enum',
-      'schema': {
-        'type': 'integer',
-        'enum': [ 0, 1, 2, 3 ],
-      },
-      'items': [
-        {
-          'name': 'SixHours',
-          'value': 0,
-          'caption': '''Password entry is required every six hours.''',
+          If this setting is not configured, users using quick unlock will be requested to enter their password on the lock screen every day.''',
         },
         {
-          'name': 'TweleveHours',
-          'value': 1,
-          'caption': '''Password entry is required every twelve hours.''',
+          'name': 'PinUnlockMinimumLength',
+          'type': 'int',
+          'schema': { 'type': 'integer' },
+          'supported_on': ['chrome_os:57-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': 6,
+          'id': 354,
+          'caption': '''Sets the minimum length of the lock screen PIN.''',
+          'tags': [],
+          'desc': '''This setting controls the minimum PIN length.
+
+          The absolute minimum PIN length is 1; values less than 1 are treated as 1.
+
+          The default and recommended minimum PIN length is 6 digits.''',
         },
         {
-          'name': 'Day',
-          'value': 2,
-          'caption': '''Password entry is required every day (24 hours).''',
+          'name': 'PinUnlockMaximumLength',
+          'type': 'int',
+          'schema': { 'type': 'integer' },
+          'supported_on': ['chrome_os:57-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': 0,
+          'id': 355,
+          'caption': '''Sets the maximum length of the lock screen PIN.''',
+          'tags': [],
+          'desc': '''This setting controls the maximum PIN length.
+
+          If this setting is 0 or less, there is no maximum length; the user can set a PIN as long as they want.
+
+          If this setting is less than PinUnlockMinimumLength but greater than 0, the maximum length is the same as the minimum length.
+
+          This setting defaults to no maximum length.''',
         },
         {
-          'name': 'Week',
-          'value': 3,
-          'caption': '''Password entry is required every week (168 hours).''',
+          'name': 'PinUnlockWeakPinsAllowed',
+          'type': 'main',
+          'schema': { 'type': 'boolean' },
+          'supported_on': ['chrome_os:57-'],
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': False,
+          'id': 356,
+          'caption': '''Enables users to set weak PINs for the lock screen PIN.''',
+          'tags': [],
+          'desc': '''If false, users will be unable to set PINs which are weak and easy to guess.
+
+          Some example weak PINs: PINs containing only one digit (1111), PINs whose digits are increasing by 1 (1234), PINs whose digits are decreasing by 1 (4321), and PINs which are commonly used.
+
+          By default, users will get a warning, not error, if the PIN is considered weak.''',
         },
       ],
-      'supported_on': ['chrome_os:56-'],
+    },
+    {
+      'name': 'DeviceWallpaperImage',
+      'type': 'external',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'url': { "type": "string" },
+          'hash': { "type": "string" }
+        },
+      },
+      'supported_on': ['chrome_os:57-'],
+      'device_only': True,
       'features': {
         'dynamic_refresh': True,
-        'per_profile': True,
       },
-      'example_value': 2,
-      'id': 353,
-      'caption': '''Sets how often user has to enter password to use quick unlock.''',
+      'example_value': { "url": "https://example.com/device_wallpaper.jpg", "hash": "examplewallpaperexamplewallpaperexamplewallpaperexamplewallpaper" },
+      'max_size': 16777216,
+      'id': 357,
+      'caption': '''Device wallpaper image''',
       'tags': [],
-      'desc': '''This setting controls how often the lock screen will request the password to be entered in order to continue using quick unlock. Each time the lock screen is entered, if the last password entry was more than this setting, the quick unlock will not be available on entering the lock screen. Should the user stay on the lock screen past this period of time, a password will be requested next time the user enters the wrong code, or re-enters the lock screen, whichever comes first.
+      'desc': '''Configure device-level wallpaper image that is shown on the login screen if no user has yet signed in to the device. The policy is set by specifying the URL from which the Chrome OS device can download the wallpaper image and a cryptographic hash used to verify the integrity of the download. The image must be in JPEG format, its file size must not exceed 16MB. The URL must be accessible without any authentication. The wallpaper image is downloaded and cached. It will be re-downloaded whenever the URL or the hash changes.
 
-      If this setting is configured, users using quick unlock will be requested to enter their passwords on the lock screen depending on this setting.
+      The policy should be speicified as a string that expresses the URL and hash in JSON format, e.g.,
+      {
+        "url": "https://example.com/device_wallpaper.jpg",
+        "hash": "examplewallpaperhash"
+      }
 
-      If this setting is not configured, users using quick unlock will be requested to enter their password on the lock screen every day.''',
+      If the device wallpaper policy is set, the Chrome OS device will download and use the wallpaper image on the login screen if no user has yet signed in to the device. Once the user logs in, the user's wallpaper policy kicks in.
+
+      If the device wallpaper policy is left not set, it's the user's wallpaper policy to decide what to show if the user's wallpaper policy is set.''',
     },
   ],
   'messages': {

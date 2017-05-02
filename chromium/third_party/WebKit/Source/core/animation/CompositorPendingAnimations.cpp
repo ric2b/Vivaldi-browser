@@ -35,14 +35,14 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/page/Page.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
 void CompositorPendingAnimations::add(Animation* animation) {
   DCHECK(animation);
   DCHECK_EQ(m_pending.find(animation), kNotFound);
-  m_pending.append(animation);
+  m_pending.push_back(animation);
 
   Document* document = animation->timeline()->document();
   if (document->view())
@@ -82,20 +82,20 @@ bool CompositorPendingAnimations::update(bool startOnCompositor) {
 
       if (animation->playing() && !animation->hasStartTime() &&
           animation->timeline() && animation->timeline()->isActive()) {
-        waitingForStartTime.append(animation.get());
+        waitingForStartTime.push_back(animation.get());
       }
     } else {
-      deferred.append(animation);
+      deferred.push_back(animation);
     }
   }
 
   // If any synchronized animations were started on the compositor, all
-  // remaning synchronized animations need to wait for the synchronized
+  // remaining synchronized animations need to wait for the synchronized
   // start time. Otherwise they may start immediately.
   if (startedSynchronizedOnCompositor) {
     for (auto& animation : waitingForStartTime) {
       if (!animation->hasStartTime()) {
-        m_waitingForCompositorAnimationStart.append(animation);
+        m_waitingForCompositorAnimationStart.push_back(animation);
       }
     }
   } else {
@@ -153,7 +153,7 @@ void CompositorPendingAnimations::notifyCompositorAnimationStarted(
     }
     if (compositorGroup && animation->compositorGroup() != compositorGroup) {
       // Still waiting.
-      m_waitingForCompositorAnimationStart.append(animation);
+      m_waitingForCompositorAnimationStart.push_back(animation);
       continue;
     }
     animation->notifyCompositorStartTime(monotonicAnimationStartTime -

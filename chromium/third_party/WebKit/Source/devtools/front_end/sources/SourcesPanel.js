@@ -111,11 +111,14 @@ Sources.SourcesPanel = class extends UI.Panel {
     SDK.targetManager.addModelListener(
         SDK.DebuggerModel, SDK.DebuggerModel.Events.DebuggerPaused, this._debuggerPaused, this);
     SDK.targetManager.addModelListener(
-        SDK.DebuggerModel, SDK.DebuggerModel.Events.DebuggerResumed, this._debuggerResumed, this);
+        SDK.DebuggerModel, SDK.DebuggerModel.Events.DebuggerResumed,
+        (event) => this._debuggerResumed(/** @type {!SDK.DebuggerModel} */ (event.data)));
     SDK.targetManager.addModelListener(
-        SDK.DebuggerModel, SDK.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
+        SDK.DebuggerModel, SDK.DebuggerModel.Events.GlobalObjectCleared,
+        (event) => this._debuggerResumed(/** @type {!SDK.DebuggerModel} */ (event.data)));
     SDK.targetManager.addModelListener(
-        SDK.SubTargetsManager, SDK.SubTargetsManager.Events.PendingTargetAdded, this._pendingTargetAdded, this);
+        SDK.SubTargetsManager, SDK.SubTargetsManager.Events.AvailableNodeTargetsChanged,
+        this._availableNodeTargetsChanged, this);
     new Sources.WorkspaceMappingTip(this, this._workspace);
     Extensions.extensionServer.addEventListener(
         Extensions.ExtensionServer.Events.SidebarPaneAdded, this._extensionSidebarPaneAdded, this);
@@ -168,7 +171,7 @@ Sources.SourcesPanel = class extends UI.Panel {
   targetRemoved(target) {
   }
 
-  _pendingTargetAdded() {
+  _availableNodeTargetsChanged() {
     this._showThreadsIfNeeded();
   }
 
@@ -288,7 +291,8 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Common.Event} event
    */
   _debuggerPaused(event) {
-    var details = /** @type {!SDK.DebuggerPausedDetails} */ (event.data);
+    var debuggerModel = /** @type {!SDK.DebuggerModel} */ (event.data);
+    var details = debuggerModel.debuggerPausedDetails();
     if (!this._paused)
       this._setAsCurrentPanel();
 
@@ -312,10 +316,9 @@ Sources.SourcesPanel = class extends UI.Panel {
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {!SDK.DebuggerModel} debuggerModel
    */
-  _debuggerResumed(event) {
-    var debuggerModel = /** @type {!SDK.DebuggerModel} */ (event.target);
+  _debuggerResumed(debuggerModel) {
     var target = debuggerModel.target();
     if (UI.context.flavor(SDK.Target) !== target)
       return;
@@ -329,18 +332,11 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Common.Event} event
    */
   _debuggerWasEnabled(event) {
-    var target = /** @type {!SDK.Target} */ (event.target.target());
-    if (UI.context.flavor(SDK.Target) !== target)
+    var debuggerModel = /** @type {!SDK.DebuggerModel} */ (event.data);
+    if (UI.context.flavor(SDK.Target) !== debuggerModel.target())
       return;
 
     this._updateDebuggerButtonsAndStatus();
-  }
-
-  /**
-   * @param {!Common.Event} event
-   */
-  _debuggerReset(event) {
-    this._debuggerResumed(event);
   }
 
   /**
@@ -387,10 +383,6 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {boolean=} skipReveal
    */
   _revealInNavigator(uiSourceCode, skipReveal) {
-    var binding = Persistence.persistence.binding(uiSourceCode);
-    if (binding && binding.network === uiSourceCode)
-      uiSourceCode = binding.fileSystem;
-
     var extensions = self.runtime.extensions(Sources.NavigatorView);
     Promise.all(extensions.map(extension => extension.instance())).then(filterNavigators.bind(this));
 
@@ -520,7 +512,6 @@ Sources.SourcesPanel = class extends UI.Panel {
     delete this._switchToPausedTargetTimeout;
     if (this._paused)
       return;
-    var target = UI.context.flavor(SDK.Target);
     if (debuggerModel.isPaused())
       return;
     var debuggerModels = SDK.DebuggerModel.instances();
@@ -541,11 +532,14 @@ Sources.SourcesPanel = class extends UI.Panel {
    */
   _runSnippet() {
     var uiSourceCode = this._sourcesView.currentUISourceCode();
-    if (uiSourceCode.project().type() !== Workspace.projectTypes.Snippets)
+    if (!uiSourceCode)
       return false;
 
     var currentExecutionContext = UI.context.flavor(SDK.ExecutionContext);
     if (!currentExecutionContext)
+      return false;
+
+    if (uiSourceCode.project().type() !== Workspace.projectTypes.Snippets)
       return false;
 
     Snippets.scriptSnippetModel.evaluateScriptSnippet(currentExecutionContext, uiSourceCode);
@@ -599,16 +593,15 @@ Sources.SourcesPanel = class extends UI.Panel {
   }
 
   /**
-   * @return {boolean}
+   * @param {!Common.Event} event
    */
-  _longResume() {
+  _longResume(event) {
     var debuggerModel = this._prepareToResume();
     if (!debuggerModel)
-      return true;
+      return;
 
     debuggerModel.skipAllPausesUntilReloadOrTimeout(500);
     debuggerModel.resume();
-    return true;
   }
 
   /**
@@ -685,7 +678,7 @@ Sources.SourcesPanel = class extends UI.Panel {
 
     var longResumeButton =
         new UI.ToolbarButton(Common.UIString('Resume with all pauses blocked for 500 ms'), 'largeicon-play');
-    longResumeButton.addEventListener('click', this._longResume.bind(this), this);
+    longResumeButton.addEventListener(UI.ToolbarButton.Events.Click, this._longResume, this);
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._togglePauseAction, [longResumeButton], []));
 
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._stepOverAction));
@@ -695,7 +688,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     debugToolbar.appendToolbarItem(UI.Toolbar.createActionButton(this._toggleBreakpointsActiveAction));
 
     this._pauseOnExceptionButton = new UI.ToolbarToggle('', 'largeicon-pause-on-exceptions');
-    this._pauseOnExceptionButton.addEventListener('click', this._togglePauseOnExceptions, this);
+    this._pauseOnExceptionButton.addEventListener(UI.ToolbarButton.Events.Click, this._togglePauseOnExceptions, this);
     debugToolbar.appendToolbarItem(this._pauseOnExceptionButton);
 
     debugToolbar.appendSeparator();
@@ -751,7 +744,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     function mapFileSystemToNetwork(networkUISourceCode) {
       if (!networkUISourceCode)
         return;
-      var fileSystemPath = Bindings.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
+      var fileSystemPath = Persistence.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
       Workspace.fileSystemMapping.addMappingForResource(networkUISourceCode.url(), fileSystemPath, uiSourceCode.url());
     }
   }
@@ -769,7 +762,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     function mapNetworkToFileSystem(uiSourceCode) {
       if (!uiSourceCode)
         return;
-      var fileSystemPath = Bindings.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
+      var fileSystemPath = Persistence.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
       Workspace.fileSystemMapping.addMappingForResource(networkUISourceCode.url(), fileSystemPath, uiSourceCode.url());
     }
   }
@@ -832,16 +825,14 @@ Sources.SourcesPanel = class extends UI.Panel {
       return;
 
     var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (target);
-    var projectType = uiSourceCode.project().type();
-
-    if (projectType !== Workspace.projectTypes.Debugger &&
+    if (!uiSourceCode.project().isServiceProject() &&
         !event.target.isSelfOrDescendant(this._navigatorTabbedLocation.widget().element)) {
       contextMenu.appendItem(
           Common.UIString.capitalize('Reveal in ^navigator'), this._handleContextMenuReveal.bind(this, uiSourceCode));
       contextMenu.appendSeparator();
     }
     this._appendUISourceCodeMappingItems(contextMenu, uiSourceCode);
-    if (projectType !== Workspace.projectTypes.FileSystem) {
+    if (!uiSourceCode.project().canSetFileContent()) {
       contextMenu.appendItem(
           Common.UIString.capitalize('Local ^modifications\u2026'), this._showLocalHistory.bind(this, uiSourceCode));
     }
@@ -853,7 +844,7 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Object} target
    */
   _appendUISourceCodeFrameItems(event, contextMenu, target) {
-    if (!(target instanceof Sources.UISourceCodeFrame))
+    if (!(target instanceof SourceFrame.UISourceCodeFrame))
       return;
     contextMenu.appendAction('debugger.evaluate-selection');
   }
@@ -867,7 +858,6 @@ Sources.SourcesPanel = class extends UI.Panel {
       return;
     var uiLocation = /** @type {!Workspace.UILocation} */ (object);
     var uiSourceCode = uiLocation.uiSourceCode;
-    var projectType = uiSourceCode.project().type();
 
     var contentType = uiSourceCode.contentType();
     if (contentType.hasScripts()) {
@@ -877,10 +867,8 @@ Sources.SourcesPanel = class extends UI.Panel {
         contextMenu.appendItem(
             Common.UIString.capitalize('Continue to ^here'), this._continueToLocation.bind(this, uiLocation));
       }
-    }
-
-    if (contentType.hasScripts() && projectType !== Workspace.projectTypes.Snippets)
       this._callstackPane.appendBlackboxURLContextMenuItems(contextMenu, uiSourceCode);
+    }
   }
 
   /**
@@ -916,7 +904,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     if (!(target instanceof SDK.NetworkRequest))
       return;
     var request = /** @type {!SDK.NetworkRequest} */ (target);
-    var uiSourceCode = this._workspace.uiSourceCodeForURL(request.url);
+    var uiSourceCode = this._workspace.uiSourceCodeForURL(request.url());
     if (!uiSourceCode)
       return;
     var openText = Common.UIString.capitalize('Open in Sources ^panel');
@@ -970,7 +958,8 @@ Sources.SourcesPanel = class extends UI.Panel {
         failedToSave(result);
       } else {
         SDK.ConsoleModel.evaluateCommandInConsole(
-            /** @type {!SDK.ExecutionContext} */ (currentExecutionContext), result.value);
+            /** @type {!SDK.ExecutionContext} */ (currentExecutionContext), result.value,
+            /* useCommandLineAPI */ false);
       }
     }
 
@@ -1275,12 +1264,12 @@ Sources.SourcesPanel.DebuggingActionDelegate = class {
         panel._toggleBreakpointsActive();
         return true;
       case 'debugger.evaluate-selection':
-        var frame = UI.context.flavor(Sources.UISourceCodeFrame);
+        var frame = UI.context.flavor(SourceFrame.UISourceCodeFrame);
         if (frame) {
           var text = frame.textEditor.text(frame.textEditor.selection());
           var executionContext = UI.context.flavor(SDK.ExecutionContext);
           if (executionContext)
-            SDK.ConsoleModel.evaluateCommandInConsole(executionContext, text);
+            SDK.ConsoleModel.evaluateCommandInConsole(executionContext, text, /* useCommandLineAPI */ true);
         }
         return true;
     }

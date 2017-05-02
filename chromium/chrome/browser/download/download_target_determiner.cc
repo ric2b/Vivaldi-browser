@@ -8,6 +8,7 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -28,6 +29,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "net/base/filename_util.h"
+#include "ppapi/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
@@ -36,7 +38,7 @@
 #include "extensions/common/feature_switch.h"
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/webplugininfo.h"
@@ -207,7 +209,6 @@ DownloadTargetDeterminer::Result
     // (WebStore, Drag&Drop). Treat the path as a virtual path. We will
     // eventually determine whether this is a local path and if not, figure out
     // a local path.
-
     std::string suggested_filename = download_->GetSuggestedFilename();
     if (suggested_filename.empty() &&
         download_->GetMimeType() == "application/x-x509-user-cert") {
@@ -233,12 +234,18 @@ DownloadTargetDeterminer::Result
     } else {
       target_directory = download_prefs_->DownloadPath();
     }
-    virtual_path_ = target_directory.Append(generated_filename);
 #if defined(OS_ANDROID)
-    conflict_action_ = DownloadPathReservationTracker::PROMPT;
+    // If |virtual_path_| is not empty, we are resuming a download which already
+    // has a target path. Don't prompt user in this case.
+    if (!virtual_path_.empty()) {
+      conflict_action_ = DownloadPathReservationTracker::UNIQUIFY;
+    } else {
+      conflict_action_ = DownloadPathReservationTracker::PROMPT;
+    }
 #else
     conflict_action_ = DownloadPathReservationTracker::UNIQUIFY;
 #endif
+    virtual_path_ = target_directory.Append(generated_filename);
     // We do not want to restrict downloads to only the download directory for Vivaldi.
     should_notify_extensions_ = !vivaldi::IsVivaldiRunning();
   } else {
@@ -326,7 +333,7 @@ void DownloadTargetDeterminer::ReserveVirtualPathDone(
   DVLOG(20) << "Reserved path: " << path.AsUTF8Unsafe()
             << " Verified:" << verified;
   DCHECK_EQ(STATE_PROMPT_USER_FOR_DOWNLOAD_PATH, next_state_);
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   if (!verified) {
     if (path.empty()) {
       DownloadManagerService::OnDownloadCanceled(
@@ -447,7 +454,7 @@ void DownloadTargetDeterminer::DetermineMimeTypeDone(
   DoLoop();
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // The code below is used by DoDetermineIfHandledSafely to determine if the
 // file type is handled by a sandboxed plugin.
 namespace {
@@ -507,7 +514,7 @@ void IsHandledBySafePlugin(content::ResourceContext* resource_context,
 }
 
 }  // namespace
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 DownloadTargetDeterminer::Result
     DownloadTargetDeterminer::DoDetermineIfHandledSafely() {
@@ -526,7 +533,7 @@ DownloadTargetDeterminer::Result
     return CONTINUE;
   }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   BrowserThread::PostTask(
       BrowserThread::IO,
       FROM_HERE,
@@ -544,7 +551,7 @@ DownloadTargetDeterminer::Result
 #endif
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 void DownloadTargetDeterminer::DetermineIfHandledSafelyDone(
     bool is_handled_safely) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -569,9 +576,8 @@ DownloadTargetDeterminer::Result
     return CONTINUE;
   }
 
-  base::PostTaskAndReplyWithResult(
-      BrowserThread::GetBlockingPool(),
-      FROM_HERE,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, base::TaskTraits().MayBlock(),
       base::Bind(&::IsAdobeReaderUpToDate),
       base::Bind(&DownloadTargetDeterminer::DetermineIfAdobeReaderUpToDateDone,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -598,6 +604,10 @@ DownloadTargetDeterminer::Result
   DCHECK(!virtual_path_.empty());
   next_state_ = STATE_CHECK_VISITED_REFERRER_BEFORE;
 
+  // If user has validated a dangerous download, don't check.
+  if (danger_type_ == content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED)
+    return CONTINUE;
+
   delegate_->CheckDownloadUrl(
       download_,
       virtual_path_,
@@ -618,7 +628,6 @@ void DownloadTargetDeterminer::CheckDownloadUrlDone(
 DownloadTargetDeterminer::Result
     DownloadTargetDeterminer::DoCheckVisitedReferrerBefore() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   next_state_ = STATE_DETERMINE_INTERMEDIATE_PATH;
 
   // Checking if there are prior visits to the referrer is only necessary if the
@@ -796,10 +805,10 @@ Profile* DownloadTargetDeterminer::GetProfile() const {
 
 bool DownloadTargetDeterminer::ShouldPromptForDownload(
     const base::FilePath& filename) const {
-#if BUILDFLAG(ANDROID_JAVA_UI)
-    // Don't prompt user about saving path on Android.
-    // TODO(qinmin): show an error toast to warn user in certain cases.
-    return false;
+#if defined(OS_ANDROID)
+  // Don't prompt user about saving path on Android.
+  // TODO(qinmin): show an error toast to warn user in certain cases.
+  return false;
 #endif
   if (is_resumption_) {
     // For resumed downloads, if the target disposition or prefs require

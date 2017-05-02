@@ -29,6 +29,7 @@
 #include "chrome/browser/signin/oauth2_token_service_delegate_android.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -60,7 +61,7 @@ class ProfileDataRemover : public BrowsingDataRemover::Observer {
         origin_runner_(base::ThreadTaskRunnerHandle::Get()),
         remover_(BrowsingDataRemoverFactory::GetForBrowserContext(profile)) {
     remover_->AddObserver(this);
-    remover_->RemoveAndReply(BrowsingDataRemover::Unbounded(),
+    remover_->RemoveAndReply(base::Time(), base::Time::Max(),
                              BrowsingDataRemover::REMOVE_ALL,
                              BrowsingDataHelper::ALL, this);
   }
@@ -163,6 +164,8 @@ void SigninManagerAndroid::OnSignInCompleted(
 
 void SigninManagerAndroid::SignOut(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj) {
+  // TODO(bauerb): This is not only called for a user-triggered signout.
+  // We should pass the reason in here from Java.
   SigninManagerFactory::GetForProfile(profile_)
       ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
                 signin_metrics::SignoutDelete::IGNORE_METRIC);
@@ -269,10 +272,25 @@ jboolean SigninManagerAndroid::IsSigninAllowedByPolicy(
   return SigninManagerFactory::GetForProfile(profile_)->IsSigninAllowed();
 }
 
+jboolean SigninManagerAndroid::IsForceSigninEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  // prefs::kForceBrowserSignin is set in Local State, not in user prefs.
+  PrefService* prefs = g_browser_process->local_state();
+  return prefs->GetBoolean(prefs::kForceBrowserSignin);
+}
+
 jboolean SigninManagerAndroid::IsSignedInOnNative(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   return SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
+}
+
+void SigninManagerAndroid::ProhibitSignout(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj,
+                                           jboolean prohibit_signout) {
+  SigninManagerFactory::GetForProfile(profile_)->ProhibitSignout(
+      prohibit_signout);
 }
 
 void SigninManagerAndroid::GoogleSigninFailed(

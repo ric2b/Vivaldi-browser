@@ -110,6 +110,16 @@ class MEDIA_EXPORT VideoFrameMetadata {
     // Indicates that the frame is rotated.
     ROTATION,
 
+    // Android only: if set, then this frame is not suitable for overlay, even
+    // if ALLOW_OVERLAY is set.  However, it allows us to process the overlay
+    // to see if it would have been promoted, if it were backed by a SurfaceView
+    // instead.  This lets us figure out when SurfaceViews are appropriate.
+    SURFACE_TEXTURE,
+
+    // Android only: if set, then this frame's resource would like to be
+    // notified about its promotability to an overlay.
+    WANTS_PROMOTION_HINT,
+
     NUM_KEYS
   };
 
@@ -146,7 +156,7 @@ class MEDIA_EXPORT VideoFrameMetadata {
   bool IsTrue(Key key) const WARN_UNUSED_RESULT;
 
   // For serialization.
-  void MergeInternalValuesInto(base::DictionaryValue* out) const;
+  std::unique_ptr<base::DictionaryValue> CopyInternalValues() const;
   void MergeInternalValuesFrom(const base::DictionaryValue& in);
 
   // Merges internal values from |metadata_source|.

@@ -162,6 +162,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                          LayoutUnit position) const override;
 
   RootInlineBox* createAndAppendRootInlineBox();
+  RootInlineBox* constructLine(BidiRunList<BidiRun>&, const LineInfo&);
 
   // Return the number of lines in *this* block flow. Does not recurse into
   // block flow children.
@@ -393,7 +394,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   LayoutUnit logicalHeightWithVisibleOverflow() const final;
 
-  // This function is only public so we can call it from NGBox while we're
+  // This function is only public so we can call it from NGBlockNode while we're
   // still working on LayoutNG.
   void updateIsSelfCollapsing() {
     m_isSelfCollapsing = checkIfIsSelfCollapsingBlock();
@@ -427,8 +428,10 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   void absoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulatedOffset) const override;
-  void absoluteQuads(Vector<FloatQuad>&) const override;
-  void absoluteQuadsForSelf(Vector<FloatQuad>& quads) const override;
+  void absoluteQuads(Vector<FloatQuad>&,
+                     MapCoordinatesFlags mode = 0) const override;
+  void absoluteQuadsForSelf(Vector<FloatQuad>& quads,
+                            MapCoordinatesFlags mode = 0) const override;
   LayoutObject* hoverAncestor() const final;
 
   LayoutUnit logicalRightOffsetForLine(
@@ -476,9 +479,9 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   LayoutSize accumulateInFlowPositionOffsets() const override;
 
  private:
-  bool layoutBlockFlow(bool relayoutChildren,
-                       LayoutUnit& pageLogicalHeight,
-                       SubtreeLayoutScope&);
+  void resetLayout();
+  void layoutChildren(bool relayoutChildren, SubtreeLayoutScope&);
+  void addOverhangingFloatsFromChildren(LayoutUnit unconstrainedHeight);
   void layoutBlockChildren(bool relayoutChildren,
                            SubtreeLayoutScope&,
                            LayoutUnit beforeEdge,
@@ -505,7 +508,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                              LayoutUnit logicalTopOffset) const;
 
   void removeFloatingObject(LayoutBox*);
-  void removeFloatingObjectsBelow(FloatingObject*, int logicalOffset);
+  void removeFloatingObjectsBelow(FloatingObject*, LayoutUnit logicalOffset);
 
   LayoutUnit getClearDelta(LayoutBox* child, LayoutUnit yPos);
 
@@ -589,10 +592,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                       LayoutUnit& totalLogicalWidth,
                                       LayoutUnit& availableLogicalWidth,
                                       unsigned expansionOpportunityCount);
-  void checkForPaginationLogicalHeightChange(
-      LayoutUnit& pageLogicalHeight,
-      bool& pageLogicalHeightChanged,
-      bool& hasSpecifiedPageLogicalHeight);
 
   bool shouldBreakAtLineToAvoidWidow() const {
     return m_rareData && m_rareData->m_lineBreakToAvoidWidow >= 0;
@@ -719,7 +718,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     return m_floatingObjects.get();
   }
 
-  static void setAncestorShouldPaintFloatingObject(const LayoutBox& floatBox);
+  static void updateAncestorShouldPaintFloatingObject(
+      const LayoutBox& floatBox);
 
  protected:
   LayoutUnit maxPositiveMarginBefore() const {
@@ -781,8 +781,14 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     return maxPositiveMarginAfter() - maxNegativeMarginAfter();
   }
 
+  LayoutUnit adjustedMarginBeforeForPagination(
+      const LayoutBox&,
+      LayoutUnit logicalTopMarginEdge,
+      LayoutUnit logicalTopBorderEdge,
+      const BlockChildrenLayoutInfo&) const;
+
   LayoutUnit collapseMargins(LayoutBox& child,
-                             MarginInfo&,
+                             BlockChildrenLayoutInfo&,
                              bool childIsSelfCollapsing,
                              bool childDiscardMarginBefore,
                              bool childDiscardMarginAfter);
@@ -819,9 +825,18 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                            LayoutBox& child,
                                            BlockChildrenLayoutInfo&,
                                            bool atBeforeSideOfBlock);
+
+  // If a float cannot fit in the current fragmentainer, return the logical top
+  // margin edge that the float needs to have in order to be pushed to the top
+  // of the next fragmentainer. Otherwise, just return |logicalTopMarginEdge|.
+  LayoutUnit adjustFloatLogicalTopForPagination(
+      LayoutBox&,
+      LayoutUnit logicalTopMarginEdge);
+
   // Computes a deltaOffset value that put a line at the top of the next page if
   // it doesn't fit on the current page.
   void adjustLinePositionForPagination(RootInlineBox&, LayoutUnit& deltaOffset);
+
   // If the child is unsplittable and can't fit on the current page, return the
   // top of the next page/column.
   LayoutUnit adjustForUnsplittableChild(LayoutBox&,
@@ -859,7 +874,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   InlineFlowBox* createLineBoxes(LineLayoutItem,
                                  const LineInfo&,
                                  InlineBox* childBox);
-  RootInlineBox* constructLine(BidiRunList<BidiRun>&, const LineInfo&);
   void setMarginsForRubyRun(BidiRun*,
                             LayoutRubyRun*,
                             LayoutObject*,

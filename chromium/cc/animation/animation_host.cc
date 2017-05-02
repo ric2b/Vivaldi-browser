@@ -154,9 +154,10 @@ void AnimationHost::UnregisterPlayerForElement(ElementId element_id,
   if (element_animations->IsEmpty()) {
     element_animations->ClearAffectedElementTypes();
     element_to_animations_map_.erase(element_animations->element_id());
-    DidDeactivateElementAnimations(element_animations.get());
     element_animations->SetAnimationHost(nullptr);
   }
+
+  RemoveFromTicking(player);
 }
 
 void AnimationHost::SetMutatorHostClient(MutatorHostClient* client) {
@@ -269,48 +270,45 @@ bool AnimationHost::SupportsScrollAnimations() const {
   return supports_scroll_animations_;
 }
 
-bool AnimationHost::NeedsAnimateLayers() const {
-  return !active_element_to_animations_map_.empty();
+bool AnimationHost::NeedsTickAnimations() const {
+  return !ticking_players_.empty();
 }
 
 bool AnimationHost::ActivateAnimations() {
-  if (!NeedsAnimateLayers())
+  if (!NeedsTickAnimations())
     return false;
 
   TRACE_EVENT0("cc", "AnimationHost::ActivateAnimations");
-  ElementToAnimationsMap active_element_animations_map_copy =
-      active_element_to_animations_map_;
-  for (auto& it : active_element_animations_map_copy)
-    it.second->ActivateAnimations();
+  PlayersList ticking_players_copy = ticking_players_;
+  for (auto& it : ticking_players_copy)
+    it->ActivateAnimations();
 
   return true;
 }
 
-bool AnimationHost::AnimateLayers(base::TimeTicks monotonic_time) {
-  if (!NeedsAnimateLayers())
+bool AnimationHost::TickAnimations(base::TimeTicks monotonic_time) {
+  if (!NeedsTickAnimations())
     return false;
 
-  TRACE_EVENT0("cc", "AnimationHost::AnimateLayers");
-  ElementToAnimationsMap active_element_animations_map_copy =
-      active_element_to_animations_map_;
-  for (auto& it : active_element_animations_map_copy)
-    it.second->Animate(monotonic_time);
+  TRACE_EVENT0("cc", "AnimationHost::TickAnimations");
+  PlayersList ticking_players_copy = ticking_players_;
+  for (auto& it : ticking_players_copy)
+    it->Tick(monotonic_time);
 
   return true;
 }
 
 bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
                                          MutatorEvents* mutator_events) {
-  if (!NeedsAnimateLayers())
+  if (!NeedsTickAnimations())
     return false;
 
   auto animation_events = static_cast<AnimationEvents*>(mutator_events);
 
   TRACE_EVENT0("cc", "AnimationHost::UpdateAnimationState");
-  ElementToAnimationsMap active_element_animations_map_copy =
-      active_element_to_animations_map_;
-  for (auto& it : active_element_animations_map_copy)
-    it.second->UpdateState(start_ready_animations, animation_events);
+  PlayersList ticking_players_copy = ticking_players_;
+  for (auto& it : ticking_players_copy)
+    it->UpdateState(start_ready_animations, animation_events);
 
   return true;
 }
@@ -328,9 +326,8 @@ void AnimationHost::SetAnimationEvents(
        ++event_index) {
     ElementId element_id = events->events_[event_index].element_id;
 
-    // Use the map of all ElementAnimations, not just active ones, since
-    // non-active ElementAnimations may still receive events for impl-only
-    // animations.
+    // Use the map of all ElementAnimations, not just ticking players, since
+    // non-ticking Players may still receive events for impl-only animations.
     const ElementToAnimationsMap& all_element_animations =
         element_to_animations_map_;
     auto iter = all_element_animations.find(element_id);
@@ -365,7 +362,7 @@ bool AnimationHost::ScrollOffsetAnimationWasInterrupted(
     ElementId element_id) const {
   auto element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations
-             ? element_animations->scroll_offset_animation_was_interrupted()
+             ? element_animations->ScrollOffsetAnimationWasInterrupted()
              : false;
 }
 
@@ -522,9 +519,9 @@ bool AnimationHost::HasAnyAnimation(ElementId element_id) const {
   return element_animations ? element_animations->HasAnyAnimation() : false;
 }
 
-bool AnimationHost::HasActiveAnimationForTesting(ElementId element_id) const {
+bool AnimationHost::HasTickingAnimationForTesting(ElementId element_id) const {
   auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations ? element_animations->HasActiveAnimation() : false;
+  return element_animations ? element_animations->HasTickingAnimation() : false;
 }
 
 void AnimationHost::ImplOnlyScrollAnimationCreate(
@@ -559,26 +556,26 @@ void AnimationHost::ScrollAnimationAbort(bool needs_completion) {
   return scroll_offset_animations_impl_->ScrollAnimationAbort(needs_completion);
 }
 
-void AnimationHost::DidActivateElementAnimations(
-    ElementAnimations* element_animations) {
-  DCHECK(element_animations->element_id());
-  active_element_to_animations_map_[element_animations->element_id()] =
-      element_animations;
+void AnimationHost::AddToTicking(scoped_refptr<AnimationPlayer> player) {
+  DCHECK(std::find(ticking_players_.begin(), ticking_players_.end(), player) ==
+         ticking_players_.end());
+  ticking_players_.push_back(player);
 }
 
-void AnimationHost::DidDeactivateElementAnimations(
-    ElementAnimations* element_animations) {
-  DCHECK(element_animations->element_id());
-  active_element_to_animations_map_.erase(element_animations->element_id());
+void AnimationHost::RemoveFromTicking(scoped_refptr<AnimationPlayer> player) {
+  auto to_erase =
+      std::find(ticking_players_.begin(), ticking_players_.end(), player);
+  if (to_erase != ticking_players_.end())
+    ticking_players_.erase(to_erase);
+}
+
+const AnimationHost::PlayersList& AnimationHost::ticking_players_for_testing()
+    const {
+  return ticking_players_;
 }
 
 const AnimationHost::ElementToAnimationsMap&
-AnimationHost::active_element_animations_for_testing() const {
-  return active_element_to_animations_map_;
-}
-
-const AnimationHost::ElementToAnimationsMap&
-AnimationHost::all_element_animations_for_testing() const {
+AnimationHost::element_animations_for_testing() const {
   return element_to_animations_map_;
 }
 

@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.customtabs;
 
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -16,6 +17,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.StrictMode;
+import android.provider.Browser;
 import android.support.customtabs.CustomTabsCallback;
 import android.support.customtabs.CustomTabsIntent;
 import android.support.customtabs.CustomTabsSessionToken;
@@ -45,12 +47,14 @@ import org.chromium.chrome.browser.KeyboardShortcuts;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerDocument;
 import org.chromium.chrome.browser.datausage.DataUseTabUIManager;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.fullscreen.BrowserStateBrowserControlsVisibilityDelegate;
+import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.pageinfo.WebsiteSettingsPopup;
@@ -65,7 +69,6 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
-import org.chromium.chrome.browser.tabmodel.TabPersistencePolicy;
 import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
@@ -99,6 +102,7 @@ public class CustomTabActivity extends ChromeActivity {
     private CustomTabContentHandler mCustomTabContentHandler;
     private Tab mMainTab;
     private CustomTabBottomBarDelegate mBottomBarDelegate;
+    private CustomTabTabPersistencePolicy mTabPersistencePolicy;
 
     // This is to give the right package name while using the client's resources during an
     // overridePendingTransition call.
@@ -131,11 +135,12 @@ public class CustomTabActivity extends ChromeActivity {
         }
 
         @Override
-        public void onFirstContentfulPaint(WebContents webContents, long firstContentfulPaintMs) {
+        public void onFirstContentfulPaint(
+                WebContents webContents, long navigationStartTick, long firstContentfulPaintMs) {
             if (webContents != mTab.getWebContents()) return;
 
-            mConnection.notifyPageLoadMetric(
-                    mSession, PageLoadMetrics.FIRST_CONTENTFUL_PAINT, firstContentfulPaintMs);
+            mConnection.notifyPageLoadMetric(mSession, PageLoadMetrics.FIRST_CONTENTFUL_PAINT,
+                    navigationStartTick, firstContentfulPaintMs);
         }
     }
 
@@ -168,6 +173,8 @@ public class CustomTabActivity extends ChromeActivity {
         public void didAddTab(Tab tab, TabLaunchType type) {
             PageLoadMetrics.addObserver(mMetricsObserver);
             tab.addObserver(mTabObserver);
+            getFullscreenManager().setBottomControlsHeight(mBottomBarDelegate.getBottomBarHeight());
+            getFullscreenManager().addListener(mBottomBarDelegate);
         }
 
         @Override
@@ -337,6 +344,12 @@ public class CustomTabActivity extends ChromeActivity {
             ApiCompatibilityUtils.setStatusBarColor(getWindow(),
                     ColorUtils.getDarkenedColorForStatusBar(toolbarColor));
         }
+        // Properly attach tab's infobar to the view hierarchy, as the main tab might have been
+        // initialized prior to inflation.
+        if (mMainTab != null) {
+            ViewGroup bottomContainer = (ViewGroup) findViewById(R.id.bottom_container);
+            mMainTab.getInfoBarContainer().setParentView(bottomContainer);
+        }
 
         // Setting task title and icon to be null will preserve the client app's title and icon.
         ApiCompatibilityUtils.setTaskDescription(this, null, null, toolbarColor);
@@ -347,10 +360,10 @@ public class CustomTabActivity extends ChromeActivity {
 
     @Override
     protected TabModelSelector createTabModelSelector() {
-        TabPersistencePolicy persistencePolicy = new CustomTabTabPersistencePolicy(
+        mTabPersistencePolicy = new CustomTabTabPersistencePolicy(
                 getTaskId(), getSavedInstanceState() != null);
 
-        return new TabModelSelectorImpl(this, this, persistencePolicy, false, false);
+        return new TabModelSelectorImpl(this, this, mTabPersistencePolicy, false, false);
     }
 
     @Override
@@ -368,7 +381,7 @@ public class CustomTabActivity extends ChromeActivity {
 
     @Override
     public void finishNativeInitialization() {
-        FirstRunSignInProcessor.start(this);
+        if (!mIntentDataProvider.isInfoPage()) FirstRunSignInProcessor.start(this);
 
         final CustomTabsConnection connection = CustomTabsConnection.getInstance(getApplication());
         // If extra headers have been passed, cancel any current prerender, as
@@ -422,6 +435,7 @@ public class CustomTabActivity extends ChromeActivity {
                         finishAndClose(false);
                     }
                 });
+        getFullscreenManager().setBottomControlsHeight(mBottomBarDelegate.getBottomBarHeight());
 
         mCustomTabContentHandler = new CustomTabContentHandler() {
             @Override
@@ -440,7 +454,7 @@ public class CustomTabActivity extends ChromeActivity {
 
             @Override
             public boolean shouldIgnoreIntent(Intent intent) {
-                return mIntentHandler.shouldIgnoreIntent(CustomTabActivity.this, intent);
+                return mIntentHandler.shouldIgnoreIntent(intent);
             }
 
             @Override
@@ -494,7 +508,7 @@ public class CustomTabActivity extends ChromeActivity {
                 CustomTabsConnection.getInstance(getApplication());
         String url = getUrlToLoad();
         // Get any referrer that has been explicitly set by the app.
-        String referrerUrl = IntentHandler.getReferrerUrlIncludingExtraHeaders(getIntent(), this);
+        String referrerUrl = IntentHandler.getReferrerUrlIncludingExtraHeaders(getIntent());
         if (referrerUrl == null) {
             Referrer referrer = customTabsConnection.getReferrerForSession(mSession);
             if (referrer != null) referrerUrl = referrer.getUrl();
@@ -514,7 +528,7 @@ public class CustomTabActivity extends ChromeActivity {
             webContents = WarmupManager.getInstance().takeSpareWebContents(false, false);
             if (webContents != null) webContentsStateOnLaunch = WEBCONTENTS_STATE_SPARE_WEBCONTENTS;
         }
-        RecordHistogram.recordEnumeratedHistogram("CustomTabs.WebcontentsStateOnLaunch",
+        RecordHistogram.recordEnumeratedHistogram("CustomTabs.WebContentsStateOnLaunch",
                 webContentsStateOnLaunch, WEBCONTENTS_STATE_MAX);
         if (webContents == null) webContents = WebContentsFactory.createWebContents(false, false);
         if (!mHasPrerendered) {
@@ -561,6 +575,9 @@ public class CustomTabActivity extends ChromeActivity {
             public void run() {
                 RapporServiceBridge.sampleString(
                         "CustomTabs.ServiceClient.PackageName", packageName);
+                if (GSAState.isGsaPackageName(packageName)) return;
+                RapporServiceBridge.sampleString(
+                        "CustomTabs.ServiceClient.PackageNameThirdParty", packageName);
             }
         });
     }
@@ -616,7 +633,12 @@ public class CustomTabActivity extends ChromeActivity {
     public void onStopWithNative() {
         super.onStopWithNative();
         setActiveContentHandler(null);
-        if (!mIsClosing) getTabModelSelector().saveState();
+        if (mIsClosing) {
+            getTabModelSelector().closeAllTabs(true);
+            mTabPersistencePolicy.deleteMetadataStateFileAsync();
+        } else {
+            getTabModelSelector().saveState();
+        }
     }
 
     /**
@@ -629,19 +651,19 @@ public class CustomTabActivity extends ChromeActivity {
         if (mHasPrerendered && UrlUtilities.urlsFragmentsDiffer(mPrerenderedUrl, url)) {
             mHasPrerendered = false;
             LoadUrlParams temporaryParams = new LoadUrlParams(mPrerenderedUrl);
-            IntentHandler.addReferrerAndHeaders(temporaryParams, intent, this);
+            IntentHandler.addReferrerAndHeaders(temporaryParams, intent);
             tab.loadUrl(temporaryParams);
             params.setShouldReplaceCurrentEntry(true);
         }
 
-        IntentHandler.addReferrerAndHeaders(params, intent, this);
+        IntentHandler.addReferrerAndHeaders(params, intent);
         if (params.getReferrer() == null) {
             params.setReferrer(CustomTabsConnection.getInstance(getApplication())
                     .getReferrerForSession(mSession));
         }
         // See ChromeTabCreator#getTransitionType(). This marks the navigation chain as starting
         // from an external intent (unless otherwise specified by an extra in the intent).
-        params.setTransitionType(IntentHandler.getTransitionTypeFromIntent(this, intent,
+        params.setTransitionType(IntentHandler.getTransitionTypeFromIntent(intent,
                 PageTransition.LINK | PageTransition.FROM_API));
         mTabObserver.trackNextPageLoadFromTimestamp(timeStamp);
         tab.loadUrl(params);
@@ -670,7 +692,9 @@ public class CustomTabActivity extends ChromeActivity {
         return new CustomTabAppMenuPropertiesDelegate(this, mIntentDataProvider.getMenuTitles(),
                 mIntentDataProvider.shouldShowShareMenuItem(),
                 mIntentDataProvider.isOpenedByChrome(),
-                mIntentDataProvider.isMediaViewer());
+                mIntentDataProvider.isMediaViewer(),
+                mIntentDataProvider.shouldShowStarButton(),
+                mIntentDataProvider.shouldShowDownloadButton());
     }
 
     @Override
@@ -721,6 +745,7 @@ public class CustomTabActivity extends ChromeActivity {
      * @param reparenting true iff the activity finishes due to tab reparenting.
      */
     public final void finishAndClose(boolean reparenting) {
+        if (mIsClosing) return;
         mIsClosing = true;
         if (!reparenting) {
             // Closing the activity destroys the renderer as well. Re-create a spare renderer some
@@ -778,6 +803,7 @@ public class CustomTabActivity extends ChromeActivity {
                 new OnClickListener() {
                     @Override
                     public void onClick(View v) {
+                        if (getActivityTab() == null) return;
                         mIntentDataProvider.sendButtonPendingIntentWithUrl(
                                 getApplicationContext(), getActivityTab().getUrl());
                         RecordUserAction.record("CustomTabsCustomActionButtonClick");
@@ -832,6 +858,20 @@ public class CustomTabActivity extends ChromeActivity {
                 || id == R.id.new_incognito_tab_menu_id || id == R.id.new_tab_menu_id
                 || id == R.id.open_history_menu_id) {
             return true;
+        } else if (id == R.id.bookmark_this_page_id) {
+            addOrEditBookmark(getActivityTab());
+            RecordUserAction.record("MobileMenuAddToBookmarks");
+            return true;
+        } else if (id == R.id.find_in_page_id) {
+            mFindToolbarManager.showToolbar();
+            if (getContextualSearchManager() != null) {
+                getContextualSearchManager().hideContextualSearch(StateChangeReason.UNKNOWN);
+            }
+            if (fromMenu) {
+                RecordUserAction.record("MobileMenuFindInPage");
+            } else {
+                RecordUserAction.record("MobileShortcutFindInPage");
+            }
         } else if (id == R.id.open_in_browser_id) {
             openCurrentUrlInBrowser(false);
             RecordUserAction.record("CustomTabsMenuOpenInChrome");
@@ -878,6 +918,14 @@ public class CustomTabActivity extends ChromeActivity {
     }
 
     /**
+     * @return The tab persistence policy for this activity.
+     */
+    @VisibleForTesting
+    CustomTabTabPersistencePolicy getTabPersistencePolicyForTest() {
+        return mTabPersistencePolicy;
+    }
+
+    /**
      * Opens the URL currently being displayed in the Custom Tab in the regular browser.
      * @param forceReparenting Whether tab reparenting should be forced for testing.
      *
@@ -901,7 +949,7 @@ public class CustomTabActivity extends ChromeActivity {
         StrictMode.allowThreadDiskWrites();
         try {
             willChromeHandleIntent |= ExternalNavigationDelegateImpl
-                    .willChromeHandleIntent(this, intent, true);
+                    .willChromeHandleIntent(intent, true);
         } finally {
             StrictMode.setThreadPolicy(oldPolicy);
         }
@@ -917,13 +965,21 @@ public class CustomTabActivity extends ChromeActivity {
             };
 
             mMainTab = null;
+            // mHasCreatedTabEarly == true => mMainTab != null in the rest of the code.
+            mHasCreatedTabEarly = false;
+            CustomTabsConnection.getInstance(getApplication()).resetPostMessageHandlerForSession(
+                    mSession, null);
             tab.detachAndStartReparenting(intent, startActivityOptions, finalizeCallback);
         } else {
             // Temporarily allowing disk access while fixing. TODO: http://crbug.com/581860
             StrictMode.allowThreadDiskReads();
             StrictMode.allowThreadDiskWrites();
             try {
-                startActivity(intent, startActivityOptions);
+                if (mIntentDataProvider.isInfoPage()) {
+                    IntentHandler.startChromeLauncherActivityForTrustedIntent(intent);
+                } else {
+                    startActivity(intent, startActivityOptions);
+                }
             } finally {
                 StrictMode.setThreadPolicy(oldPolicy);
             }
@@ -937,15 +993,29 @@ public class CustomTabActivity extends ChromeActivity {
      */
     private String getUrlToLoad() {
         String url = IntentHandler.getUrlFromIntent(getIntent());
+
+        // Intents fired for media viewers have an additional file:// URI passed along so that the
+        // tab can display the actual filename to the user when it is loaded.
+        if (mIntentDataProvider.isMediaViewer()) {
+            String mediaViewerUrl = mIntentDataProvider.getMediaViewerUrl();
+            if (!TextUtils.isEmpty(mediaViewerUrl)) {
+                Uri mediaViewerUri = Uri.parse(mediaViewerUrl);
+                if ("file".equals(mediaViewerUri.getScheme())) {
+                    url = mediaViewerUrl;
+                }
+            }
+        }
+
         if (!TextUtils.isEmpty(url)) {
             url = DataReductionProxySettings.getInstance().maybeRewriteWebliteUrl(url);
         }
+
         return url;
     }
 
     /** Sets the initial background color for the Tab, shown before the page content is ready. */
     private void prepareTabBackground(final Tab tab) {
-        if (!IntentHandler.isIntentChromeOrFirstParty(getIntent(), this)) return;
+        if (!IntentHandler.isIntentChromeOrFirstParty(getIntent())) return;
 
         int backgroundColor = mIntentDataProvider.getInitialBackgroundColor();
         if (backgroundColor == Color.TRANSPARENT) return;
@@ -978,5 +1048,32 @@ public class CustomTabActivity extends ChromeActivity {
     protected void initializeToolbar() {
         super.initializeToolbar();
         if (mIntentDataProvider.isMediaViewer()) getToolbarManager().disableShadow();
+    }
+
+    /**
+     * Show the web page with CustomTabActivity, without any navigation control.
+     * Used in showing the terms of services page or help pages for Chrome.
+     * @param context The current activity context.
+     * @param url The url of the web page.
+     */
+    public static void showInfoPage(Context context, String url) {
+        // TODO(xingliu): The title text will be the html document title, figure out if we want to
+        // use Chrome strings here as EmbedContentViewActivity does.
+        CustomTabsIntent customTabIntent = new CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .setToolbarColor(ApiCompatibilityUtils.getColor(
+                        context.getResources(),
+                        R.color.dark_action_bar_color))
+                .build();
+        customTabIntent.intent.setData(Uri.parse(url));
+
+        Intent intent = ChromeLauncherActivity.createCustomTabActivityIntent(
+                context, customTabIntent.intent, false);
+        intent.setPackage(context.getPackageName());
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_INFO_PAGE, true);
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+        IntentHandler.addTrustedIntentExtras(intent);
+
+        context.startActivity(intent);
     }
 }

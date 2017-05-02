@@ -136,7 +136,7 @@ base::string16 BookmarkNode::GetNickName() const
 
 void BookmarkNode::set_description(const base::string16 &desc)
 {
-	SetMetaInfo("Description", base::UTF16ToUTF8(desc));
+  SetMetaInfo("Description", base::UTF16ToUTF8(desc));
 }
 
 base::string16 BookmarkNode::GetDescription() const
@@ -183,6 +183,14 @@ void BookmarkNode::SetMetaInfoMap(const MetaInfoMap& meta_info_map) {
 
 const BookmarkNode::MetaInfoMap* BookmarkNode::GetMetaInfoMap() const {
   return meta_info_map_.get();
+}
+
+const base::string16& BookmarkNode::GetTitledUrlNodeTitle() const {
+  return GetTitle();
+}
+
+const GURL& BookmarkNode::GetTitledUrlNodeUrl() const {
+  return url_;
 }
 
 void BookmarkNode::Initialize(int64_t id) {

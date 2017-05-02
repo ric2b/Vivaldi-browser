@@ -5,30 +5,35 @@
 #include "core/layout/ng/ng_layout_input_node.h"
 
 #include "core/layout/ng/ng_block_layout_algorithm.h"
-#include "core/layout/ng/ng_box.h"
+#include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_constraint_space.h"
-#include "core/layout/ng/ng_inline_box.h"
 #include "core/layout/ng/ng_inline_layout_algorithm.h"
+#include "core/layout/ng/ng_inline_node.h"
 #include "core/layout/ng/ng_layout_algorithm.h"
+#include "core/layout/ng/ng_legacy_block_layout_algorithm.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
 
 NGLayoutAlgorithm* NGLayoutInputNode::AlgorithmForInputNode(
     NGLayoutInputNode* input_node,
-    const NGConstraintSpace* constraint_space) {
+    NGConstraintSpace* constraint_space) {
   // At least for now, this should never be called on LegacyInline
   // children. However, there will be other kinds of input_node so
   // it makes sense to do this here.
-  DCHECK(input_node->Type() == LegacyBlock);
-  NGBox* block = toNGBox(input_node);
-
-  if (block->HasInlineChildren())
-    return new NGInlineLayoutAlgorithm(
-        block->Style(), toNGInlineBox(block->FirstChild()),
-        constraint_space->ChildSpace(block->Style()));
-  return new NGBlockLayoutAlgorithm(
-      block->Style(), toNGBox(block->FirstChild()),
-      constraint_space->ChildSpace(block->Style()));
+  DCHECK(input_node->Type() == kLegacyBlock);
+  NGBlockNode* block = toNGBlockNode(input_node);
+  if (!block->CanUseNewLayout())
+    return new NGLegacyBlockLayoutAlgorithm(block, constraint_space);
+  const ComputedStyle* style = block->Style();
+  if (block->HasInlineChildren()) {
+    NGInlineNode* child = toNGInlineNode(block->FirstChild());
+    return new NGInlineLayoutAlgorithm(style, child, constraint_space);
+  }
+  NGBlockNode* child = toNGBlockNode(block->FirstChild());
+  // TODO(layout-ng): The break token should be passed as an argument to this
+  // method instead of getting it from the NGBlockNode
+  NGBreakToken* token = block->CurrentBreakToken();
+  return new NGBlockLayoutAlgorithm(style, child, constraint_space, token);
 }
 }

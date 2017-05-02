@@ -140,7 +140,7 @@ class CORE_EXPORT AtomicHTMLToken {
         break;
       case HTMLToken::DOCTYPE:
         m_name = AtomicString(token.data());
-        m_doctypeData = makeUnique<DoctypeData>();
+        m_doctypeData = WTF::makeUnique<DoctypeData>();
         m_doctypeData->m_hasPublicIdentifier = true;
         token.publicIdentifier().appendTo(m_doctypeData->m_publicIdentifier);
         m_doctypeData->m_hasSystemIdentifier = true;
@@ -157,7 +157,7 @@ class CORE_EXPORT AtomicHTMLToken {
                              nullAtom);
           // FIXME: This is N^2 for the number of attributes.
           if (!findAttributeInVector(m_attributes, name))
-            m_attributes.append(
+            m_attributes.push_back(
                 Attribute(name, AtomicString(attribute.value())));
         }
       // Fall through!
@@ -222,8 +222,7 @@ inline void AtomicHTMLToken::initializeAttributes(
 
   m_attributes.clear();
   m_attributes.reserveInitialCapacity(size);
-  for (size_t i = 0; i < size; ++i) {
-    const HTMLToken::Attribute& attribute = attributes[i];
+  for (const auto& attribute : attributes) {
     if (attribute.nameAsVector().isEmpty())
       continue;
 
@@ -234,7 +233,7 @@ inline void AtomicHTMLToken::initializeAttributes(
     const QualifiedName& name = nameForAttribute(attribute);
     // FIXME: This is N^2 for the number of attributes.
     if (!findAttributeInVector(m_attributes, name))
-      m_attributes.append(Attribute(name, value));
+      m_attributes.push_back(Attribute(name, value));
   }
 }
 

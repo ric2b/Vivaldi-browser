@@ -99,7 +99,7 @@ public class ShareHelper {
     private static final String SHARE_IMAGES_DIRECTORY_NAME = "screenshot";
 
     /** Force the use of a Chrome-specific intent chooser, not the system chooser. */
-    private static boolean sForceCustomChooserForTesting = false;
+    private static boolean sForceCustomChooserForTesting;
 
     /** If non-null, will be used instead of the real activity. */
     private static FakeIntentReceiver sFakeIntentReceiverForTesting;
@@ -359,7 +359,8 @@ public class ShareHelper {
 
                 if (ApplicationStatus.getStateForApplication()
                         != ApplicationState.HAS_DESTROYED_ACTIVITIES) {
-                    Uri imageUri = UiUtils.getUriForImageCaptureFile(activity, saveFile);
+                    Uri imageUri = ApiCompatibilityUtils.getUriForImageCaptureFile(activity,
+                            saveFile);
 
                     Intent chooserIntent = Intent.createChooser(getShareImageIntent(imageUri),
                             activity.getString(R.string.share_link_chooser_title));
@@ -414,7 +415,7 @@ public class ShareHelper {
                 if (ApplicationStatus.getStateForApplication()
                         != ApplicationState.HAS_DESTROYED_ACTIVITIES
                         && savedFile != null) {
-                    fileUri = UiUtils.getUriForImageCaptureFile(context, savedFile);
+                    fileUri = ApiCompatibilityUtils.getUriForImageCaptureFile(context, savedFile);
                 }
                 callback.onResult(fileUri);
             }

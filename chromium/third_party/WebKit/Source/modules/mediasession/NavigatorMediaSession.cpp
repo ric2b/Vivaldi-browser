@@ -4,7 +4,7 @@
 
 #include "modules/mediasession/NavigatorMediaSession.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "modules/mediasession/MediaSession.h"
 #include "platform/Supplementable.h"
 
@@ -35,7 +35,7 @@ MediaSession* NavigatorMediaSession::mediaSession(ScriptState* scriptState,
                                                   Navigator& navigator) {
   NavigatorMediaSession& self = NavigatorMediaSession::from(navigator);
   if (!self.m_session)
-    self.m_session = MediaSession::create(scriptState);
+    self.m_session = MediaSession::create(scriptState->getExecutionContext());
   return self.m_session.get();
 }
 

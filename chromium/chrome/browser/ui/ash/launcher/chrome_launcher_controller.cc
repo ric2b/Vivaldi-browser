@@ -30,6 +30,15 @@ void ChromeLauncherController::LaunchApp(const std::string& app_id,
   launcher_controller_helper_->LaunchApp(app_id, source, event_flags);
 }
 
+void ChromeLauncherController::LaunchAppWithLaunchId(
+    const std::string& app_id,
+    const std::string& launch_id,
+    ash::LaunchSource source,
+    int event_flags) {
+  launcher_controller_helper_->LaunchAppWithLaunchId(app_id, launch_id, source,
+                                                     event_flags);
+}
+
 ChromeLauncherController::ChromeLauncherController() : observer_binding_(this) {
   DCHECK(!instance_);
   instance_ = this;
@@ -51,13 +60,7 @@ bool ChromeLauncherController::ConnectToShelfController() {
   if (!connector)
     return false;
 
-  // Under mash the ShelfController interface is in the ash process. In classic
-  // ash we provide it to ourself.
-  if (chrome::IsRunningInMash()) {
-    connector->ConnectToInterface("ash", &shelf_controller_);
-  } else {
-    connector->ConnectToInterface("content_browser", &shelf_controller_);
-  }
+  connector->BindInterface(ash_util::GetAshServiceName(), &shelf_controller_);
   return true;
 }
 
@@ -139,12 +142,14 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
           profile_, extension_misc::EXTENSION_ICON_SMALL, this);
   app_icon_loaders_.push_back(std::move(extension_app_icon_loader));
 
-  if (arc::ArcAuthService::IsAllowedForProfile(profile_)) {
+  if (arc::ArcSessionManager::IsAllowedForProfile(profile_)) {
     std::unique_ptr<AppIconLoader> arc_app_icon_loader =
         base::MakeUnique<ArcAppIconLoader>(
             profile_, extension_misc::EXTENSION_ICON_SMALL, this);
     app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
   }
+
+  SetShelfBehaviorsFromPrefs();
 }
 
 void ChromeLauncherController::OnShelfCreated(int64_t display_id) {

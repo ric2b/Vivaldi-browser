@@ -2,7 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
+import("//build/config/ios/rules.gni")
+import("//rlz/features/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 declare_args() {
@@ -19,7 +22,10 @@ declare_args() {
 }
 
 source_set("browser") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "about_flags.h",
+    "about_flags.mm",
     "app_startup_parameters.h",
     "app_startup_parameters.mm",
     "application_context.cc",
@@ -73,9 +79,14 @@ source_set("browser") {
     "xcallback_parameters.mm",
   ]
   deps = [
+    ":google_api_keys_header",
+    ":settings_resources",
     "//base",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
+    "//components/dom_distiller/core",
+    "//components/flags_ui",
+    "//components/flags_ui:switches",
     "//components/gcm_driver",
     "//components/handoff",
     "//components/keyed_service/core",
@@ -88,23 +99,31 @@ source_set("browser") {
     "//components/pref_registry",
     "//components/prefs",
     "//components/proxy_config",
+    "//components/reading_list/core",
+    "//components/reading_list/ios",
     "//components/search_engines",
     "//components/signin/core/browser",
     "//components/ssl_config",
+    "//components/strings",
+    "//components/sync",
     "//components/translate/core/browser",
     "//components/url_formatter",
     "//components/variations",
     "//components/variations/service",
     "//components/version_info",
     "//components/webdata_services",
+    "//google_apis",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/common",
     "//ios/net",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/voice",
     "//ios/web",
     "//ios/web:user_agent",
     "//net",
+    "//rlz/features",
     "//url",
   ]
   allow_circular_includes_from = [
@@ -115,6 +134,7 @@ source_set("browser") {
 }
 
 source_set("browser_impl") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "application_context_impl.cc",
     "application_context_impl.h",
@@ -122,7 +142,6 @@ source_set("browser_impl") {
     "ios_chrome_main_parts.mm",
   ]
   deps = [
-    ":about_flags",
     ":browser",
     "//base",
     "//components/component_updater",
@@ -141,7 +160,6 @@ source_set("browser_impl") {
     "//components/physical_web/data_source",
     "//components/prefs",
     "//components/rappor",
-    "//components/task_scheduler_util",
     "//components/translate/core/browser",
     "//components/update_client",
     "//components/variations",
@@ -157,6 +175,7 @@ source_set("browser_impl") {
     "//ios/chrome/browser/open_from_clipboard",
     "//ios/chrome/browser/physical_web",
     "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/services/gcm",
     "//ios/chrome/browser/translate",
     "//ios/chrome/browser/update_client",
@@ -166,6 +185,7 @@ source_set("browser_impl") {
     "//ios/web",
     "//ios/web/public/app",
     "//net",
+    "//rlz/features",
     "//ui/base",
   ]
 
@@ -174,33 +194,9 @@ source_set("browser_impl") {
   }
 }
 
-# This is a separate target so that the 'defines' does not leak to the
-# other files (which would increase the compilation time when changing
-# the value).
-source_set("about_flags") {
-  sources = [
-    "about_flags.h",
-    "about_flags.mm",
-  ]
-
-  deps = [
-    ":browser",
-    "//base",
-    "//components/autofill/core/common",
-    "//components/dom_distiller/core",
-    "//components/flags_ui",
-    "//components/flags_ui:switches",
-    "//components/ntp_tiles",
-    "//components/strings",
-    "//components/sync",
-    "//components/variations",
-    "//google_apis",
-    "//ios/chrome/app/strings",
-    "//ios/web",
-    "//ios/web:user_agent",
-  ]
-
-  defines = [
+buildflag_header("google_api_keys_header") {
+  header = "google_api_keys.h"
+  flags = [
     "GOOGLE_STAGING_API_URL=\"$google_staging_api_url\"",
     "GOOGLE_STAGING_LSO_URL=\"$google_staging_lso_url\"",
     "GOOGLE_TEST_API_URL=\"$google_test_api_url\"",
@@ -212,9 +208,20 @@ source_set("about_flags") {
   ]
 }
 
+bundle_data("settings_resources") {
+  sources = [
+    "resources/Settings.bundle/Experimental.plist",
+    "resources/Settings.bundle/Root.plist",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/Settings.bundle/{{source_file_part}}",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "callback_counter_unittest.mm",
     "chrome_url_util_unittest.mm",
     "crash_loop_detection_util_unittest.mm",
     "install_time_util_unittest.mm",
@@ -224,6 +231,7 @@ source_set("unit_tests") {
   ]
   deps = [
     ":browser",
+    ":browser_internal",
     "//base",
     "//base/test:test_support",
     "//components/prefs",
@@ -236,5 +244,15 @@ source_set("unit_tests") {
     "//net:test_support",
     "//testing/gtest",
     "//url",
+  ]
+}
+
+source_set("browser_internal") {
+  sources = [
+    "callback_counter.h",
+    "callback_counter.mm",
+  ]
+  deps = [
+    "//base",
   ]
 }

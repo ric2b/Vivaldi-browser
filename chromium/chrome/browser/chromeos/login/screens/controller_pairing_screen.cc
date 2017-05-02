@@ -20,7 +20,8 @@ ControllerPairingScreen::ControllerPairingScreen(
     Delegate* delegate,
     ControllerPairingScreenActor* actor,
     ControllerPairingController* shark_controller)
-    : BaseScreen(base_screen_delegate),
+    : BaseScreen(base_screen_delegate,
+                 OobeScreen::SCREEN_OOBE_CONTROLLER_PAIRING),
       delegate_(delegate),
       actor_(actor),
       shark_controller_(shark_controller),
@@ -53,9 +54,6 @@ bool ControllerPairingScreen::ExpectStageIs(Stage stage) const {
   return stage == current_stage_;
 }
 
-void ControllerPairingScreen::PrepareToShow() {
-}
-
 void ControllerPairingScreen::Show() {
   if (actor_)
     actor_->Show();
@@ -65,10 +63,6 @@ void ControllerPairingScreen::Show() {
 void ControllerPairingScreen::Hide() {
   if (actor_)
     actor_->Hide();
-}
-
-std::string ControllerPairingScreen::GetName() const {
-  return WizardController::kControllerPairingScreenName;
 }
 
 void ControllerPairingScreen::PairingStageChanged(Stage new_stage) {

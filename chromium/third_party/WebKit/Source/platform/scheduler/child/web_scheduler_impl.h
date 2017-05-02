@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "public/platform/WebCommon.h"
@@ -47,7 +48,6 @@ class BLINK_PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
   void addPendingNavigation(WebScheduler::NavigatingFrameType type) override {}
   void removePendingNavigation(
       WebScheduler::NavigatingFrameType type) override {}
-  void onNavigationStarted() override {}
 
  private:
   static void runIdleTask(std::unique_ptr<WebThread::IdleTask> task,
@@ -56,8 +56,10 @@ class BLINK_PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
   ChildScheduler* child_scheduler_;  // NOT OWNED
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
   scoped_refptr<TaskQueue> timer_task_runner_;
-  std::unique_ptr<WebTaskRunnerImpl> loading_web_task_runner_;
-  std::unique_ptr<WebTaskRunnerImpl> timer_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> loading_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> timer_web_task_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebSchedulerImpl);
 };
 
 }  // namespace scheduler

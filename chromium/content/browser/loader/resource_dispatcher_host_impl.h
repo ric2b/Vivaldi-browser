@@ -32,11 +32,13 @@
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_message.h"
 #include "net/base/load_states.h"
 #include "net/base/request_priority.h"
+#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -54,6 +56,7 @@ class ShareableFileReference;
 }
 
 namespace content {
+class AppCacheNavigationHandleCore;
 class AppCacheService;
 class AsyncRevalidationManager;
 class LoaderDelegate;
@@ -65,7 +68,7 @@ class ResourceDispatcherHostDelegate;
 class ResourceLoader;
 class ResourceHandler;
 class ResourceMessageDelegate;
-class ResourceMessageFilter;
+class ResourceRequesterInfo;
 class ResourceRequestInfoImpl;
 class ResourceScheduler;
 class ServiceWorkerNavigationHandleCore;
@@ -135,7 +138,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Returns true if the message was a resource message that was processed.
   bool OnMessageReceived(const IPC::Message& message,
-                         ResourceMessageFilter* filter);
+                         ResourceRequesterInfo* requester_info);
 
   // Cancels the given request if it still exists.
   void CancelRequest(int child_id, int request_id);
@@ -277,7 +280,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       const NavigationRequestInfo& info,
       std::unique_ptr<NavigationUIData> navigation_ui_data,
       NavigationURLLoaderImplCore* loader,
-      ServiceWorkerNavigationHandleCore* service_worker_handle_core);
+      ServiceWorkerNavigationHandleCore* service_worker_handle_core,
+      AppCacheNavigationHandleCore* appcache_handle_core);
 
   int num_in_flight_requests_for_testing() const {
     return num_in_flight_requests_;
@@ -295,17 +299,17 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Called when loading a request with mojo.
   void OnRequestResourceWithMojo(
+      ResourceRequesterInfo* requester_info,
       int routing_id,
       int request_id,
       const ResourceRequest& request,
       mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientAssociatedPtr url_loader_client,
-      ResourceMessageFilter* filter);
+      mojom::URLLoaderClientAssociatedPtr url_loader_client);
 
-  void OnSyncLoadWithMojo(int routing_id,
+  void OnSyncLoadWithMojo(ResourceRequesterInfo* requester_info,
+                          int routing_id,
                           int request_id,
                           const ResourceRequest& request_data,
-                          ResourceMessageFilter* filter,
                           const SyncLoadResultCallback& result_handler);
 
   // Helper function for initializing the |request| passed in. By initializing
@@ -319,6 +323,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                             int render_process_host_id,
                             int render_view_routing_id,
                             int render_frame_routing_id,
+                            PreviewsState previews_state,
                             ResourceContext* context);
 
   // Helper function for initiating a URL request. The |is_download| and
@@ -525,18 +530,21 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       const GlobalFrameRoutingId& global_routing_id,
       bool cancel_requests);
 
-  void OnRequestResource(int routing_id,
+  void OnRequestResource(ResourceRequesterInfo* requester_info,
+                         int routing_id,
                          int request_id,
                          const ResourceRequest& request_data);
 
   void OnRequestResourceInternal(
+      ResourceRequesterInfo* requester_info,
       int routing_id,
       int request_id,
       const ResourceRequest& request_data,
       mojom::URLLoaderAssociatedRequest mojo_request,
       mojom::URLLoaderClientAssociatedPtr url_loader_client);
 
-  void OnSyncLoad(int request_id,
+  void OnSyncLoad(ResourceRequesterInfo* requester_info,
+                  int request_id,
                   const ResourceRequest& request_data,
                   IPC::Message* sync_result);
 
@@ -544,19 +552,26 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Update the ResourceRequestInfo and internal maps when a request is
   // transferred from one process to another.
-  void UpdateRequestForTransfer(int child_id,
-                                int route_id,
-                                int request_id,
-                                const ResourceRequest& request_data,
-                                LoaderMap::iterator iter);
+  void UpdateRequestForTransfer(
+      ResourceRequesterInfo* requester_info,
+      int route_id,
+      int request_id,
+      const ResourceRequest& request_data,
+      LoaderMap::iterator iter,
+      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderClientAssociatedPtr url_loader_client);
 
   // If |request_data| is for a request being transferred from another process,
   // then CompleteTransfer method can be used to complete the transfer.
-  void CompleteTransfer(int request_id,
+  void CompleteTransfer(ResourceRequesterInfo* requester_info,
+                        int request_id,
                         const ResourceRequest& request_data,
-                        int route_id);
+                        int route_id,
+                        mojom::URLLoaderAssociatedRequest mojo_request,
+                        mojom::URLLoaderClientAssociatedPtr url_loader_client);
 
   void BeginRequest(
+      ResourceRequesterInfo* requester_info,
       int request_id,
       const ResourceRequest& request_data,
       const SyncLoadResultCallback& sync_result_handler,  // only valid for sync
@@ -574,6 +589,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // request should be continued or aborted. The |error_code| parameter is set
   // if |continue_request| is false.
   void ContinuePendingBeginRequest(
+      scoped_refptr<ResourceRequesterInfo> requester_info,
       int request_id,
       const ResourceRequest& request_data,
       const SyncLoadResultCallback& sync_result_handler,  // only valid for sync
@@ -587,11 +603,11 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Creates a ResourceHandler to be used by BeginRequest() for normal resource
   // loading.
   std::unique_ptr<ResourceHandler> CreateResourceHandler(
+      ResourceRequesterInfo* requester_info,
       net::URLRequest* request,
       const ResourceRequest& request_data,
       const SyncLoadResultCallback& sync_result_handler,
       int route_id,
-      int process_type,
       int child_id,
       ResourceContext* resource_context,
       mojom::URLLoaderAssociatedRequest mojo_request,
@@ -605,14 +621,17 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       ResourceType resource_type,
       ResourceContext* resource_context,
       RequestContextType fetch_request_context_type,
+      blink::WebMixedContentContextType fetch_mixed_content_context_type,
       AppCacheService* appcache_service,
       int child_id,
       int route_id,
       std::unique_ptr<ResourceHandler> handler);
 
-  void OnCancelRequest(int request_id);
-  void OnReleaseDownloadedFile(int request_id);
-  void OnDidChangePriority(int request_id,
+  void OnCancelRequest(ResourceRequesterInfo* requester_info, int request_id);
+  void OnReleaseDownloadedFile(ResourceRequesterInfo* requester_info,
+                               int request_id);
+  void OnDidChangePriority(ResourceRequesterInfo* requester_info,
+                           int request_id,
                            net::RequestPriority new_priority,
                            int intra_priority_value);
 
@@ -622,6 +641,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       int child_id,
       int render_view_route_id,
       int render_frame_route_id,
+      PreviewsState previews_state,
       bool download,
       ResourceContext* context);
 
@@ -655,18 +675,16 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                                          ResourceMessageDelegate* delegate);
 
   int BuildLoadFlagsForRequest(const ResourceRequest& request_data,
-                               int child_id,
                                bool is_sync_load);
 
   // Consults the RendererSecurity policy to determine whether the
   // ResourceDispatcherHostImpl should service this request.  A request might
   // be disallowed if the renderer is not authorized to retrieve the request
   // URL or if the renderer is attempting to upload an unauthorized file.
-  bool ShouldServiceRequest(int process_type,
-                            int child_id,
+  bool ShouldServiceRequest(int child_id,
                             const ResourceRequest& request_data,
                             const net::HttpRequestHeaders& headers,
-                            ResourceMessageFilter* filter,
+                            ResourceRequesterInfo* requester_info,
                             ResourceContext* resource_context);
 
   // Notifies the ResourceDispatcherHostDelegate about a download having
@@ -747,10 +765,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // flag to requests occurring soon after a gesture to indicate they
   // may be because of explicit user action.
   base::TimeTicks last_user_gesture_time_;
-
-  // Used during IPC message dispatching so that the handlers can get a pointer
-  // to the source of the message.
-  ResourceMessageFilter* filter_;
 
   ResourceDispatcherHostDelegate* delegate_;
 

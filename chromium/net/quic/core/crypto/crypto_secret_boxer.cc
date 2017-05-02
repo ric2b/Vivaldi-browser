@@ -16,7 +16,6 @@
 
 using base::StringPiece;
 using std::string;
-using std::vector;
 
 namespace net {
 
@@ -45,20 +44,20 @@ size_t CryptoSecretBoxer::GetKeySize() {
   return kKeySize;
 }
 
-void CryptoSecretBoxer::SetKeys(const vector<string>& keys) {
+void CryptoSecretBoxer::SetKeys(const std::vector<string>& keys) {
   DCHECK(!keys.empty());
-  vector<string> copy = keys;
+  std::vector<string> copy = keys;
   for (const string& key : keys) {
     DCHECK_EQ(kKeySize, key.size());
   }
-  base::AutoLock l(lock_);
+  QuicWriterMutexLock l(&lock_);
   keys_.swap(copy);
 }
 
 string CryptoSecretBoxer::Box(QuicRandom* rand, StringPiece plaintext) const {
   std::unique_ptr<Aes128Gcm12Encrypter> encrypter(new Aes128Gcm12Encrypter());
   {
-    base::AutoLock l(lock_);
+    QuicReaderMutexLock l(&lock_);
     DCHECK_EQ(kKeySize, keys_[0].size());
     if (!encrypter->SetKey(keys_[0])) {
       DLOG(DFATAL) << "CryptoSecretBoxer's encrypter->SetKey failed.";
@@ -105,14 +104,15 @@ bool CryptoSecretBoxer::Unbox(StringPiece ciphertext,
   size_t plaintext_length = 0;
   bool ok = false;
   {
-    base::AutoLock l(lock_);
+    QuicReaderMutexLock l(&lock_);
     for (const string& key : keys_) {
       if (decrypter->SetKey(key)) {
         decrypter->SetNoncePrefix(nonce_prefix);
-        if (decrypter->DecryptPacket(
-                /*path_id=*/0u, packet_number,
-                /*associated data=*/StringPiece(), ciphertext, plaintext,
-                &plaintext_length, kMaxPacketSize)) {
+        if (decrypter->DecryptPacket(QUIC_VERSION_36,
+                                     /*path_id=*/0u, packet_number,
+                                     /*associated data=*/StringPiece(),
+                                     ciphertext, plaintext, &plaintext_length,
+                                     kMaxPacketSize)) {
           ok = true;
           break;
         }

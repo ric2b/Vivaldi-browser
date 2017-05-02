@@ -24,7 +24,6 @@
 #endif
 #include "media/filters/file_data_source.h"
 #include "media/filters/memory_data_source.h"
-#include "media/filters/opus_audio_decoder.h"
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/renderer_impl.h"
 #if !defined(MEDIA_DISABLE_LIBVPX)
@@ -57,6 +56,7 @@ using ::testing::AtLeast;
 using ::testing::AtMost;
 using ::testing::Invoke;
 using ::testing::InvokeWithoutArgs;
+using ::testing::Return;
 using ::testing::SaveArg;
 
 namespace media {
@@ -329,7 +329,7 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
       .WillRepeatedly(
           Invoke(this, &PipelineIntegrationTestBase::CheckDuration));
   EXPECT_CALL(*this, OnVideoNaturalSizeChange(_)).Times(AtMost(1));
-  EXPECT_CALL(*this, OnVideoOpacityChange(_)).Times(AtMost(1));
+  EXPECT_CALL(*this, OnVideoOpacityChange(_)).WillRepeatedly(Return());
   CreateDemuxer(std::move(data_source));
 
   if (cdm_context) {
@@ -579,8 +579,6 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
       new FFmpegAudioDecoder(message_loop_.task_runner(), new MediaLog()));
 #endif
 
-  audio_decoders.push_back(new OpusAudioDecoder(message_loop_.task_runner()));
-
   if (!clockless_playback_) {
     audio_sink_ = new NullAudioSink(message_loop_.task_runner());
   } else {
@@ -630,7 +628,7 @@ void PipelineIntegrationTestBase::OnVideoFramePaint(
   if (!hashing_enabled_ || last_frame_ == frame)
     return;
   last_frame_ = frame;
-  DVLOG(3) << __FUNCTION__ << " pts=" << frame->timestamp().InSecondsF();
+  DVLOG(3) << __func__ << " pts=" << frame->timestamp().InSecondsF();
   VideoFrame::HashFrameForTesting(&md5_context_, frame);
 }
 
@@ -647,7 +645,7 @@ base::TimeDelta PipelineIntegrationTestBase::GetStartTime() {
 }
 
 void PipelineIntegrationTestBase::ResetVideoHash() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   base::MD5Init(&md5_context_);
 }
 

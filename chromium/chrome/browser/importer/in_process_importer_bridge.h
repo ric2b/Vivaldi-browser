@@ -17,15 +17,14 @@
 
 class GURL;
 struct ImportedBookmarkEntry;
-struct ImportedSpeedDialEntry;
-struct FaviconUsageData;
 class ExternalProcessImporterHost;
+
+struct ImportedSpeedDialEntry;
 
 namespace importer {
 #if defined(OS_WIN)
 struct ImporterIE7PasswordInfo;
 #endif
-struct ImporterURlRow;
 struct SearchEngineInfo;
 }
 

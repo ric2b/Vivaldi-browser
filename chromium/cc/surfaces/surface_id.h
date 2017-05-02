@@ -5,19 +5,21 @@
 #ifndef CC_SURFACES_SURFACE_ID_H_
 #define CC_SURFACES_SURFACE_ID_H_
 
-#include <stddef.h>
 #include <stdint.h>
 
-#include <functional>
+#include <iosfwd>
 #include <string>
 
 #include "base/format_macros.h"
 #include "base/hash.h"
-#include "base/strings/stringprintf.h"
 #include "cc/surfaces/frame_sink_id.h"
 #include "cc/surfaces/local_frame_id.h"
+#include "mojo/public/cpp/bindings/struct_traits.h"
 
 namespace cc {
+namespace mojom {
+class SurfaceIdDataView;
+}
 
 class SurfaceId {
  public:
@@ -49,11 +51,7 @@ class SurfaceId {
 
   const LocalFrameId& local_frame_id() const { return local_frame_id_; }
 
-  std::string ToString() const {
-    return base::StringPrintf("SurfaceId(%s, %s)",
-                              frame_sink_id_.ToString().c_str(),
-                              local_frame_id_.ToString().c_str());
-  }
+  std::string ToString() const;
 
   bool operator==(const SurfaceId& other) const {
     return frame_sink_id_ == other.frame_sink_id_ &&
@@ -68,10 +66,14 @@ class SurfaceId {
   }
 
  private:
+  friend struct mojo::StructTraits<mojom::SurfaceIdDataView, SurfaceId>;
+
   // See SurfaceIdAllocator::GenerateId.
   FrameSinkId frame_sink_id_;
   LocalFrameId local_frame_id_;
 };
+
+std::ostream& operator<<(std::ostream& out, const SurfaceId& surface_id);
 
 struct SurfaceIdHash {
   size_t operator()(const SurfaceId& key) const { return key.hash(); }

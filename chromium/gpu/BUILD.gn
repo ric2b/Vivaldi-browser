@@ -147,6 +147,7 @@ test("gl_tests") {
     "command_buffer/tests/gl_manager.h",
     "command_buffer/tests/gl_map_buffer_range_unittest.cc",
     "command_buffer/tests/gl_native_gmb_backbuffer_unittest.cc",
+    "command_buffer/tests/gl_object_bindings_unittest.cc",
     "command_buffer/tests/gl_pointcoord_unittest.cc",
     "command_buffer/tests/gl_program_unittest.cc",
     "command_buffer/tests/gl_query_unittest.cc",
@@ -301,6 +302,7 @@ test("gpu_unittests") {
     "ipc/client/gpu_memory_buffer_impl_shared_memory_unittest.cc",
     "ipc/client/gpu_memory_buffer_impl_test_template.h",
     "ipc/common/struct_traits_unittest.cc",
+    "ipc/host/shader_disk_cache_unittest.cc",
   ]
 
   if (is_mac) {
@@ -325,8 +327,10 @@ test("gpu_unittests") {
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/ipc/common:test_interfaces",
+    "//gpu/ipc/host",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
+    "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/angle:translator",
@@ -398,8 +402,27 @@ fuzzer_test("gpu_fuzzer") {
     "//ui/gl:test_support",
   ]
 
-  libfuzzer_options = [
-    "max_len=16384",
-    "use_traces=1",
-  ]
+  libfuzzer_options = [ "max_len=16384" ]
+}
+
+if (is_linux) {
+  fuzzer_test("gpu_angle_fuzzer") {
+    sources = [
+      "command_buffer/tests/fuzzer_main.cc",
+    ]
+
+    defines = [ "GPU_FUZZER_USE_ANGLE" ]
+
+    deps = [
+      ":gpu",
+      "//base",
+      "//base/third_party/dynamic_annotations",
+      "//gpu/command_buffer/common:gles2_utils",
+      "//ui/gfx/geometry",
+      "//ui/gl",
+      "//ui/gl:test_support",
+    ]
+
+    libfuzzer_options = [ "max_len=16384" ]
+  }
 }

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//ui/base/ui_features.gni")
 
 static_library("constrained_window") {
   sources = [
@@ -24,6 +25,7 @@ static_library("constrained_window") {
     "//components/guest_view/browser",
     "//components/web_modal",
     "//content/public/browser",
+    "//ui/display",
     "//ui/views",
   ]
   public_deps = [

@@ -5,9 +5,12 @@
 #include "content/shell/browser/layout_test/layout_test_permission_manager.h"
 
 #include <list>
+#include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents.h"
@@ -147,7 +150,7 @@ int LayoutTestPermissionManager::SubscribePermissionStatusChange(
     const base::Callback<void(blink::mojom::PermissionStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  Subscription* subscription = new Subscription();
+  auto subscription = base::MakeUnique<Subscription>();
   subscription->permission =
       PermissionDescription(permission, requesting_origin, embedding_origin);
   subscription->callback = callback;
@@ -156,7 +159,7 @@ int LayoutTestPermissionManager::SubscribePermissionStatusChange(
                           subscription->permission.origin,
                           subscription->permission.embedding_origin);
 
-  return subscriptions_.Add(subscription);
+  return subscriptions_.Add(std::move(subscription));
 }
 
 void LayoutTestPermissionManager::UnsubscribePermissionStatusChange(

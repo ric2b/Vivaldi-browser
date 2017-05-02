@@ -23,10 +23,9 @@ HostListFetcher::HostListFetcher() {
 HostListFetcher::~HostListFetcher() {
 }
 
-void HostListFetcher::RetrieveHostlist(
-    const std::string& access_token,
-    const HostlistCallback& callback) {
-
+void HostListFetcher::RetrieveHostlist(const std::string& access_token,
+                                       const std::string& target_url,
+                                       const HostlistCallback& callback) {
   VLOG(2) << "HostListFetcher::RetrieveHostlist() called";
 
   DCHECK(!access_token.empty());
@@ -36,11 +35,11 @@ void HostListFetcher::RetrieveHostlist(
   hostlist_callback_ = callback;
 
   request_context_getter_ = new remoting::URLRequestContextGetter(
-      base::ThreadTaskRunnerHandle::Get(),   // network_runner
-      base::ThreadTaskRunnerHandle::Get());  // file_runner
+      /*network_runner=*/base::ThreadTaskRunnerHandle::Get(),
+      /*file_runner=*/base::ThreadTaskRunnerHandle::Get());
 
-  request_ = net::URLFetcher::Create(
-      GURL(kHostListProdRequestUrl), net::URLFetcher::GET, this);
+  request_ =
+      net::URLFetcher::Create(GURL(target_url), net::URLFetcher::GET, this);
   request_->SetRequestContext(request_context_getter_.get());
   request_->AddExtraRequestHeader("Authorization: OAuth " + access_token);
   request_->Start();
@@ -63,7 +62,7 @@ bool HostListFetcher::ProcessResponse(
   std::unique_ptr<base::Value> response_value(
       base::JSONReader::Read(response_string));
   if (!response_value ||
-      !response_value->IsType(base::Value::TYPE_DICTIONARY)) {
+      !response_value->IsType(base::Value::Type::DICTIONARY)) {
     LOG(ERROR) << "Failed to parse response string to JSON";
     return false;
   }

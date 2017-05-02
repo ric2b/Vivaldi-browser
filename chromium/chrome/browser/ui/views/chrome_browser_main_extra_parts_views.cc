@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
 #include "chrome/browser/ui/views/chrome_views_delegate.h"
+#include "chrome/browser/ui/views/ime_driver/ime_driver_mus.h"
 #include "components/constrained_window/constrained_window_views.h"
 
 #if defined(USE_AURA)
@@ -14,12 +16,12 @@
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/runner/common/client_util.h"
-#include "services/ui/public/cpp/gpu_service.h"
+#include "services/ui/public/cpp/gpu/gpu.h"  // nogncheck
 #include "services/ui/public/cpp/input_devices/input_device_client.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/input_devices/input_device_server.mojom.h"
 #include "ui/display/screen.h"
-#include "ui/views/mus/window_manager_connection.h"
+#include "ui/views/mus/mus_client.h"
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
 #include "ui/wm/core/wm_state.h"
 #endif  // defined(USE_AURA)
@@ -62,6 +64,12 @@ void ChromeBrowserMainExtraPartsViews::PreCreateThreads() {
 }
 
 void ChromeBrowserMainExtraPartsViews::PreProfileInit() {
+#if defined(USE_AURA)
+  // IME driver must be available at login screen, so initialize before profile.
+  if (service_manager::ServiceManagerIsRemote())
+    IMEDriver::Register();
+#endif
+
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // On the Linux desktop, we want to prevent the user from logging in as root,
   // so that we don't destroy the profile. Now that we have some minimal ui
@@ -86,7 +94,7 @@ void ChromeBrowserMainExtraPartsViews::PreProfileInit() {
   base::RunLoop().RunUntilIdle();
 
   exit(EXIT_FAILURE);
-#endif
+#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 }
 
 void ChromeBrowserMainExtraPartsViews::ServiceManagerConnectionStarted(
@@ -102,14 +110,16 @@ void ChromeBrowserMainExtraPartsViews::ServiceManagerConnectionStarted(
 
     input_device_client_.reset(new ui::InputDeviceClient());
     ui::mojom::InputDeviceServerPtr server;
-    connection->GetConnector()->ConnectToInterface(ui::mojom::kServiceName,
-                                                   &server);
+    connection->GetConnector()->BindInterface(ui::mojom::kServiceName, &server);
     input_device_client_->Connect(std::move(server));
 
-    window_manager_connection_ = views::WindowManagerConnection::Create(
+    // WMState is owned as a member, so don't have MusClient create it.
+    const bool create_wm_state = false;
+    mus_client_ = base::MakeUnique<views::MusClient>(
         connection->GetConnector(), connection->GetIdentity(),
         content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::IO));
+            content::BrowserThread::IO),
+        create_wm_state);
   }
 #endif  // defined(USE_AURA)
 }

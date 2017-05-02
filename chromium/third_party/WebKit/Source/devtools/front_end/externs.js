@@ -91,19 +91,23 @@ Array.prototype.sortNumbers = function() {};
 /**
  * @param {!S} object
  * @param {function(!S,!T):number=} comparator
+ * @param {number=} left
+ * @param {number=} right
  * @return {number}
  * @this {Array.<T>}
  * @template S
  */
-Array.prototype.lowerBound = function(object, comparator) {};
+Array.prototype.lowerBound = function(object, comparator, left, right) {};
 /**
  * @param {!S} object
  * @param {function(!S,!T):number=} comparator
+ * @param {number=} left
+ * @param {number=} right
  * @return {number}
  * @this {Array.<T>}
  * @template S
  */
-Array.prototype.upperBound = function(object, comparator) {};
+Array.prototype.upperBound = function(object, comparator, left, right) {};
 /**
  * @param {!S} value
  * @param {function(!S,!T):number} comparator
@@ -181,6 +185,15 @@ Array.prototype.intersectOrdered = function(array, comparator) {};
  * @template T
  */
 Array.prototype.mergeOrdered = function(array, comparator) {};
+
+/**
+ * @param {number} object
+ * @param {function(number, number):number=} comparator
+ * @param {number=} left
+ * @param {number=} right
+ * @return {number}
+ */
+Int32Array.prototype.lowerBound = function(object, comparator, left, right) {};
 
 // File System API
 /**
@@ -619,12 +632,6 @@ CodeMirror.doc;
 window.dispatchStandaloneTestRunnerMessages;
 
 /**
- * @param {*} obj
- * @return {boolean}
- */
-ArrayBuffer.isView = function(obj) {};
-
-/**
  * @param {Array.<Object>} keyframes
  * @param {number|Object} timing
  * @return {Object}
@@ -745,7 +752,7 @@ ESTree.TemplateLiteralNode = function() {
   /** @type {!Array.<!ESTree.Node>} */
   this.expressions;
 };
-
+/** @type {!Object} */
 var Gonzales = {};
 var gonzales = {
   /**
@@ -807,48 +814,111 @@ Terminal.prototype = {
 };
 
 // Module namespaces.
+/** @type {!Object} */
 var Accessibility = {};
+/** @type {!Object} */
 var Animation = {};
+/** @type {!Object} */
 var Audits = {};
+/** @type {!Object} */
 var Audits2 = {};
+/** @type {!Object} */
 var Audits2Worker = {};
+/** @type {!Object} */
 var Bindings = {};
+/** @type {!Object} */
 var CmModes = {};
+/** @type {!Object} */
+var ColorPicker = {};
+/** @type {!Object} */
 var Common = {};
+/** @type {!Object} */
 var Components = {};
+// Closure uses Console as a namespace item so we cannot override it right now.
 var Console = {};
+/** @type {!Object} */
+var CookieTable = {};
+/** @type {!Object} */
+var CSSTracker = {};
+/** @type {!Object} */
+var DataGrid = {};
+/** @type {!Object} */
 var Devices = {};
+/** @type {!Object} */
 var Diff = {};
+/** @type {!Object} */
 var Elements = {};
+/** @type {!Object} */
 var Emulation = {};
+/** @type {!Object} */
 var Extensions = {};
+/** @type {!Object} */
 var FormatterWorker = {};
-var Gonzales = {};
+/** @type {!Object} */
+var HeapSnapshotModel = {};
+/** @type {!Object} */
 var HeapSnapshotWorker = {};
+/** @type {!Object} */
 var Host = {};
+/** @type {!Object} */
+var InlineEditor = {};
+/** @type {!Object} */
 var LayerViewer = {};
+/** @type {!Object} */
 var Layers = {};
+/** @type {!Object} */
 var Main = {};
+/** @type {!Object} */
 var Network = {};
+/** @type {!Object} */
+var PerfUI = {};
+/** @type {!Object} */
 var Persistence = {};
+/** @type {!Object} */
 var Platform = {};
+/** @type {!Object} */
 var Profiler = {};
+/** @type {!Object} */
+var Protocol = {};
+/** @type {!Object} */
+var QuickOpen = {};
+/** @type {!Object} */
 var Resources = {};
+/** @type {!Object} */
 var Sass = {};
+/** @type {!Object} */
 var Screencast = {};
+/** @type {!Object} */
 var SDK = {};
+/** @type {!Object} */
 var Security = {};
+/** @type {!Object} */
 var Services = {};
+/** @type {!Object} */
 var Settings = {};
+/** @type {!Object} */
+var Shell = {};
+/** @type {!Object} */
 var Snippets = {};
+/** @type {!Object} */
 var SourceFrame = {};
+/** @type {!Object} */
 var Sources = {};
-var Terminal = {};
+/** @type {!Object} */
+var TestRunner = {};
+/** @type {!Object} */
 var TextEditor = {};
+/** @type {!Object} */
 var Timeline = {};
+/** @type {!Object} */
 var TimelineModel = {};
+/** @type {!Object} */
 var ToolboxBootstrap = {};
+/** @type {!Object} */
 var UI = {};
+/** @type {!Object} */
 var UtilitySharedWorker = {};
+/** @type {!Object} */
 var WorkerService = {};
+/** @type {!Object} */
 var Workspace = {};

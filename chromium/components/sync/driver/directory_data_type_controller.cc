@@ -5,11 +5,12 @@
 #include "components/sync/driver/directory_data_type_controller.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/sync/driver/backend_data_type_configurer.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/syncable/syncable_read_transaction.h"
 #include "components/sync/syncable/user_share.h"
 
@@ -18,8 +19,12 @@ namespace syncer {
 DirectoryDataTypeController::DirectoryDataTypeController(
     ModelType type,
     const base::Closure& dump_stack,
-    SyncClient* sync_client)
-    : DataTypeController(type, dump_stack), sync_client_(sync_client) {}
+    SyncClient* sync_client,
+    ModelSafeGroup model_safe_group)
+    : DataTypeController(type),
+      dump_stack_(dump_stack),
+      sync_client_(sync_client),
+      model_safe_group_(model_safe_group) {}
 
 DirectoryDataTypeController::~DirectoryDataTypeController() {}
 
@@ -51,22 +56,23 @@ void DirectoryDataTypeController::GetStatusCounters(
       num_entries_by_type[type()] - num_to_delete_entries_by_type[type()];
 
   callback.Run(type(), counters);
-};
+}
 
 void DirectoryDataTypeController::RegisterWithBackend(
-    BackendDataTypeConfigurer* configurer) {}
+    base::Callback<void(bool)> set_downloaded,
+    ModelTypeConfigurer* configurer) {}
 
 void DirectoryDataTypeController::ActivateDataType(
-    BackendDataTypeConfigurer* configurer) {
+    ModelTypeConfigurer* configurer) {
   DCHECK(CalledOnValidThread());
   // Tell the backend about the change processor for this type so it can
   // begin routing changes to it.
-  configurer->ActivateDirectoryDataType(type(), model_safe_group(),
+  configurer->ActivateDirectoryDataType(type(), model_safe_group_,
                                         GetChangeProcessor());
 }
 
 void DirectoryDataTypeController::DeactivateDataType(
-    BackendDataTypeConfigurer* configurer) {
+    ModelTypeConfigurer* configurer) {
   DCHECK(CalledOnValidThread());
   configurer->DeactivateDirectoryDataType(type());
 }

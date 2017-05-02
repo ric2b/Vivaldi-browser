@@ -10,7 +10,7 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event_memory_overhead.h"
 #include "platform/heap/Handle.h"
-#include "platform/tracing/web_memory_allocator_dump.h"
+#include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
 #include "public/platform/Platform.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Threading.h"
@@ -127,9 +127,11 @@ BlinkGCMemoryDumpProvider::BlinkGCMemoryDumpProvider()
 void BlinkGCMemoryDumpProvider::insert(Address address,
                                        size_t size,
                                        const char* typeName) {
-  base::trace_event::AllocationContext context =
-      base::trace_event::AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
+  base::trace_event::AllocationContext context;
+  if (!base::trace_event::AllocationContextTracker::
+           GetInstanceForCurrentThread()
+               ->GetContextSnapshot(&context))
+    return;
   context.type_name = typeName;
   MutexLocker locker(m_allocationRegisterMutex);
   if (m_allocationRegister)

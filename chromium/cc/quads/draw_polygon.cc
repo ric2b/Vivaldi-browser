@@ -43,9 +43,12 @@ DrawPolygon::DrawPolygon(const DrawQuad* original,
   for (size_t i = 0; i < in_points.size(); i++) {
     points_.push_back(in_points[i]);
   }
+#if DCHECK_IS_ON()
   normal_ = normal;
-  DCHECK_LE((ConstructNormal(), (normal_ - normal).Length()),
-            normalized_threshold);
+  ConstructNormal();
+  DCHECK_LE((normal_ - normal).Length(), normalized_threshold);
+#endif
+  normal_ = normal;
 }
 
 // This takes the original DrawQuad that this polygon should be based on,
@@ -59,7 +62,7 @@ DrawPolygon::DrawPolygon(const DrawQuad* original_ref,
       order_index_(draw_order_index),
       original_ref_(original_ref),
       is_split_(false) {
-  gfx::Point3F points[8];
+  gfx::Point3F points[6];
   int num_vertices_in_clipped_quad;
   gfx::QuadF send_quad(visible_layer_rect);
 

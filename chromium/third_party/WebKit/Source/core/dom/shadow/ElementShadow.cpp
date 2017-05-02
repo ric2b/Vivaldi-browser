@@ -27,6 +27,7 @@
 #include "core/dom/shadow/ElementShadow.h"
 
 #include "core/css/StyleSheetList.h"
+#include "core/css/resolver/ScopedStyleResolver.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/shadow/ElementShadowV0.h"
 #include "core/frame/Deprecation.h"
@@ -44,8 +45,6 @@ ElementShadow::ElementShadow()
     : m_elementShadowV0(this, nullptr),
       m_shadowRoot(this, nullptr),
       m_needsDistributionRecalc(false) {}
-
-ElementShadow::~ElementShadow() {}
 
 ShadowRoot& ElementShadow::youngestShadowRoot() const {
   ShadowRoot* current = m_shadowRoot;
@@ -141,17 +140,11 @@ bool ElementShadow::hasSameStyles(const ElementShadow& other) const {
     if (!root || !otherRoot)
       return false;
 
-    StyleSheetList& list = root->styleSheets();
-    StyleSheetList& otherList = otherRoot->styleSheets();
-
-    if (list.length() != otherList.length())
+    if (!ScopedStyleResolver::haveSameStyles(
+            root->scopedStyleResolver(), otherRoot->scopedStyleResolver())) {
       return false;
-
-    for (size_t i = 0; i < list.length(); i++) {
-      if (toCSSStyleSheet(list.item(i))->contents() !=
-          toCSSStyleSheet(otherList.item(i))->contents())
-        return false;
     }
+
     root = root->olderShadowRoot();
     otherRoot = otherRoot->olderShadowRoot();
   }

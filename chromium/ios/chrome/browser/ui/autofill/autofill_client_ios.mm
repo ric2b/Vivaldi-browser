@@ -24,18 +24,25 @@
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/infobars/infobar_utils.h"
+#include "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_bridge.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_manager.h"
+#include "ios/web/public/ssl_status.h"
+#import "ios/web/public/web_state/web_state.h"
 
 namespace autofill {
 
 AutofillClientIOS::AutofillClientIOS(
     ios::ChromeBrowserState* browser_state,
+    web::WebState* web_state,
     infobars::InfoBarManager* infobar_manager,
     id<AutofillClientIOSBridge> bridge,
     password_manager::PasswordGenerationManager* password_generation_manager,
     std::unique_ptr<IdentityProvider> identity_provider)
     : browser_state_(browser_state),
+      web_state_(web_state),
       infobar_manager_(infobar_manager),
       bridge_(bridge),
       password_generation_manager_(password_generation_manager),
@@ -65,8 +72,8 @@ IdentityProvider* AutofillClientIOS::GetIdentityProvider() {
   return identity_provider_.get();
 }
 
-rappor::RapporService* AutofillClientIOS::GetRapporService() {
-  return GetApplicationContext()->GetRapporService();
+rappor::RapporServiceImpl* AutofillClientIOS::GetRapporServiceImpl() {
+  return GetApplicationContext()->GetRapporServiceImpl();
 }
 
 void AutofillClientIOS::ShowAutofillSettings() {
@@ -77,10 +84,11 @@ void AutofillClientIOS::ShowUnmaskPrompt(
     const CreditCard& card,
     UnmaskCardReason reason,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
-  ios::ChromeBrowserProvider* provider = ios::GetChromeBrowserProvider();
   unmask_controller_.ShowPrompt(
-      provider->CreateCardUnmaskPromptView(&unmask_controller_), card, reason,
-      delegate);
+      // autofill::CardUnmaskPromptViewBridge manages its own lifetime, so
+      // do not use std::unique_ptr<> here.
+      new autofill::CardUnmaskPromptViewBridge(&unmask_controller_), card,
+      reason, delegate);
 }
 
 void AutofillClientIOS::OnUnmaskVerificationResult(PaymentsRpcResult result) {
@@ -177,10 +185,20 @@ scoped_refptr<AutofillWebDataService> AutofillClientIOS::GetDatabase() {
       browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
-bool AutofillClientIOS::IsContextSecure(const GURL& form_origin) {
-  // TODO (sigbjorn): Return if the context is secure, not just
-  // the form_origin. See crbug.com/505388.
-  return form_origin.SchemeIsCryptographic();
+bool AutofillClientIOS::IsContextSecure() {
+  // This implementation differs slightly from other platforms. Other platforms'
+  // implementations check for the presence of active mixed content, but because
+  // the iOS web view blocks active mixed content without an option to run it,
+  // there is no need to check for active mixed conent here.
+  web::NavigationManager* manager = web_state_->GetNavigationManager();
+  web::NavigationItem* nav_item = manager->GetLastCommittedItem();
+  if (!nav_item)
+    return false;
+
+  const web::SSLStatus& ssl = nav_item->GetSSL();
+  return nav_item->GetURL().SchemeIsCryptographic() && ssl.certificate &&
+         (!net::IsCertStatusError(ssl.cert_status) ||
+          net::IsCertStatusMinorError(ssl.cert_status));
 }
 
 void AutofillClientIOS::OnFirstUserGestureObserved() {
@@ -194,6 +212,10 @@ bool AutofillClientIOS::ShouldShowSigninPromo() {
 }
 
 void AutofillClientIOS::StartSigninFlow() {
+  NOTIMPLEMENTED();
+}
+
+void AutofillClientIOS::ShowHttpNotSecureExplanation() {
   NOTIMPLEMENTED();
 }
 

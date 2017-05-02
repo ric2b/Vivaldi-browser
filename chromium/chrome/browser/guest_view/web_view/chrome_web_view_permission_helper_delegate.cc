@@ -19,6 +19,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "ppapi/features/features.h"
 
 namespace extensions {
 
@@ -40,7 +41,7 @@ ChromeWebViewPermissionHelperDelegate::ChromeWebViewPermissionHelperDelegate(
 ChromeWebViewPermissionHelperDelegate::~ChromeWebViewPermissionHelperDelegate()
 {}
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 bool ChromeWebViewPermissionHelperDelegate::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
@@ -60,8 +61,6 @@ bool ChromeWebViewPermissionHelperDelegate::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(ChromeWebViewPermissionHelperDelegate, message)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_CouldNotLoadPlugin,
                         OnCouldNotLoadPlugin)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_OpenAboutPlugins,
-                        OnOpenAboutPlugins)
 #if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_RemovePluginPlaceholderHost,
                         OnRemovePluginPlaceholderHost)
@@ -101,9 +100,6 @@ void ChromeWebViewPermissionHelperDelegate::OnBlockedOutdatedPlugin(
     const std::string& identifier) {
 }
 
-void ChromeWebViewPermissionHelperDelegate::OnOpenAboutPlugins() {
-}
-
 #if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 void ChromeWebViewPermissionHelperDelegate::OnRemovePluginPlaceholderHost(
     int placeholder_id) {
@@ -120,7 +116,7 @@ void ChromeWebViewPermissionHelperDelegate::OnPermissionResponse(
   }
 }
 
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 void ChromeWebViewPermissionHelperDelegate::CanDownload(
     const GURL& url,

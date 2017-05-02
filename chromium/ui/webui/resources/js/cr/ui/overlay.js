@@ -13,7 +13,7 @@ cr.define('cr.ui.overlay', function() {
    * @return {HTMLElement} The overlay.
    */
   function getTopOverlay() {
-    var overlays = /** @type !NodeList<!HTMLElement> */(
+    var overlays = /** @type !NodeList<!HTMLElement> */ (
         document.querySelectorAll('.overlay:not([hidden])'));
     return overlays[overlays.length - 1];
   }
@@ -26,8 +26,10 @@ cr.define('cr.ui.overlay', function() {
    * @return {HTMLElement} The default button.
    */
   function getDefaultButton(overlay) {
-    function isHidden(node) { return node.hidden; }
-    var defaultButtons = /** @type !NodeList<!HTMLElement> */(
+    function isHidden(node) {
+      return node.hidden;
+    }
+    var defaultButtons = /** @type !NodeList<!HTMLElement> */ (
         overlay.querySelectorAll('.page .button-strip > .default-button'));
     for (var i = 0; i < defaultButtons.length; i++) {
       if (!findAncestor(defaultButtons[i], isHidden))
@@ -81,8 +83,7 @@ cr.define('cr.ui.overlay', function() {
    * height.
    */
   function setMaxHeightAllPages() {
-    var pages = document.querySelectorAll(
-        '.overlay .page:not(.not-resizable)');
+    var pages = document.querySelectorAll('.overlay .page:not(.not-resizable)');
 
     var maxHeight = Math.min(0.9 * window.innerHeight, 640) + 'px';
     for (var i = 0; i < pages.length; i++)

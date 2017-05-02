@@ -19,14 +19,14 @@
 #include "net/socket/udp_socket.h"
 
 namespace net {
-class IOBuffer;
 class IPEndPoint;
 class StringIOBuffer;
 class NetLog;
-struct NetworkInterface;
 }
 
 namespace extensions {
+namespace api {
+namespace dial {
 
 class DialDeviceData;
 
@@ -292,6 +292,8 @@ class DialServiceImpl : public DialService {
   DISALLOW_COPY_AND_ASSIGN(DialServiceImpl);
 };
 
+}  // namespace dial
+}  // namespace api
 }  // namespace extensions
 
 #endif  // CHROME_BROWSER_EXTENSIONS_API_DIAL_DIAL_SERVICE_H_

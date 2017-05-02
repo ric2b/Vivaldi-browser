@@ -5,6 +5,7 @@
 #ifndef CC_OUTPUT_BEGIN_FRAME_ARGS_H_
 #define CC_OUTPUT_BEGIN_FRAME_ARGS_H_
 
+#include <stdint.h>
 #include <memory>
 
 #include "base/location.h"
@@ -49,6 +50,9 @@ struct CC_EXPORT BeginFrameArgs {
   };
   static const char* TypeToString(BeginFrameArgsType type);
 
+  static constexpr uint64_t kInvalidFrameNumber = 0;
+  static constexpr uint64_t kStartingFrameNumber = 1;
+
   // Creates an invalid set of values.
   BeginFrameArgs();
 
@@ -63,6 +67,8 @@ struct CC_EXPORT BeginFrameArgs {
   // created by searching for "BeginFrameArgs::Create".
   // The location argument should **always** be BEGINFRAME_FROM_HERE macro.
   static BeginFrameArgs Create(CreationLocation location,
+                               uint32_t source_id,
+                               uint64_t sequence_number,
                                base::TimeTicks frame_time,
                                base::TimeTicks deadline,
                                base::TimeDelta interval,
@@ -84,14 +90,81 @@ struct CC_EXPORT BeginFrameArgs {
   base::TimeTicks frame_time;
   base::TimeTicks deadline;
   base::TimeDelta interval;
+
+  // |source_id| and |sequence_number| identify a BeginFrame within a single
+  // process and are set by the original BeginFrameSource that created the
+  // BeginFrameArgs. When |source_id| of consecutive BeginFrameArgs changes,
+  // observers should expect the continuity of |sequence_number| to break.
+  uint64_t sequence_number;
+  uint32_t source_id;  // |source_id| after |sequence_number| for packing.
+
   BeginFrameArgsType type;
   bool on_critical_path;
 
  private:
-  BeginFrameArgs(base::TimeTicks frame_time,
+  BeginFrameArgs(uint32_t source_id,
+                 uint64_t sequence_number,
+                 base::TimeTicks frame_time,
                  base::TimeTicks deadline,
                  base::TimeDelta interval,
                  BeginFrameArgsType type);
+};
+
+// Sent by a BeginFrameObserver as acknowledgment of completing a BeginFrame.
+struct CC_EXPORT BeginFrameAck {
+  BeginFrameAck();
+  BeginFrameAck(uint32_t source_id,
+                uint64_t sequence_number,
+                uint64_t latest_confirmed_sequence_number,
+                uint32_t remaining_frames,
+                bool has_damage);
+
+  // Sequence number of the BeginFrame that is acknowledged.
+  uint64_t sequence_number;
+
+  // Sequence number of the latest BeginFrame that was positively acknowledged
+  // (confirmed) by the observer.
+  //
+  // There are two scenarios for a positive acknowledgment:
+  //  a) All of the observer's pending updates led to successful damage (e.g. a
+  //     CompositorFrame or a damaged surface).
+  //  b) The observer did not have any updates and thus did not need to
+  //     produce damage.
+  // A negative acknowledgment, in contrast, describes a situation in which the
+  // observer had pending updates, but was unable to successfully produce
+  // corresponding damage for all its updates in time.
+  //
+  // As a result, |latest_confirmed_sequence_number| describes the "staleness"
+  // of the last damage that was produced by the observer. Note that even if
+  // |has_damage == true|, the damage produced as a result of the acknowledged
+  // BeginFrame may be stale
+  // (|latest_confirmed_sequence_number < sequence_number|). In such a case, the
+  // damage that was produced may contain updates from previous BeginFrames or
+  // only part of this BeginFrame's updates.
+  //
+  // Observers aggregate the |latest_confirmed_sequence_number| of their
+  // children: The compositor Scheduler indicates the latest BeginFrame that
+  // both impl and main thread confirmed. Likewise, the DisplayScheduler
+  // indicates the minimum |latest_confirmed_sequence_number| that all its
+  // BeginFrameObservers acknowledged.
+  // TODO(eseckler): Set this in Scheduler / DisplayScheduler and other
+  // observers according to above comment.
+  uint64_t latest_confirmed_sequence_number;
+
+  // Source identifier of the BeginFrame that is acknowledged. The
+  // BeginFrameSource that receives the acknowledgment uses this to discard
+  // BeginFrameAcks for BeginFrames sent by a different source. Such a situation
+  // may occur when the BeginFrameSource of the observer changes while a
+  // BeginFrame from the old source is still in flight.
+  uint32_t source_id;  // |source_id| after above fields for packing.
+
+  // Number of BeginFrames queued at the observer at time of acknowledgment.
+  // TODO(eseckler): Remove this field and replace with ack-tracking if needed.
+  uint32_t remaining_frames;
+
+  // |true| if the observer has produced damage (e.g. sent a CompositorFrame or
+  // damaged a surface) as part of responding to the BeginFrame.
+  bool has_damage;
 };
 
 }  // namespace cc

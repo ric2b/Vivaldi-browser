@@ -20,6 +20,8 @@ bool enable_for_testing_ = false;
 // Options for the quick unlock whitelist.
 const char kQuickUnlockWhitelistOptionAll[] = "all";
 const char kQuickUnlockWhitelistOptionPin[] = "PIN";
+// Default minimum PIN length. Policy can increase or decrease this value.
+constexpr int kDefaultMinimumPinLength = 6;
 }  // namespace
 
 void RegisterQuickUnlockProfilePrefs(PrefRegistrySimple* registry) {
@@ -30,6 +32,13 @@ void RegisterQuickUnlockProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::kQuickUnlockTimeout,
       static_cast<int>(QuickUnlockPasswordConfirmationFrequency::DAY));
+
+  // Preferences related the lock screen pin unlock.
+  registry->RegisterIntegerPref(prefs::kPinUnlockMinimumLength,
+                                kDefaultMinimumPinLength);
+  // 0 indicates no maximum length for the pin.
+  registry->RegisterIntegerPref(prefs::kPinUnlockMaximumLength, 0);
+  registry->RegisterBooleanPref(prefs::kPinUnlockWeakPinsAllowed, true);
 }
 
 bool IsPinUnlockEnabled(PrefService* pref_service) {
@@ -47,12 +56,6 @@ bool IsPinUnlockEnabled(PrefService* pref_service) {
           quick_unlock_whitelist->end()) {
     return false;
   }
-
-  // PIN for enterprise is disabled in m56 as it is not fully implemented.
-  if (g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->IsEnterpriseManaged())
-    return false;
 
   // TODO(jdufault): Disable PIN for supervised users until we allow the owner
   // to set the PIN. See crbug.com/632797.

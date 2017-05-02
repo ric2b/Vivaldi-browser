@@ -43,7 +43,9 @@ cr.define('cr.ui', function() {
       else
         this.lastFocused_ = e.currentTarget;
 
-      this.rows.forEach(function(r) { r.makeActive(r == row); });
+      this.rows.forEach(function(r) {
+        r.makeActive(r == row);
+      });
     },
 
     /** @override */
@@ -77,7 +79,9 @@ cr.define('cr.ui', function() {
      * Unregisters event handlers and removes all |this.rows|.
      */
     destroy: function() {
-      this.rows.forEach(function(row) { row.destroy(); });
+      this.rows.forEach(function(row) {
+        row.destroy();
+      });
       this.rows.length = 0;
     },
 
@@ -142,8 +146,11 @@ cr.define('cr.ui', function() {
     /**
      * Makes sure that at least one row is active. Should be called once, after
      * adding all rows to FocusGrid.
+     * @param {number=} preferredRow The row to select if no other row is
+     *     active. Selects the first item if this is beyond the range of the
+     *     grid.
      */
-    ensureRowActive: function() {
+    ensureRowActive: function(preferredRow) {
       if (this.rows.length == 0)
         return;
 
@@ -152,7 +159,7 @@ cr.define('cr.ui', function() {
           return;
       }
 
-      this.rows[0].makeActive(true);
+      (this.rows[preferredRow || 0] || this.rows[0]).makeActive(true);
     },
   };
 

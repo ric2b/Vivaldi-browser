@@ -38,14 +38,16 @@ class MockServiceWorkerContextClient : public WebServiceWorkerContextClient {
   void setHasAssociatedRegistration(bool hasAssociatedRegistration) {
     m_hasAssociatedRegistration = hasAssociatedRegistration;
   }
-  void getClient(const WebString&, WebServiceWorkerClientCallbacks*) override {
+  void getClient(const WebString&,
+                 std::unique_ptr<WebServiceWorkerClientCallbacks>) override {
     NOTREACHED();
   }
   void getClients(const WebServiceWorkerClientQueryOptions&,
-                  WebServiceWorkerClientsCallbacks*) override {
+                  std::unique_ptr<WebServiceWorkerClientsCallbacks>) override {
     NOTREACHED();
   }
-  void openWindow(const WebURL&, WebServiceWorkerClientCallbacks*) override {
+  void openWindow(const WebURL&,
+                  std::unique_ptr<WebServiceWorkerClientCallbacks>) override {
     NOTREACHED();
   }
   void postMessageToClient(const WebString& uuid,
@@ -53,21 +55,20 @@ class MockServiceWorkerContextClient : public WebServiceWorkerContextClient {
                            WebMessagePortChannelArray*) override {
     NOTREACHED();
   }
-  void postMessageToCrossOriginClient(const WebCrossOriginServiceWorkerClient&,
-                                      const WebString&,
-                                      WebMessagePortChannelArray*) override {
+  void skipWaiting(
+      std::unique_ptr<WebServiceWorkerSkipWaitingCallbacks>) override {
     NOTREACHED();
   }
-  void skipWaiting(WebServiceWorkerSkipWaitingCallbacks*) override {
+  void claim(std::unique_ptr<WebServiceWorkerClientsClaimCallbacks>) override {
     NOTREACHED();
   }
-  void claim(WebServiceWorkerClientsClaimCallbacks*) override { NOTREACHED(); }
-  void focus(const WebString& uuid, WebServiceWorkerClientCallbacks*) override {
+  void focus(const WebString& uuid,
+             std::unique_ptr<WebServiceWorkerClientCallbacks>) override {
     NOTREACHED();
   }
   void navigate(const WebString& uuid,
                 const WebURL&,
-                WebServiceWorkerClientCallbacks*) override {
+                std::unique_ptr<WebServiceWorkerClientCallbacks>) override {
     NOTREACHED();
   }
   void registerForeignFetchScopes(
@@ -84,7 +85,8 @@ class WebEmbeddedWorkerImplTest : public ::testing::Test {
  protected:
   void SetUp() override {
     m_mockClient = new MockServiceWorkerContextClient();
-    m_worker = wrapUnique(WebEmbeddedWorker::create(m_mockClient, nullptr));
+    m_worker =
+        WTF::wrapUnique(WebEmbeddedWorker::create(m_mockClient, nullptr));
 
     WebURL scriptURL = URLTestHelpers::toKURL("https://www.example.com/sw.js");
     WebURLResponse response;

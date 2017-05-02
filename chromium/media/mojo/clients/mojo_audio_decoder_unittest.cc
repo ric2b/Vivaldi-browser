@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
@@ -59,7 +60,7 @@ class MojoAudioDecoderTest : public ::testing::Test {
         FROM_HERE,
         base::Bind(&MojoAudioDecoderTest::ConnectToService,
                    base::Unretained(this),
-                   base::Passed(mojo::GetProxy(&remote_audio_decoder))));
+                   base::Passed(mojo::MakeRequest(&remote_audio_decoder))));
     mojo_audio_decoder_.reset(new MojoAudioDecoder(
         message_loop_.task_runner(), std::move(remote_audio_decoder)));
   }
@@ -83,19 +84,19 @@ class MojoAudioDecoderTest : public ::testing::Test {
   // running the loop because we cannot run the same loop more than once.
 
   void RunLoop() {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     run_loop_.reset(new base::RunLoop());
     run_loop_->Run();
   }
 
   void RunLoopUntilIdle() {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     run_loop_.reset(new base::RunLoop());
     run_loop_->RunUntilIdle();
   }
 
   void QuitLoop() {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     run_loop_->QuitWhenIdle();
   }
 
@@ -107,11 +108,13 @@ class MojoAudioDecoderTest : public ::testing::Test {
     mock_audio_decoder_ = mock_audio_decoder.get();
 
     EXPECT_CALL(*mock_audio_decoder_, Initialize(_, _, _, _))
-        .WillOnce(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(true)));
+        .WillRepeatedly(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(true)));
     EXPECT_CALL(*mock_audio_decoder_, Decode(_, _))
         .WillRepeatedly(
             DoAll(InvokeWithoutArgs(this, &MojoAudioDecoderTest::ReturnOutput),
                   RunCallback<1>(DecodeStatus::OK)));
+    EXPECT_CALL(*mock_audio_decoder_, Reset(_))
+        .WillRepeatedly(RunCallback<0>());
 
     mojo::MakeStrongBinding(base::MakeUnique<MojoAudioDecoderService>(
                                 mojo_cdm_service_context_.GetWeakPtr(),
@@ -120,7 +123,7 @@ class MojoAudioDecoderTest : public ::testing::Test {
   }
 
   void InitializeAndExpect(bool success) {
-    DVLOG(1) << __FUNCTION__ << ": success=" << success;
+    DVLOG(1) << __func__ << ": success=" << success;
     EXPECT_CALL(*this, OnInitialized(success))
         .WillOnce(InvokeWithoutArgs(this, &MojoAudioDecoderTest::QuitLoop));
 
@@ -137,6 +140,16 @@ class MojoAudioDecoderTest : public ::testing::Test {
   }
 
   void Initialize() { InitializeAndExpect(true); }
+
+  void Reset() {
+    DVLOG(1) << __func__;
+    EXPECT_CALL(*this, OnReset())
+        .WillOnce(InvokeWithoutArgs(this, &MojoAudioDecoderTest::QuitLoop));
+
+    mojo_audio_decoder_->Reset(
+        base::Bind(&MojoAudioDecoderTest::OnReset, base::Unretained(this)));
+    RunLoop();
+  }
 
   void ReturnOutput() {
     for (int i = 0; i < kOutputPerDecode; ++i) {
@@ -207,6 +220,15 @@ class MojoAudioDecoderTest : public ::testing::Test {
 };
 
 TEST_F(MojoAudioDecoderTest, Initialize_Success) {
+  Initialize();
+}
+
+TEST_F(MojoAudioDecoderTest, Reinitialize_Success) {
+  Initialize();
+  DecodeMultipleTimes(10);
+  Reset();
+
+  // Reinitialize MojoAudioDecoder.
   Initialize();
 }
 

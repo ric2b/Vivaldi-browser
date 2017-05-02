@@ -59,7 +59,7 @@ static void sampleGamepads(ListType* into) {
 
   for (unsigned i = 0; i < WebGamepads::itemsLengthCap; ++i) {
     WebGamepad& webGamepad = gamepads.items[i];
-    if (i < gamepads.length && webGamepad.connected) {
+    if (webGamepad.connected) {
       GamepadType* gamepad = into->item(i);
       if (!gamepad)
         gamepad = GamepadType::create();
@@ -130,8 +130,7 @@ void NavigatorGamepad::didUpdateData() {
   if (!m_hasEventListener)
     return;
 
-  if (document->activeDOMObjectsAreStopped() ||
-      document->activeDOMObjectsAreSuspended())
+  if (document->isContextDestroyed() || document->isContextSuspended())
     return;
 
   const GamepadDispatcher::ConnectionChange& change =
@@ -174,7 +173,7 @@ NavigatorGamepad::NavigatorGamepad(LocalFrame* frame)
           this,
           &NavigatorGamepad::dispatchOneEvent)) {
   if (frame)
-    frame->localDOMWindow()->registerEventListenerObserver(this);
+    frame->domWindow()->registerEventListenerObserver(this);
 }
 
 NavigatorGamepad::~NavigatorGamepad() {}
@@ -183,7 +182,7 @@ const char* NavigatorGamepad::supplementName() {
   return "NavigatorGamepad";
 }
 
-void NavigatorGamepad::contextDestroyed() {
+void NavigatorGamepad::contextDestroyed(ExecutionContext*) {
   stopUpdating();
 }
 

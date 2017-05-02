@@ -294,18 +294,18 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
                              blink::WebMouseEvent::Button button,
                              int x,
                              int y) {
-    blink::WebMouseEvent mouse_event;
+    blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                     blink::WebInputEvent::NoModifiers,
+                                     blink::WebInputEvent::TimeStampForTesting);
     mouse_event.button = button;
     mouse_event.x = mouse_event.windowX = x;
     mouse_event.y = mouse_event.windowY = y;
-    mouse_event.modifiers = 0;
     // Needed for the WebViewTest.ContextMenuPositionAfterCSSTransforms
     gfx::Rect rect = rwh->GetView()->GetViewBounds();
     mouse_event.globalX = x + rect.x();
     mouse_event.globalY = y + rect.y();
-    mouse_event.type = blink::WebInputEvent::MouseDown;
     rwh->ForwardMouseEvent(mouse_event);
-    mouse_event.type = blink::WebInputEvent::MouseUp;
+    mouse_event.setType(blink::WebInputEvent::MouseUp);
     rwh->ForwardMouseEvent(mouse_event);
   }
 
@@ -513,7 +513,9 @@ class WebViewInteractiveTest : public WebViewInteractiveTestBase,
   }
 };
 
+class WebViewDragDropInteractiveTest : public WebViewInteractiveTest {};
 class WebViewNewWindowInteractiveTest : public WebViewInteractiveTest {};
+class WebViewPointerLockInteractiveTest : public WebViewInteractiveTest {};
 
 // The tests below aren't needed in --use-cross-process-frames-for-guests.
 class WebViewContextMenuInteractiveTest : public WebViewInteractiveTestBase {};
@@ -523,15 +525,21 @@ class WebViewContextMenuInteractiveTest : public WebViewInteractiveTestBase {};
 // with WebViewInteractiveTest (see crbug.com/582562).
 class WebViewFocusInteractiveTest : public WebViewInteractiveTestBase {};
 class WebViewPopupInteractiveTest : public WebViewInteractiveTestBase {};
-class WebViewPointerLockInteractiveTest : public WebViewInteractiveTestBase {};
-class WebViewDragDropInteractiveTest : public WebViewInteractiveTestBase {};
 
 INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
                         WebViewInteractiveTest,
                         testing::Bool());
 
 INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
+                        WebViewDragDropInteractiveTest,
+                        testing::Bool());
+
+INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
                         WebViewNewWindowInteractiveTest,
+                        testing::Bool());
+
+INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
+                        WebViewPointerLockInteractiveTest,
                         testing::Bool());
 
 // ui_test_utils::SendMouseMoveSync doesn't seem to work on OS_MACOSX, and
@@ -544,7 +552,7 @@ INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
 
 #if defined(OS_LINUX)
 // flaky http://crbug.com/412086
-IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewPointerLockInteractiveTest,
                        DISABLED_PointerLock) {
   SetupTest("web_view/pointer_lock",
             "/extensions/platform_apps/web_view/pointer_lock/guest.html");
@@ -618,7 +626,7 @@ IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
 }
 
 // flaky http://crbug.com/412086
-IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewPointerLockInteractiveTest,
                        DISABLED_PointerLockFocus) {
   SetupTest("web_view/pointer_lock_focus",
             "/extensions/platform_apps/web_view/pointer_lock_focus/guest.html");
@@ -1033,7 +1041,7 @@ IN_PROC_BROWSER_TEST_F(WebViewPopupInteractiveTest,
 // but the tests don't work on anything except chromeos for now. This is because
 // of simulating mouse drag code's dependency on platforms.
 #if defined(OS_CHROMEOS) && !defined(USE_OZONE)
-IN_PROC_BROWSER_TEST_F(WebViewDragDropInteractiveTest, DragDropWithinWebView) {
+IN_PROC_BROWSER_TEST_P(WebViewDragDropInteractiveTest, DragDropWithinWebView) {
   LoadAndLaunchPlatformApp("web_view/dnd_within_webview", "connected");
   ASSERT_TRUE(ui_test_utils::ShowAndFocusNativeWindow(GetPlatformAppWindow()));
 
@@ -1106,8 +1114,16 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, Navigation_BackForwardKeys) {
   ASSERT_TRUE(done_listener.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
-                       PointerLock_PointerLockLostWithFocus) {
+// Flaky on Linux: crbug.com/678267
+#if defined(OS_LINUX)
+#define MAYBE_PointerLock_PointerLockLostWithFocus \
+  DISABLED_PointerLock_PointerLockLostWithFocus
+#else
+#define MAYBE_PointerLock_PointerLockLostWithFocus \
+  PointerLock_PointerLockLostWithFocus
+#endif
+IN_PROC_BROWSER_TEST_P(WebViewPointerLockInteractiveTest,
+                       MAYBE_PointerLock_PointerLockLostWithFocus) {
   TestHelper("testPointerLockLostWithFocus",
              "web_view/pointerlock",
              NO_TEST_SERVER);
@@ -1325,7 +1341,14 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, TextSelection) {
 }
 #endif
 
-IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, FocusAndVisibility) {
+// Flaky on MacOS builders. https://crbug.com/670008
+#if defined(OS_MACOSX)
+#define MAYBE_FocusAndVisibility DISABLED_FocusAndVisibility
+#else
+#define MAYBE_FocusAndVisibility FocusAndVisibility
+#endif
+
+IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, MAYBE_FocusAndVisibility) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   LoadAndLaunchPlatformApp("web_view/focus_visibility",
                            "WebViewInteractiveTest.LOADED");

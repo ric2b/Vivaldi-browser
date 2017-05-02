@@ -49,15 +49,22 @@ class CORE_EXPORT HTMLTableCellElement final : public HTMLTablePartElement {
   void setColSpan(unsigned);
   const AtomicString& headers() const;
   void setRowSpan(unsigned);
-  const AtomicString& scope() const;
-  void setScope(const AtomicString&);
+
+  // Rowspan: match Firefox's limit of 65,534. Edge has a higher limit, at
+  // least 2^17.
+  // Colspan: Firefox uses a limit of 1,000 for colspan and resets the value to
+  // 1.
+  // TODO(dgrogan): Change these to HTML's new specified behavior when
+  // https://github.com/whatwg/html/issues/1198 is resolved.
+  // Public so that HTMLColElement can use maxColSpan. maxRowSpan is only used
+  // by this class but keeping them together seems desirable.
+  static unsigned maxColSpan() { return 8190u; }
+  static unsigned maxRowSpan() { return 65534u; }
 
  private:
   HTMLTableCellElement(const QualifiedName&, Document&);
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,

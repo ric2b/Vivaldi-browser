@@ -5,6 +5,7 @@ var PRIVATE_CONSTANTS = {
   ATTRIBUTE_WINDOW_ID: 'window_id',
   ATTRIBUTE_WASTYPED: 'wasTyped',
   ATTRIBUTE_EXTENSIONHOST: 'extensionhost',
+  ATTRIBUTE_GUESTCONTENT_ID: 'guestcontent_id',
 };
 
 function addPrivateConstants(WebViewConstants) {

@@ -25,7 +25,7 @@
 
 #include "core/html/track/TextTrackList.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/events/GenericEventQueue.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/InbandTextTrack.h"
@@ -47,7 +47,7 @@ unsigned TextTrackList::length() const {
 
 int TextTrackList::getTrackIndex(TextTrack* textTrack) {
   if (textTrack->trackType() == TextTrack::TrackElement)
-    return static_cast<LoadableTextTrack*>(textTrack)->trackElementIndex();
+    return toLoadableTextTrack(textTrack)->trackElementIndex();
 
   if (textTrack->trackType() == TextTrack::AddTrack)
     return m_elementTracks.size() + m_addTrackTracks.find(textTrack);
@@ -67,29 +67,29 @@ int TextTrackList::getTrackIndexRelativeToRenderedTracks(TextTrack* textTrack) {
   // track."
   int trackIndex = 0;
 
-  for (size_t i = 0; i < m_elementTracks.size(); ++i) {
-    if (!m_elementTracks[i]->isRendered())
+  for (const auto& track : m_elementTracks) {
+    if (!track->isRendered())
       continue;
 
-    if (m_elementTracks[i] == textTrack)
+    if (track == textTrack)
       return trackIndex;
     ++trackIndex;
   }
 
-  for (size_t i = 0; i < m_addTrackTracks.size(); ++i) {
-    if (!m_addTrackTracks[i]->isRendered())
+  for (const auto& track : m_addTrackTracks) {
+    if (!track->isRendered())
       continue;
 
-    if (m_addTrackTracks[i] == textTrack)
+    if (track == textTrack)
       return trackIndex;
     ++trackIndex;
   }
 
-  for (size_t i = 0; i < m_inbandTracks.size(); ++i) {
-    if (!m_inbandTracks[i]->isRendered())
+  for (const auto& track : m_inbandTracks) {
+    if (!track->isRendered())
       continue;
 
-    if (m_inbandTracks[i] == textTrack)
+    if (track == textTrack)
       return trackIndex;
     ++trackIndex;
   }
@@ -144,14 +144,14 @@ void TextTrackList::invalidateTrackIndexesAfterTrack(TextTrack* track) {
 
   if (track->trackType() == TextTrack::TrackElement) {
     tracks = &m_elementTracks;
-    for (size_t i = 0; i < m_addTrackTracks.size(); ++i)
-      m_addTrackTracks[i]->invalidateTrackIndex();
-    for (size_t i = 0; i < m_inbandTracks.size(); ++i)
-      m_inbandTracks[i]->invalidateTrackIndex();
+    for (const auto& addTrack : m_addTrackTracks)
+      addTrack->invalidateTrackIndex();
+    for (const auto& inbandTrack : m_inbandTracks)
+      inbandTrack->invalidateTrackIndex();
   } else if (track->trackType() == TextTrack::AddTrack) {
     tracks = &m_addTrackTracks;
-    for (size_t i = 0; i < m_inbandTracks.size(); ++i)
-      m_inbandTracks[i]->invalidateTrackIndex();
+    for (const auto& inbandTrack : m_inbandTracks)
+      inbandTrack->invalidateTrackIndex();
   } else if (track->trackType() == TextTrack::InBand) {
     tracks = &m_inbandTracks;
   } else {
@@ -168,13 +168,13 @@ void TextTrackList::invalidateTrackIndexesAfterTrack(TextTrack* track) {
 
 void TextTrackList::append(TextTrack* track) {
   if (track->trackType() == TextTrack::AddTrack) {
-    m_addTrackTracks.append(TraceWrapperMember<TextTrack>(this, track));
+    m_addTrackTracks.push_back(TraceWrapperMember<TextTrack>(this, track));
   } else if (track->trackType() == TextTrack::TrackElement) {
     // Insert tracks added for <track> element in tree order.
-    size_t index = static_cast<LoadableTextTrack*>(track)->trackElementIndex();
+    size_t index = toLoadableTextTrack(track)->trackElementIndex();
     m_elementTracks.insert(index, TraceWrapperMember<TextTrack>(this, track));
   } else if (track->trackType() == TextTrack::InBand) {
-    m_inbandTracks.append(TraceWrapperMember<TextTrack>(this, track));
+    m_inbandTracks.push_back(TraceWrapperMember<TextTrack>(this, track));
   } else {
     NOTREACHED();
   }
@@ -215,8 +215,8 @@ void TextTrackList::remove(TextTrack* track) {
 }
 
 void TextTrackList::removeAllInbandTracks() {
-  for (unsigned i = 0; i < m_inbandTracks.size(); ++i) {
-    m_inbandTracks[i]->setTrackList(0);
+  for (const auto& track : m_inbandTracks) {
+    track->setTrackList(0);
   }
   m_inbandTracks.clear();
 }

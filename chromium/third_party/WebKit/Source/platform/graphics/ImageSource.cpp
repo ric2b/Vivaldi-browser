@@ -33,7 +33,8 @@
 
 namespace blink {
 
-ImageSource::ImageSource() {}
+ImageSource::ImageSource()
+    : m_decoderColorBehavior(ColorBehavior::transformToGlobalTarget()) {}
 
 ImageSource::~ImageSource() {}
 
@@ -48,9 +49,10 @@ PassRefPtr<SharedBuffer> ImageSource::data() {
 bool ImageSource::setData(PassRefPtr<SharedBuffer> passData,
                           bool allDataReceived) {
   RefPtr<SharedBuffer> data = passData;
+  m_allDataReceived = allDataReceived;
 
   if (m_decoder) {
-    m_decoder->setData(data.release(), allDataReceived);
+    m_decoder->setData(std::move(data), allDataReceived);
     // If the decoder is pre-instantiated, it means we've already validated the
     // data/signature at some point.
     return true;
@@ -58,7 +60,7 @@ bool ImageSource::setData(PassRefPtr<SharedBuffer> passData,
 
   m_decoder = DeferredImageDecoder::create(data, allDataReceived,
                                            ImageDecoder::AlphaPremultiplied,
-                                           ImageDecoder::ColorSpaceApplied);
+                                           m_decoderColorBehavior);
 
   // Insufficient data is not a failure.
   return m_decoder || !ImageDecoder::hasSufficientDataToSniffImageType(*data);
@@ -107,9 +109,21 @@ size_t ImageSource::frameCount() const {
   return m_decoder ? m_decoder->frameCount() : 0;
 }
 
-sk_sp<SkImage> ImageSource::createFrameAtIndex(size_t index) {
+sk_sp<SkImage> ImageSource::createFrameAtIndex(
+    size_t index,
+    const ColorBehavior& colorBehavior) {
   if (!m_decoder)
     return nullptr;
+
+  if (colorBehavior != m_decoderColorBehavior) {
+    m_decoder = DeferredImageDecoder::create(data(), m_allDataReceived,
+                                             ImageDecoder::AlphaPremultiplied,
+                                             colorBehavior);
+    m_decoderColorBehavior = colorBehavior;
+    // The data has already been validated, so changing the color behavior
+    // should always result in a valid decoder.
+    DCHECK(m_decoder);
+  }
 
   return m_decoder->createFrameAtIndex(index);
 }

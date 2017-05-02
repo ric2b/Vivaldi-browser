@@ -71,7 +71,7 @@ class TextInputManagerTester::InternalObserver
     on_text_selection_changed_callback_ = callback;
   }
 
-  const RenderWidgetHostView* GetUpdatedView() const { return updated_view_; }
+  RenderWidgetHostView* GetUpdatedView() const { return updated_view_; }
 
   bool text_input_state_changed() const { return text_input_state_changed_; }
 
@@ -262,6 +262,23 @@ bool DoesFrameHaveFocusedEditableElement(RenderFrameHost* frame) {
       ->has_focused_editable_element();
 }
 
+void SendImeCommitTextToWidget(
+    RenderWidgetHost* rwh,
+    const base::string16& text,
+    const std::vector<ui::CompositionUnderline>& underlines,
+    const gfx::Range& replacement_range,
+    int relative_cursor_pos) {
+  std::vector<blink::WebCompositionUnderline> web_composition_underlines;
+  for (auto underline : underlines) {
+    web_composition_underlines.emplace_back(
+        static_cast<int>(underline.start_offset),
+        static_cast<int>(underline.end_offset), underline.color,
+        underline.thick, underline.background_color);
+  }
+  RenderWidgetHostImpl::From(rwh)->ImeCommitText(
+      text, web_composition_underlines, replacement_range, relative_cursor_pos);
+}
+
 size_t GetRegisteredViewsCountFromTextInputManager(WebContents* web_contents) {
   std::unordered_set<RenderWidgetHostView*> views;
   TextInputManager* manager =
@@ -325,7 +342,7 @@ const RenderWidgetHostView* TextInputManagerTester::GetActiveView() {
   return observer_->text_input_manager()->active_view_for_testing();
 }
 
-const RenderWidgetHostView* TextInputManagerTester::GetUpdatedView() {
+RenderWidgetHostView* TextInputManagerTester::GetUpdatedView() {
   return observer_->GetUpdatedView();
 }
 
@@ -394,10 +411,6 @@ void TextInputStateSender::SetCanComposeInline(bool can_compose_inline) {
 
 void TextInputStateSender::SetShowImeIfNeeded(bool show_ime_if_needed) {
   text_input_state_->show_ime_if_needed = show_ime_if_needed;
-}
-
-void TextInputStateSender::SetIsNonImeChange(bool is_non_ime_change) {
-  text_input_state_->is_non_ime_change = is_non_ime_change;
 }
 
 TestInputMethodObserver::TestInputMethodObserver() {}

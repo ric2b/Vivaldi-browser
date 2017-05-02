@@ -89,6 +89,40 @@ TEST_F(StyledLabelTest, RespectLeadingWhitespace) {
             static_cast<Label*>(styled()->child_at(0))->text());
 }
 
+TEST_F(StyledLabelTest, RespectLeadingSpacesInNonFirstLine) {
+  const std::string indented_line = "  indented line";
+  const std::string text(std::string("First line\n") + indented_line);
+  InitStyledLabel(text);
+  styled()->SetBounds(0, 0, 1000, 1000);
+  styled()->Layout();
+  ASSERT_EQ(2, styled()->child_count());
+  ASSERT_EQ(std::string(Label::kViewClassName),
+            styled()->child_at(0)->GetClassName());
+  EXPECT_EQ(ASCIIToUTF16(indented_line),
+            static_cast<Label*>(styled()->child_at(1))->text());
+}
+
+TEST_F(StyledLabelTest, CorrectWrapAtNewline) {
+  const std::string first_line = "Line one";
+  const std::string second_line = "  two";
+  const std::string multiline_text(first_line + "\n" + second_line);
+  InitStyledLabel(multiline_text);
+  Label label(ASCIIToUTF16(first_line));
+  gfx::Size label_preferred_size = label.GetPreferredSize();
+  // Correct handling of \n and label width limit encountered at the same place
+  styled()->SetBounds(0, 0, label_preferred_size.width(), 1000);
+  styled()->Layout();
+  ASSERT_EQ(2, styled()->child_count());
+  ASSERT_EQ(std::string(Label::kViewClassName),
+            styled()->child_at(1)->GetClassName());
+  EXPECT_EQ(ASCIIToUTF16(first_line),
+            static_cast<Label*>(styled()->child_at(0))->text());
+  EXPECT_EQ(ASCIIToUTF16(second_line),
+            static_cast<Label*>(styled()->child_at(1))->text());
+  EXPECT_EQ(styled()->GetHeightForWidth(1000),
+            styled()->child_at(1)->bounds().bottom());
+}
+
 TEST_F(StyledLabelTest, FirstLineNotEmptyWhenLeadingWhitespaceTooLong) {
   const std::string text("                                     a");
   InitStyledLabel(text);
@@ -104,6 +138,8 @@ TEST_F(StyledLabelTest, FirstLineNotEmptyWhenLeadingWhitespaceTooLong) {
             styled()->child_at(0)->GetClassName());
   EXPECT_EQ(ASCIIToUTF16("a"),
             static_cast<Label*>(styled()->child_at(0))->text());
+  EXPECT_EQ(label_preferred_size.height(),
+            styled()->GetHeightForWidth(label_preferred_size.width() / 2));
 }
 
 TEST_F(StyledLabelTest, BasicWrapping) {
@@ -128,6 +164,20 @@ TEST_F(StyledLabelTest, BasicWrapping) {
   EXPECT_EQ(styled()->height() - 3, styled()->child_at(1)->bounds().bottom());
 }
 
+TEST_F(StyledLabelTest, AllowEmptyLines) {
+  const std::string text("one");
+  InitStyledLabel(text);
+  int default_height = styled()->GetHeightForWidth(1000);
+  const std::string multiline_text("one\n\nthree");
+  InitStyledLabel(multiline_text);
+  styled()->SetBounds(0, 0, 1000, 1000);
+  styled()->Layout();
+  EXPECT_EQ(3 * default_height, styled()->GetHeightForWidth(1000));
+  ASSERT_EQ(2, styled()->child_count());
+  EXPECT_EQ(styled()->GetHeightForWidth(1000),
+            styled()->child_at(1)->bounds().bottom());
+}
+
 TEST_F(StyledLabelTest, WrapLongWords) {
   const std::string text("ThisIsTextAsASingleWord");
   InitStyledLabel(text);
@@ -142,10 +192,10 @@ TEST_F(StyledLabelTest, WrapLongWords) {
   styled()->Layout();
 
   ASSERT_EQ(2, styled()->child_count());
-  ASSERT_EQ(gfx::Point(), styled()->bounds().origin());
-  EXPECT_EQ(gfx::Point(), styled()->child_at(0)->bounds().origin());
+  ASSERT_EQ(gfx::Point(), styled()->origin());
+  EXPECT_EQ(gfx::Point(), styled()->child_at(0)->origin());
   EXPECT_EQ(gfx::Point(0, styled()->height() / 2),
-            styled()->child_at(1)->bounds().origin());
+            styled()->child_at(1)->origin());
 
   EXPECT_FALSE(static_cast<Label*>(styled()->child_at(0))->text().empty());
   EXPECT_FALSE(static_cast<Label*>(styled()->child_at(1))->text().empty());
@@ -257,13 +307,7 @@ TEST_F(StyledLabelTest, MAYBE_StyledRangeUnderlined) {
       static_cast<Label*>(styled()->child_at(1))->font_list().GetFontStyle());
 }
 
-// Fails on Mac, but only on 10.10. See http://crbug.com/622983.
-#if defined(OS_MACOSX)
-#define MAYBE_StyledRangeBold DISABLED_StyledRangeBold
-#else
-#define MAYBE_StyledRangeBold StyledRangeBold
-#endif
-TEST_F(StyledLabelTest, MAYBE_StyledRangeBold) {
+TEST_F(StyledLabelTest, StyledRangeBold) {
   const std::string bold_text(
       "This is a block of text whose style will be set to BOLD in the test");
   const std::string text(" normal text");

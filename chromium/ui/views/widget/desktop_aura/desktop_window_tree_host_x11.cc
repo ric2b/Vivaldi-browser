@@ -48,8 +48,6 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/path_x11.h"
-#include "ui/native_theme/native_theme.h"
-#include "ui/native_theme/native_theme_aura.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/views_delegate.h"
@@ -62,6 +60,7 @@
 #include "ui/views/widget/desktop_aura/x11_desktop_window_move_client.h"
 #include "ui/views/widget/desktop_aura/x11_pointer_grab.h"
 #include "ui/views/widget/desktop_aura/x11_window_event_filter.h"
+#include "ui/views/window/native_frame_view.h"
 #include "ui/wm/core/compound_event_filter.h"
 #include "ui/wm/core/window_util.h"
 
@@ -456,6 +455,8 @@ void DesktopWindowTreeHostX11::Init(aura::Window* content_window,
     sanitized_params.bounds.set_height(100);
 
   InitX11Window(sanitized_params);
+  InitHost();
+  window()->Show();
 }
 
 void DesktopWindowTreeHostX11::OnNativeWidgetCreated(
@@ -480,6 +481,10 @@ void DesktopWindowTreeHostX11::OnNativeWidgetCreated(
 
   native_widget_delegate_->OnNativeWidgetCreated(true);
 }
+
+void DesktopWindowTreeHostX11::OnWidgetInitDone() {}
+
+void DesktopWindowTreeHostX11::OnNativeWidgetActivationChanged(bool active) {}
 
 std::unique_ptr<corewm::Tooltip> DesktopWindowTreeHostX11::CreateTooltip() {
   return base::WrapUnique(new corewm::TooltipAura);
@@ -601,7 +606,7 @@ void DesktopWindowTreeHostX11::SetSize(const gfx::Size& requested_size) {
                 size_in_pixels.height());
   bounds_in_pixels_.set_size(size_in_pixels);
   if (size_changed) {
-    OnHostResized(size_in_pixels);
+    OnHostResizedInPixels(size_in_pixels);
     ResetWindowRegion();
   }
 }
@@ -666,7 +671,7 @@ void DesktopWindowTreeHostX11::CenterWindow(const gfx::Size& size) {
   // able to close or move it.
   window_bounds_in_pixels.AdjustToFit(parent_bounds_in_pixels);
 
-  SetBounds(window_bounds_in_pixels);
+  SetBoundsInPixels(window_bounds_in_pixels);
 }
 
 void DesktopWindowTreeHostX11::GetWindowPlacement(
@@ -851,7 +856,7 @@ void DesktopWindowTreeHostX11::Maximize() {
     gfx::Rect adjusted_bounds_in_pixels(bounds_in_pixels_.origin(),
                                         AdjustSize(bounds_in_pixels_.size()));
     if (adjusted_bounds_in_pixels != bounds_in_pixels_)
-      SetBounds(adjusted_bounds_in_pixels);
+      SetBoundsInPixels(adjusted_bounds_in_pixels);
   }
 
   // Some WMs do not respect maximization hints on unmapped windows, so we
@@ -1004,6 +1009,12 @@ void DesktopWindowTreeHostX11::SetVisibilityChangedAnimationsEnabled(
   // Much like the previous NativeWidgetGtk, we don't have anything to do here.
 }
 
+NonClientFrameView* DesktopWindowTreeHostX11::CreateNonClientFrameView() {
+  return ShouldUseNativeFrame()
+             ? new NativeFrameView(native_widget_delegate_->AsWidget())
+             : nullptr;
+}
+
 bool DesktopWindowTreeHostX11::ShouldUseNativeFrame() const {
   return use_native_frame_;
 }
@@ -1020,12 +1031,15 @@ void DesktopWindowTreeHostX11::FrameTypeChanged() {
     // and does not change.
     return;
   }
-
-  SetUseNativeFrame(new_type == Widget::FRAME_TYPE_FORCE_NATIVE);
-  // Replace the frame and layout the contents. Even though we don't have a
-  // swapable glass frame like on Windows, we still replace the frame because
-  // the button assets don't update otherwise.
-  native_widget_delegate_->AsWidget()->non_client_view()->UpdateFrame();
+  // Avoid mutating |View::children_| while possibly iterating over them.
+  // See View::PropagateNativeThemeChanged().
+  // TODO(varkha, sadrul): Investigate removing this (and instead expecting the
+  // NonClientView::UpdateFrame() to update the frame-view when theme changes,
+  // like all other views).
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&DesktopWindowTreeHostX11::DelayedChangeFrameType,
+                            weak_factory_.GetWeakPtr(),
+                            new_type));
 }
 
 void DesktopWindowTreeHostX11::SetFullscreen(bool fullscreen) {
@@ -1063,8 +1077,8 @@ void DesktopWindowTreeHostX11::SetFullscreen(bool fullscreen) {
   } else {
     bounds_in_pixels_ = restored_bounds_in_pixels_;
   }
-  OnHostMoved(bounds_in_pixels_.origin());
-  OnHostResized(bounds_in_pixels_.size());
+  OnHostMovedInPixels(bounds_in_pixels_.origin());
+  OnHostResizedInPixels(bounds_in_pixels_.size());
 
   if (HasWMSpecProperty("_NET_WM_STATE_FULLSCREEN") == fullscreen) {
     Relayout();
@@ -1150,10 +1164,6 @@ void DesktopWindowTreeHostX11::FlashFrame(bool flash_frame) {
   urgency_hint_set_ = flash_frame;
 }
 
-void DesktopWindowTreeHostX11::OnRootViewLayout() {
-  UpdateMinAndMaxSize();
-}
-
 bool DesktopWindowTreeHostX11::IsAnimatingClosed() const {
   return false;
 }
@@ -1164,6 +1174,14 @@ bool DesktopWindowTreeHostX11::IsTranslucentWindowOpacitySupported() const {
 
 void DesktopWindowTreeHostX11::SizeConstraintsChanged() {
   UpdateMinAndMaxSize();
+}
+
+bool DesktopWindowTreeHostX11::ShouldUpdateWindowTransparency() const {
+  return true;
+}
+
+bool DesktopWindowTreeHostX11::ShouldUseDesktopNativeCursorManager() const {
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1203,11 +1221,11 @@ void DesktopWindowTreeHostX11::HideImpl() {
   native_widget_delegate_->OnNativeWidgetVisibilityChanged(false);
 }
 
-gfx::Rect DesktopWindowTreeHostX11::GetBounds() const {
+gfx::Rect DesktopWindowTreeHostX11::GetBoundsInPixels() const {
   return bounds_in_pixels_;
 }
 
-void DesktopWindowTreeHostX11::SetBounds(
+void DesktopWindowTreeHostX11::SetBoundsInPixels(
     const gfx::Rect& requested_bounds_in_pixel) {
   gfx::Rect bounds_in_pixels(requested_bounds_in_pixel.origin(),
                              AdjustSize(requested_bounds_in_pixel.size()));
@@ -1257,12 +1275,12 @@ void DesktopWindowTreeHostX11::SetBounds(
   if (origin_changed)
     native_widget_delegate_->AsWidget()->OnNativeWidgetMove();
   if (size_changed) {
-    OnHostResized(bounds_in_pixels.size());
+    OnHostResizedInPixels(bounds_in_pixels.size());
     ResetWindowRegion();
   }
 }
 
-gfx::Point DesktopWindowTreeHostX11::GetLocationOnNativeScreen() const {
+gfx::Point DesktopWindowTreeHostX11::GetLocationOnScreenInPixels() const {
   return bounds_in_pixels_.origin();
 }
 
@@ -1307,10 +1325,11 @@ void DesktopWindowTreeHostX11::SetCursorNative(gfx::NativeCursor cursor) {
   XDefineCursor(xdisplay_, xwindow_, cursor.platform());
 }
 
-void DesktopWindowTreeHostX11::MoveCursorToNative(const gfx::Point& location) {
+void DesktopWindowTreeHostX11::MoveCursorToScreenLocationInPixels(
+    const gfx::Point& location_in_pixels) {
   XWarpPointer(xdisplay_, None, x_root_window_, 0, 0, 0, 0,
-               bounds_in_pixels_.x() + location.x(),
-               bounds_in_pixels_.y() + location.y());
+               bounds_in_pixels_.x() + location_in_pixels.x(),
+               bounds_in_pixels_.y() + location_in_pixels.y());
 }
 
 void DesktopWindowTreeHostX11::OnCursorVisibilityChangedNative(bool show) {
@@ -1584,10 +1603,10 @@ void DesktopWindowTreeHostX11::OnWMStateUpdated() {
   // the render side can update its visibility properly. OnWMStateUpdated() is
   // called by PropertyNofify event from DispatchEvent() when the browser is
   // minimized or shown from minimized state. On Windows, this is realized by
-  // calling OnHostResized() with an empty size. In particular,
+  // calling OnHostResizedInPixels() with an empty size. In particular,
   // HWNDMessageHandler::GetClientAreaBounds() returns an empty size when the
   // window is minimized. On Linux, returning empty size in GetBounds() or
-  // SetBounds() does not work.
+  // SetBoundsInPixels() does not work.
   // We also propagate the minimization to the compositor, to makes sure that we
   // don't draw any 'blank' frames that could be noticed in applications such as
   // window manager previews, which show content even when a window is
@@ -1819,8 +1838,8 @@ void DesktopWindowTreeHostX11::ConvertEventToDifferentHost(
       display::Screen::GetScreen()->GetDisplayNearestWindow(host->window());
   DCHECK_EQ(display_src.device_scale_factor(),
             display_dest.device_scale_factor());
-  gfx::Vector2d offset = GetLocationOnNativeScreen() -
-                         host->GetLocationOnNativeScreen();
+  gfx::Vector2d offset =
+      GetLocationOnScreenInPixels() - host->GetLocationOnScreenInPixels();
   gfx::PointF location_in_pixel_in_host =
       located_event->location_f() + gfx::Vector2dF(offset);
   located_event->set_location_f(location_in_pixel_in_host);
@@ -2074,7 +2093,7 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
       bounds_in_pixels_ = bounds_in_pixels;
 
       if (origin_changed)
-        OnHostMoved(bounds_in_pixels_.origin());
+        OnHostMovedInPixels(bounds_in_pixels_.origin());
 
       if (size_changed) {
         delayed_resize_task_.Reset(base::Bind(
@@ -2287,9 +2306,17 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
 }
 
 void DesktopWindowTreeHostX11::DelayedResize(const gfx::Size& size_in_pixels) {
-  OnHostResized(size_in_pixels);
+  OnHostResizedInPixels(size_in_pixels);
   ResetWindowRegion();
   delayed_resize_task_.Cancel();
+}
+
+void DesktopWindowTreeHostX11::DelayedChangeFrameType(Widget::FrameType type) {
+  SetUseNativeFrame(type == Widget::FRAME_TYPE_FORCE_NATIVE);
+  // Replace the frame and layout the contents. Even though we don't have a
+  // swappable glass frame like on Windows, we still replace the frame because
+  // the button assets don't update otherwise.
+  native_widget_delegate_->AsWidget()->non_client_view()->UpdateFrame();
 }
 
 gfx::Rect DesktopWindowTreeHostX11::GetWorkAreaBoundsInPixels() const {
@@ -2361,18 +2388,6 @@ DesktopWindowTreeHost* DesktopWindowTreeHost::Create(
     DesktopNativeWidgetAura* desktop_native_widget_aura) {
   return new DesktopWindowTreeHostX11(native_widget_delegate,
                                       desktop_native_widget_aura);
-}
-
-// static
-ui::NativeTheme* DesktopWindowTreeHost::GetNativeTheme(aura::Window* window) {
-  const LinuxUI* linux_ui = LinuxUI::instance();
-  if (linux_ui) {
-    ui::NativeTheme* native_theme = linux_ui->GetNativeTheme(window);
-    if (native_theme)
-      return native_theme;
-  }
-
-  return ui::NativeThemeAura::instance();
 }
 
 }  // namespace views

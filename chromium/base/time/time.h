@@ -59,6 +59,7 @@
 
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
+#include "base/logging.h"
 #include "base/numerics/safe_math.h"
 #include "build/build_config.h"
 
@@ -494,8 +495,9 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   static Time FromJsTime(double ms_since_epoch);
   double ToJsTime() const;
 
-  // Converts to Java convention for times, a number of
+  // Converts to/from Java convention for times, a number of
   // milliseconds since the epoch.
+  static Time FromJavaTime(int64_t ms_since_epoch);
   int64_t ToJavaTime() const;
 
 #if defined(OS_POSIX)
@@ -536,21 +538,6 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
 #endif
 
   // Converts an exploded structure representing either the local time or UTC
-  // into a Time class.
-  // TODO(maksims): Get rid of these in favor of the methods below when
-  // all the callers stop using these ones.
-  static Time FromUTCExploded(const Exploded& exploded) {
-    base::Time time;
-    ignore_result(FromUTCExploded(exploded, &time));
-    return time;
-  }
-  static Time FromLocalExploded(const Exploded& exploded) {
-    base::Time time;
-    ignore_result(FromLocalExploded(exploded, &time));
-    return time;
-  }
-
-  // Converts an exploded structure representing either the local time or UTC
   // into a Time class. Returns false on a failure when, for example, a day of
   // month is set to 31 on a 28-30 day month. Returns Time(0) on overflow.
   static bool FromUTCExploded(const Exploded& exploded,
@@ -570,10 +557,12 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // specified in RFC822) is treated as if the timezone is not specified.
   // TODO(iyengar) Move the FromString/FromTimeT/ToTimeT/FromFileTime to
   // a new time converter class.
-  static bool FromString(const char* time_string, Time* parsed_time) {
+  static bool FromString(const char* time_string,
+                         Time* parsed_time) WARN_UNUSED_RESULT {
     return FromStringInternal(time_string, true, parsed_time);
   }
-  static bool FromUTCString(const char* time_string, Time* parsed_time) {
+  static bool FromUTCString(const char* time_string,
+                            Time* parsed_time) WARN_UNUSED_RESULT {
     return FromStringInternal(time_string, false, parsed_time);
   }
 
@@ -616,10 +605,11 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // timezone is not specified.
   static bool FromStringInternal(const char* time_string,
                                  bool is_local,
-                                 Time* parsed_time);
+                                 Time* parsed_time) WARN_UNUSED_RESULT;
 
   // Comparison does not consider |day_of_week| when doing the operation.
-  static bool ExplodedMostlyEquals(const Exploded& lhs, const Exploded& rhs);
+  static bool ExplodedMostlyEquals(const Exploded& lhs,
+                                   const Exploded& rhs) WARN_UNUSED_RESULT;
 };
 
 // static
@@ -726,14 +716,14 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   // Now() will return high resolution values. Note that, on systems where the
   // high resolution clock works but is deemed inefficient, the low resolution
   // clock will be used instead.
-  static bool IsHighResolution();
+  static bool IsHighResolution() WARN_UNUSED_RESULT;
 
   // Returns true if TimeTicks is consistent across processes, meaning that
   // timestamps taken on different processes can be safely compared with one
   // another. (Note that, even on platforms where this returns true, time values
   // from different threads that are within one tick of each other must be
   // considered to have an ambiguous ordering.)
-  static bool IsConsistentAcrossProcesses();
+  static bool IsConsistentAcrossProcesses() WARN_UNUSED_RESULT;
 
 #if defined(OS_WIN)
   // Translates an absolute QPC timestamp into a TimeTicks value. The returned
@@ -794,7 +784,7 @@ class BASE_EXPORT ThreadTicks : public time_internal::TimeBase<ThreadTicks> {
   }
 
   // Returns true if ThreadTicks::Now() is supported on this system.
-  static bool IsSupported() {
+  static bool IsSupported() WARN_UNUSED_RESULT {
 #if (defined(_POSIX_THREAD_CPUTIME) && (_POSIX_THREAD_CPUTIME >= 0)) || \
     (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_ANDROID)
     return true;
@@ -845,7 +835,7 @@ class BASE_EXPORT ThreadTicks : public time_internal::TimeBase<ThreadTicks> {
   // allow testing.
   static double TSCTicksPerSecond();
 
-  static bool IsSupportedWin();
+  static bool IsSupportedWin() WARN_UNUSED_RESULT;
   static void WaitUntilInitializedWin();
 #endif
 };

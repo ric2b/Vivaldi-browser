@@ -6,6 +6,9 @@
 
 #include "core/ComputedStyleBaseConstants.h"
 #include "core/CoreExport.h"
+{% for field in fields if field.storage_type_path != None %}
+#include "{{field.storage_type_path}}.h"
+{% endfor %}
 
 {# Returns the default value for the field, converted to fit in the storage container. #}
 {% macro default_value(field) %}
@@ -45,7 +48,7 @@ class CORE_EXPORT ComputedStyleBase {
 
   inline bool inheritedEqual(const ComputedStyleBase& o) const {
     return true &&
-    {% for field in fields if field.property['inherited'] %}
+    {% for field in fields if field.is_enum and field.is_inherited %}
         {{field.name}} == o.{{field.name}} &&
     {% endfor %}
         true;
@@ -53,7 +56,7 @@ class CORE_EXPORT ComputedStyleBase {
 
   inline bool independentInheritedEqual(const ComputedStyleBase& o) const {
     return true &&
-    {% for field in fields if field.property['inherited'] and field.property['independent'] %}
+    {% for field in fields if field.is_enum and field.is_inherited and field.is_independent %}
         {{field.name}} == o.{{field.name}} &&
     {% endfor %}
         true;
@@ -61,7 +64,7 @@ class CORE_EXPORT ComputedStyleBase {
 
   inline bool nonIndependentInheritedEqual(const ComputedStyleBase& o) const {
     return true &&
-    {% for field in fields if field.property['inherited'] and not field.property['independent'] %}
+    {% for field in fields if field.is_enum and field.is_inherited and not field.is_independent %}
         {{field.name}} == o.{{field.name}} &&
     {% endfor %}
         true;
@@ -69,7 +72,7 @@ class CORE_EXPORT ComputedStyleBase {
 
   inline bool nonInheritedEqual(const ComputedStyleBase& o) const {
     return true &&
-    {% for field in fields if not field.property['inherited'] %}
+    {% for field in fields if field.is_enum and not field.is_inherited %}
         {{field.name}} == o.{{field.name}} &&
     {% endfor %}
         true;
@@ -90,21 +93,26 @@ class CORE_EXPORT ComputedStyleBase {
 
   void copyNonInheritedFromCached(const ComputedStyleBase& other);
 
+  // Copies the values of any independent inherited properties from the parent
+  // style that are marked as inherited by this style.
+  void propagateIndependentInheritedProperties(
+      const ComputedStyleBase& parentStyle);
+
   // Fields.
   // TODO(sashab): Remove initialFoo() static methods and update callers to
   // use resetFoo(), which can be more efficient.
   {% for field in fields %}
-  // {{field.property['name']}}
-  inline static {{field.type}} {{field.initial_method_name}}() { return {{field.default_value}}; }
-  {{field.type}} {{field.getter_method_name}}() const { return static_cast<{{field.type}}>({{field.name}}); }
-  void {{field.setter_method_name}}({{field.type}} v) { {{field.name}} = static_cast<unsigned>(v); }
+  // {{field.property_name}}
+  inline static {{field.storage_type}} {{field.initial_method_name}}() { return {{field.default_value}}; }
+  {{field.storage_type}} {{field.getter_method_name}}() const { return static_cast<{{field.storage_type}}>({{field.name}}); }
+  void {{field.setter_method_name}}({{field.storage_type}} v) { {{field.name}} = static_cast<unsigned>(v); }
   inline void {{field.resetter_method_name}}() { {{field.name}} = {{default_value(field)}}; }
 
   {% endfor %}
  protected:
   // Storage.
   {% for field in fields %}
-  unsigned {{field.name}} : {{field.size}}; // {{field.type}}
+  unsigned {{field.name}} : {{field.size}}; // {{field.storage_type}}
   {% endfor %}
 };
 

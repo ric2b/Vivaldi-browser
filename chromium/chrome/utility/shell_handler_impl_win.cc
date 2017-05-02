@@ -8,6 +8,7 @@
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "base/win/scoped_bstr.h"
@@ -61,7 +62,8 @@ class IsPinnedToTaskbarHelper {
 base::string16 IsPinnedToTaskbarHelper::LoadShellResourceString(
     uint32_t resource_id) {
   base::ScopedNativeLibrary scoped_native_library(::LoadLibraryEx(
-      FILE_PATH_LITERAL("shell32.dll"), nullptr, LOAD_LIBRARY_AS_DATAFILE));
+      FILE_PATH_LITERAL("shell32.dll"), nullptr,
+      LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE));
   if (!scoped_native_library.is_valid())
     return base::string16();
 
@@ -212,7 +214,7 @@ ShellHandlerImpl::ShellHandlerImpl() = default;
 ShellHandlerImpl::~ShellHandlerImpl() = default;
 
 // static
-void ShellHandlerImpl::Create(mojom::ShellHandlerRequest request) {
+void ShellHandlerImpl::Create(chrome::mojom::ShellHandlerRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<ShellHandlerImpl>(),
                           std::move(request));
 }

@@ -62,32 +62,29 @@
 namespace {
 
 const char* const kCommonSwitches[] = {
-  "disable-infobars",
-  "disable-popup-blocking",
-  "ignore-certificate-errors",
-  "metrics-recording-only",
+    "disable-popup-blocking", "enable-automation", "ignore-certificate-errors",
+    "metrics-recording-only",
 };
 
 const char* const kDesktopSwitches[] = {
-  "disable-hang-monitor",
-  "disable-prompt-on-repost",
-  "disable-sync",
-  "no-first-run",
-  "disable-background-networking",
-  "disable-web-resources",
-  "safebrowsing-disable-auto-update",
-  "disable-client-side-phishing-detection",
-  "disable-default-apps",
-  "enable-logging",
-  "log-level=0",
-  "password-store=basic",
-  "use-mock-keychain",
-  "test-type=webdriver",
+    "disable-hang-monitor",
+    "disable-prompt-on-repost",
+    "disable-sync",
+    "no-first-run",
+    "disable-background-networking",
+    "disable-web-resources",
+    "safebrowsing-disable-auto-update",
+    "disable-client-side-phishing-detection",
+    "disable-default-apps",
+    "enable-logging",
+    "log-level=0",
+    "password-store=basic",
+    "use-mock-keychain",
+    "test-type=webdriver",
 };
 
 const char* const kAndroidSwitches[] = {
-  "disable-fre",
-  "enable-remote-debugging",
+    "disable-fre", "enable-remote-debugging",
 };
 
 #if defined(OS_LINUX)
@@ -317,7 +314,8 @@ Status LaunchDesktopChrome(
     const SyncWebSocketFactory& socket_factory,
     const Capabilities& capabilities,
     ScopedVector<DevToolsEventListener>* devtools_event_listeners,
-    std::unique_ptr<Chrome>* chrome) {
+    std::unique_ptr<Chrome>* chrome,
+    bool w3c_compliant) {
   base::CommandLine command(base::CommandLine::NO_PROGRAM);
   base::ScopedTempDir user_data_dir;
   base::ScopedTempDir extension_dir;
@@ -371,7 +369,7 @@ Status LaunchDesktopChrome(
   }
 #elif defined(OS_WIN)
   if (!SwitchToUSKeyboardLayout())
-    VLOG(0) << "Can not set to US keyboard layout - Some keycodes may be"
+    VLOG(0) << "Cannot switch to US keyboard layout - some keys may be "
         "interpreted incorrectly";
 #endif
 
@@ -455,7 +453,8 @@ Status LaunchDesktopChrome(
     VLOG(0) << "Waiting for extension bg page load: " << extension_bg_pages[i];
     std::unique_ptr<WebView> web_view;
     Status status = chrome_desktop->WaitForPageToLoad(
-        extension_bg_pages[i], base::TimeDelta::FromSeconds(10), &web_view);
+        extension_bg_pages[i], base::TimeDelta::FromSeconds(10),
+        &web_view, w3c_compliant);
     if (status.IsError()) {
       return Status(kUnknownError,
                     "failed to wait for extension background page to load: " +
@@ -544,7 +543,8 @@ Status LaunchChrome(
     PortManager* port_manager,
     const Capabilities& capabilities,
     ScopedVector<DevToolsEventListener>* devtools_event_listeners,
-    std::unique_ptr<Chrome>* chrome) {
+    std::unique_ptr<Chrome>* chrome,
+    bool w3c_compliant) {
   if (capabilities.IsRemoteBrowser()) {
     return LaunchRemoteChromeSession(
         context_getter, socket_factory,
@@ -576,7 +576,8 @@ Status LaunchChrome(
                     port_status);
     return LaunchDesktopChrome(context_getter, port,
                                std::move(port_reservation), socket_factory,
-                               capabilities, devtools_event_listeners, chrome);
+                               capabilities, devtools_event_listeners, chrome,
+                               w3c_compliant);
   }
 }
 

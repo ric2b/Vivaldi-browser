@@ -31,15 +31,15 @@ class ScriptWrappableVisitorVerifier : public WrapperVisitor {
   WRAPPER_VISITOR_SPECIAL_CLASSES(DECLARE_DISPATCH_TRACE_WRAPPERS);
 
 #undef DECLARE_DISPATCH_TRACE_WRAPPERS
-  void dispatchTraceWrappers(const void*) const override {}
 
   void traceWrappers(const TraceWrapperV8Reference<v8::Value>&) const override {
   }
   void markWrapper(const v8::PersistentBase<v8::Value>*) const override {}
 
-  void pushToMarkingDeque(
+  bool pushToMarkingDeque(
       void (*traceWrappersCallback)(const WrapperVisitor*, const void*),
       HeapObjectHeader* (*heapObjectHeaderCallback)(const void*),
+      void (*missedWriteBarrierCallback)(void),
       const void* object) const override {
     if (!heapObjectHeaderCallback(object)->isWrapperHeaderMarked()) {
       // If this branch is hit, it means that a white (not discovered by
@@ -49,12 +49,14 @@ class ScriptWrappableVisitorVerifier : public WrapperVisitor {
       // therefore its wrapper and all wrappers reachable from it would be
       // collected.
 
-      // Most often this means there is a write barrier missing somewhere.
-      // Check backtrace to see which classes are causing this and review all
-      // the places where white class is set to the black class.
+      // This means there is a write barrier missing somewhere. Check the
+      // backtrace to see which types are causing this and review all the
+      // places where white object is set to a black object.
+      missedWriteBarrierCallback();
       NOTREACHED();
     }
     traceWrappersCallback(this, object);
+    return true;
   }
 
   bool markWrapperHeader(HeapObjectHeader* header) const override {
@@ -65,7 +67,6 @@ class ScriptWrappableVisitorVerifier : public WrapperVisitor {
     return false;
   }
   void markWrappersInAllWorlds(const ScriptWrappable*) const override {}
-  void markWrappersInAllWorlds(const void*) const override {}
 
  private:
   mutable WTF::HashSet<HeapObjectHeader*> m_visitedHeaders;

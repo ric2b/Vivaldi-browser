@@ -9,8 +9,8 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/string_util.h"
 #include "chrome/app/chrome_command_ids.h"  // IDC_*
-#import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_unittest_helper.h"
+#import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #include "chrome/grit/generated_resources.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -195,15 +195,6 @@ TEST_F(AutocompleteTextFieldEditorTest, Display) {
   [editor_ display];
 }
 
-// Test setting gray text, mostly to ensure nothing leaks or crashes.
-TEST_F(AutocompleteTextFieldEditorTest, GrayText) {
-  [editor_ display];
-  EXPECT_FALSE([editor_ needsDisplay]);
-  [field_ setGrayTextAutocompletion:@"foo" textColor:[NSColor redColor]];
-  EXPECT_TRUE([editor_ needsDisplay]);
-  [editor_ display];
-}
-
 // Test that -paste: is correctly delegated to the observer.
 TEST_F(AutocompleteTextFieldEditorObserverTest, Paste) {
   EXPECT_CALL(field_observer_, OnPaste());
@@ -251,6 +242,7 @@ TEST_F(AutocompleteTextFieldEditorObserverTest, PasteAndGo) {
 
 // Test that the menu is constructed correctly.
 TEST_F(AutocompleteTextFieldEditorObserverTest, Menu) {
+  EXPECT_CALL(field_observer_, CanPasteAndGo()).WillOnce(Return(true));
   EXPECT_CALL(field_observer_, GetPasteActionStringId()).
       WillOnce(Return(IDS_PASTE_AND_GO));
 
@@ -262,7 +254,9 @@ TEST_F(AutocompleteTextFieldEditorObserverTest, Menu) {
   EXPECT_EQ([[items objectAtIndex:i++] action], @selector(cut:));
   EXPECT_EQ([[items objectAtIndex:i++] action], @selector(copy:));
   EXPECT_EQ([[items objectAtIndex:i++] action], @selector(paste:));
-  EXPECT_EQ([[items objectAtIndex:i++] action], @selector(pasteAndGo:));
+  NSMenuItem* pasteAndGo = [items objectAtIndex:i++];
+  EXPECT_EQ([pasteAndGo action], @selector(pasteAndGo:));
+  EXPECT_TRUE([pasteAndGo isEnabled]);
   EXPECT_TRUE([[items objectAtIndex:i++] isSeparatorItem]);
   EXPECT_EQ([[items objectAtIndex:i] tag], IDC_EDIT_SEARCH_ENGINES);
   EXPECT_EQ([[items objectAtIndex:i++] action], @selector(commandDispatch:));
@@ -299,16 +293,16 @@ TEST_F(AutocompleteTextFieldEditorObserverTest, CanPasteAndGoValidate) {
   for (NSUInteger i = 0; i < [items count]; ++i) {
     NSMenuItem* item = [items objectAtIndex:i];
     if ([item action] == @selector(pasteAndGo:)) {
+      EXPECT_TRUE([item isEnabled]);
       EXPECT_TRUE([editor_ validateMenuItem:item]);
       break;
     }
   }
 }
 
-// Test that the menu validation works as expected when !CanPasteAndGo().
+// Test that the GetPasteActionStringId() is not called when !CanPasteAndGo().
 TEST_F(AutocompleteTextFieldEditorObserverTest, CannotPasteAndGoValidate) {
-  EXPECT_CALL(field_observer_, GetPasteActionStringId())
-      .WillOnce(Return(IDS_PASTE_AND_GO));
+  EXPECT_CALL(field_observer_, GetPasteActionStringId()).Times(0);
   EXPECT_CALL(field_observer_, CanPasteAndGo()).WillOnce(Return(false));
 
   NSMenu* menu = MenuFromRightClick(editor_);
@@ -317,6 +311,7 @@ TEST_F(AutocompleteTextFieldEditorObserverTest, CannotPasteAndGoValidate) {
   for (NSUInteger i = 0; i < [items count]; ++i) {
     NSMenuItem* item = [items objectAtIndex:i];
     if ([item action] == @selector(pasteAndGo:)) {
+      EXPECT_FALSE([item isEnabled]);
       EXPECT_FALSE([editor_ validateMenuItem:item]);
       break;
     }

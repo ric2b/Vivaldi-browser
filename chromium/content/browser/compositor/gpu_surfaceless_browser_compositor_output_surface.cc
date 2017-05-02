@@ -12,18 +12,17 @@
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "components/display_compositor/gl_helper.h"
 #include "content/browser/compositor/reflector_impl.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 
 namespace content {
 
 GpuSurfacelessBrowserCompositorOutputSurface::
     GpuSurfacelessBrowserCompositorOutputSurface(
-        scoped_refptr<ContextProviderCommandBuffer> context,
+        scoped_refptr<ui::ContextProviderCommandBuffer> context,
         gpu::SurfaceHandle surface_handle,
-        scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-        cc::SyntheticBeginFrameSource* begin_frame_source,
+        const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
         std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
             overlay_candidate_validator,
         unsigned int target,
@@ -31,9 +30,9 @@ GpuSurfacelessBrowserCompositorOutputSurface::
         gfx::BufferFormat format,
         gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
     : GpuBrowserCompositorOutputSurface(std::move(context),
-                                        std::move(vsync_manager),
-                                        begin_frame_source,
-                                        std::move(overlay_candidate_validator)),
+                                        update_vsync_parameters_callback,
+                                        std::move(overlay_candidate_validator),
+                                        true  /* support_stencil */),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager) {
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.flipped_output_surface = true;
@@ -93,12 +92,13 @@ void GpuSurfacelessBrowserCompositorOutputSurface::Reshape(
     const gfx::Size& size,
     float device_scale_factor,
     const gfx::ColorSpace& color_space,
-    bool has_alpha) {
+    bool has_alpha,
+    bool use_stencil) {
   reshape_size_ = size;
-  GpuBrowserCompositorOutputSurface::Reshape(size, device_scale_factor,
-                                             color_space, has_alpha);
+  GpuBrowserCompositorOutputSurface::Reshape(
+      size, device_scale_factor, color_space, has_alpha, use_stencil);
   DCHECK(buffer_queue_);
-  buffer_queue_->Reshape(size, device_scale_factor, color_space);
+  buffer_queue_->Reshape(size, device_scale_factor, color_space, use_stencil);
 }
 
 void GpuSurfacelessBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(

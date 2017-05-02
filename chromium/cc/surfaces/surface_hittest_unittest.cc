@@ -86,7 +86,6 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
   SurfaceIdAllocator root_allocator;
   LocalFrameId root_local_frame_id = root_allocator.GenerateId();
   SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
-  root_factory.Create(root_local_frame_id);
   root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                      SurfaceFactory::DrawCallback());
 
@@ -99,7 +98,7 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
                   root_surface_id, gfx::Point(100, 100), &transform));
   }
 
-  root_factory.Destroy(root_local_frame_id);
+  root_factory.EvictSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_SingleSurface) {
@@ -119,7 +118,6 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
   SurfaceIdAllocator root_allocator;
   LocalFrameId root_local_frame_id = root_allocator.GenerateId();
   SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
-  root_factory.Create(root_local_frame_id);
   root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                      SurfaceFactory::DrawCallback());
   TestCase tests[] = {
@@ -133,7 +131,7 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
 
   RunTests(nullptr, &manager, tests, arraysize(tests));
 
-  root_factory.Destroy(root_local_frame_id);
+  root_factory.EvictSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_ChildSurface) {
@@ -172,7 +170,6 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   SurfaceIdAllocator root_allocator;
   LocalFrameId root_local_frame_id = root_allocator.GenerateId();
   SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
-  root_factory.Create(root_local_frame_id);
   root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                      SurfaceFactory::DrawCallback());
 
@@ -191,7 +188,6 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
       root_rect, child_solid_quad_rect);
 
   // Submit the frame.
-  child_factory.Create(child_local_frame_id);
   child_factory.SubmitCompositorFrame(child_local_frame_id,
                                       std::move(child_frame),
                                       SurfaceFactory::DrawCallback());
@@ -272,8 +268,8 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
     EXPECT_EQ(gfx::Point(25, 25), point_in_target_space);
   }
 
-  root_factory.Destroy(root_local_frame_id);
-  child_factory.Destroy(child_local_frame_id);
+  root_factory.EvictSurface();
+  child_factory.EvictSurface();
 }
 
 // This test verifies that hit testing will progress to the next quad if it
@@ -297,11 +293,9 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Create a RenderPassDrawQuad to a non-existant RenderPass.
-  CreateRenderPassDrawQuad(root_pass,
-                           gfx::Transform(),
-                           root_rect,
-                           root_rect,
-                           RenderPassId(1337, 1337));
+  int invalid_render_pass_id = 1337;
+  CreateRenderPassDrawQuad(root_pass, gfx::Transform(), root_rect, root_rect,
+                           invalid_render_pass_id);
 
   // Add a reference to the child surface on the root surface.
   SurfaceIdAllocator child_allocator;
@@ -321,7 +315,6 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
   SurfaceIdAllocator root_allocator;
   LocalFrameId root_local_frame_id = root_allocator.GenerateId();
   SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
-  root_factory.Create(root_local_frame_id);
   root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                      SurfaceFactory::DrawCallback());
 
@@ -340,7 +333,6 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
                            child_solid_quad_rect);
 
   // Submit the frame.
-  child_factory.Create(child_local_frame_id);
   child_factory.SubmitCompositorFrame(child_local_frame_id,
                                       std::move(child_frame),
                                       SurfaceFactory::DrawCallback());
@@ -386,8 +378,8 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
 
   RunTests(nullptr, &manager, tests, arraysize(tests));
 
-  root_factory.Destroy(root_local_frame_id);
-  child_factory.Destroy(child_local_frame_id);
+  root_factory.EvictSurface();
+  child_factory.EvictSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
@@ -398,10 +390,11 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
 
   // Create a CompostiorFrame with two RenderPasses.
   gfx::Rect root_rect(300, 300);
-  RenderPassList render_pass_list;
+  CompositorFrame root_frame;
+  RenderPassList& render_pass_list = root_frame.render_pass_list;
 
   // Create a child RenderPass.
-  RenderPassId child_render_pass_id(1, 3);
+  int child_render_pass_id = 3;
   gfx::Transform transform_to_root_target(1.0f, 0.0f, 0.0f, 50.0f,
                                           0.0f, 1.0f, 0.0f, 50.0f,
                                           0.0f, 0.0f, 1.0f, 0.0f,
@@ -412,14 +405,12 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
                    &render_pass_list);
 
   // Create the root RenderPass.
-  RenderPassId root_render_pass_id(1, 2);
+  int root_render_pass_id = 2;
   CreateRenderPass(root_render_pass_id, root_rect, gfx::Transform(),
                    &render_pass_list);
 
   RenderPass* root_pass = nullptr;
-  CompositorFrame root_frame =
-      CreateCompositorFrameWithRenderPassList(&render_pass_list);
-  root_pass = root_frame.delegated_frame_data->render_pass_list.back().get();
+  root_pass = root_frame.render_pass_list.back().get();
 
   // Create a RenderPassDrawQuad.
   gfx::Rect render_pass_quad_rect(100, 100);
@@ -430,8 +421,7 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
                            child_render_pass_id);
 
   // Add a solid quad in the child render pass.
-  RenderPass* child_render_pass =
-      root_frame.delegated_frame_data->render_pass_list.front().get();
+  RenderPass* child_render_pass = root_frame.render_pass_list.front().get();
   gfx::Rect child_solid_quad_rect(100, 100);
   CreateSolidColorDrawQuad(child_render_pass,
                            gfx::Transform(),
@@ -442,7 +432,6 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
   SurfaceIdAllocator root_allocator;
   LocalFrameId root_local_frame_id = root_allocator.GenerateId();
   SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
-  factory.Create(root_local_frame_id);
   factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
@@ -492,7 +481,7 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
 
   RunTests(nullptr, &manager, tests, arraysize(tests));
 
-  factory.Destroy(root_local_frame_id);
+  factory.EvictSurface();
 }
 
 TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
@@ -530,7 +519,6 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   SurfaceIdAllocator root_allocator;
   LocalFrameId root_local_frame_id = root_allocator.GenerateId();
   SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
-  root_factory.Create(root_local_frame_id);
   root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                      SurfaceFactory::DrawCallback());
 
@@ -547,7 +535,6 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
       root_rect, child_solid_quad_rect);
 
   // Submit the frame.
-  child_factory.Create(child_local_frame_id);
   child_factory.SubmitCompositorFrame(child_local_frame_id,
                                       std::move(child_frame),
                                       SurfaceFactory::DrawCallback());
@@ -629,8 +616,8 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   EXPECT_EQ(0, accept_delegate.reject_target_overrides());
   EXPECT_EQ(2, accept_delegate.accept_target_overrides());
 
-  root_factory.Destroy(root_local_frame_id);
-  child_factory.Destroy(child_local_frame_id);
+  root_factory.EvictSurface();
+  child_factory.EvictSurface();
 }
 
 }  // namespace cc

@@ -31,10 +31,15 @@
     border-bottom: 1px solid #dadada;
 }
 
+.timeline-settings-pane {
+    flex: none;
+    border-bottom: 1px solid #dadada;
+}
+
 #timeline-overview-panel {
     flex: none;
     position: relative;
-    border-bottom: 1px solid rgb(140, 140, 140);
+    border-bottom: 1px solid #bbb;
 }
 
 #timeline-overview-panel .timeline-graph-bar {
@@ -67,8 +72,7 @@
     display: flex;
 }
 
-#timeline-container .webkit-html-external-link,
-#timeline-container .webkit-html-resource-link {
+#timeline-container .devtools-link {
     color: inherit;
 }
 
@@ -78,13 +82,17 @@
 
 .timeline.panel .status-pane-container {
     z-index: 1000;
-    pointer-events: none;
     display: flex;
     align-items: center;
+    pointer-events: none;
 }
 
 .timeline.panel .status-pane-container.tinted {
     background-color: hsla(0, 0%, 90%, 0.8);
+    pointer-events: auto;
+}
+
+.timeline.panel .status-pane-container > div {
     pointer-events: auto;
 }
 
@@ -276,6 +284,7 @@
     background: transparent;
     text-align: left;
     border-spacing: 0;
+    margin: 4px;
 }
 
 .image-preview-container img {
@@ -441,6 +450,22 @@
     overflow: hidden;
 }
 
+.timeline-flamechart-resizer {
+    height: 7px;
+    background-color: #f3f3f3;
+    border-top: #a3a3a3 1px solid;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.timeline-flamechart-resizer:after {
+    content: "...";
+    font-size: 14px;
+    margin-bottom: -1px;
+}
+
 .timeline-status-pane.full-widget-dimmed-banner {
     text-align: left !important;
 }
@@ -482,7 +507,8 @@
 }
 
 .timeline-overview-popover .frame .thumbnail img {
-    max-width: 200px;
+    max-width: 300px;
+    max-height: 500px;
 }
 
 .timeline-tree-view {
@@ -596,7 +622,7 @@
     background-color: inherit;
 }
 
-.timeline-details #filter-input-field {
+.timeline-details .filter-input-field {
     width: 120px;
 }
 
@@ -619,4 +645,34 @@
     padding: 6px 10px;
     color: #5a5a5a;
     white-space: nowrap;
+}
+
+.timeline-landing-page {
+    position: absolute;
+    background-color: white;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 15px;
+    color: #777;
+}
+
+.timeline-landing-page > div {
+    max-width: 430px;
+    margin: 10px;
+}
+
+.timeline-landing-page > div > p {
+    flex: none;
+}
+
+.timeline-landing-warning {
+    background-color: #fffde7;
+    padding: 10px 14px;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+}
+
+.timeline-landing-warning span[is=ui-icon] {
+    margin: -8px;
 }

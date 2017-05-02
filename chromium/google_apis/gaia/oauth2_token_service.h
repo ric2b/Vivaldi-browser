@@ -93,8 +93,12 @@ class OAuth2TokenService : public base::NonThreadSafe {
    public:
     // Called whenever a new login-scoped refresh token is available for
     // account |account_id|. Once available, access tokens can be retrieved for
-    // this account.  This is called during initial startup for each token
-    // loaded.
+    // this account. This is called during initial startup for each token
+    // loaded (and any time later when, e.g., credentials change). When called,
+    // any pending token request is cancelled and needs to be retried. Such a
+    // pending request can easily occur on Android, where refresh tokens are
+    // held by the OS and are thus often available on startup even before
+    // OnRefreshTokenAvailable() is called.
     virtual void OnRefreshTokenAvailable(const std::string& account_id) {}
     // Called whenever the login-scoped refresh token becomes unavailable for
     // account |account_id|.
@@ -175,11 +179,11 @@ class OAuth2TokenService : public base::NonThreadSafe {
 
   // Lists account IDs of all accounts with a refresh token maintained by this
   // instance.
-  std::vector<std::string> GetAccounts() const;
+  virtual std::vector<std::string> GetAccounts() const;
 
   // Returns true if a refresh token exists for |account_id|. If false, calls to
   // |StartRequest| will result in a Consumer::OnGetTokenFailure callback.
-  bool RefreshTokenIsAvailable(const std::string& account_id) const;
+  virtual bool RefreshTokenIsAvailable(const std::string& account_id) const;
 
   // This method cancels all token requests, revoke all refresh tokens and
   // cached access tokens.
@@ -310,10 +314,12 @@ class OAuth2TokenService : public base::NonThreadSafe {
     ScopeSet scopes;
   };
 
+ protected:
   // Provide a request context used for fetching access tokens with the
   // |StartRequest| method.
-  net::URLRequestContextGetter* GetRequestContext() const;
+  virtual net::URLRequestContextGetter* GetRequestContext() const;
 
+ private:
   // Struct that contains the information of an OAuth2 access token.
   struct CacheEntry {
     std::string access_token;

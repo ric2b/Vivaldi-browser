@@ -2,6 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
+# This is a .pyl, or "Python Literal", file. You can treat it just like a
+# .json file, with the following exceptions:
+# * all keys must be quoted (use single quotes, please);
+# * comments are allowed, using '#' syntax; and
+# * trailing commas are allowed.
+#
 # Specifies which grd files should be translated and into which languages they
 # should be translated. Used by the internal translation process.
 {
@@ -48,9 +54,6 @@
     ],
     "files": [
       "android_webview/java/strings/android_webview_strings.grd",
-      "blimp/client/app/android/java/strings/android_blimp_strings.grd",
-      "blimp/client/core/resources/blimp_strings.grd",
-      "blimp/client/support/resources/blimp_support_strings.grd",
       "chrome/android/java/strings/android_chrome_strings.grd",
       "content/public/android/java/strings/android_content_strings.grd",
       "ui/android/java/strings/android_ui_strings.grd",
@@ -67,6 +70,7 @@
     "chrome/app/resources/locale_settings_mac.grd": "Not UI strings; localized separately",
     "chrome/app/resources/locale_settings_win.grd": "Not UI strings; localized separately",
     "chromecast/app/resources/chromecast_settings.grd": "Not UI strings; localized separately",
+    "cloud_print/virtual_driver/win/install/virtual_driver_setup_resources.grd": "Separate release process",
     "components/components_locale_settings.grd": "Not UI strings; localized separately",
     "tools/grit/grit/testdata/buildinfo.grd": "Test data",
     "tools/grit/grit/testdata/chrome/app/generated_resources.grd": "Test data",

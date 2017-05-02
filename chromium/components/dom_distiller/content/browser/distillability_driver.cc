@@ -4,6 +4,7 @@
 
 #include "components/dom_distiller/content/browser/distillability_driver.h"
 
+#include "base/memory/ptr_util.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -89,7 +90,7 @@ void DistillabilityDriver::RenderFrameHostChanged(
 
 void DistillabilityDriver::DidStartProvisionalLoadForFrame(
     content::RenderFrameHost* render_frame_host, const GURL& validated_url,
-    bool is_error_page, bool is_iframe_srcdoc) {
+    bool is_error_page) {
   SetupMojoService(render_frame_host);
 }
 

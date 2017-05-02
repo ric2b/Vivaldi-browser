@@ -35,6 +35,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/KURLHash.h"
+#include "wtf/Deque.h"
 #include "wtf/Forward.h"
 #include "wtf/HashSet.h"
 #include "wtf/Vector.h"
@@ -48,9 +49,8 @@ class CSSValue;
 class Document;
 class Element;
 class FontResource;
-class ImageResource;
+class ImageResourceContent;
 class LocalFrame;
-class Resource;
 class SharedBuffer;
 class StylePropertySet;
 
@@ -63,10 +63,20 @@ class CORE_EXPORT FrameSerializer final {
   STACK_ALLOCATED();
 
  public:
+  enum ResourceHasCacheControlNoStoreHeader {
+    NoCacheControlNoStoreHeader,
+    HasCacheControlNoStoreHeader
+  };
+
   class Delegate {
    public:
+    // Controls whether HTML serialization should skip the given element.
+    virtual bool shouldIgnoreElement(const Element&) { return false; }
+
     // Controls whether HTML serialization should skip the given attribute.
-    virtual bool shouldIgnoreAttribute(const Attribute&) { return false; }
+    virtual bool shouldIgnoreAttribute(const Element&, const Attribute&) {
+      return false;
+    }
 
     // Method allowing the Delegate control which URLs are written into the
     // generated html document.
@@ -86,18 +96,26 @@ class CORE_EXPORT FrameSerializer final {
     virtual bool shouldSkipResourceWithURL(const KURL&) { return false; }
 
     // Tells whether to skip serialization of a subresource.
-    virtual bool shouldSkipResource(const Resource&) { return false; }
+    virtual bool shouldSkipResource(ResourceHasCacheControlNoStoreHeader) {
+      return false;
+    }
+
+    // Returns custom attributes that need to add in order to serialize the
+    // element.
+    virtual Vector<Attribute> getCustomAttributes(const Element&) {
+      return Vector<Attribute>();
+    }
   };
 
-  // Constructs a serializer that will write output to the given vector of
+  // Constructs a serializer that will write output to the given deque of
   // SerializedResources and uses the Delegate for controlling some
   // serialization aspects.  Callers need to ensure that both arguments stay
   // alive until the FrameSerializer gets destroyed.
-  FrameSerializer(Vector<SerializedResource>&, Delegate&);
+  FrameSerializer(Deque<SerializedResource>&, Delegate&);
 
   // Initiates the serialization of the frame. All serialized content and
-  // retrieved resources are added to the Vector passed to the constructor.
-  // The first resource in that vector is the frame's serialized content.
+  // retrieved resources are added to the Deque passed to the constructor.
+  // The first resource in that deque is the frame's serialized content.
   // Subsequent resources are images, css, etc.
   void serializeFrame(const LocalFrame&);
 
@@ -115,16 +133,17 @@ class CORE_EXPORT FrameSerializer final {
 
   bool shouldAddURL(const KURL&);
 
-  void addToResources(const Resource&,
+  void addToResources(const String& mimeType,
+                      ResourceHasCacheControlNoStoreHeader,
                       PassRefPtr<const SharedBuffer>,
                       const KURL&);
-  void addImageToResources(ImageResource*, const KURL&);
+  void addImageToResources(ImageResourceContent*, const KURL&);
   void addFontToResources(FontResource*);
 
   void retrieveResourcesForProperties(const StylePropertySet*, Document&);
   void retrieveResourcesForCSSValue(const CSSValue&, Document&);
 
-  Vector<SerializedResource>* m_resources;
+  Deque<SerializedResource>* m_resources;
   HashSet<KURL> m_resourceURLs;
 
   bool m_isSerializingCss;

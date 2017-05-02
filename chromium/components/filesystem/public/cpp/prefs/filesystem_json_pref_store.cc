@@ -23,7 +23,6 @@
 #include "base/time/default_clock.h"
 #include "base/values.h"
 #include "components/prefs/pref_filter.h"
-#include "mojo/common/common_type_converters.h"
 
 namespace filesystem {
 
@@ -48,7 +47,7 @@ FilesystemJsonPrefStore::ReadResult::~ReadResult() {}
 namespace {
 
 PersistentPrefStore::PrefReadError HandleReadErrors(const base::Value* value) {
-  if (!value->IsType(base::Value::TYPE_DICTIONARY))
+  if (!value->IsType(base::Value::Type::DICTIONARY))
     return PersistentPrefStore::PREF_READ_ERROR_JSON_TYPE;
   return PersistentPrefStore::PREF_READ_ERROR_NONE;
 }
@@ -334,10 +333,10 @@ void FilesystemJsonPrefStore::PerformWrite() {
 
 void FilesystemJsonPrefStore::OpenFilesystem(base::Closure callback) {
   filesystem::mojom::FileSystemClientPtr client;
-  binding_.Bind(GetProxy(&client));
+  binding_.Bind(MakeRequest(&client));
 
   filesystem_->OpenFileSystem(
-      "origin", GetProxy(&directory_), std::move(client),
+      "origin", MakeRequest(&directory_), std::move(client),
       base::Bind(&FilesystemJsonPrefStore::OnOpenFilesystem, AsWeakPtr(),
                  callback));
 }
@@ -366,8 +365,7 @@ void FilesystemJsonPrefStore::OnTempFileWriteStart() {
   serializer.Serialize(*prefs_);
 
   directory_->WriteFile(
-      "tmp",
-      mojo::Array<uint8_t>::From(output),
+      "tmp", std::vector<uint8_t>(output.begin(), output.end()),
       Bind(&FilesystemJsonPrefStore::OnTempFileWrite, AsWeakPtr()));
 }
 

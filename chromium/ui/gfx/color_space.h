@@ -10,16 +10,13 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "ui/gfx/gfx_export.h"
 
 namespace IPC {
 template <class P>
 struct ParamTraits;
 }  // namespace IPC
-
-template <typename T>
-class sk_sp;
-class SkColorSpace;
 
 namespace gfx {
 
@@ -144,13 +141,18 @@ class GFX_EXPORT ColorSpace {
              TransferID transfer,
              MatrixID matrix,
              RangeID full_range);
+  ColorSpace(const ColorSpace& other);
   ColorSpace(int primaries, int transfer, int matrix, RangeID full_range);
+  ~ColorSpace();
 
   static PrimaryID PrimaryIDFromInt(int primary_id);
   static TransferID TransferIDFromInt(int transfer_id);
   static MatrixID MatrixIDFromInt(int matrix_id);
 
   static ColorSpace CreateSRGB();
+  // scRGB is like RGB, but linear and values outside of 0-1 are allowed.
+  // scRGB is normally used with fp16 textures.
+  static ColorSpace CreateSCRGBLinear();
   static ColorSpace CreateXYZD50();
 
   // TODO: Remove these, and replace with more generic constructors.
@@ -162,8 +164,10 @@ class GFX_EXPORT ColorSpace {
   bool operator!=(const ColorSpace& other) const;
   bool operator<(const ColorSpace& other) const;
 
+  bool IsHDR() const;
+
   // Note that this may return nullptr.
-  sk_sp<SkColorSpace> ToSkColorSpace() const;
+  const sk_sp<SkColorSpace>& ToSkColorSpace() const { return sk_color_space_; }
   static ColorSpace FromSkColorSpace(const sk_sp<SkColorSpace>& sk_color_space);
 
  private:
@@ -179,8 +183,11 @@ class GFX_EXPORT ColorSpace {
   // created, if possible.
   uint64_t icc_profile_id_ = 0;
 
+  sk_sp<SkColorSpace> sk_color_space_;
+
   friend class ICCProfile;
   friend class ColorSpaceToColorSpaceTransform;
+  friend class ColorSpaceWin;
   friend struct IPC::ParamTraits<gfx::ColorSpace>;
   FRIEND_TEST_ALL_PREFIXES(SimpleColorSpace, GetColorSpace);
 };

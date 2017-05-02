@@ -202,7 +202,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
   }
 
   float max_contents_scale = MaximumTilingContentsScale();
-  PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale);
+  PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
+                                max_contents_scale);
   Occlusion scaled_occlusion =
       draw_properties()
           .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
@@ -272,7 +273,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         } else if (iter.resolution() == LOW_RESOLUTION) {
           color = DebugColors::LowResTileBorderColor();
           width = DebugColors::LowResTileBorderWidth(layer_tree_impl());
-        } else if (iter->contents_scale_key() > max_contents_scale) {
+        } else if (iter->contents_scale() > max_contents_scale) {
           color = DebugColors::ExtraHighResTileBorderColor();
           width = DebugColors::ExtraHighResTileBorderWidth(layer_tree_impl());
         } else {
@@ -340,8 +341,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           // complete. But if a tile is ideal scale, we don't want to consider
           // it incomplete and trying to replace it with a tile at a worse
           // scale.
-          if (iter->contents_scale_key() != raster_contents_scale_ &&
-              iter->contents_scale_key() != ideal_contents_scale_ &&
+          if (iter->contents_scale() != raster_contents_scale_ &&
+              iter->contents_scale() != ideal_contents_scale_ &&
               geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
             append_quads_data->num_incomplete_tiles++;
           }
@@ -574,8 +575,8 @@ void PictureLayerImpl::UpdateRasterSource(
 
   // Only set the image decode controller when we're committing.
   if (!pending_set) {
-    raster_source_->set_image_decode_controller(
-        layer_tree_impl()->image_decode_controller());
+    raster_source_->set_image_decode_cache(
+        layer_tree_impl()->image_decode_cache());
   }
 
   // The |new_invalidation| must be cleared before updating tilings since they
@@ -645,13 +646,12 @@ bool PictureLayerImpl::RasterSourceUsesLCDText() const {
 void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile) {
   if (layer_tree_impl()->IsActiveTree()) {
     gfx::Rect layer_damage_rect = gfx::ScaleToEnclosingRect(
-        tile->content_rect(), 1.f / tile->raster_scales().width(),
-        1.f / tile->raster_scales().height());
+        tile->content_rect(), 1.f / tile->contents_scale());
     AddDamageRect(layer_damage_rect);
   }
   if (tile->draw_info().NeedsRaster()) {
     PictureLayerTiling* tiling =
-        tilings_->FindTilingWithScaleKey(tile->contents_scale_key());
+        tilings_->FindTilingWithScaleKey(tile->contents_scale());
     if (tiling)
       tiling->set_all_tiles_done(false);
   }
@@ -676,8 +676,8 @@ void PictureLayerImpl::ReleaseTileResources() {
 void PictureLayerImpl::RecreateTileResources() {
   tilings_ = CreatePictureLayerTilingSet();
   if (raster_source_) {
-    raster_source_->set_image_decode_controller(
-        layer_tree_impl()->image_decode_controller());
+    raster_source_->set_image_decode_cache(
+        layer_tree_impl()->image_decode_cache());
   }
 }
 
@@ -690,7 +690,8 @@ Region PictureLayerImpl::GetInvalidationRegionForDebugging() {
   return IntersectRegions(invalidation_, update_rect());
 }
 
-ScopedTilePtr PictureLayerImpl::CreateTile(const Tile::CreateInfo& info) {
+std::unique_ptr<Tile> PictureLayerImpl::CreateTile(
+    const Tile::CreateInfo& info) {
   int flags = 0;
 
   // We don't handle solid color masks, so we shouldn't bother analyzing those.
@@ -721,8 +722,7 @@ const PictureLayerTiling* PictureLayerImpl::GetPendingOrActiveTwinTiling(
   PictureLayerImpl* twin_layer = GetPendingOrActiveTwinLayer();
   if (!twin_layer)
     return nullptr;
-  return twin_layer->tilings_->FindTilingWithScaleKey(
-      tiling->contents_scale_key());
+  return twin_layer->tilings_->FindTilingWithScaleKey(tiling->contents_scale());
 }
 
 bool PictureLayerImpl::RequiresHighResToDraw() const {
@@ -1309,8 +1309,8 @@ void PictureLayerImpl::AsValueInto(
 
   state->BeginArray("coverage_tiles");
   for (PictureLayerTilingSet::CoverageIterator iter(
-           tilings_.get(), 1.f, gfx::Rect(raster_source_->GetSize()),
-           ideal_contents_scale_);
+           tilings_.get(), MaximumTilingContentsScale(),
+           gfx::Rect(raster_source_->GetSize()), ideal_contents_scale_);
        iter; ++iter) {
     state->BeginDictionary();
 
@@ -1322,6 +1322,32 @@ void PictureLayerImpl::AsValueInto(
     state->EndDictionary();
   }
   state->EndArray();
+
+  state->BeginDictionary("can_have_tilings_state");
+  state->SetBoolean("can_have_tilings", CanHaveTilings());
+  state->SetBoolean("raster_source_solid_color",
+                    raster_source_->IsSolidColor());
+  state->SetBoolean("draws_content", DrawsContent());
+  state->SetBoolean("raster_source_has_recordings",
+                    raster_source_->HasRecordings());
+  state->SetDouble("max_contents_scale", MaximumTilingContentsScale());
+  state->SetDouble("min_contents_scale", MinimumContentsScale());
+  state->EndDictionary();
+
+  state->BeginDictionary("raster_scales");
+  state->SetDouble("page_scale", raster_page_scale_);
+  state->SetDouble("device_scale", raster_device_scale_);
+  state->SetDouble("source_scale", raster_source_scale_);
+  state->SetDouble("contents_scale", raster_contents_scale_);
+  state->SetDouble("low_res_contents_scale", low_res_raster_contents_scale_);
+  state->EndDictionary();
+
+  state->BeginDictionary("ideal_scales");
+  state->SetDouble("page_scale", ideal_page_scale_);
+  state->SetDouble("device_scale", ideal_device_scale_);
+  state->SetDouble("source_scale", ideal_source_scale_);
+  state->SetDouble("contents_scale", ideal_contents_scale_);
+  state->EndDictionary();
 }
 
 size_t PictureLayerImpl::GPUMemoryUsageInBytes() const {

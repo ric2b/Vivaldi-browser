@@ -1641,8 +1641,9 @@
 
   The precise behavior of declare args is:
 
-   1. The declare_arg block executes. Any variables in the enclosing scope are
-      available for reading.
+   1. The declare_args() block executes. Any variable defined in the enclosing
+      scope is available for reading, but any variable defined earlier in
+      the current scope is not (since the overrides haven't been applied yet).
 
    2. At the end of executing the block, any variables set within that scope
       are saved globally as build arguments, with their current values being
@@ -1661,12 +1662,10 @@
       like [], "", or -1, and after the declare_args block, call exec_script if
       the value is unset by the user.
 
-    - Any code inside of the declare_args block will see the default values of
-      previous variables defined in the block rather than the user-overridden
-      value. This can be surprising because you will be used to seeing the
-      overridden value. If you need to make the default value of one arg
-      dependent on the possibly-overridden value of another, write two separate
-      declare_args blocks:
+    - Because you cannot read the value of a variable defined in the same
+      block, if you need to make the default value of one arg depend
+      on the possibly-overridden value of another, write two separate
+      declare_args() blocks:
 
         declare_args() {
           enable_foo = true
@@ -3967,7 +3966,7 @@
   This addition happens in a second phase once a target and all of its
   dependencies have been resolved. Therefore, a target will not see these
   force-added configs in their "configs" variable while the script is running,
-  and then can not be removed. As a result, this capability should generally
+  and they can not be removed. As a result, this capability should generally
   only be used to add defines and include directories necessary to compile a
   target's headers.
 
@@ -5434,7 +5433,7 @@
   This addition happens in a second phase once a target and all of its
   dependencies have been resolved. Therefore, a target will not see these
   force-added configs in their "configs" variable while the script is running,
-  and then can not be removed. As a result, this capability should generally
+  and they can not be removed. As a result, this capability should generally
   only be used to add defines and include directories necessary to compile a
   target's headers.
 
@@ -6583,6 +6582,13 @@
       out directory if the source file is in a different directory than the
       build.gn file.
         "//foo/bar/baz.txt" => "obj/foo/bar"
+
+  {{source_target_relative}}
+      The path to the source file relative to the target's directory. This will
+      generally be used for replicating the source directory layout in the
+      output directory. This can only be used in actions and it is an error to
+      use in process_file_template where there is no "target".
+        "//foo/bar/baz.txt" => "baz.txt"
 
 ```
 

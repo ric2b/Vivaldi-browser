@@ -24,6 +24,7 @@
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
 #include "media/base/media.h"
+#include "media/media_features.h"
 #include "net/cookies/cookie_monster.h"
 #include "storage/browser/database/vfs_backend.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
@@ -48,10 +49,10 @@
 #include "gin/v8_initializer.h"  // nogncheck
 #endif
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "content/renderer/media/rtc_certificate.h"
 #include "third_party/WebKit/public/platform/WebRTCCertificateGenerator.h"
-#include "third_party/webrtc/base/rtccertificate.h"
+#include "third_party/webrtc/base/rtccertificate.h"  // nogncheck
 #endif
 
 namespace {
@@ -132,7 +133,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   blink::setLayoutTestMode(true);
   blink::WebRuntimeFeatures::enableDatabase(true);
   blink::WebRuntimeFeatures::enableNotifications(true);
-  blink::WebRuntimeFeatures::enableTouch(true);
+  blink::WebRuntimeFeatures::enableTouchEventFeatureDetection(true);
 
   // Initialize NetworkStateNotifier.
   blink::WebNetworkStateNotifier::setWebConnection(
@@ -309,7 +310,7 @@ void TestBlinkWebUnitTestSupport::getPluginList(
   builder->addMediaTypeToLastPlugin("application/pdf", "pdf");
 }
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 namespace {
 
 class TestWebRTCCertificateGenerator
@@ -341,11 +342,11 @@ class TestWebRTCCertificateGenerator
 };
 
 }  // namespace
-#endif  // defined(ENABLE_WEBRTC)
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 blink::WebRTCCertificateGenerator*
 TestBlinkWebUnitTestSupport::createRTCCertificateGenerator() {
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   return new TestWebRTCCertificateGenerator();
 #else
   return nullptr;

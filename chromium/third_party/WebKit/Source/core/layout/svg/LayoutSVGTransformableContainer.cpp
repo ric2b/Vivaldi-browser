@@ -67,6 +67,11 @@ bool LayoutSVGTransformableContainer::isChildAllowed(
 
 void LayoutSVGTransformableContainer::setNeedsTransformUpdate() {
   setMayNeedPaintInvalidationSubtree();
+  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
+    // The transform paint property relies on the SVG transform being up-to-date
+    // (see: PaintPropertyTreeBuilder::updateTransformForNonRootSVG).
+    setNeedsPaintPropertyUpdate();
+  }
   m_needsTransformUpdate = true;
 }
 
@@ -105,7 +110,8 @@ SVGTransformChange LayoutSVGTransformableContainer::calculateLocalTransform() {
     return SVGTransformChange::None;
 
   SVGTransformChangeDetector changeDetector(m_localTransform);
-  m_localTransform = element->calculateAnimatedLocalTransform();
+  m_localTransform =
+      element->calculateTransform(SVGElement::IncludeMotionTransform);
   m_localTransform.translate(m_additionalTranslation.width(),
                              m_additionalTranslation.height());
   m_needsTransformUpdate = false;

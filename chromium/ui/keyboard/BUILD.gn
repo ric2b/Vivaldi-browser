@@ -14,6 +14,7 @@ component("keyboard") {
     "keyboard_controller.h",
     "keyboard_controller_observer.h",
     "keyboard_export.h",
+    "keyboard_layout_delegate.h",
     "keyboard_layout_manager.cc",
     "keyboard_layout_manager.h",
     "keyboard_switches.cc",
@@ -37,6 +38,7 @@ component("keyboard") {
     "//ui/base",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display:display",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
@@ -164,6 +166,7 @@ test("keyboard_unittests") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl:test_support",
+    "//ui/resources:ui_test_pak",
     "//ui/wm",
   ]
 }

@@ -32,7 +32,7 @@
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/Functional.h"
@@ -64,7 +64,7 @@ static const size_t defaultPendingTokenLimit = 1000;
 
 using namespace HTMLNames;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 
 static void checkThatTokensAreSafeToSendToAnotherThread(
     const CompactHTMLTokenStream* tokens) {
@@ -88,7 +88,7 @@ static void checkThatXSSInfosAreSafeToSendToAnotherThread(
 
 WeakPtr<BackgroundHTMLParser> BackgroundHTMLParser::create(
     std::unique_ptr<Configuration> config,
-    std::unique_ptr<WebTaskRunner> loadingTaskRunner) {
+    RefPtr<WebTaskRunner> loadingTaskRunner) {
   auto* backgroundParser =
       new BackgroundHTMLParser(std::move(config), std::move(loadingTaskRunner));
   return backgroundParser->m_weakFactory.createWeakPtr();
@@ -109,20 +109,20 @@ BackgroundHTMLParser::Configuration::Configuration()
 
 BackgroundHTMLParser::BackgroundHTMLParser(
     std::unique_ptr<Configuration> config,
-    std::unique_ptr<WebTaskRunner> loadingTaskRunner)
+    RefPtr<WebTaskRunner> loadingTaskRunner)
     : m_weakFactory(this),
-      m_token(wrapUnique(new HTMLToken)),
+      m_token(WTF::wrapUnique(new HTMLToken)),
       m_tokenizer(HTMLTokenizer::create(config->options)),
       m_treeBuilderSimulator(config->options),
       m_options(config->options),
       m_outstandingTokenLimit(config->outstandingTokenLimit),
       m_parser(config->parser),
-      m_pendingTokens(wrapUnique(new CompactHTMLTokenStream)),
+      m_pendingTokens(WTF::wrapUnique(new CompactHTMLTokenStream)),
       m_pendingTokenLimit(config->pendingTokenLimit),
       m_xssAuditor(std::move(config->xssAuditor)),
       m_decoder(std::move(config->decoder)),
       m_loadingTaskRunner(std::move(loadingTaskRunner)),
-      m_tokenizedChunkQueue(config->tokenizedChunkQueue.release()),
+      m_tokenizedChunkQueue(std::move(config->tokenizedChunkQueue)),
       m_pendingCSPMetaTokenIndex(
           HTMLDocumentParser::TokenizedChunk::noPendingToken),
       m_startingScript(false),
@@ -256,7 +256,7 @@ void BackgroundHTMLParser::pumpTokenizer() {
               FilterTokenRequest(*m_token, m_sourceTracker,
                                  m_tokenizer->shouldAllowCDATA()))) {
         xssInfo->m_textPosition = position;
-        m_pendingXSSInfos.append(std::move(xssInfo));
+        m_pendingXSSInfos.push_back(std::move(xssInfo));
       }
 
       CompactHTMLToken token(m_token.get(), position);
@@ -278,12 +278,13 @@ void BackgroundHTMLParser::pumpTokenizer() {
         m_startingScript = true;
       }
 
-      m_pendingTokens->append(token);
+      m_pendingTokens->push_back(token);
       if (isCSPMetaTag) {
         m_pendingCSPMetaTokenIndex = m_pendingTokens->size() - 1;
       }
       if (shouldEvaluateForDocumentWrite) {
-        m_likelyDocumentWriteScriptIndices.append(m_pendingTokens->size() - 1);
+        m_likelyDocumentWriteScriptIndices.push_back(m_pendingTokens->size() -
+                                                     1);
       }
     }
 
@@ -318,7 +319,7 @@ bool BackgroundHTMLParser::queueChunkForMainThread() {
   if (m_pendingTokens->isEmpty())
     return false;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   checkThatTokensAreSafeToSendToAnotherThread(m_pendingTokens.get());
   checkThatPreloadsAreSafeToSendToAnotherThread(m_pendingPreloads);
   checkThatXSSInfosAreSafeToSendToAnotherThread(m_pendingXSSInfos);
@@ -326,7 +327,7 @@ bool BackgroundHTMLParser::queueChunkForMainThread() {
 
   double chunkStartTime = monotonicallyIncreasingTimeMS();
   std::unique_ptr<HTMLDocumentParser::TokenizedChunk> chunk =
-      wrapUnique(new HTMLDocumentParser::TokenizedChunk);
+      WTF::wrapUnique(new HTMLDocumentParser::TokenizedChunk);
   TRACE_EVENT_WITH_FLOW0("blink,loading",
                          "BackgroundHTMLParser::sendTokensToMainThread",
                          chunk.get(), TRACE_EVENT_FLAG_FLOW_OUT);
@@ -361,7 +362,7 @@ bool BackgroundHTMLParser::queueChunkForMainThread() {
                       ("Parser.ChunkEnqueueTime", 1, 10000, 50));
   chunkEnqueueTime.count(monotonicallyIncreasingTimeMS() - chunkStartTime);
 
-  m_pendingTokens = wrapUnique(new CompactHTMLTokenStream);
+  m_pendingTokens = WTF::wrapUnique(new CompactHTMLTokenStream);
   return isEmpty;
 }
 

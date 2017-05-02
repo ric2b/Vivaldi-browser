@@ -73,7 +73,7 @@ SDK.HAREntry = class {
 
     if (this._request.connectionId !== '0')
       entry.connection = this._request.connectionId;
-    var page = this._request.networkLog().pageLoadForRequest(this._request);
+    var page = SDK.NetworkLog.pageLoadForRequest(this._request);
     if (page)
       entry.pageref = 'page_' + page.id;
     return entry;
@@ -86,7 +86,7 @@ SDK.HAREntry = class {
     var headersText = this._request.requestHeadersText();
     var res = {
       method: this._request.requestMethod,
-      url: this._buildRequestURL(this._request.url),
+      url: this._buildRequestURL(this._request.url()),
       httpVersion: this._request.requestHttpVersion(),
       headers: this._request.requestHeaders(),
       queryString: this._buildParameters(this._request.queryParameters || []),
@@ -305,7 +305,7 @@ SDK.HARLog = class {
     var pages = [];
     for (var i = 0; i < this._requests.length; ++i) {
       var request = this._requests[i];
-      var page = request.networkLog().pageLoadForRequest(request);
+      var page = SDK.NetworkLog.pageLoadForRequest(request);
       if (!page || seenIdentifiers[page.id])
         continue;
       seenIdentifiers[page.id] = true;

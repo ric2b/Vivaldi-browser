@@ -15,7 +15,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
-#include "chrome/browser/android/webapk/webapk_installer.h"
+#include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/manifest/manifest_icon_downloader.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -85,9 +85,8 @@ void ShortcutHelper::InstallWebApkWithSkBitmap(
     const ShortcutInfo& info,
     const SkBitmap& icon_bitmap,
     const WebApkInstaller::FinishCallback& callback) {
-  // WebApkInstaller destroys itself when it is done.
-  WebApkInstaller* installer = new WebApkInstaller(info, icon_bitmap);
-  installer->InstallAsync(browser_context, callback);
+  WebApkInstallService::Get(browser_context)
+      ->InstallAsync(info, icon_bitmap, callback);
 }
 
 // static
@@ -110,8 +109,8 @@ void ShortcutHelper::AddWebappWithSkBitmap(
       base::android::ConvertUTF16ToJavaString(env, info.name);
   ScopedJavaLocalRef<jstring> java_short_name =
       base::android::ConvertUTF16ToJavaString(env, info.short_name);
-  ScopedJavaLocalRef<jstring> java_icon_url =
-      base::android::ConvertUTF8ToJavaString(env, info.icon_url.spec());
+  ScopedJavaLocalRef<jstring> java_best_icon_url =
+      base::android::ConvertUTF8ToJavaString(env, info.best_icon_url.spec());
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (icon_bitmap.getSize())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
@@ -125,7 +124,7 @@ void ShortcutHelper::AddWebappWithSkBitmap(
 
   Java_ShortcutHelper_addWebapp(env, java_webapp_id, java_url, java_scope_url,
                                 java_user_title, java_name, java_short_name,
-                                java_icon_url, java_bitmap, info.display,
+                                java_best_icon_url, java_bitmap, info.display,
                                 info.orientation, info.source, info.theme_color,
                                 info.background_color, callback_pointer);
 }
@@ -146,25 +145,30 @@ void ShortcutHelper::AddShortcutWithSkBitmap(
                                   info.source);
 }
 
-int ShortcutHelper::GetIdealHomescreenIconSizeInDp() {
+void ShortcutHelper::ShowWebApkInstallInProgressToast() {
+  Java_ShortcutHelper_showWebApkInstallInProgressToast(
+      base::android::AttachCurrentThread());
+}
+
+int ShortcutHelper::GetIdealHomescreenIconSizeInPx() {
   if (kIdealHomescreenIconSize == -1)
     GetHomescreenIconAndSplashImageSizes();
   return kIdealHomescreenIconSize;
 }
 
-int ShortcutHelper::GetMinimumHomescreenIconSizeInDp() {
+int ShortcutHelper::GetMinimumHomescreenIconSizeInPx() {
   if (kMinimumHomescreenIconSize == -1)
     GetHomescreenIconAndSplashImageSizes();
   return kMinimumHomescreenIconSize;
 }
 
-int ShortcutHelper::GetIdealSplashImageSizeInDp() {
+int ShortcutHelper::GetIdealSplashImageSizeInPx() {
   if (kIdealSplashImageSize == -1)
     GetHomescreenIconAndSplashImageSizes();
   return kIdealSplashImageSize;
 }
 
-int ShortcutHelper::GetMinimumSplashImageSizeInDp() {
+int ShortcutHelper::GetMinimumSplashImageSizeInPx() {
   if (kMinimumSplashImageSize == -1)
     GetHomescreenIconAndSplashImageSizes();
   return kMinimumSplashImageSize;
@@ -174,14 +178,14 @@ int ShortcutHelper::GetMinimumSplashImageSizeInDp() {
 void ShortcutHelper::FetchSplashScreenImage(
     content::WebContents* web_contents,
     const GURL& image_url,
-    const int ideal_splash_image_size_in_dp,
-    const int minimum_splash_image_size_in_dp,
+    const int ideal_splash_image_size_in_px,
+    const int minimum_splash_image_size_in_px,
     const std::string& webapp_id) {
   // This is a fire and forget task. It is not vital for the splash screen image
   // to be downloaded so if the downloader returns false there is no fallback.
   ManifestIconDownloader::Download(
-      web_contents, image_url, ideal_splash_image_size_in_dp,
-      minimum_splash_image_size_in_dp,
+      web_contents, image_url, ideal_splash_image_size_in_px,
+      minimum_splash_image_size_in_px,
       base::Bind(&ShortcutHelper::StoreWebappSplashImage, webapp_id));
 }
 
@@ -260,8 +264,13 @@ std::string ShortcutHelper::QueryWebApkPackage(const GURL& url) {
 }
 
 // static
-bool ShortcutHelper::IsWebApkInstalled(const GURL& url) {
-  return !QueryWebApkPackage(url).empty();
+bool ShortcutHelper::IsWebApkInstalled(
+    content::BrowserContext* browser_context,
+    const GURL& start_url,
+    const GURL& manifest_url) {
+  return !QueryWebApkPackage(start_url).empty() ||
+      WebApkInstallService::Get(browser_context)
+      ->IsInstallInProgress(manifest_url);
 }
 
 GURL ShortcutHelper::GetScopeFromURL(const GURL& url) {

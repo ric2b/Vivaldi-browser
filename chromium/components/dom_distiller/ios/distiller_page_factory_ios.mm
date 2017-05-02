@@ -12,18 +12,19 @@ namespace dom_distiller {
 
 DistillerPageFactoryIOS::DistillerPageFactoryIOS(
     web::BrowserState* browser_state)
-    : browser_state_(browser_state) {
-}
+    : browser_state_(browser_state) {}
+
+DistillerPageFactoryIOS::~DistillerPageFactoryIOS() {}
 
 std::unique_ptr<DistillerPage> DistillerPageFactoryIOS::CreateDistillerPage(
     const gfx::Size& view_size) const {
-  return base::WrapUnique<DistillerPage>(new DistillerPageIOS(browser_state_));
+  return base::MakeUnique<DistillerPageIOS>(browser_state_);
 }
 
 std::unique_ptr<DistillerPage>
 DistillerPageFactoryIOS::CreateDistillerPageWithHandle(
     std::unique_ptr<SourcePageHandle> handle) const {
-  return base::WrapUnique<DistillerPage>(new DistillerPageIOS(browser_state_));
+  return base::MakeUnique<DistillerPageIOS>(browser_state_);
 }
 
 }  // namespace dom_distiller

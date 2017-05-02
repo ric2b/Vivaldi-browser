@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
+#include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "grit/components_scaled_resources.h"
@@ -83,7 +84,7 @@ void CardUnmaskPromptControllerImpl::OnVerificationResult(
 
     case AutofillClient::TRY_AGAIN_FAILURE: {
       error_message = l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN);
+          IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_CVC);
       break;
     }
 
@@ -219,15 +220,11 @@ base::string16 CardUnmaskPromptControllerImpl::GetWindowTitle() const {
   // The iOS UI has less room for the title so it shows a shorter string.
   return l10n_util::GetStringUTF16(IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE);
 #else
-  int ids;
-  if (reason_ == AutofillClient::UNMASK_FOR_AUTOFILL &&
-      ShouldRequestExpirationDate()) {
-    ids = IDS_AUTOFILL_CARD_UNMASK_PROMPT_UPDATE_TITLE;
-  }
-  else {
-    ids = IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE;
-  }
-  return l10n_util::GetStringFUTF16(ids, card_.TypeAndLastFourDigits());
+  return l10n_util::GetStringFUTF16(
+      ShouldRequestExpirationDate()
+          ? IDS_AUTOFILL_CARD_UNMASK_PROMPT_EXPIRED_TITLE
+          : IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE,
+      card_.TypeAndLastFourDigits());
 #endif
 }
 
@@ -283,10 +280,7 @@ bool CardUnmaskPromptControllerImpl::InputCvcIsValid(
     const base::string16& input_text) const {
   base::string16 trimmed_text;
   base::TrimWhitespace(input_text, base::TRIM_ALL, &trimmed_text);
-  size_t input_size = card_.type() == kAmericanExpressCard ? 4 : 3;
-  return trimmed_text.size() == input_size &&
-         base::ContainsOnlyChars(trimmed_text,
-                                 base::ASCIIToUTF16("0123456789"));
+  return IsValidCreditCardSecurityCode(trimmed_text, card_.type());
 }
 
 bool CardUnmaskPromptControllerImpl::InputExpirationIsValid(
@@ -303,23 +297,15 @@ bool CardUnmaskPromptControllerImpl::InputExpirationIsValid(
     return false;
   }
 
-  if (month_value < 1 || month_value > 12)
-    return false;
-
-  base::Time::Exploded now;
-  base::Time::Now().LocalExplode(&now);
-
   // Convert 2 digit year to 4 digit year.
-  if (year_value < 100)
+  if (year_value < 100) {
+    base::Time::Exploded now;
+    base::Time::Now().LocalExplode(&now);
     year_value += (now.year / 100) * 100;
+  }
 
-  if (year_value < now.year)
-    return false;
-
-  if (year_value > now.year)
-    return true;
-
-  return month_value >= now.month;
+  return IsValidCreditCardExpirationDate(year_value, month_value,
+                                         base::Time::Now());
 }
 
 base::TimeDelta CardUnmaskPromptControllerImpl::GetSuccessMessageDuration()

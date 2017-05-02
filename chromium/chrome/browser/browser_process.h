@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/shell_integration.h"
+#include "media/media_features.h"
 
 class BackgroundModeManager;
 class CRLSetFetcher;
@@ -32,14 +33,11 @@ class IOThread;
 class MediaFileSystemRegistry;
 class NotificationPlatformBridge;
 class NotificationUIManager;
-class PhysicalWebDataSource;
-class PrefRegistrySimple;
 class PrefService;
-class Profile;
 class ProfileManager;
 class StatusTray;
 class WatchDogThread;
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 class WebRtcLogUploader;
 #endif
 
@@ -97,6 +95,10 @@ namespace network_time {
 class NetworkTimeTracker;
 }
 
+namespace physical_web {
+class PhysicalWebDataSource;
+}
+
 namespace policy {
 class BrowserPolicyConnector;
 class PolicyService;
@@ -109,7 +111,7 @@ class PrintPreviewDialogController;
 }
 
 namespace rappor {
-class RapporService;
+class RapporServiceImpl;
 }
 
 namespace safe_browsing {
@@ -139,7 +141,7 @@ class BrowserProcess {
 
   // Services: any of these getters may return NULL
   virtual metrics::MetricsService* metrics_service() = 0;
-  virtual rappor::RapporService* rappor_service() = 0;
+  virtual rappor::RapporServiceImpl* rappor_service() = 0;
   virtual ProfileManager* profile_manager() = 0;
   virtual PrefService* local_state() = 0;
   virtual net::URLRequestContextGetter* system_request_context() = 0;
@@ -262,7 +264,7 @@ class BrowserProcess {
 
   virtual bool created_local_state() const = 0;
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   virtual WebRtcLogUploader* webrtc_log_uploader() = 0;
 #endif
 
@@ -280,7 +282,7 @@ class BrowserProcess {
   CachedDefaultWebClientState() = 0;
 
   // Returns the Physical Web data source.
-  virtual PhysicalWebDataSource* GetPhysicalWebDataSource() = 0;
+  virtual physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BrowserProcess);

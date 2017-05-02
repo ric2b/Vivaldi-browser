@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("sync") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "ios_chrome_profile_sync_service_factory.cc",
     "ios_chrome_profile_sync_service_factory.h",
@@ -30,6 +31,8 @@ source_set("sync") {
     "//components/password_manager/core/browser",
     "//components/password_manager/sync/browser",
     "//components/prefs",
+    "//components/reading_list/core",
+    "//components/reading_list/ios",
     "//components/search_engines",
     "//components/sessions",
     "//components/signin/core/browser",
@@ -46,15 +49,16 @@ source_set("sync") {
     "//ios/chrome/browser/history",
     "//ios/chrome/browser/invalidation",
     "//ios/chrome/browser/passwords",
+    "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/services/gcm",
     "//ios/chrome/browser/sessions",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/sync/sessions",
+    "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/undo",
     "//ios/chrome/common",
-    "//ios/public/provider/chrome/browser",
     "//ios/web",
     "//net",
     "//ui/base",
@@ -63,6 +67,7 @@ source_set("sync") {
   allow_circular_includes_from = [
     "//ios/chrome/browser/history",
     "//ios/chrome/browser/passwords",
+    "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/sync/sessions",
@@ -108,6 +113,7 @@ source_set("unit_tests") {
     ":sync",
     "//base",
     "//components/browser_sync",
+    "//components/reading_list/core",
     "//components/sync",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/web:test_support",

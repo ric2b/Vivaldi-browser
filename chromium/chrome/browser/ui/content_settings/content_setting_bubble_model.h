@@ -33,7 +33,7 @@ class WebContents;
 }
 
 namespace rappor {
-class RapporService;
+class RapporServiceImpl;
 }
 
 // The hierarchy of bubble models:
@@ -176,9 +176,12 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   AsSubresourceFilterBubbleModel();
 
   // Sets the Rappor service used for testing.
-  void SetRapporServiceForTesting(rappor::RapporService* rappor_service) {
+  void SetRapporServiceImplForTesting(
+      rappor::RapporServiceImpl* rappor_service) {
     rappor_service_ = rappor_service;
   }
+
+  static const int kAllowButtonIndex;
 
  protected:
   ContentSettingBubbleModel(
@@ -227,7 +230,7 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   void set_selected_device(const content::MediaStreamDevice& device) {
     bubble_content_.media_menus[device.type].selected_device = device;
   }
-  rappor::RapporService* rappor_service() const { return rappor_service_; }
+  rappor::RapporServiceImpl* rappor_service() const { return rappor_service_; }
 
  private:
   virtual void SetTitle() = 0;
@@ -240,7 +243,7 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   // A registrar for listening for WEB_CONTENTS_DESTROYED notifications.
   content::NotificationRegistrar registrar_;
   // The service used to record Rappor metrics. Can be set for testing.
-  rappor::RapporService* rappor_service_;
+  rappor::RapporServiceImpl* rappor_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingBubbleModel);
 };

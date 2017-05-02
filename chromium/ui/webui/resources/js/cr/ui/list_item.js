@@ -50,18 +50,17 @@ cr.define('cr.ui', function() {
     /**
      * Called when the selection state of this element changes.
      */
-    selectionChanged: function() {
-    },
+    selectionChanged: function() {},
   };
 
   /**
    * Whether the item is selected. Setting this does not update the underlying
    * selection model. This is only used for display purpose.
    */
-  cr.defineProperty(ListItem, 'selected', cr.PropertyKind.BOOL_ATTR,
-                    function() {
-                      this.selectionChanged();
-                    });
+  cr.defineProperty(
+      ListItem, 'selected', cr.PropertyKind.BOOL_ATTR, function() {
+        this.selectionChanged();
+      });
 
   /**
    * Whether the item is the lead in a selection. Setting this does not update
@@ -75,7 +74,5 @@ cr.define('cr.ui', function() {
    */
   cr.defineProperty(ListItem, 'listIndex');
 
-  return {
-    ListItem: ListItem
-  };
+  return {ListItem: ListItem};
 });

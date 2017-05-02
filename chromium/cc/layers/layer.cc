@@ -47,7 +47,7 @@ Layer::Inputs::Inputs(int layer_id)
       masks_to_bounds(false),
       mask_layer(nullptr),
       opacity(1.f),
-      blend_mode(SkXfermode::kSrcOver_Mode),
+      blend_mode(SkBlendMode::kSrcOver),
       is_root_for_isolated_group(false),
       contents_opaque(false),
       is_drawable(false),
@@ -97,7 +97,7 @@ Layer::Layer()
       subtree_property_changed_(false),
       may_contain_video_(false),
       safe_opaque_background_color_(0),
-      draw_blend_mode_(SkXfermode::kSrcOver_Mode),
+      draw_blend_mode_(SkBlendMode::kSrcOver),
       num_unclipped_descendants_(0) {}
 
 Layer::~Layer() {
@@ -472,8 +472,10 @@ void Layer::SetOpacity(float opacity) {
   SetSubtreePropertyChanged();
   if (layer_tree_host_ && !force_rebuild) {
     PropertyTrees* property_trees = layer_tree_->property_trees();
-    auto effect_id_to_index = property_trees->effect_id_to_index_map.find(id());
-    if (effect_id_to_index != property_trees->effect_id_to_index_map.end()) {
+    auto effect_id_to_index =
+        property_trees->layer_id_to_effect_node_index.find(id());
+    if (effect_id_to_index !=
+        property_trees->layer_id_to_effect_node_index.end()) {
       EffectNode* node =
           property_trees->effect_tree.Node(effect_id_to_index->second);
       node->opacity = opacity;
@@ -498,7 +500,7 @@ bool Layer::AlwaysUseActiveTreeOpacity() const {
   return false;
 }
 
-void Layer::SetBlendMode(SkXfermode::Mode blend_mode) {
+void Layer::SetBlendMode(SkBlendMode blend_mode) {
   DCHECK(IsPropertyChangeAllowed());
   if (inputs_.blend_mode == blend_mode)
     return;
@@ -506,37 +508,37 @@ void Layer::SetBlendMode(SkXfermode::Mode blend_mode) {
   // Allowing only blend modes that are defined in the CSS Compositing standard:
   // http://dev.w3.org/fxtf/compositing-1/#blending
   switch (blend_mode) {
-    case SkXfermode::kSrcOver_Mode:
-    case SkXfermode::kScreen_Mode:
-    case SkXfermode::kOverlay_Mode:
-    case SkXfermode::kDarken_Mode:
-    case SkXfermode::kLighten_Mode:
-    case SkXfermode::kColorDodge_Mode:
-    case SkXfermode::kColorBurn_Mode:
-    case SkXfermode::kHardLight_Mode:
-    case SkXfermode::kSoftLight_Mode:
-    case SkXfermode::kDifference_Mode:
-    case SkXfermode::kExclusion_Mode:
-    case SkXfermode::kMultiply_Mode:
-    case SkXfermode::kHue_Mode:
-    case SkXfermode::kSaturation_Mode:
-    case SkXfermode::kColor_Mode:
-    case SkXfermode::kLuminosity_Mode:
+    case SkBlendMode::kSrcOver:
+    case SkBlendMode::kScreen:
+    case SkBlendMode::kOverlay:
+    case SkBlendMode::kDarken:
+    case SkBlendMode::kLighten:
+    case SkBlendMode::kColorDodge:
+    case SkBlendMode::kColorBurn:
+    case SkBlendMode::kHardLight:
+    case SkBlendMode::kSoftLight:
+    case SkBlendMode::kDifference:
+    case SkBlendMode::kExclusion:
+    case SkBlendMode::kMultiply:
+    case SkBlendMode::kHue:
+    case SkBlendMode::kSaturation:
+    case SkBlendMode::kColor:
+    case SkBlendMode::kLuminosity:
       // supported blend modes
       break;
-    case SkXfermode::kClear_Mode:
-    case SkXfermode::kSrc_Mode:
-    case SkXfermode::kDst_Mode:
-    case SkXfermode::kDstOver_Mode:
-    case SkXfermode::kSrcIn_Mode:
-    case SkXfermode::kDstIn_Mode:
-    case SkXfermode::kSrcOut_Mode:
-    case SkXfermode::kDstOut_Mode:
-    case SkXfermode::kSrcATop_Mode:
-    case SkXfermode::kDstATop_Mode:
-    case SkXfermode::kXor_Mode:
-    case SkXfermode::kPlus_Mode:
-    case SkXfermode::kModulate_Mode:
+    case SkBlendMode::kClear:
+    case SkBlendMode::kSrc:
+    case SkBlendMode::kDst:
+    case SkBlendMode::kDstOver:
+    case SkBlendMode::kSrcIn:
+    case SkBlendMode::kDstIn:
+    case SkBlendMode::kSrcOut:
+    case SkBlendMode::kDstOut:
+    case SkBlendMode::kSrcATop:
+    case SkBlendMode::kDstATop:
+    case SkBlendMode::kXor:
+    case SkBlendMode::kPlus:
+    case SkBlendMode::kModulate:
       // Porter Duff Compositing Operators are not yet supported
       // http://dev.w3.org/fxtf/compositing-1/#porterduffcompositingoperators
       NOTREACHED();
@@ -579,7 +581,7 @@ void Layer::SetPosition(const gfx::PointF& position) {
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                        id())) {
     DCHECK_EQ(transform_tree_index(),
-              property_trees->transform_id_to_index_map[id()]);
+              property_trees->layer_id_to_transform_node_index[id()]);
     TransformNode* transform_node =
         property_trees->transform_tree.Node(transform_tree_index());
     transform_node->update_post_local_transform(position, transform_origin());
@@ -640,7 +642,7 @@ void Layer::SetTransform(const gfx::Transform& transform) {
       // are axis
       // align with respect to one another.
       DCHECK_EQ(transform_tree_index(),
-                property_trees->transform_id_to_index_map[id()]);
+                property_trees->layer_id_to_transform_node_index[id()]);
       TransformNode* transform_node =
           property_trees->transform_tree.Node(transform_tree_index());
       bool preserves_2d_axis_alignment =
@@ -677,7 +679,7 @@ void Layer::SetTransformOrigin(const gfx::Point3F& transform_origin) {
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                        id())) {
     DCHECK_EQ(transform_tree_index(),
-              property_trees->transform_id_to_index_map[id()]);
+              property_trees->layer_id_to_transform_node_index[id()]);
     TransformNode* transform_node =
         property_trees->transform_tree.Node(transform_tree_index());
     transform_node->update_pre_local_transform(transform_origin);
@@ -780,7 +782,7 @@ void Layer::SetScrollOffset(const gfx::ScrollOffset& scroll_offset) {
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                        id())) {
     DCHECK_EQ(transform_tree_index(),
-              property_trees->transform_id_to_index_map[id()]);
+              property_trees->layer_id_to_transform_node_index[id()]);
     TransformNode* transform_node =
         property_trees->transform_tree.Node(transform_tree_index());
     transform_node->scroll_offset = CurrentScrollOffset();
@@ -813,7 +815,7 @@ void Layer::SetScrollOffsetFromImplSide(
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                        id())) {
     DCHECK_EQ(transform_tree_index(),
-              property_trees->transform_id_to_index_map[id()]);
+              property_trees->layer_id_to_transform_node_index[id()]);
     TransformNode* transform_node =
         property_trees->transform_tree.Node(transform_tree_index());
     transform_node->scroll_offset = CurrentScrollOffset();
@@ -1165,7 +1167,6 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetUseLocalTransformForBackfaceVisibility(
       use_local_transform_for_backface_visibility_);
   layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);
-  layer->Set3dSortingContextId(inputs_.sorting_context_id);
 
   layer->SetScrollClipLayer(inputs_.scroll_clip_layer_id);
   layer->set_user_scrollable_horizontal(inputs_.user_scrollable_horizontal);
@@ -1178,7 +1179,8 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   // active tree. To do so, avoid scrolling the pending tree along with it
   // instead of trying to undo that scrolling later.
   if (ScrollOffsetAnimationWasInterrupted())
-    layer_tree_->property_trees()
+    layer->layer_tree_impl()
+        ->property_trees()
         ->scroll_tree.SetScrollOffsetClobberActiveValue(layer->id());
 
   // If the main thread commits multiple times before the impl thread actually
@@ -1423,7 +1425,7 @@ void Layer::OnOpacityAnimated(float opacity) {
     if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT,
                                          id())) {
       DCHECK_EQ(effect_tree_index(),
-                property_trees->effect_id_to_index_map[id()]);
+                property_trees->layer_id_to_effect_node_index[id()]);
       EffectNode* node = property_trees->effect_tree.Node(effect_tree_index());
       node->opacity = opacity;
       property_trees->effect_tree.set_needs_update(true);
@@ -1443,7 +1445,7 @@ void Layer::OnTransformAnimated(const gfx::Transform& transform) {
     if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                          id())) {
       DCHECK_EQ(transform_tree_index(),
-                property_trees->transform_id_to_index_map[id()]);
+                property_trees->layer_id_to_transform_node_index[id()]);
       TransformNode* node =
           property_trees->transform_tree.Node(transform_tree_index());
       node->local = transform;
@@ -1469,7 +1471,7 @@ void Layer::OnIsAnimatingChanged(const PropertyAnimationState& mask,
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                        id())) {
     DCHECK_EQ(transform_tree_index(),
-              property_trees->transform_id_to_index_map[id()]);
+              property_trees->layer_id_to_transform_node_index[id()]);
     transform_node =
         property_trees->transform_tree.Node(transform_tree_index());
   }
@@ -1477,7 +1479,7 @@ void Layer::OnIsAnimatingChanged(const PropertyAnimationState& mask,
   EffectNode* effect_node = nullptr;
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id())) {
     DCHECK_EQ(effect_tree_index(),
-              property_trees->effect_id_to_index_map[id()]);
+              property_trees->layer_id_to_effect_node_index[id()]);
     effect_node = property_trees->effect_tree.Node(effect_tree_index());
   }
 
@@ -1531,9 +1533,9 @@ void Layer::OnIsAnimatingChanged(const PropertyAnimationState& mask,
   }
 }
 
-bool Layer::HasActiveAnimationForTesting() const {
+bool Layer::HasTickingAnimationForTesting() const {
   return layer_tree_host_
-             ? GetMutatorHost()->HasActiveAnimationForTesting(element_id())
+             ? GetMutatorHost()->HasTickingAnimationForTesting(element_id())
              : false;
 }
 

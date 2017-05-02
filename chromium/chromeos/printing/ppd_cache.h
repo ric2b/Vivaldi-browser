@@ -25,6 +25,8 @@ namespace printing {
 // the cache).  However, changing *any* field in PpdReference will make the
 // previous cache entry invalid.  This is the intentional behavior -- we want to
 // re-run the resolution logic if we have new meta-information about a printer.
+//
+// All cache functions must be called on a thread which is permitted to do I/O.
 class CHROMEOS_EXPORT PpdCache {
  public:
   // Options that can be tweaked.  These should all have sane defaults.  This
@@ -46,7 +48,9 @@ class CHROMEOS_EXPORT PpdCache {
     size_t max_available_list_cached_size = 10 * 1024 * 1024;
   };
 
-  // Create and return a Ppdcache that uses cache_dir to store state.
+  // Create and return a Ppdcache that uses cache_dir to store state.  If
+  // cache_base_dir does not exist, it will be lazily created the first time the
+  // cache needs to store state.
   static std::unique_ptr<PpdCache> Create(const base::FilePath& cache_base_dir,
                                           const Options& options = Options());
   virtual ~PpdCache() {}
@@ -73,12 +77,11 @@ class CHROMEOS_EXPORT PpdCache {
       const std::string& ppd_contents) = 0;
 
   // Return a map of available printers, if we have one available and it's
-  // not too stale.  Returns null if no map is available.
-  //
-  // If a map is returned, ownership is retained by the cache.  The map is
-  // guaranteed to remain valid and unchanged until the next
-  // {Find|Store}AvailablePrinters call.
-  virtual const PpdProvider::AvailablePrintersMap* FindAvailablePrinters() = 0;
+  // not too stale.  Returns nullopt if no map is available.  Note that, if the
+  // number of printers gets extremely large this map copy could get expensive
+  // and need to be reworked.
+  virtual base::Optional<PpdProvider::AvailablePrintersMap>
+  FindAvailablePrinters() = 0;
 
   // Store |available_printers|, replacing any existing entry.
   virtual void StoreAvailablePrinters(

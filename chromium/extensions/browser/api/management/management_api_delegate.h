@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_DELEGATER_H_
-#define EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_DELEGATER_H_
+#ifndef EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_DELEGATE_H_
+#define EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_DELEGATE_H_
 
 #include "base/callback.h"
 #include "extensions/browser/uninstall_reason.h"
@@ -24,7 +24,6 @@ class ExtensionPrefs;
 class ManagementCreateAppShortcutFunction;
 class ManagementGenerateAppForLinkFunction;
 class ManagementGetPermissionWarningsByManifestFunction;
-class ManagementSetEnabledFunction;
 class ManagementUninstallFunctionBase;
 class RequirementsChecker;
 
@@ -134,10 +133,9 @@ class ManagementAPIDelegate {
   virtual GURL GetIconURL(const Extension* extension,
                           int icon_size,
                           ExtensionIconSet::MatchType match,
-                          bool grayscale,
-                          bool* exists) const = 0;
+                          bool grayscale) const = 0;
 };
 
 }  // namespace extensions
 
-#endif  // EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_DELEGATER_H_
+#endif  // EXTENSIONS_BROWSER_API_MANAGEMENT_MANAGEMENT_API_DELEGATE_H_

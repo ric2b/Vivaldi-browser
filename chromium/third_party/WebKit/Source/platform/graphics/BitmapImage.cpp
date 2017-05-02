@@ -27,6 +27,7 @@
 #include "platform/graphics/BitmapImage.h"
 
 #include "platform/PlatformInstrumentation.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/BitmapImageMetrics.h"
@@ -34,13 +35,26 @@
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
+
+namespace {
+
+ColorBehavior defaultColorBehavior() {
+  // TODO(ccameron): ColorBehavior should be specified by the caller requesting
+  // SkImages.
+  // https://crbug.com/667420
+  if (RuntimeEnabledFeatures::trueColorRenderingEnabled())
+    return ColorBehavior::tag();
+  return ColorBehavior::transformToGlobalTarget();
+}
+
+}  // namespace
 
 PassRefPtr<BitmapImage> BitmapImage::createWithOrientationForTesting(
     const SkBitmap& bitmap,
@@ -60,6 +74,7 @@ BitmapImage::BitmapImage(ImageObserver* observer)
     : Image(observer),
       m_currentFrame(0),
       m_cachedFrameIndex(0),
+      m_cachedFrameColorBehavior(defaultColorBehavior()),
       m_repetitionCount(cAnimationNone),
       m_repetitionCountStatus(Unknown),
       m_repetitionsComplete(0),
@@ -78,6 +93,7 @@ BitmapImage::BitmapImage(const SkBitmap& bitmap, ImageObserver* observer)
       m_currentFrame(0),
       m_cachedFrame(SkImage::MakeFromBitmap(bitmap)),
       m_cachedFrameIndex(0),
+      m_cachedFrameColorBehavior(defaultColorBehavior()),
       m_repetitionCount(cAnimationNone),
       m_repetitionCountStatus(Unknown),
       m_repetitionsComplete(0),
@@ -130,16 +146,19 @@ size_t BitmapImage::totalFrameBytes() {
   return totalBytes;
 }
 
-sk_sp<SkImage> BitmapImage::decodeAndCacheFrame(size_t index) {
+sk_sp<SkImage> BitmapImage::decodeAndCacheFrame(
+    size_t index,
+    const ColorBehavior& colorBehavior) {
   size_t numFrames = frameCount();
   if (m_frames.size() < numFrames)
     m_frames.grow(numFrames);
 
   // We are caching frame snapshots.  This is OK even for partially decoded
   // frames, as they are cleared by dataChanged() when new data arrives.
-  sk_sp<SkImage> image = m_source.createFrameAtIndex(index);
+  sk_sp<SkImage> image = m_source.createFrameAtIndex(index, colorBehavior);
   m_cachedFrame = image;
   m_cachedFrameIndex = index;
+  m_cachedFrameColorBehavior = colorBehavior;
 
   m_frames[index].m_orientation = m_source.orientationAtIndex(index);
   m_frames[index].m_haveMetadata = true;
@@ -186,7 +205,8 @@ Image::SizeAvailability BitmapImage::setData(PassRefPtr<SharedBuffer> data,
     return SizeAvailable;
 
   // If ImageSource::setData() fails, we know that this is a decode error.
-  // Report size available so that it gets registered as such in ImageResource.
+  // Report size available so that it gets registered as such in
+  // ImageResourceContent.
   if (!m_source.setData(std::move(data), allDataReceived))
     return SizeAvailable;
 
@@ -245,10 +265,11 @@ void BitmapImage::draw(
     const FloatRect& dstRect,
     const FloatRect& srcRect,
     RespectImageOrientationEnum shouldRespectImageOrientation,
-    ImageClampingMode clampMode) {
+    ImageClampingMode clampMode,
+    const ColorBehavior& colorBehavior) {
   TRACE_EVENT0("skia", "BitmapImage::draw");
 
-  sk_sp<SkImage> image = imageForCurrentFrame();
+  sk_sp<SkImage> image = imageForCurrentFrame(colorBehavior);
   if (!image)
     return;  // It's too early and we don't have an image yet.
 
@@ -290,9 +311,6 @@ void BitmapImage::draw(
   if (image->isLazyGenerated())
     PlatformInstrumentation::didDrawLazyPixelRef(image->uniqueID());
 
-  if (ImageObserver* observer = getImageObserver())
-    observer->didDraw(this);
-
   startAnimation();
 }
 
@@ -327,14 +345,16 @@ bool BitmapImage::isSizeAvailable() {
   return m_sizeAvailable;
 }
 
-sk_sp<SkImage> BitmapImage::frameAtIndex(size_t index) {
+sk_sp<SkImage> BitmapImage::frameAtIndex(size_t index,
+                                         const ColorBehavior& colorBehavior) {
   if (index >= frameCount())
     return nullptr;
 
-  if (index == m_cachedFrameIndex && m_cachedFrame)
+  if (index == m_cachedFrameIndex && m_cachedFrame &&
+      m_cachedFrameColorBehavior == colorBehavior)
     return m_cachedFrame;
 
-  return decodeAndCacheFrame(index);
+  return decodeAndCacheFrame(index, colorBehavior);
 }
 
 bool BitmapImage::frameIsCompleteAtIndex(size_t index) const {
@@ -352,13 +372,17 @@ float BitmapImage::frameDurationAtIndex(size_t index) const {
   return m_source.frameDurationAtIndex(index);
 }
 
-sk_sp<SkImage> BitmapImage::imageForCurrentFrame() {
-  return frameAtIndex(currentFrame());
+sk_sp<SkImage> BitmapImage::imageForCurrentFrame(
+    const ColorBehavior& colorBehavior) {
+  return frameAtIndex(currentFrame(), colorBehavior);
 }
 
 PassRefPtr<Image> BitmapImage::imageForDefaultFrame() {
+  // TODO(ccameron): Determine the appropriate ColorBehavior for this situation.
+  // https://crbug.com/667420
+  const ColorBehavior& colorBehavior = m_cachedFrameColorBehavior;
   if (frameCount() > 1) {
-    sk_sp<SkImage> firstFrame = frameAtIndex(0);
+    sk_sp<SkImage> firstFrame = frameAtIndex(0, colorBehavior);
     if (firstFrame)
       return StaticBitmapImage::create(std::move(firstFrame));
   }
@@ -387,8 +411,9 @@ bool BitmapImage::currentFrameKnownToBeOpaque(MetadataMode metadataMode) {
   if (metadataMode == PreCacheMetadata) {
     // frameHasAlphaAtIndex() conservatively returns false for uncached frames.
     // To increase the chance of an accurate answer, pre-cache the current frame
-    // metadata.
-    frameAtIndex(currentFrame());
+    // metadata. Because ColorBehavior does not affect this result, use
+    // whatever ColorBehavior was last used (if any).
+    frameAtIndex(currentFrame(), m_cachedFrameColorBehavior);
   }
   return !frameHasAlphaAtIndex(currentFrame());
 }
@@ -398,7 +423,10 @@ bool BitmapImage::currentFrameIsComplete() {
 }
 
 bool BitmapImage::currentFrameIsLazyDecoded() {
-  sk_sp<SkImage> image = frameAtIndex(currentFrame());
+  // Because ColorBehavior does not affect this result, use whatever
+  // ColorBehavior was last used (if any).
+  sk_sp<SkImage> image =
+      frameAtIndex(currentFrame(), m_cachedFrameColorBehavior);
   return image && image->isLazyGenerated();
 }
 
@@ -493,7 +521,7 @@ void BitmapImage::startAnimation(CatchUpAnimation catchUpIfNecessary) {
 
   if (catchUpIfNecessary == DoNotCatchUp || time < m_desiredFrameStartTime) {
     // Haven't yet reached time for next frame to start; delay until then.
-    m_frameTimer = wrapUnique(
+    m_frameTimer = WTF::wrapUnique(
         new Timer<BitmapImage>(this, &BitmapImage::advanceAnimation));
     m_frameTimer->startOneShot(std::max(m_desiredFrameStartTime - time, 0.),
                                BLINK_FROM_HERE);
@@ -524,7 +552,7 @@ void BitmapImage::startAnimation(CatchUpAnimation catchUpIfNecessary) {
     // may be in the past, meaning the next time through this function we'll
     // kick off the next advancement sooner than this frame's duration would
     // suggest.
-    m_frameTimer = wrapUnique(new Timer<BitmapImage>(
+    m_frameTimer = WTF::wrapUnique(new Timer<BitmapImage>(
         this, &BitmapImage::advanceAnimationWithoutCatchUp));
     m_frameTimer->startOneShot(0, BLINK_FROM_HERE);
   }
@@ -607,7 +635,7 @@ bool BitmapImage::internalAdvanceAnimation(AnimationAdvancement advancement) {
       // last frame. Skipping frames occurs while painting so we do not
       // synchronously notify the observer which could cause a layout.
       if (advancement == SkipFramesToCatchUp) {
-        m_frameTimer = wrapUnique(new Timer<BitmapImage>(
+        m_frameTimer = WTF::wrapUnique(new Timer<BitmapImage>(
             this, &BitmapImage::notifyObserversOfAnimationAdvance));
         m_frameTimer->startOneShot(0, BLINK_FROM_HERE);
       }

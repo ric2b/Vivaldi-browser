@@ -18,7 +18,8 @@
 namespace blink {
 
 DeviceMotionController::DeviceMotionController(Document& document)
-    : DeviceSingleWindowEventController(document) {}
+    : DeviceSingleWindowEventController(document),
+      Supplement<Document>(document) {}
 
 DeviceMotionController::~DeviceMotionController() {}
 
@@ -43,8 +44,7 @@ void DeviceMotionController::didAddEventListener(
     return;
 
   if (document().frame()) {
-    String errorMessage;
-    if (document().isSecureContext(errorMessage)) {
+    if (document().isSecureContext()) {
       UseCounter::count(document().frame(),
                         UseCounter::DeviceMotionSecureOrigin);
     } else {
@@ -52,7 +52,10 @@ void DeviceMotionController::didAddEventListener(
                                     UseCounter::DeviceMotionInsecureOrigin);
       HostsUsingFeatures::countAnyWorld(
           document(), HostsUsingFeatures::Feature::DeviceMotionInsecureHost);
-      if (document().frame()->settings()->strictPowerfulFeatureRestrictions())
+      if (document()
+              .frame()
+              ->settings()
+              ->getStrictPowerfulFeatureRestrictions())
         return;
     }
   }

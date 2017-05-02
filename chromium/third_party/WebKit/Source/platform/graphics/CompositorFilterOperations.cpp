@@ -97,4 +97,26 @@ bool CompositorFilterOperations::operator==(
   return m_filterOperations == o.m_filterOperations;
 }
 
+bool CompositorFilterOperations::equalsIgnoringReferenceFilters(
+    const CompositorFilterOperations& o) const {
+  size_t size = m_filterOperations.size();
+  if (size != o.m_filterOperations.size())
+    return false;
+  for (size_t i = 0; i < size; ++i) {
+    const auto& operation = m_filterOperations.at(i);
+    if (operation.type() == cc::FilterOperation::REFERENCE) {
+      if (o.m_filterOperations.at(i).type() != cc::FilterOperation::REFERENCE)
+        return false;
+      continue;
+    }
+    if (operation != o.m_filterOperations.at(i))
+      return false;
+  }
+  return true;
+}
+
+String CompositorFilterOperations::toString() const {
+  return m_filterOperations.ToString().c_str();
+}
+
 }  // namespace blink

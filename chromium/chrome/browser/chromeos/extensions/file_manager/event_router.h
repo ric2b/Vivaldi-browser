@@ -26,6 +26,8 @@
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "chromeos/settings/timezone_settings.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/drive/chromeos/file_system_observer.h"
 #include "components/drive/chromeos/sync_client.h"
 #include "components/drive/service/drive_service_interface.h"
@@ -36,10 +38,6 @@ class PrefChangeRegistrar;
 class Profile;
 
 using file_manager::util::EntryDefinition;
-
-namespace base {
-class ListValue;
-}
 
 namespace chromeos {
 class NetworkState;
@@ -58,7 +56,8 @@ class EventRouter : public KeyedService,
                     public chromeos::system::TimezoneSettings::Observer,
                     public drive::FileSystemObserver,
                     public drive::DriveServiceObserver,
-                    public VolumeManagerObserver {
+                    public VolumeManagerObserver,
+                    public arc::ArcIntentHelperObserver {
  public:
   typedef base::Callback<void(const base::FilePath& virtual_path,
                               const drive::FileChange* list,
@@ -68,6 +67,9 @@ class EventRouter : public KeyedService,
 
   explicit EventRouter(Profile* profile);
   ~EventRouter() override;
+
+  // arc::ArcIntentHelperObserver overrides.
+  void OnIntentFiltersUpdated() override;
 
   // KeyedService overrides.
   void Shutdown() override;

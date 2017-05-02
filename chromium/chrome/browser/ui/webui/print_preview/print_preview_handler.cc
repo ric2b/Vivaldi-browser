@@ -21,6 +21,7 @@
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -106,6 +107,8 @@ using printing::PrintViewManager;
 
 namespace {
 
+// This enum is used to back an UMA histogram, and should therefore be treated
+// as append only.
 enum UserActionBuckets {
   PRINT_TO_PRINTER,
   PRINT_TO_PDF,
@@ -121,6 +124,8 @@ enum UserActionBuckets {
   USERACTION_BUCKET_BOUNDARY
 };
 
+// This enum is used to back an UMA histogram, and should therefore be treated
+// as append only.
 enum PrintSettingsBuckets {
   LANDSCAPE = 0,
   PORTRAIT,
@@ -138,10 +143,19 @@ enum PrintSettingsBuckets {
   DEFAULT_MEDIA,
   NON_DEFAULT_MEDIA,
   COPIES,
-  SCALING,
   NON_DEFAULT_MARGINS,
   DISTILL_PAGE_UNUSED,
+  SCALING,
+  PRINT_AS_IMAGE,
   PRINT_SETTINGS_BUCKET_BOUNDARY
+};
+
+// This enum is used to back an UMA histogram, and should therefore be treated
+// as append only.
+enum PrintDocumentTypeBuckets {
+  HTML_DOCUMENT = 0,
+  PDF_DOCUMENT,
+  PRINT_DOCUMENT_TYPE_BUCKET_BOUNDARY
 };
 
 void ReportUserActionHistogram(enum UserActionBuckets event) {
@@ -152,6 +166,11 @@ void ReportUserActionHistogram(enum UserActionBuckets event) {
 void ReportPrintSettingHistogram(enum PrintSettingsBuckets setting) {
   UMA_HISTOGRAM_ENUMERATION("PrintPreview.PrintSettings", setting,
                             PRINT_SETTINGS_BUCKET_BOUNDARY);
+}
+
+void ReportPrintDocumentTypeHistogram(enum PrintDocumentTypeBuckets doctype) {
+  UMA_HISTOGRAM_ENUMERATION("PrintPreview.PrintDocumentType", doctype,
+                            PRINT_DOCUMENT_TYPE_BUCKET_BOUNDARY);
 }
 
 // Name of a dictionary field holding cloud print related data;
@@ -288,6 +307,12 @@ void ReportPrintSettingsStats(const base::DictionaryValue& settings) {
                           &external_preview) && external_preview) {
     ReportPrintSettingHistogram(EXTERNAL_PDF_PREVIEW);
   }
+
+  bool rasterize = false;
+  if (settings.GetBoolean(printing::kSettingRasterizePdf,
+                          &rasterize) && rasterize) {
+    ReportPrintSettingHistogram(PRINT_AS_IMAGE);
+  }
 }
 
 // Callback that stores a PDF file on disk.
@@ -397,6 +422,11 @@ void PrintersToValues(const printing::PrinterList& printer_list,
     auto options = base::MakeUnique<base::DictionaryValue>();
     for (const auto opt_it : printer.options)
       options->SetString(opt_it.first, opt_it.second);
+
+    printer_info->SetBoolean(
+        kCUPSEnterprisePrinter,
+        base::ContainsKey(printer.options, kCUPSEnterprisePrinter) &&
+            printer.options.at(kCUPSEnterprisePrinter) == kValueTrue);
 
     printer_info->Set(printing::kSettingPrinterOptions, std::move(options));
 
@@ -518,7 +548,8 @@ PrintPreviewHandler::PrintPreviewHandler()
       manage_cloud_printers_dialog_request_count_(0),
       reported_failed_preview_(false),
       has_logged_printers_count_(false),
-      gaia_cookie_manager_service_(NULL),
+      gaia_cookie_manager_service_(nullptr),
+      printer_backend_proxy_(nullptr),
       weak_factory_(this) {
   ReportUserActionHistogram(PREVIEW_STARTED);
 }
@@ -544,6 +575,9 @@ void PrintPreviewHandler::RegisterMessages() {
       "getPrinterCapabilities",
       base::Bind(&PrintPreviewHandler::HandleGetPrinterCapabilities,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setupPrinter", base::Bind(&PrintPreviewHandler::HandlePrinterSetup,
+                                 base::Unretained(this)));
 #if BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
   web_ui()->RegisterMessageCallback("showSystemDialog",
       base::Bind(&PrintPreviewHandler::HandleShowSystemDialog,
@@ -611,11 +645,27 @@ PrintPreviewUI* PrintPreviewHandler::print_preview_ui() const {
   return static_cast<PrintPreviewUI*>(web_ui()->GetController());
 }
 
+printing::PrinterBackendProxy* PrintPreviewHandler::printer_backend_proxy() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (!printer_backend_proxy_) {
+#if defined(OS_CHROMEOS)
+    // ChromeOS stores printer information in printer prefs which requires a
+    // profile.  Other plaforms retrieve printer information from OS resources.
+    printer_backend_proxy_ =
+        printing::PrinterBackendProxy::Create(Profile::FromWebUI(web_ui()));
+#else
+    printer_backend_proxy_ = printing::PrinterBackendProxy::Create();
+#endif
+  }
+
+  return printer_backend_proxy_.get();
+}
+
 void PrintPreviewHandler::HandleGetPrinters(const base::ListValue* /*args*/) {
   VLOG(1) << "Enumerate printers start";
-  printing::EnumeratePrinters(Profile::FromWebUI(web_ui()),
-                              base::Bind(&PrintPreviewHandler::SetupPrinterList,
-                                         weak_factory_.GetWeakPtr()));
+  printer_backend_proxy()->EnumeratePrinters(base::Bind(
+      &PrintPreviewHandler::SetupPrinterList, weak_factory_.GetWeakPtr()));
 }
 
 void PrintPreviewHandler::HandleGetPrivetPrinters(const base::ListValue* args) {
@@ -785,6 +835,10 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
     return;
 
   ReportPrintSettingsStats(*settings);
+
+  // Report whether the user printed a PDF or an HTML document.
+  ReportPrintDocumentTypeHistogram(print_preview_ui()->source_is_modifiable() ?
+                                   HTML_DOCUMENT : PDF_DOCUMENT);
 
   // Never try to add headers/footers here. It's already in the generated PDF.
   settings->SetBoolean(printing::kSettingHeaderFooterEnabled, false);
@@ -1029,8 +1083,28 @@ void PrintPreviewHandler::HandleGetPrinterCapabilities(
       base::Bind(&PrintPreviewHandler::SendPrinterCapabilities,
                  weak_factory_.GetWeakPtr(), printer_name);
 
-  printing::ConfigurePrinterAndFetchCapabilities(Profile::FromWebUI(web_ui()),
-                                                 printer_name, cb);
+  printer_backend_proxy()->ConfigurePrinterAndFetchCapabilities(printer_name,
+                                                                cb);
+}
+
+// |args| is expected to contain a string with representing the callback id
+// followed by a list of arguments the first of which should be the printer id.
+void PrintPreviewHandler::HandlePrinterSetup(const base::ListValue* args) {
+  AllowJavascript();
+
+  std::string callback_id;
+  std::string printer_name;
+  if (!args->GetString(0, &callback_id) || !args->GetString(1, &printer_name) ||
+      callback_id.empty() || printer_name.empty()) {
+    RejectJavascriptCallback(base::StringValue(callback_id),
+                             base::StringValue(printer_name));
+    return;
+  }
+
+  printer_backend_proxy()->ConfigurePrinterAndFetchCapabilities(
+      printer_name,
+      base::Bind(&PrintPreviewHandler::SendPrinterSetup,
+                 weak_factory_.GetWeakPtr(), callback_id, printer_name));
 }
 
 void PrintPreviewHandler::OnSigninComplete() {
@@ -1152,11 +1226,8 @@ void PrintPreviewHandler::HandleGetInitialSettings(
     const base::ListValue* /*args*/) {
   // Send before SendInitialSettings() to allow cloud printer auto select.
   SendCloudPrintEnabled();
-  base::PostTaskAndReplyWithResult(
-      BrowserThread::GetBlockingPool(), FROM_HERE,
-      base::Bind(&printing::GetDefaultPrinterOnBlockingPoolThread),
-      base::Bind(&PrintPreviewHandler::SendInitialSettings,
-                 weak_factory_.GetWeakPtr()));
+  printer_backend_proxy()->GetDefaultPrinter(base::Bind(
+      &PrintPreviewHandler::SendInitialSettings, weak_factory_.GetWeakPtr()));
 }
 
 void PrintPreviewHandler::HandleForceOpenNewTab(const base::ListValue* args) {
@@ -1234,6 +1305,30 @@ void PrintPreviewHandler::SendPrinterCapabilities(
   VLOG(1) << "Get printer capabilities finished";
   web_ui()->CallJavascriptFunctionUnsafe("updateWithPrinterCapabilities",
                                          *settings_info);
+}
+
+void PrintPreviewHandler::SendPrinterSetup(
+    const std::string& callback_id,
+    const std::string& printer_name,
+    std::unique_ptr<base::DictionaryValue> destination_info) {
+  auto response = base::MakeUnique<base::DictionaryValue>();
+  bool success = true;
+  auto caps_value = base::Value::CreateNullValue();
+  auto caps = base::MakeUnique<base::DictionaryValue>();
+  if (destination_info &&
+      destination_info->Remove(printing::kPrinterCapabilities, &caps_value) &&
+      caps_value->IsType(base::Value::Type::DICTIONARY)) {
+    caps = base::DictionaryValue::From(std::move(caps_value));
+  } else {
+    LOG(WARNING) << "Printer setup failed";
+    success = false;
+  }
+
+  response->SetString("printerId", printer_name);
+  response->SetBoolean("success", success);
+  response->Set("capabilities", std::move(caps));
+
+  ResolveJavascriptCallback(base::StringValue(callback_id), *response);
 }
 
 void PrintPreviewHandler::SetupPrinterList(

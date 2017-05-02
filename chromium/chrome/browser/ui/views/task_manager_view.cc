@@ -40,9 +40,9 @@
 #include "ash/wm/window_properties.h"             // nogncheck
 #include "ash/wm/window_util.h"                   // nogncheck
 #include "chrome/browser/ui/ash/ash_util.h"       // nogncheck
-#include "chrome/browser/ui/ash/property_util.h"  // nogncheck
-
-#include "ash/shell.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/image/image_skia.h"
 #endif  // defined(USE_ASH)
 
 #if defined(OS_WIN)
@@ -50,6 +50,10 @@
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif  // defined(OS_WIN)
+
+#if defined(USE_ASH)
+#include "ash/shell.h"
+#endif  // defined(USE_ASH)
 
 namespace task_manager {
 
@@ -75,17 +79,17 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
 
   g_task_manager_view = new TaskManagerView();
 
-  gfx::NativeWindow window =
+  gfx::NativeWindow context =
       browser ? browser->window()->GetNativeWindow() : nullptr;
 #if defined(USE_ASH)
-  // NOTE(jarle@vivaldi): Do not call ash::wm::GetActiveWindow unless we have a 
+  // NOTE(jarle@vivaldi): Do not call ash::wm::GetActiveWindow unless we have a
   // valid Shell instance, otherwise it will terminate the process via
   // Shell::GetPrimaryRootWindow. [VB-10963]
-  if (!chrome::IsRunningInMash() && !window && ash::Shell::HasInstance())
-    window = ash::wm::GetActiveWindow();
+  if (!chrome::IsRunningInMash() && !context && ash::Shell::HasInstance())
+    context = ash::wm::GetActiveWindow();
 #endif
 
-  DialogDelegate::CreateDialogWidget(g_task_manager_view, window, nullptr);
+  DialogDelegate::CreateDialogWidget(g_task_manager_view, context, nullptr);
   g_task_manager_view->InitAlwaysOnTopState();
 
 #if defined(OS_WIN)
@@ -109,12 +113,12 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
     focus_manager->SetFocusedView(g_task_manager_view->tab_table_);
 
 #if defined(USE_ASH)
-  aura::Window* aura_window =
-      g_task_manager_view->GetWidget()->GetNativeWindow();
-  property_util::SetIntProperty(aura_window, ash::kShelfItemTypeKey,
-                                ash::TYPE_DIALOG);
-  property_util::SetIntProperty(aura_window, ash::kShelfIconResourceIdKey,
-                                IDR_ASH_SHELF_ICON_TASK_MANAGER);
+  aura::Window* window = g_task_manager_view->GetWidget()->GetNativeWindow();
+  window->SetProperty<int>(ash::kShelfItemTypeKey, ash::TYPE_DIALOG);
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  gfx::ImageSkia* icon = rb.GetImageSkiaNamed(IDR_ASH_SHELF_ICON_TASK_MANAGER);
+  // The new gfx::ImageSkia instance is owned by the window itself.
+  window->SetProperty(aura::client::kWindowIconKey, new gfx::ImageSkia(*icon));
 #endif
   return g_task_manager_view->table_model_.get();
 }
@@ -327,7 +331,7 @@ void TaskManagerView::Init() {
       this));
   tab_table_->SetModel(table_model_.get());
   tab_table_->SetGrouper(this);
-  tab_table_->SetObserver(this);
+  tab_table_->set_observer(this);
   tab_table_->set_context_menu_controller(this);
   set_context_menu_controller(this);
 

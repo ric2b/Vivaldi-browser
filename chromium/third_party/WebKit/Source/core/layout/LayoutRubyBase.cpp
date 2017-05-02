@@ -126,15 +126,17 @@ void LayoutRubyBase::moveBlockChildren(LayoutRubyBase* toBase,
   }
   // Move all remaining children normally. If moving all children, include our
   // float list.
-  if (!beforeChild)
+  if (!beforeChild) {
     moveAllChildrenIncludingFloatsTo(toBase, toBase->hasLayer() || hasLayer());
-  else
-    moveChildrenTo(toBase, firstChild(), beforeChild, toBase->children());
+  } else {
+    moveChildrenTo(toBase, firstChild(), beforeChild);
+    removeFloatingObjectsFromDescendants();
+  }
 }
 
 ETextAlign LayoutRubyBase::textAlignmentForLine(
     bool /* endsWithSoftBreak */) const {
-  return ETextAlign::Justify;
+  return ETextAlign::kJustify;
 }
 
 void LayoutRubyBase::adjustInlineDirectionLineBounds(

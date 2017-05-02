@@ -112,7 +112,8 @@ bool IsYoutubeDomainUrl(const GURL& url,
 // "*.<domain_in_lower_case>.<TLD>" instead.
 bool IsValidHostName(base::StringPiece host,
                      base::StringPiece domain_in_lower_case,
-                     google_util::SubdomainPermission subdomain_permission);
+                     google_util::SubdomainPermission subdomain_permission,
+                     base::StringPiece* tld = nullptr);
 
 // True if |url| is a valid URL with HTTP or HTTPS scheme. If |port_permission|
 // is DISALLOW_NON_STANDARD_PORTS, this also requires |url| to use the standard

@@ -21,7 +21,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -623,7 +622,8 @@ bool MetadataDatabase::HasSyncRoot() const {
 SyncStatusCode MetadataDatabase::PopulateInitialData(
     int64_t largest_change_id,
     const google_apis::FileResource& sync_root_folder,
-    const ScopedVector<google_apis::FileResource>& app_root_folders) {
+    const std::vector<std::unique_ptr<google_apis::FileResource>>&
+        app_root_folders) {
   index_->SetLargestChangeID(largest_change_id);
   UpdateLargestKnownChangeID(largest_change_id);
 
@@ -890,7 +890,7 @@ bool MetadataDatabase::FindNearestActiveAncestor(
 
 SyncStatusCode MetadataDatabase::UpdateByChangeList(
     int64_t largest_change_id,
-    ScopedVector<google_apis::ChangeResource> changes) {
+    std::vector<std::unique_ptr<google_apis::ChangeResource>> changes) {
   DCHECK_LE(index_->GetLargestChangeID(), largest_change_id);
 
   for (size_t i = 0; i < changes.size(); ++i) {
@@ -919,7 +919,7 @@ SyncStatusCode MetadataDatabase::UpdateByFileResource(
 }
 
 SyncStatusCode MetadataDatabase::UpdateByFileResourceList(
-    ScopedVector<google_apis::FileResource> resources) {
+    std::vector<std::unique_ptr<google_apis::FileResource>> resources) {
   for (size_t i = 0; i < resources.size(); ++i) {
     std::unique_ptr<FileMetadata> metadata(CreateFileMetadataFromFileResource(
         GetLargestKnownChangeID(), *resources[i]));

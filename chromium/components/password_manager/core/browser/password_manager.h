@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -171,9 +172,25 @@ class PasswordManager : public LoginModel {
   // visible forms.
   void DropFormManagers();
 
+  // Returns true if password element is detected on the current page.
+  bool IsPasswordFieldDetectedOnPage();
+
   PasswordManagerClient* client() { return client_; }
 
+#if defined(UNIT_TEST)
+  // TODO(crbug.com/639786): Replace using this by quering the factory for
+  // mocked PasswordFormManagers.
+  const std::vector<std::unique_ptr<PasswordFormManager>>&
+  pending_login_managers() {
+    return pending_login_managers_;
+  }
+#endif
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(
+      PasswordManagerTest,
+      ShouldBlockPasswordForSameOriginButDifferentSchemeTest);
+
   enum ProvisionalSaveFailure {
     SAVING_DISABLED,
     EMPTY_PASSWORD,
@@ -200,6 +217,13 @@ class PasswordManager : public LoginModel {
   // Returns true if |provisional_save_manager_| is ready for saving and
   // non-blacklisted.
   bool CanProvisionalManagerSave();
+
+  // Returns true if there already exists a provisionally saved password form
+  // from the same origin as |form|, but with a different and secure scheme.
+  // This prevents a potential attack where users can be tricked into saving
+  // unwanted credentials, see http://crbug.com/571580 for details.
+  bool ShouldBlockPasswordForSameOriginButDifferentScheme(
+      const autofill::PasswordForm& form) const;
 
   // Returns true if the user needs to be prompted before a password can be
   // saved (instead of automatically saving

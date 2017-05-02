@@ -38,13 +38,13 @@ class PrefService;
 class PrefRegistrySimple;
 class SystemURLRequestContextGetter;
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 namespace chrome {
 namespace android {
 class ExternalDataUseObserver;
 }
 }
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
 
 namespace base {
 class CommandLine;
@@ -78,7 +78,6 @@ class CookieStore;
 class CTLogVerifier;
 class HostMappingRules;
 class HostResolver;
-class HttpAuthHandlerRegistryFactory;
 class HttpAuthPreferences;
 class HttpServerProperties;
 class HttpTransactionFactory;
@@ -139,11 +138,11 @@ class IOThread : public content::BrowserThreadDelegate {
     // Global aggregator of data use. It must outlive the
     // |system_network_delegate|.
     std::unique_ptr<data_usage::DataUseAggregator> data_use_aggregator;
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
     // An external observer of data use.
     std::unique_ptr<chrome::android::ExternalDataUseObserver>
         external_data_use_observer;
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
     // The "system" NetworkDelegate, used for Profile-agnostic network events.
     std::unique_ptr<net::NetworkDelegate> system_network_delegate;
     std::unique_ptr<net::HostResolver> host_resolver;
@@ -237,10 +236,16 @@ class IOThread : public content::BrowserThreadDelegate {
 
   const net::HttpNetworkSession::Params& NetworkSessionParams() const;
 
+  // Dynamically disables QUIC for HttpNetworkSessions owned by io_thread, and
+  // to HttpNetworkSession::Params which are used for the creation of new
+  // HttpNetworkSessions. Not that re-enabling Quic dynamically is not
+  // supported for simplicity and requires a browser restart.
+  void DisableQuic();
+
   base::TimeTicks creation_time() const;
 
   // Returns the callback for updating data use prefs.
-  const metrics::UpdateUsagePrefCallbackType& GetMetricsDataUseForwarder();
+  metrics::UpdateUsagePrefCallbackType GetMetricsDataUseForwarder();
 
   // Registers the |observer| for new STH notifications.
   void RegisterSTHObserver(net::ct::STHObserver* observer);
@@ -399,10 +404,6 @@ class IOThread : public content::BrowserThreadDelegate {
   bool http_09_on_non_default_ports_enabled_;
 
   const base::TimeTicks creation_time_;
-
-  // Callback for updating data use prefs which needs to be initialized on UI
-  // thread and passed to |DataUseNetworkDelegate|.
-  metrics::UpdateUsagePrefCallbackType metrics_data_use_forwarder_;
 
   base::WeakPtrFactory<IOThread> weak_factory_;
 

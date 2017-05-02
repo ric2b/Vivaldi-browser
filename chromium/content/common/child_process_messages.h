@@ -15,10 +15,8 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap_manager.h"
-#include "components/discardable_memory/common/discardable_shared_memory_id.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits_macros.h"
-#include "content/common/gpu_process_launch_causes.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/ipc/common/gpu_param_traits_macros.h"
 #include "ipc/ipc_channel_handle.h"
@@ -32,9 +30,6 @@
 #include "base/threading/platform_thread.h"
 #endif
 
-IPC_ENUM_TRAITS_MAX_VALUE(content::CauseForGpuLaunch,
-                          content::CAUSE_FOR_GPU_LAUNCH_MAX_ENUM - 1)
-
 IPC_ENUM_TRAITS_MAX_VALUE(tracked_objects::ThreadData::Status,
                           tracked_objects::ThreadData::STATUS_LAST)
 
@@ -46,7 +41,7 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(tracked_objects::BirthOnThreadSnapshot)
   IPC_STRUCT_TRAITS_MEMBER(location)
-  IPC_STRUCT_TRAITS_MEMBER(thread_name)
+  IPC_STRUCT_TRAITS_MEMBER(sanitized_thread_name)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(tracked_objects::DeathDataSnapshot)
@@ -57,12 +52,18 @@ IPC_STRUCT_TRAITS_BEGIN(tracked_objects::DeathDataSnapshot)
   IPC_STRUCT_TRAITS_MEMBER(queue_duration_sum)
   IPC_STRUCT_TRAITS_MEMBER(queue_duration_max)
   IPC_STRUCT_TRAITS_MEMBER(queue_duration_sample)
+  IPC_STRUCT_TRAITS_MEMBER(alloc_ops)
+  IPC_STRUCT_TRAITS_MEMBER(free_ops)
+  IPC_STRUCT_TRAITS_MEMBER(allocated_bytes)
+  IPC_STRUCT_TRAITS_MEMBER(freed_bytes)
+  IPC_STRUCT_TRAITS_MEMBER(alloc_overhead_bytes)
+  IPC_STRUCT_TRAITS_MEMBER(max_allocated_bytes)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(tracked_objects::TaskSnapshot)
   IPC_STRUCT_TRAITS_MEMBER(birth)
   IPC_STRUCT_TRAITS_MEMBER(death_data)
-  IPC_STRUCT_TRAITS_MEMBER(death_thread_name)
+  IPC_STRUCT_TRAITS_MEMBER(death_sanitized_thread_name)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(tracked_objects::ProcessDataPhaseSnapshot)
@@ -136,15 +137,6 @@ IPC_MESSAGE_CONTROL0(ChildProcessMsg_Resume)
 ////////////////////////////////////////////////////////////////////////////////
 // Messages sent from the child process to the browser.
 
-// A renderer sends this when it wants to create a connection to the GPU
-// process. The browser will create the GPU process if necessary, and will
-// return a handle to the channel via a GpuChannelEstablished message.
-IPC_SYNC_MESSAGE_CONTROL1_3(ChildProcessHostMsg_EstablishGpuChannel,
-                            content::CauseForGpuLaunch,
-                            int /* client id */,
-                            IPC::ChannelHandle /* handle to channel */,
-                            gpu::GPUInfo /* stats about GPU process*/)
-
 // A renderer sends this when it wants to know whether a gpu process exists.
 IPC_SYNC_MESSAGE_CONTROL0_1(ChildProcessHostMsg_HasGpuProcess,
                             bool /* result */)
@@ -178,50 +170,6 @@ IPC_SYNC_MESSAGE_CONTROL1_0(ChildProcessHostMsg_PreCacheFont,
 // Release the cached font
 IPC_MESSAGE_CONTROL0(ChildProcessHostMsg_ReleaseCachedFonts)
 #endif  // defined(OS_WIN)
-
-// Asks the browser to create a block of shared memory for the child process to
-// fill in and pass back to the browser.
-IPC_SYNC_MESSAGE_CONTROL2_1(ChildProcessHostMsg_SyncAllocateSharedBitmap,
-                            uint32_t /* buffer size */,
-                            cc::SharedBitmapId,
-                            base::SharedMemoryHandle)
-
-// Informs the browser that the child allocated a shared bitmap.
-IPC_MESSAGE_CONTROL3(ChildProcessHostMsg_AllocatedSharedBitmap,
-                     uint32_t /* buffer size */,
-                     base::SharedMemoryHandle,
-                     cc::SharedBitmapId)
-
-// Informs the browser that the child deleted a shared bitmap.
-IPC_MESSAGE_CONTROL1(ChildProcessHostMsg_DeletedSharedBitmap,
-                     cc::SharedBitmapId)
-
-// Asks the browser to create a gpu memory buffer.
-IPC_SYNC_MESSAGE_CONTROL5_1(ChildProcessHostMsg_SyncAllocateGpuMemoryBuffer,
-                            gfx::GpuMemoryBufferId /* new_id */,
-                            uint32_t /* width */,
-                            uint32_t /* height */,
-                            gfx::BufferFormat,
-                            gfx::BufferUsage,
-                            gfx::GpuMemoryBufferHandle)
-
-// Informs the browser that the child deleted a gpu memory buffer.
-IPC_MESSAGE_CONTROL2(ChildProcessHostMsg_DeletedGpuMemoryBuffer,
-                     gfx::GpuMemoryBufferId,
-                     gpu::SyncToken /* sync_token */)
-
-// Asks the browser to create a block of discardable shared memory for the
-// child process.
-IPC_SYNC_MESSAGE_CONTROL2_1(
-    ChildProcessHostMsg_SyncAllocateLockedDiscardableSharedMemory,
-    uint32_t /* size */,
-    discardable_memory::DiscardableSharedMemoryId,
-    base::SharedMemoryHandle)
-
-// Informs the browser that the child deleted a block of discardable shared
-// memory.
-IPC_MESSAGE_CONTROL1(ChildProcessHostMsg_DeletedDiscardableSharedMemory,
-                     discardable_memory::DiscardableSharedMemoryId)
 
 #if defined(OS_LINUX)
 // Asks the browser to change the priority of thread.

@@ -7,9 +7,19 @@
  */
 
 cr.define('device_table', function() {
+  var COLUMNS = {
+    NAME: 0,
+    ADDRESS: 1,
+    RSSI: 2,
+    SERVICES: 3,
+    CONNECTION_STATE: 4,
+    LINKS: 5,
+  };
+
   /**
    * A table that lists the devices and responds to changes in the given
-   *     DeviceCollection.
+   * DeviceCollection. Fires events for inspection requests from listed
+   * devices.
    * @constructor
    * @extends {HTMLTableElement}
    */
@@ -33,6 +43,8 @@ cr.define('device_table', function() {
       this.body_ = this.tBodies[0];
       /** @private */
       this.headers_ = this.tHead.rows[0].cells;
+      /** @private {!Map<!interfaces.BluetoothDevice.DeviceInfo, boolean>} */
+      this.inspectionMap_ = new Map();
     },
 
     /**
@@ -51,18 +63,60 @@ cr.define('device_table', function() {
     },
 
     /**
-     * Updates table row on change event of the device collection.
+     * Updates the inspect status of the row matching the given |deviceInfo|.
+     * If |isInspecting| is true, the forget link is enabled otherwise it's
+     * disabled.
+     * @param {!interfaces.BluetoothDevice.DeviceInfo} deviceInfo
+     * @param {boolean} isInspecting
+     */
+    setInspecting: function(deviceInfo, isInspecting) {
+      this.inspectionMap_.set(deviceInfo, isInspecting);
+      this.updateRow_(deviceInfo, this.devices_.indexOf(deviceInfo));
+    },
+
+    /**
+     * Fires a forget pressed event for the row |index|.
+     * @param {number} index
      * @private
-     * @param {!CustomEvent} event
+     */
+    handleForgetClick_: function(index) {
+      var event = new CustomEvent('forgetpressed', {
+        bubbles: true,
+        detail: {
+          address: this.devices_.item(index).address,
+        }
+      });
+      this.dispatchEvent(event);
+    },
+
+    /**
+     * Updates table row on change event of the device collection.
+     * @param {!Event} event
+     * @private
      */
     handleChange_: function(event) {
       this.updateRow_(this.devices_.item(event.index), event.index);
     },
 
     /**
-     * Updates table row on splice event of the device collection.
+     * Fires an inspect pressed event for the row |index|.
+     * @param {number} index
      * @private
-     * @param {!CustomEvent} event
+     */
+    handleInspectClick_: function(index) {
+      var event = new CustomEvent('inspectpressed', {
+        bubbles: true,
+        detail: {
+          address: this.devices_.item(index).address,
+        }
+      });
+      this.dispatchEvent(event);
+    },
+
+    /**
+     * Updates table row on splice event of the device collection.
+     * @param {!Event} event
+     * @private
      */
     handleSplice_: function(event) {
       event.removed.forEach(function() {
@@ -76,17 +130,36 @@ cr.define('device_table', function() {
 
     /**
      * Inserts a new row at |index| and updates it with info from |device|.
-     * @private
-     * @param {!device_collection.Device} device
+     * @param {!interfaces.BluetoothDevice.DeviceInfo} device
      * @param {?number} index
+     * @private
      */
     insertRow_: function(device, index) {
       var row = this.body_.insertRow(index);
-      row.id = device.info.address;
+      row.id = device.address;
 
       for (var i = 0; i < this.headers_.length; i++) {
+        // Skip the LINKS column. It has no data-field attribute.
+        if (i === COLUMNS.LINKS) continue;
         row.insertCell();
       }
+
+      // Make two extra cells for the inspect link and connect errors.
+      var inspectCell = row.insertCell();
+
+      var inspectLink = document.createElement('a', 'action-link');
+      inspectLink.textContent = 'Inspect';
+      inspectCell.appendChild(inspectLink);
+      inspectLink.addEventListener('click', function() {
+        this.handleInspectClick_(row.sectionRowIndex);
+      }.bind(this));
+
+      var forgetLink = document.createElement('a', 'action-link');
+      forgetLink.textContent = 'Forget';
+      inspectCell.appendChild(forgetLink);
+      forgetLink.addEventListener('click', function() {
+        this.handleForgetClick_(row.sectionRowIndex);
+      }.bind(this));
 
       this.updateRow_(device, row.sectionRowIndex);
     },
@@ -108,30 +181,44 @@ cr.define('device_table', function() {
 
     /**
      * Updates the row at |index| with the info from |device|.
-     * @private
-     * @param {!device_collection.Device} device
+     * @param {!interfaces.BluetoothDevice.DeviceInfo} device
      * @param {number} index
+     * @private
      */
     updateRow_: function(device, index) {
-      assert(this.body_.rows[index], 'Row ' + index + ' is not in the table.');
       var row = this.body_.rows[index];
+      assert(row, 'Row ' + index + ' is not in the table.');
 
       row.classList.toggle('removed', device.removed);
 
+      var forgetLink = row.cells[COLUMNS.LINKS].children[1];
+
+      if (this.inspectionMap_.has(device))
+        forgetLink.disabled = !this.inspectionMap_.get(device);
+      else
+        forgetLink.disabled = true;
+
       // Update the properties based on the header field path.
       for (var i = 0; i < this.headers_.length; i++) {
+        // Skip the LINKS column. It has no data-field attribute.
+        if (i === COLUMNS.LINKS) continue;
+
         var header = this.headers_[i];
         var propName = header.dataset.field;
 
         var parts = propName.split('.');
-        var obj = device.info;
+        var obj = device;
         while (obj != null && parts.length > 0) {
           var part = parts.shift();
           obj = obj[part];
         }
 
+        if (propName == 'is_gatt_connected') {
+          obj = obj ? 'Connected' : 'Not Connected';
+        }
+
         var cell = row.cells[i];
-        cell.textContent = obj || 'Unknown';
+        cell.textContent = obj == null ? 'Unknown' : obj;
         cell.dataset.label = header.textContent;
       }
     },

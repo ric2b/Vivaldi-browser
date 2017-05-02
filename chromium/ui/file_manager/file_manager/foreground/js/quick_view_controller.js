@@ -4,8 +4,8 @@
 
 /**
  * Controller for QuickView.
+ * This should be initialized with |init_| method.
  *
- * @param {!FilesQuickView} quickView
  * @param {!MetadataModel} metadataModel File system metadata.
  * @param {!FileSelectionHandler} selectionHandler
  * @param {!ListContainer} listContainer
@@ -13,17 +13,33 @@
  * @param {!TaskController} taskController
  * @param {!cr.ui.ListSelectionModel} fileListSelectionModel
  * @param {!QuickViewUma} quickViewUma
+ * @param {!MetadataBoxController} metadataBoxController
+ * @param {DialogType} dialogType
+ * @param {!VolumeManagerWrapper} volumeManager
  *
  * @constructor
  */
 function QuickViewController(
-    quickView, metadataModel, selectionHandler, listContainer, quickViewModel,
-    taskController, fileListSelectionModel, quickViewUma) {
+    metadataModel, selectionHandler, listContainer, quickViewModel,
+    taskController, fileListSelectionModel, quickViewUma,
+    metadataBoxController, dialogType, volumeManager) {
   /**
-   * @type {!FilesQuickView}
+   * @type {FilesQuickView}
    * @private
    */
-  this.quickView_ = quickView;
+  this.quickView_ = null;
+
+  /**
+   * @type {!FileSelectionHandler}
+   * @private
+   */
+  this.selectionHandler_ = selectionHandler;
+
+  /**
+   * @type {!ListContainer}
+   * @private
+   */
+  this.listContainer_ = listContainer;
 
   /**
    * @type{!QuickViewModel}
@@ -44,12 +60,6 @@ function QuickViewController(
   this.metadataModel_ = metadataModel;
 
   /**
-   * @type {!ListContainer}
-   * @private
-   */
-  this.listContainer_ = listContainer;
-
-  /**
    * @type {!TaskController}
    * @private
    */
@@ -62,6 +72,24 @@ function QuickViewController(
   this.fileListSelectionModel_ = fileListSelectionModel;
 
   /**
+   * @type {!MetadataBoxController}
+   * @private
+   */
+  this.metadataBoxController_ = metadataBoxController;
+
+  /**
+   * @type {DialogType}
+   * @private
+   */
+  this.dialogType_ = dialogType;
+
+  /**
+   * @type {!VolumeManagerWrapper}
+   * @private
+   */
+  this.volumeManager_ = volumeManager;
+
+  /**
    * Current selection of selectionHandler.
    *
    * @type {!Array<!FileEntry>}
@@ -69,15 +97,47 @@ function QuickViewController(
    */
   this.entries_ = [];
 
-  selectionHandler.addEventListener(
+  this.selectionHandler_.addEventListener(
       FileSelectionHandler.EventType.CHANGE,
       this.onFileSelectionChanged_.bind(this));
-  listContainer.element.addEventListener(
+  this.listContainer_.element.addEventListener(
       'keydown', this.onKeyDownToOpen_.bind(this));
-  listContainer.element.addEventListener('command', function(event) {
+  this.listContainer_.element.addEventListener('command', function(event) {
     if(event.command.id === 'get-info')
-      this.display_();
+      this.display_(QuickViewUma.WayToOpen.CONTEXT_MENU);
   }.bind(this));
+}
+
+/**
+ * List of local volume types.
+ *
+ * In this context, "local" means that files in that volume are directly
+ * accessible from the Chrome browser process by Linux VFS paths. In this
+ * regard, media views are NOT local even though files in media views are
+ * actually stored in the local disk.
+ *
+ * Due to access control of WebView, non-local files can not be previewed
+ * with Quick View unless thumbnails are provided (which is the case with
+ * Drive).
+ *
+ * @type {!Array<!VolumeManagerCommon.VolumeType>}
+ * @const
+ * @private
+ */
+QuickViewController.LOCAL_VOLUME_TYPES_ = [
+  VolumeManagerCommon.VolumeType.ARCHIVE,
+  VolumeManagerCommon.VolumeType.DOWNLOADS,
+  VolumeManagerCommon.VolumeType.REMOVABLE,
+];
+
+/**
+ * Initialize the controller with quick view which will be lazily loaded.
+ * @param {!FilesQuickView} quickView
+ * @private
+ */
+QuickViewController.prototype.init_ = function(quickView) {
+  this.quickView_ = quickView;
+  this.metadataBoxController_.init(quickView);
   quickView.addEventListener('keydown', this.onQuickViewKeyDown_.bind(this));
   quickView.addEventListener('iron-overlay-closed', function() {
     this.listContainer_.focus();
@@ -87,7 +147,23 @@ function QuickViewController(
   var toolTip = this.quickView_.$$('files-tooltip');
   var elems = this.quickView_.$.buttons.querySelectorAll('[has-tooltip]');
   toolTip.addTargets(elems);
-}
+};
+
+/**
+ * Craete quick view element.
+ * @return Promise<!FilesQuickView>
+ * @private
+ */
+QuickViewController.prototype.createQuickView_ = function() {
+  return new Promise(function(resolve, reject) {
+    Polymer.Base.importHref(
+        'foreground/elements/files_quick_view.html', function() {
+          var quickView = document.querySelector('#quick-view');
+          i18nTemplate.process(quickView, loadTimeData);
+          resolve(quickView);
+        }, reject);
+  });
+};
 
 /**
  * Handles open-in-new button tap.
@@ -111,7 +187,7 @@ QuickViewController.prototype.onKeyDownToOpen_ = function(event) {
     return;
   if (event.key === ' ') {
     event.preventDefault();
-    this.display_();
+    this.display_(QuickViewUma.WayToOpen.SPACE_KEY);
   }
 };
 
@@ -148,13 +224,15 @@ QuickViewController.prototype.onQuickViewKeyDown_ = function(event) {
 /**
  * Display quick view.
  *
+ * @param {QuickViewUma.WayToOpen=} opt_wayToOpen in which way opening of
+ *     quick view was triggered. Can be omitted if quick view is already open.
  * @private
  */
-QuickViewController.prototype.display_ = function() {
+QuickViewController.prototype.display_ = function(opt_wayToOpen) {
   this.updateQuickView_().then(function() {
     if (!this.quickView_.isOpened()) {
       this.quickView_.open();
-      this.quickViewUma_.onOpened(this.entries_[0]);
+      this.quickViewUma_.onOpened(this.entries_[0], assert(opt_wayToOpen));
     }
   }.bind(this));
 };
@@ -167,12 +245,23 @@ QuickViewController.prototype.display_ = function() {
  */
 QuickViewController.prototype.onFileSelectionChanged_ = function(event) {
   this.entries_ = event.target.selection.entries;
-  if (this.quickView_.isOpened()) {
+  if (this.quickView_ && this.quickView_.isOpened()) {
     assert(this.entries_.length > 0);
     var entry = this.entries_[0];
     this.quickViewModel_.setSelectedEntry(entry);
     this.display_();
   }
+};
+
+/**
+ * @param {!FileEntry} entry
+ * @return {!Promise<!Array<!FileTask>>}
+ * @private
+ */
+QuickViewController.prototype.getAvailableTasks_ = function(entry) {
+  return this.taskController_.getFileTasks().then(function(tasks) {
+    return tasks.getTaskItems();
+  });
 };
 
 /**
@@ -182,6 +271,12 @@ QuickViewController.prototype.onFileSelectionChanged_ = function(event) {
  * @private
  */
 QuickViewController.prototype.updateQuickView_ = function() {
+  if (!this.quickView_) {
+    return this.createQuickView_()
+        .then(this.init_.bind(this))
+        .then(this.updateQuickView_.bind(this))
+        .catch(console.error);
+  }
   assert(this.entries_.length > 0);
   // TODO(oka): Support multi-selection.
   this.quickViewModel_.setSelectedEntry(this.entries_[0]);
@@ -190,26 +285,40 @@ QuickViewController.prototype.updateQuickView_ = function() {
       (/** @type {!FileEntry} */ (this.quickViewModel_.getSelectedEntry()));
   assert(entry);
   this.quickViewUma_.onEntryChanged(entry);
-  return this.metadataModel_.get([entry], ['thumbnailUrl', 'externalFileUrl'])
-      .then(this.onMetadataLoaded_.bind(this, entry));
+  return Promise
+      .all([
+        this.metadataModel_.get([entry], ['thumbnailUrl']),
+        this.getAvailableTasks_(entry)
+      ])
+      .then(function(values) {
+        var items = (/**@type{Array<MetadataItem>}*/ (values[0]));
+        var tasks = (/**@type{!Array<!FileTask>}*/ (values[1]));
+        return this.onMetadataLoaded_(entry, items, tasks);
+      }.bind(this))
+      .catch(console.error);
 };
 
 /**
- * Update quick view using file entry and loaded metadata.
+ * Update quick view using file entry and loaded metadata and tasks.
  *
  * @param {!FileEntry} entry
  * @param {Array<MetadataItem>} items
+ * @param {!Array<!FileTask>} tasks
  * @private
  */
-QuickViewController.prototype.onMetadataLoaded_ = function(entry, items) {
-  return this.getQuickViewParameters_(entry, items).then(function(params) {
-    this.quickView_.contentUrl = params.contentUrl || '';
-    this.quickView_.type = params.type || '';
-    this.quickView_.filePath = params.filePath || '';
-    this.quickView_.videoPoster = params.videoPoster || '';
-    this.quickView_.audioArtwork = params.audioArtwork || '';
-    this.quickView_.autoplay = params.autoplay || false;
-  }.bind(this));
+QuickViewController.prototype.onMetadataLoaded_ = function(
+    entry, items, tasks) {
+  return this.getQuickViewParameters_(entry, items, tasks)
+      .then(function(params) {
+        this.quickView_.type = params.type || '';
+        this.quickView_.filePath = params.filePath || '';
+        this.quickView_.hasTask = params.hasTask || false;
+        this.quickView_.contentUrl = params.contentUrl || '';
+        this.quickView_.videoPoster = params.videoPoster || '';
+        this.quickView_.audioArtwork = params.audioArtwork || '';
+        this.quickView_.autoplay = params.autoplay || false;
+        this.quickView_.browsable = params.browsable || false;
+      }.bind(this));
 };
 
 /**
@@ -219,7 +328,8 @@ QuickViewController.prototype.onMetadataLoaded_ = function(entry, items) {
  *   contentUrl: (string|undefined),
  *   videoPoster: (string|undefined),
  *   audioArtwork: (string|undefined),
- *   autoplay: (boolean|undefined)
+ *   autoplay: (boolean|undefined),
+ *   browsable: (boolean|undefined),
  * }}
  */
 var QuickViewParams;
@@ -227,11 +337,13 @@ var QuickViewParams;
 /**
  * @param {!FileEntry} entry
  * @param {Array<MetadataItem>} items
+ * @param {!Array<!FileTask>} tasks
  * @return !Promise<!QuickViewParams>
  *
  * @private
  */
-QuickViewController.prototype.getQuickViewParameters_ = function(entry, items) {
+QuickViewController.prototype.getQuickViewParameters_ = function(
+    entry, items, tasks) {
   var item = items[0];
   var type = FileType.getType(entry).type;
 
@@ -239,79 +351,85 @@ QuickViewController.prototype.getQuickViewParameters_ = function(entry, items) {
   var params = {
     type: type,
     filePath: entry.name,
+    hasTask: tasks.length > 0,
   };
 
-  /**
-   * @type function(!FileEntry): !Promise<!File>
-   */
-  var getFile = function(entry) {
-    return new Promise(function(resolve, reject) {
-      entry.file(resolve, reject);
-    });
-  };
+  var volumeInfo = this.volumeManager_.getVolumeInfo(entry);
+  var localFile =
+      volumeInfo &&
+      QuickViewController.LOCAL_VOLUME_TYPES_.indexOf(
+          volumeInfo.volumeType) >= 0;
 
-  if (type === 'image') {
-    if (item.externalFileUrl) {
-      if (item.thumbnailUrl) {
-        return this.loadThumbnailFromDrive_(item.thumbnailUrl)
-            .then(function(result) {
-              if (result.status === 'success')
-                params.contentUrl = result.data;
-              return params;
-            }.bind(this));
-      }
-    } else {
-      return getFile(entry).then(function(file) {
-        params.contentUrl = URL.createObjectURL(file);
-        return params;
-      });
+  if (!localFile) {
+    switch (type) {
+      case 'image':
+        if (item.thumbnailUrl) {
+          return this.loadThumbnailFromDrive_(item.thumbnailUrl)
+              .then(function(result) {
+                if (result.status === 'success')
+                  params.contentUrl = result.data;
+                return params;
+              }.bind(this));
+        }
+        break;
+      case 'video':
+        if (item.thumbnailUrl) {
+          return this.loadThumbnailFromDrive_(item.thumbnailUrl)
+              .then(function(result) {
+                if (result.status === 'success') {
+                  params.videoPoster = result.data;
+                }
+                return params;
+              });
+        }
+        break;
     }
-  } else if (type === 'video') {
-    if (item.externalFileUrl) {
-      if (item.thumbnailUrl) {
-        return this.loadThumbnailFromDrive_(item.thumbnailUrl)
-            .then(function(result) {
-              if (result.status === 'success') {
-                params.videoPoster = result.data;
-              }
-              return params;
-            });
-      }
-    } else {
-      params.autoplay = true;
-      if (item.thumbnailUrl) {
-        params.videoPoster = item.thumbnailUrl;
-      }
-      return getFile(entry).then(function(file) {
-        params.contentUrl = URL.createObjectURL(file);
-        return params;
-      });
-    }
-  } else if (type === 'audio') {
-    if (item.externalFileUrl) {
-      // If the file is in Drive, we ask user to open it with external app.
-    } else {
-      params.autoplay = true;
-      return Promise
-          .all([
-            this.metadataModel_.get([entry], ['contentThumbnailUrl']),
-            getFile(entry)
-          ])
-          .then(function(values) {
-            /** @type {!Array<!MetadataItem>} */
-            var items = values[0];
-            /** @type {!File} */
-            var file = values[1];
-            var item = items[0];
-            if (item.contentThumbnailUrl) {
-              params.audioArtwork = item.contentThumbnailUrl;
-            }
+    // We ask user to open it with external app.
+    return Promise.resolve(params);
+  }
+
+  if (type === '.folder') {
+    return Promise.resolve(params);
+  }
+  return new Promise(function(resolve, reject) {
+           entry.file(resolve, reject);
+         })
+      .then(function(file) {
+        switch (type) {
+          case 'image':
             params.contentUrl = URL.createObjectURL(file);
             return params;
-          });
-    }
-  }
-  return Promise.resolve(params);
+          case 'video':
+            params.contentUrl = URL.createObjectURL(file);
+            params.autoplay = true;
+            if (item.thumbnailUrl) {
+              params.videoPoster = item.thumbnailUrl;
+            }
+            return params;
+          case 'audio':
+            params.contentUrl = URL.createObjectURL(file);
+            params.autoplay = true;
+            return this.metadataModel_.get([entry], ['contentThumbnailUrl'])
+                .then(function(items) {
+                  var item = items[0];
+                  if (item.contentThumbnailUrl) {
+                    params.audioArtwork = item.contentThumbnailUrl;
+                  }
+                  return params;
+                });
+        }
+        var browsable = tasks.some(function(task) {
+          return ['view-in-browser', 'view-pdf'].includes(
+              task.taskId.split('|')[2]);
+        });
+        params.browsable = browsable;
+        params.contentUrl = browsable ? URL.createObjectURL(file) : '';
+        return params;
+      }.bind(this))
+      .catch(function(e) {
+        console.error(e);
+        return params;
+      });
 };
 
 /**

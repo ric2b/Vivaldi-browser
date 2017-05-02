@@ -8,14 +8,18 @@ source_set("browser_state") {
     "browser_state_otr_helper.h",
     "chrome_browser_state.h",
     "chrome_browser_state.mm",
+    "chrome_browser_state_manager.h",
   ]
   deps = [
     "//base",
     "//components/prefs",
     "//components/sync_preferences",
+    "//ios/chrome/browser/tabs",
     "//ios/web",
     "//net",
   ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("browser_state_impl") {
@@ -33,7 +37,6 @@ source_set("browser_state_impl") {
     "chrome_browser_state_impl_io_data.mm",
     "chrome_browser_state_io_data.cc",
     "chrome_browser_state_io_data.h",
-    "chrome_browser_state_manager.h",
     "chrome_browser_state_manager_impl.cc",
     "chrome_browser_state_manager_impl.h",
     "chrome_browser_state_removal_controller.h",
@@ -43,6 +46,9 @@ source_set("browser_state_impl") {
     "off_the_record_chrome_browser_state_io_data.h",
     "off_the_record_chrome_browser_state_io_data.mm",
   ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
   deps = [
     ":browser_state",
     "//base",
@@ -84,9 +90,11 @@ source_set("browser_state_impl") {
     "//ios/chrome/browser/ntp_snippets",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/services/gcm",
+    "//ios/chrome/browser/sessions",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/suggestions",
     "//ios/chrome/browser/sync",
@@ -95,6 +103,7 @@ source_set("browser_state_impl") {
     "//ios/chrome/browser/undo",
     "//ios/net",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/signin",
     "//ios/web",
     "//net",
     "//net:extras",
@@ -103,7 +112,7 @@ source_set("browser_state_impl") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state_metrics",
     "//ios/chrome/browser/net",
-    "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/sync/glue",
@@ -140,10 +149,14 @@ source_set("test_support") {
     "//ios/chrome/browser/history",
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/ui",
     "//ios/web",
     "//net:test_support",
   ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
 }

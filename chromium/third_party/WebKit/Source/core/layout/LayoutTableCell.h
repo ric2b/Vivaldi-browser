@@ -157,7 +157,7 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
     // add in the border and padding.
     // Call computedCSSPadding* directly to avoid including implicitPadding.
     if (!document().inQuirksMode() &&
-        style()->boxSizing() != BoxSizingBorderBox)
+        style()->boxSizing() != EBoxSizing::kBorderBox)
       styleLogicalHeight +=
           (computedCSSPaddingBefore() + computedCSSPaddingAfter()).floor() +
           borderBefore() + borderAfter();
@@ -195,9 +195,9 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   int cellBaselinePosition() const;
   bool isBaselineAligned() const {
     EVerticalAlign va = style()->verticalAlign();
-    return va == VerticalAlignBaseline || va == VerticalAlignTextBottom ||
-           va == VerticalAlignTextTop || va == VerticalAlignSuper ||
-           va == VerticalAlignSub || va == VerticalAlignLength;
+    return va == EVerticalAlign::Baseline || va == EVerticalAlign::TextBottom ||
+           va == EVerticalAlign::TextTop || va == EVerticalAlign::Super ||
+           va == EVerticalAlign::Sub || va == EVerticalAlign::Length;
   }
 
   // Align the cell in the block direction. This is done by calculating an
@@ -227,7 +227,8 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   void setOverrideLogicalContentHeightFromRowHeight(LayoutUnit);
 
   void scrollbarsChanged(bool horizontalScrollbarChanged,
-                         bool verticalScrollbarChanged) override;
+                         bool verticalScrollbarChanged,
+                         ScrollbarChangeContext = Layout) override;
 
   bool cellWidthChanged() const { return m_cellWidthChanged; }
   void setCellWidthChanged(bool b = true) { m_cellWidthChanged = b; }
@@ -277,7 +278,7 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
     return style()->borderEnd();
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool isFirstOrLastCellInRow() const {
     return !table()->cellAfter(this) || !table()->cellBefore(this);
   }
@@ -348,6 +349,8 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   LayoutBox* locationContainer() const override { return section(); }
 
   void ensureIsReadyForPaintInvalidation() override;
+
+  bool hasLineIfEmpty() const override;
 
  protected:
   void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;

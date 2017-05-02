@@ -31,7 +31,11 @@ def CommonChecks(input_api, output_api):
           J(),
           J('gyp'),
           J('buildbot'),
-          J('..', '..', 'third_party', 'catapult', 'devil')
+          J('..', 'util', 'lib', 'common'),
+          J('..', '..', 'third_party', 'catapult', 'common', 'py_trace_event'),
+          J('..', '..', 'third_party', 'catapult', 'common', 'py_utils'),
+          J('..', '..', 'third_party', 'catapult', 'devil'),
+          J('..', '..', 'third_party', 'catapult', 'tracing')
       ]))
   output.extend(input_api.canned_checks.RunPylint(
       input_api,
@@ -55,13 +59,15 @@ def CommonChecks(input_api, output_api):
           J('.', 'emma_coverage_stats_test.py'),
           J('gyp', 'util', 'md5_check_test.py'),
           J('play_services', 'update_test.py'),
-          J('pylib', 'base', 'test_dispatcher_unittest.py'),
           J('pylib', 'gtest', 'gtest_test_instance_test.py'),
           J('pylib', 'instrumentation',
             'instrumentation_test_instance_test.py'),
           J('pylib', 'local', 'device', 'local_device_test_run_test.py'),
           J('pylib', 'results', 'json_results_test.py'),
           J('pylib', 'symbols', 'elf_symbolizer_unittest.py'),
+          J('pylib', 'utils', 'device_dependencies_test.py'),
+          J('pylib', 'utils', 'dexdump_test.py'),
+          J('pylib', 'utils', 'proguard_test.py'),
       ],
       env=pylib_test_env))
 

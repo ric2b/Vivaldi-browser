@@ -43,6 +43,9 @@ const int32_t kCurrentDBVersion = 90;
 // The current database page size in Kilobytes.
 const int32_t kCurrentPageSizeKB = 32768;
 
+// Vivaldi version of additions to DB
+const int32_t kCurrentVivaldiDBVersion = 1;
+
 // Iterate over the fields of |entry| and bind each to |statement| for
 // updating.  Returns the number of args bound.
 void BindFields(const EntryKernel& entry,
@@ -573,6 +576,13 @@ bool DirectoryBackingStore::InitializeTables() {
       version_on_disk = 90;
   }
 
+  int vivaldi_version_on_disk = GetVivaldiVersion();
+  if (version_on_disk && vivaldi_version_on_disk == 0){
+    MigrateVivaldiVersion0To1();
+    vivaldi_version_on_disk = 1;
+    needs_metas_column_refresh_ = true;
+  }
+
   // If one of the migrations requested it, drop columns that aren't current.
   // It's only safe to do this after migrating all the way to the current
   // version.
@@ -864,6 +874,30 @@ int DirectoryBackingStore::GetVersion() {
 
   sql::Statement statement(db_->GetUniqueStatement(
           "SELECT data FROM share_version"));
+  if (statement.Step()) {
+    return statement.ColumnInt(0);
+  } else {
+    return 0;
+  }
+}
+
+bool DirectoryBackingStore::SetVivaldiVersion(int version) {
+  sql::Statement s(db_->GetCachedStatement(
+          SQL_FROM_HERE, "UPDATE share_version SET vivaldi_version = ?"));
+  s.BindInt(0, version);
+
+  return s.Run();
+}
+
+int DirectoryBackingStore::GetVivaldiVersion() {
+  if (!db_->DoesTableExist("share_version"))
+    return 0;
+
+  if (!db_->DoesColumnExist("share_version", "vivaldi_version"))
+    return 0;
+
+  sql::Statement statement(db_->GetUniqueStatement(
+          "SELECT vivaldi_version FROM share_version"));
   if (statement.Step()) {
     return statement.ColumnInt(0);
   } else {
@@ -1478,15 +1512,17 @@ bool DirectoryBackingStore::CreateTables() {
   // Create two little tables share_version and share_info
   if (!db_->Execute(
           "CREATE TABLE share_version ("
-          "id VARCHAR(128) primary key, data INT)")) {
+          "id VARCHAR(128) primary key, data INT,"
+          "vivaldi_version INT)")) {
     return false;
   }
 
   {
     sql::Statement s(db_->GetUniqueStatement(
-            "INSERT INTO share_version VALUES(?, ?)"));
+            "INSERT INTO share_version VALUES(?, ?, ?)"));
     s.BindString(0, dir_name_);
     s.BindInt(1, kCurrentDBVersion);
+    s.BindInt(2, kCurrentVivaldiDBVersion);
 
     if (!s.Run())
       return false;
@@ -1717,6 +1753,12 @@ bool DirectoryBackingStore::GetDatabasePageSize(int* page_size) {
   return true;
 }
 
+bool DirectoryBackingStore::ReportMemoryUsage(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& dump_name) {
+  return db_ && db_->ReportMemoryUsage(pmd, dump_name);
+}
+
 bool DirectoryBackingStore::UpdatePageSizeIfNecessary() {
   int page_size;
   if (!GetDatabasePageSize(&page_size))
@@ -1763,6 +1805,22 @@ void DirectoryBackingStore::SetCatastrophicErrorHandler(
   sql::Connection::ErrorCallback error_callback =
       base::Bind(&OnSqliteError, catastrophic_error_handler_);
   db_->set_error_callback(error_callback);
+}
+
+bool DirectoryBackingStore::MigrateVivaldiVersion0To1() {
+  // Vivaldi Version 1 adds the vivalid_version to the share_version table.
+  if (!db_->Execute("ALTER TABLE share_version ADD COLUMN vivaldi_version int"))
+    return false;
+
+  if (!db_->Execute("ALTER TABLE metas ADD COLUMN "
+                    "unique_notes_tag VARCHAR")) {
+    return false;
+  }
+
+  SetVivaldiVersion(1);
+  needs_metas_column_refresh_ = true;
+  return true;
+
 }
 
 }  // namespace syncable

@@ -103,7 +103,7 @@ static bool tokenExitsInSelect(const CompactHTMLToken& token) {
 HTMLTreeBuilderSimulator::HTMLTreeBuilderSimulator(
     const HTMLParserOptions& options)
     : m_options(options), m_inSelectInsertionMode(false) {
-  m_namespaceStack.append(HTML);
+  m_namespaceStack.push_back(HTML);
 }
 
 HTMLTreeBuilderSimulator::State HTMLTreeBuilderSimulator::stateFor(
@@ -119,8 +119,8 @@ HTMLTreeBuilderSimulator::State HTMLTreeBuilderSimulator::stateFor(
     else if (record->namespaceURI() == MathMLNames::mathmlNamespaceURI)
       currentNamespace = MathML;
 
-    if (namespaceStack.isEmpty() || namespaceStack.last() != currentNamespace)
-      namespaceStack.append(currentNamespace);
+    if (namespaceStack.isEmpty() || namespaceStack.back() != currentNamespace)
+      namespaceStack.push_back(currentNamespace);
   }
   namespaceStack.reverse();
   return namespaceStack;
@@ -134,14 +134,14 @@ HTMLTreeBuilderSimulator::SimulatedToken HTMLTreeBuilderSimulator::simulate(
   if (token.type() == HTMLToken::StartTag) {
     const String& tagName = token.data();
     if (threadSafeMatch(tagName, SVGNames::svgTag))
-      m_namespaceStack.append(SVG);
+      m_namespaceStack.push_back(SVG);
     if (threadSafeMatch(tagName, MathMLNames::mathTag))
-      m_namespaceStack.append(MathML);
+      m_namespaceStack.push_back(MathML);
     if (inForeignContent() && tokenExitsForeignContent(token))
       m_namespaceStack.pop_back();
-    if ((m_namespaceStack.last() == SVG && tokenExitsSVG(token)) ||
-        (m_namespaceStack.last() == MathML && tokenExitsMath(token)))
-      m_namespaceStack.append(HTML);
+    if ((m_namespaceStack.back() == SVG && tokenExitsSVG(token)) ||
+        (m_namespaceStack.back() == MathML && tokenExitsMath(token)))
+      m_namespaceStack.push_back(HTML);
     if (!inForeignContent()) {
       // FIXME: This is just a copy of Tokenizer::updateStateFor which uses
       // threadSafeMatches.
@@ -184,15 +184,17 @@ HTMLTreeBuilderSimulator::SimulatedToken HTMLTreeBuilderSimulator::simulate(
     }
   }
 
-  if (token.type() == HTMLToken::EndTag) {
+  if (token.type() == HTMLToken::EndTag ||
+      (token.type() == HTMLToken::StartTag && token.selfClosing() &&
+       inForeignContent())) {
     const String& tagName = token.data();
-    if ((m_namespaceStack.last() == SVG &&
+    if ((m_namespaceStack.back() == SVG &&
          threadSafeMatch(tagName, SVGNames::svgTag)) ||
-        (m_namespaceStack.last() == MathML &&
+        (m_namespaceStack.back() == MathML &&
          threadSafeMatch(tagName, MathMLNames::mathTag)) ||
-        (m_namespaceStack.contains(SVG) && m_namespaceStack.last() == HTML &&
+        (m_namespaceStack.contains(SVG) && m_namespaceStack.back() == HTML &&
          tokenExitsSVG(token)) ||
-        (m_namespaceStack.contains(MathML) && m_namespaceStack.last() == HTML &&
+        (m_namespaceStack.contains(MathML) && m_namespaceStack.back() == HTML &&
          tokenExitsMath(token))) {
       m_namespaceStack.pop_back();
     }

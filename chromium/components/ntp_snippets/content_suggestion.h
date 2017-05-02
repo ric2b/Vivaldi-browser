@@ -40,7 +40,15 @@ struct RecentTabSuggestionExtra {
   // Corresponding tab identifier.
   std::string tab_id;
   // Underlying offline page identifier.
-  int64_t offline_page_id;
+  int64_t offline_page_id = 0;
+};
+
+// Contains additional data for notification-worthy suggestions.
+struct NotificationExtra {
+  // Deadline for showing notification. If the deadline is past, the
+  // notification is no longer fresh and no notification should be sent. If the
+  // deadline passes while a notification is up, it should be canceled.
+  base::Time deadline;
 };
 
 // A content suggestion for the new tab page, which can be an article or an
@@ -82,14 +90,9 @@ class ContentSuggestion {
   // An ID for identifying the suggestion. The ID is unique application-wide.
   const ID& id() const { return id_; }
 
-  // The normal content URL where the content referenced by the suggestion can
-  // be accessed.
+  // The URL where the content referenced by the suggestion can be accessed.
+  // This may be an AMP URL.
   const GURL& url() const { return url_; }
-
-  // If available, this contains an URL to an AMP version of the same content.
-  // Otherwise, this is an empty GURL().
-  const GURL& amp_url() const { return amp_url_; }
-  void set_amp_url(const GURL& amp_url) { amp_url_ = amp_url; }
 
   // Title of the suggestion.
   const base::string16& title() const { return title_; }
@@ -138,10 +141,19 @@ class ContentSuggestion {
   void set_recent_tab_suggestion_extra(
       std::unique_ptr<RecentTabSuggestionExtra> recent_tab_suggestion_extra);
 
+  // Extra information for notifications. When absent, no notification should be
+  // sent for this suggestion. When present, a notification should be sent,
+  // unless other factors disallow it (examples: the extra parameters say to;
+  // notifications are disabled; Chrome is in the foreground).
+  NotificationExtra* notification_extra() const {
+    return notification_extra_.get();
+  }
+  void set_notification_extra(
+      std::unique_ptr<NotificationExtra> notification_extra);
+
  private:
   ID id_;
   GURL url_;
-  GURL amp_url_;
   base::string16 title_;
   base::string16 snippet_text_;
   base::Time publish_date_;
@@ -149,6 +161,7 @@ class ContentSuggestion {
   float score_;
   std::unique_ptr<DownloadSuggestionExtra> download_suggestion_extra_;
   std::unique_ptr<RecentTabSuggestionExtra> recent_tab_suggestion_extra_;
+  std::unique_ptr<NotificationExtra> notification_extra_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSuggestion);
 };

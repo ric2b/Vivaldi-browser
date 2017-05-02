@@ -9,14 +9,13 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted_memory.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/flags_ui/flags_ui_constants.h"
 #include "components/flags_ui/flags_ui_pref_names.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/grit/components_resources.h"
-#include "components/grit/components_scaled_resources.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_chromium_strings.h"
@@ -26,7 +25,6 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/web/public/web_ui_ios_data_source.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
 #include "ios/web/public/webui/web_ui_ios.h"
 #include "ios/web/public/webui/web_ui_ios_message_handler.h"
@@ -215,7 +213,7 @@ BaseFlagsUI::BaseFlagsUI(web::WebUIIOS* web_ui, FlagsUIKind flags_ui_kind)
 
 void BaseFlagsUI::Initialize(web::WebUIIOS* web_ui, FlagsUIKind flags_ui_kind) {
   FlagsDOMHandler* handler = new FlagsDOMHandler();
-  web_ui->AddMessageHandler(handler);
+  web_ui->AddMessageHandler(base::WrapUnique(handler));
 
   flags_ui::FlagAccess flag_access = flags_ui::kOwnerAccessToFlags;
   if (flags_ui_kind == FLAGS_UI_APPLE)
@@ -230,13 +228,6 @@ void BaseFlagsUI::Initialize(web::WebUIIOS* web_ui, FlagsUIKind flags_ui_kind) {
 }
 
 BaseFlagsUI::~BaseFlagsUI() {}
-
-// static
-base::RefCountedMemory* BaseFlagsUI::GetFaviconResourceBytes(
-    ui::ScaleFactor scale_factor) {
-  return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-      IDR_FLAGS_FAVICON, scale_factor);
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 //

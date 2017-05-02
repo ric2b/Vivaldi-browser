@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/environment.h"
 #include "base/test/test_reg_util_win.h"
@@ -200,6 +201,12 @@ TEST_F(MiniInstallerConfigurationTest, IsSideBySide) {
 #else
   EXPECT_FALSE(TestConfiguration(L"spam.exe --chrome-sxs").is_side_by_side());
 #endif
+}
+
+TEST_F(MiniInstallerConfigurationTest, HasInvalidSwitch) {
+  EXPECT_FALSE(TestConfiguration(L"spam.exe").has_invalid_switch());
+  EXPECT_TRUE(TestConfiguration(L"spam.exe --chrome-frame")
+                  .has_invalid_switch());
 }
 
 }  // namespace mini_installer

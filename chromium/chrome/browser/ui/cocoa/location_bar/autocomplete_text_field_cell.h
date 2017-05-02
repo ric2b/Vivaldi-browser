@@ -19,10 +19,13 @@ class LocationBarDecoration;
 // a button-like token on the left-hand side).
 @interface AutocompleteTextFieldCell : StyledTextFieldCell {
  @private
-  // Decorations which live to the left and right of the text, ordered
+  // Decorations which live before and after the text, ordered
   // from outside in.  Decorations are owned by |LocationBarViewMac|.
-  std::vector<LocationBarDecoration*> leftDecorations_;
-  std::vector<LocationBarDecoration*> rightDecorations_;
+  std::vector<LocationBarDecoration*> leadingDecorations_;
+  std::vector<LocationBarDecoration*> trailingDecorations_;
+
+  // The decoration associated to the current dragging session.
+  LocationBarDecoration* draggedDecoration_;
 
   // Decorations with tracking areas attached to the AutocompleteTextField.
   std::vector<LocationBarDecoration*> mouseTrackingDecorations_;
@@ -53,22 +56,28 @@ class LocationBarDecoration;
 // Clear |leftDecorations_| and |rightDecorations_|.
 - (void)clearDecorations;
 
-// Add a new left-side decoration to the right of the existing
-// left-side decorations.
-- (void)addLeftDecoration:(LocationBarDecoration*)decoration;
+// Add a new leading decoration after the existing
+// leading decorations.
+- (void)addLeadingDecoration:(LocationBarDecoration*)decoration;
 
-// Add a new right-side decoration to the left of the existing
-// right-side decorations.
-- (void)addRightDecoration:(LocationBarDecoration*)decoration;
+// Add a new trailing decoration before the existing
+// trailing decorations.
+- (void)addTrailingDecoration:(LocationBarDecoration*)decoration;
 
 // The width available after accounting for decorations.
 - (CGFloat)availableWidthInFrame:(const NSRect)frame;
 
 // Return the frame for |aDecoration| if the cell is in |cellFrame|.
-// Returns |NSZeroRect| for decorations which are not currently
-// visible.
+// Returns |NSZeroRect| for decorations which are not currently visible.
 - (NSRect)frameForDecoration:(const LocationBarDecoration*)aDecoration
                      inFrame:(NSRect)cellFrame;
+
+// Returns the frame representing the background of |decoration|. Also sets
+// |isLeftDecoration| according to whether the decoration appears on the left or
+// the right side of the text field.
+- (NSRect)backgroundFrameForDecoration:(LocationBarDecoration*)decoration
+                               inFrame:(NSRect)cellFrame
+                      isLeftDecoration:(BOOL*)isLeftDecoration;
 
 // Returns true if it's okay to drop dragged data into the view at the
 // given location.

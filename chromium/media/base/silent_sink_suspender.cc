@@ -35,9 +35,10 @@ SilentSinkSuspender::~SilentSinkSuspender() {
   fake_sink_.Stop();
 }
 
-int SilentSinkSuspender::Render(AudioBus* dest,
-                                uint32_t frames_delayed,
-                                uint32_t frames_skipped) {
+int SilentSinkSuspender::Render(base::TimeDelta delay,
+                                base::TimeTicks delay_timestamp,
+                                int prior_frames_skipped,
+                                AudioBus* dest) {
   // Lock required since AudioRendererSink::Pause() is not synchronous, we need
   // to discard these calls during the transition to the fake sink.
   base::AutoLock al(transition_lock_);
@@ -52,8 +53,15 @@ int SilentSinkSuspender::Render(AudioBus* dest,
   // the audio data for a future transition out of silence.
   if (!dest) {
     DCHECK(is_using_fake_sink_);
-    DCHECK_EQ(frames_delayed, 0u);
-    DCHECK_EQ(frames_skipped, 0u);
+    DCHECK_EQ(prior_frames_skipped, 0);
+    // |delay_timestamp| contains the value cached at
+    // |latest_output_delay_timestamp_|
+    // so we simulate the real sink output, promoting |delay_timestamp| with
+    // |elapsedTime|.
+    DCHECK_EQ(delay_timestamp, latest_output_delay_timestamp_);
+    base::TimeDelta elapsedTime =
+        base::TimeTicks::Now() - fake_sink_transition_time_;
+    delay_timestamp += elapsedTime;
 
     // If we have no buffers or a transition is pending, one or more extra
     // Render() calls have occurred in before TransitionSinks() can run, so we
@@ -72,7 +80,7 @@ int SilentSinkSuspender::Render(AudioBus* dest,
   }
 
   // Pass-through to client and request rendering.
-  callback_->Render(dest, frames_delayed, frames_skipped);
+  callback_->Render(delay, delay_timestamp, prior_frames_skipped, dest);
 
   // Check for silence or real audio data and transition if necessary.
   if (!dest->AreFramesZero()) {
@@ -89,6 +97,9 @@ int SilentSinkSuspender::Render(AudioBus* dest,
       first_silence_time_ = now;
     if (now - first_silence_time_ > silence_timeout_) {
       is_transition_pending_ = true;
+      latest_output_delay_ = delay;
+      latest_output_delay_timestamp_ = delay_timestamp;
+      fake_sink_transition_time_ = now;
       task_runner_->PostTask(
           FROM_HERE, base::Bind(sink_transition_callback_.callback(), true));
     }
@@ -123,7 +134,8 @@ void SilentSinkSuspender::TransitionSinks(bool use_fake_sink) {
     }
     fake_sink_.Start(
         base::Bind(base::IgnoreResult(&SilentSinkSuspender::Render),
-                   base::Unretained(this), nullptr, 0, 0));
+                   base::Unretained(this), latest_output_delay_,
+                   latest_output_delay_timestamp_, 0, nullptr));
   } else {
     fake_sink_.Stop();
 

@@ -194,12 +194,14 @@ error::Error DoGetActiveAttrib(GLuint program,
                                GLuint index,
                                GLint* size,
                                GLenum* type,
-                               std::string* name);
+                               std::string* name,
+                               int32_t* success);
 error::Error DoGetActiveUniform(GLuint program,
                                 GLuint index,
                                 GLint* size,
                                 GLenum* type,
-                                std::string* name);
+                                std::string* name,
+                                int32_t* success);
 error::Error DoGetActiveUniformBlockiv(GLuint program,
                                        GLuint index,
                                        GLenum pname,
@@ -305,7 +307,8 @@ error::Error DoGetShaderInfoLog(GLuint shader, std::string* infolog);
 error::Error DoGetShaderPrecisionFormat(GLenum shadertype,
                                         GLenum precisiontype,
                                         GLint* range,
-                                        GLint* precision);
+                                        GLint* precision,
+                                        int32_t* success);
 error::Error DoGetShaderSource(GLuint shader, std::string* source);
 error::Error DoGetString(GLenum name, const char** result);
 error::Error DoGetSynciv(GLuint sync,
@@ -327,7 +330,8 @@ error::Error DoGetTransformFeedbackVarying(GLuint program,
                                            GLuint index,
                                            GLsizei* size,
                                            GLenum* type,
-                                           std::string* name);
+                                           std::string* name,
+                                           int32_t* success);
 error::Error DoGetUniformBlockIndex(GLuint program,
                                     const char* name,
                                     GLint* index);
@@ -415,7 +419,8 @@ error::Error DoReadPixels(GLint x,
                           GLenum type,
                           GLsizei bufsize,
                           GLsizei* length,
-                          void* pixels);
+                          void* pixels,
+                          int32_t* success);
 error::Error DoReleaseShaderCompiler();
 error::Error DoRenderbufferStorage(GLenum target,
                                    GLenum internalformat,
@@ -677,10 +682,17 @@ error::Error DoTexStorage2DEXT(GLenum target,
                                GLsizei height);
 error::Error DoGenQueriesEXT(GLsizei n, volatile GLuint* queries);
 error::Error DoDeleteQueriesEXT(GLsizei n, const volatile GLuint* queries);
-error::Error DoQueryCounterEXT(GLuint id, GLenum target);
-error::Error DoBeginQueryEXT(GLenum target, GLuint id);
+error::Error DoQueryCounterEXT(GLuint id,
+                               GLenum target,
+                               int32_t sync_shm_id,
+                               uint32_t sync_shm_offset,
+                               uint32_t submit_count);
+error::Error DoBeginQueryEXT(GLenum target,
+                             GLuint id,
+                             int32_t sync_shm_id,
+                             uint32_t sync_shm_offset);
 error::Error DoBeginTransformFeedback(GLenum primitivemode);
-error::Error DoEndQueryEXT(GLenum target);
+error::Error DoEndQueryEXT(GLenum target, uint32_t submit_count);
 error::Error DoEndTransformFeedback();
 error::Error DoSetDisjointValueSyncCHROMIUM(DisjointValueSync* sync);
 error::Error DoInsertEventMarkerEXT(GLsizei length, const char* marker);
@@ -728,14 +740,18 @@ error::Error DoPostSubBufferCHROMIUM(GLint x,
                                      GLint width,
                                      GLint height);
 error::Error DoCopyTextureCHROMIUM(GLenum source_id,
+                                   GLint source_level,
                                    GLenum dest_id,
+                                   GLint dest_level,
                                    GLint internalformat,
                                    GLenum dest_type,
                                    GLboolean unpack_flip_y,
                                    GLboolean unpack_premultiply_alpha,
                                    GLboolean unpack_unmultiply_alpha);
 error::Error DoCopySubTextureCHROMIUM(GLenum source_id,
+                                      GLint source_level,
                                       GLenum dest_id,
+                                      GLint dest_level,
                                       GLint xoffset,
                                       GLint yoffset,
                                       GLint x,
@@ -933,3 +949,8 @@ error::Error DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
     GLint location,
     GLboolean transpose,
     const volatile GLfloat* defaultValue);
+
+error::Error DoOverlayPromotionHintCHROMIUM(GLuint texture,
+                                            GLboolean promotion_hint,
+                                            GLint display_x,
+                                            GLint display_y);

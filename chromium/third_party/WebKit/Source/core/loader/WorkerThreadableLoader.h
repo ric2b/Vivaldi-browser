@@ -31,7 +31,6 @@
 #ifndef WorkerThreadableLoader_h
 #define WorkerThreadableLoader_h
 
-#include "core/dom/ExecutionContextTask.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "core/workers/WorkerThread.h"
@@ -110,15 +109,15 @@ class WorkerThreadableLoader final : public ThreadableLoader {
  private:
   enum BlockingBehavior { LoadSynchronously, LoadAsynchronously };
 
-  // A TaskForwarder forwards an ExecutionContextTask to the worker thread.
+  // A TaskForwarder forwards a task to the worker thread.
   class TaskForwarder : public GarbageCollectedFinalized<TaskForwarder> {
    public:
     virtual ~TaskForwarder() {}
     virtual void forwardTask(const WebTraceLocation&,
-                             std::unique_ptr<ExecutionContextTask>) = 0;
+                             std::unique_ptr<CrossThreadClosure>) = 0;
     virtual void forwardTaskWithDoneSignal(
         const WebTraceLocation&,
-        std::unique_ptr<ExecutionContextTask>) = 0;
+        std::unique_ptr<CrossThreadClosure>) = 0;
     virtual void abort() = 0;
 
     DEFINE_INLINE_VIRTUAL_TRACE() {}
@@ -137,6 +136,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
         public ThreadableLoaderClient,
         public WorkerThreadLifecycleObserver {
     USING_GARBAGE_COLLECTED_MIXIN(MainThreadLoaderHolder);
+    USING_PRE_FINALIZER(MainThreadLoaderHolder, cancel);
 
    public:
     static void createAndStart(WorkerThreadableLoader*,
@@ -154,6 +154,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
 
     void didSendData(unsigned long long bytesSent,
                      unsigned long long totalBytesToBeSent) override;
+    void didReceiveRedirectTo(const KURL&) override;
     void didReceiveResponse(unsigned long identifier,
                             const ResourceResponse&,
                             std::unique_ptr<WebDataConsumerHandle>) override;
@@ -166,7 +167,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
     void didFailRedirectCheck() override;
     void didReceiveResourceTiming(const ResourceTimingInfo&) override;
 
-    void contextDestroyed() override;
+    void contextDestroyed(WorkerThreadLifecycleContext*) override;
 
     DECLARE_TRACE();
 
@@ -193,6 +194,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
 
   void didSendData(unsigned long long bytesSent,
                    unsigned long long totalBytesToBeSent);
+  void didReceiveRedirectTo(const KURL&);
   void didReceiveResponse(unsigned long identifier,
                           std::unique_ptr<CrossThreadResourceResponseData>,
                           std::unique_ptr<WebDataConsumerHandle>);

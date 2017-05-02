@@ -60,6 +60,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.widget.TintedImageButton;
+import org.chromium.chrome.browser.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.chrome.browser.widget.newtab.NewTabButton;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
@@ -153,7 +154,7 @@ public class ToolbarPhone extends ToolbarLayout
     // mode.  0 = entirely in normal mode and 1.0 = entirely in TabSwitcher mode.  In between values
     // can be used for animating between the two view modes.
     @ViewDebug.ExportedProperty(category = "chrome")
-    private float mTabSwitcherModePercent = 0;
+    private float mTabSwitcherModePercent;
 
     // Used to clip the toolbar during the fade transition into and out of TabSwitcher mode.  Only
     // used when |mAnimateNormalToolbar| is false.
@@ -334,7 +335,7 @@ public class ToolbarPhone extends ToolbarLayout
                 new ColorDrawable(getToolbarColorForVisualState(VisualState.NORMAL));
 
         mLocationBarBackground =
-                ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.textbox);
+                ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.card_single);
         mLocationBarBackground.getPadding(mLocationBarBackgroundPadding);
         mLocationBar.setPadding(
                 mLocationBarBackgroundPadding.left, mLocationBarBackgroundPadding.top,
@@ -1773,11 +1774,9 @@ public class ToolbarPhone extends ToolbarLayout
         mUrlFocusLayoutAnimator.playTogether(animators);
 
         mUrlFocusChangeInProgress = true;
-        mUrlFocusLayoutAnimator.addListener(new AnimatorListenerAdapter() {
-            private boolean mCanceled;
-
+        mUrlFocusLayoutAnimator.addListener(new CancelAwareAnimatorListener() {
             @Override
-            public void onAnimationStart(Animator animation) {
+            public void onStart(Animator animation) {
                 if (!hasFocus) {
                     mDisableLocationBarRelayout = true;
                 } else {
@@ -1787,14 +1786,12 @@ public class ToolbarPhone extends ToolbarLayout
             }
 
             @Override
-            public void onAnimationCancel(Animator animation) {
-                mCanceled = true;
+            public void onCancel(Animator animation) {
+                if (!hasFocus) mDisableLocationBarRelayout = false;
             }
 
             @Override
-            public void onAnimationEnd(Animator animation) {
-                if (mCanceled) return;
-
+            public void onEnd(Animator animation) {
                 if (!hasFocus) {
                     mDisableLocationBarRelayout = false;
                     mLayoutLocationBarInFocusedMode = false;

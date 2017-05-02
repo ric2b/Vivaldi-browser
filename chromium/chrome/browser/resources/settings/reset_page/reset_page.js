@@ -21,10 +21,10 @@ Polymer({
   behaviors: [settings.RouteObserverBehavior],
 
   properties: {
-<if expr="chromeos">
+// <if expr="chromeos">
     /** @private */
     showPowerwashDialog_: Boolean,
-</if>
+// </if>
 
     /** @private */
     allowPowerwash_: {
@@ -61,9 +61,13 @@ Polymer({
     settings.navigateToPreviousRoute();
   },
 
-<if expr="chromeos">
-  /** @private */
-  onShowPowerwashDialog_: function() {
+// <if expr="chromeos">
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onShowPowerwashDialog_: function(e) {
+    e.preventDefault();
     this.showPowerwashDialog_ = true;
   },
 
@@ -71,5 +75,5 @@ Polymer({
   onPowerwashDialogClose_: function() {
     this.showPowerwashDialog_ = false;
   },
-</if>
+// </if>
 });

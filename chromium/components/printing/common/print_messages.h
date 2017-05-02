@@ -47,6 +47,7 @@ struct PrintMsg_Print_Params {
   double dpi;
   double scale_factor;
   int desired_dpi;
+  bool rasterize_pdf;
   int document_cookie;
   bool selection_only;
   bool supports_alpha_blend;
@@ -127,6 +128,9 @@ IPC_STRUCT_TRAITS_BEGIN(PrintMsg_Print_Params)
 
   // Desired apparent dpi on paper.
   IPC_STRUCT_TRAITS_MEMBER(desired_dpi)
+
+  // Whether to rasterize a PDF for printing
+  IPC_STRUCT_TRAITS_MEMBER(rasterize_pdf)
 
   // Cookie for the document to ensure correctness.
   IPC_STRUCT_TRAITS_MEMBER(document_cookie)
@@ -406,12 +410,12 @@ IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_ScriptedPrint,
 // Asks the browser to create a temporary file for the renderer to fill
 // in resulting PdfMetafileSkia in printing.
 IPC_SYNC_MESSAGE_CONTROL1_2(PrintHostMsg_AllocateTempFileForPrinting,
-                            int /* render_view_id */,
+                            int /* render_frame_id */,
                             base::FileDescriptor /* temp file fd */,
-                            int /* fd in browser*/)  // Used only by Chrome OS.
+                            int /* fd in browser*/)
 IPC_MESSAGE_CONTROL2(PrintHostMsg_TempFileForPrintingWritten,
-                     int /* render_view_id */,
-                     int /* fd in browser */)  // Used only by Chrome OS.
+                     int /* render_frame_id */,
+                     int /* fd in browser */)
 #endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)

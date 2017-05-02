@@ -33,6 +33,7 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8HTMLEmbedElement.h"
 #include "bindings/core/v8/V8HTMLObjectElement.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -163,17 +164,15 @@ void invokeOnScriptableObject(const v8::FunctionCallbackInfo<v8::Value>& info) {
 void V8HTMLEmbedElement::legacyCallCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   invokeOnScriptableObject<V8HTMLEmbedElement>(info);
-  UseCounter::countIfNotPrivateScript(
-      info.GetIsolate(), V8HTMLEmbedElement::toImpl(info.Holder())->document(),
-      UseCounter::HTMLEmbedElementLegacyCall);
+  Deprecation::countDeprecation(currentExecutionContext(info.GetIsolate()),
+                                UseCounter::HTMLEmbedElementLegacyCall);
 }
 
 void V8HTMLObjectElement::legacyCallCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   invokeOnScriptableObject<V8HTMLObjectElement>(info);
-  UseCounter::countIfNotPrivateScript(
-      info.GetIsolate(), V8HTMLObjectElement::toImpl(info.Holder())->document(),
-      UseCounter::HTMLObjectElementLegacyCall);
+  Deprecation::countDeprecation(currentExecutionContext(info.GetIsolate()),
+                                UseCounter::HTMLObjectElementLegacyCall);
 }
 
 }  // namespace blink

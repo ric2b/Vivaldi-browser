@@ -27,6 +27,7 @@
 
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/CrossOriginAttribute.h"
@@ -49,7 +50,9 @@ static String urlForLoggingTrack(const KURL& url) {
 
 inline HTMLTrackElement::HTMLTrackElement(Document& document)
     : HTMLElement(trackTag, document),
-      m_loadTimer(this, &HTMLTrackElement::loadTimerFired) {
+      m_loadTimer(TaskRunnerHelper::get(TaskType::Networking, &document),
+                  this,
+                  &HTMLTrackElement::loadTimerFired) {
   DVLOG(TRACK_LOG_LEVEL) << "HTMLTrackElement - " << (void*)this;
 }
 
@@ -77,11 +80,11 @@ void HTMLTrackElement::removedFrom(ContainerNode* insertionPoint) {
   HTMLElement::removedFrom(insertionPoint);
 }
 
-void HTMLTrackElement::parseAttribute(const QualifiedName& name,
-                                      const AtomicString& oldValue,
-                                      const AtomicString& value) {
+void HTMLTrackElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
   if (name == srcAttr) {
-    if (!value.isEmpty())
+    if (!params.newValue.isEmpty())
       scheduleLoad();
     else if (m_track)
       m_track->removeAllCues();
@@ -90,7 +93,7 @@ void HTMLTrackElement::parseAttribute(const QualifiedName& name,
     // As the kind, label, and srclang attributes are set, changed, or removed,
     // the text track must update accordingly...
   } else if (name == kindAttr) {
-    AtomicString lowerCaseValue = value.lower();
+    AtomicString lowerCaseValue = params.newValue.lower();
     // 'missing value default' ("subtitles")
     if (lowerCaseValue.isNull())
       lowerCaseValue = TextTrack::subtitlesKeyword();
@@ -100,14 +103,14 @@ void HTMLTrackElement::parseAttribute(const QualifiedName& name,
 
     track()->setKind(lowerCaseValue);
   } else if (name == labelAttr) {
-    track()->setLabel(value);
+    track()->setLabel(params.newValue);
   } else if (name == srclangAttr) {
-    track()->setLanguage(value);
+    track()->setLanguage(params.newValue);
   } else if (name == idAttr) {
-    track()->setId(value);
+    track()->setId(params.newValue);
   }
 
-  HTMLElement::parseAttribute(name, oldValue, value);
+  HTMLElement::parseAttribute(params);
 }
 
 const AtomicString& HTMLTrackElement::kind() {

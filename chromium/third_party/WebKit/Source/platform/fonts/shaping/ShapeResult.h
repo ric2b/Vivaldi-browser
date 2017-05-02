@@ -48,7 +48,6 @@ class Font;
 class ShapeResultSpacing;
 class SimpleFontData;
 class TextRun;
-struct GlyphData;
 
 class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
  public:
@@ -68,7 +67,9 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   const FloatRect& bounds() const { return m_glyphBoundingBox; }
   unsigned numCharacters() const { return m_numCharacters; }
   void fallbackFonts(HashSet<const SimpleFontData*>*) const;
-  bool rtl() const { return m_direction == RTL; }
+  bool rtl() const {
+    return static_cast<TextDirection>(m_direction) == TextDirection::kRtl;
+  }
   bool hasVerticalOffsets() const { return m_hasVerticalOffsets; }
 
   // For memory reporting.

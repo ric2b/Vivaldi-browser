@@ -12,9 +12,17 @@ blink_modules_sources("shapedetection") {
     "DetectedBarcode.h",
     "DetectedFace.cpp",
     "DetectedFace.h",
+    "DetectedText.cpp",
+    "DetectedText.h",
     "FaceDetector.cpp",
     "FaceDetector.h",
     "ShapeDetector.cpp",
     "ShapeDetector.h",
+    "TextDetector.cpp",
+    "TextDetector.h",
+  ]
+
+  public_deps = [
+    "//services/shape_detection/public/interfaces:interfaces_blink",
   ]
 }

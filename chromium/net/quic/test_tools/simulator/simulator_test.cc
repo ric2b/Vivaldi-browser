@@ -4,16 +4,22 @@
 
 #include "net/quic/test_tools/simulator/simulator.h"
 
-#include "base/memory/ptr_util.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/quic/test_tools/simulator/alarm_factory.h"
 #include "net/quic/test_tools/simulator/link.h"
+#include "net/quic/test_tools/simulator/packet_filter.h"
 #include "net/quic/test_tools/simulator/queue.h"
 #include "net/quic/test_tools/simulator/switch.h"
 #include "net/quic/test_tools/simulator/traffic_policer.h"
-
-#include "net/test/gtest_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using std::string;
+using testing::_;
+using testing::Return;
+using testing::StrictMock;
 
 namespace net {
 namespace simulator {
@@ -21,7 +27,7 @@ namespace simulator {
 // A simple counter that increments its value by 1 every specified period.
 class Counter : public Actor {
  public:
-  Counter(Simulator* simulator, std::string name, QuicTime::Delta period)
+  Counter(Simulator* simulator, string name, QuicTime::Delta period)
       : Actor(simulator, name), value_(-1), period_(period) {
     Schedule(clock_->Now());
   }
@@ -31,8 +37,8 @@ class Counter : public Actor {
 
   void Act() override {
     ++value_;
-    DVLOG(1) << name_ << " has value " << value_ << " at time "
-             << clock_->Now().ToDebuggingValue();
+    QUIC_DVLOG(1) << name_ << " has value " << value_ << " at time "
+                  << clock_->Now().ToDebuggingValue();
     Schedule(clock_->Now() + period_);
   }
 
@@ -79,7 +85,7 @@ class CounterPort : public UnconstrainedPortInterface {
     per_destination_packet_counter_.clear();
   }
 
-  QuicPacketCount CountPacketsForDestination(std::string destination) const {
+  QuicPacketCount CountPacketsForDestination(string destination) const {
     auto result_it = per_destination_packet_counter_.find(destination);
     if (result_it == per_destination_packet_counter_.cend()) {
       return 0;
@@ -91,8 +97,7 @@ class CounterPort : public UnconstrainedPortInterface {
   QuicByteCount bytes_;
   QuicPacketCount packets_;
 
-  std::unordered_map<std::string, QuicPacketCount>
-      per_destination_packet_counter_;
+  std::unordered_map<string, QuicPacketCount> per_destination_packet_counter_;
 };
 
 // Sends the packet to the specified destination at the uplink rate.  Provides a
@@ -100,9 +105,9 @@ class CounterPort : public UnconstrainedPortInterface {
 class LinkSaturator : public Endpoint {
  public:
   LinkSaturator(Simulator* simulator,
-                std::string name,
+                string name,
                 QuicByteCount packet_size,
-                std::string destination)
+                string destination)
       : Endpoint(simulator, name),
         packet_size_(packet_size),
         destination_(std::move(destination)),
@@ -113,7 +118,7 @@ class LinkSaturator : public Endpoint {
 
   void Act() override {
     if (tx_port_->TimeUntilAvailable().IsZero()) {
-      auto packet = base::MakeUnique<Packet>();
+      auto packet = QuicMakeUnique<Packet>();
       packet->source = name_;
       packet->destination = destination_;
       packet->tx_timestamp = clock_->Now();
@@ -146,7 +151,7 @@ class LinkSaturator : public Endpoint {
 
  private:
   QuicByteCount packet_size_;
-  std::string destination_;
+  string destination_;
 
   ConstrainedPortInterface* tx_port_;
   CounterPort rx_port_;
@@ -245,7 +250,7 @@ TEST(SimulatorTest, Queue) {
   EXPECT_EQ(0u, queue.packets_queued());
   EXPECT_EQ(0u, acceptor.packets()->size());
 
-  auto first_packet = base::MakeUnique<Packet>();
+  auto first_packet = QuicMakeUnique<Packet>();
   first_packet->size = 600;
   queue.AcceptPacket(std::move(first_packet));
   EXPECT_EQ(600u, queue.bytes_queued());
@@ -253,14 +258,14 @@ TEST(SimulatorTest, Queue) {
   EXPECT_EQ(0u, acceptor.packets()->size());
 
   // The second packet does not fit and is dropped.
-  auto second_packet = base::MakeUnique<Packet>();
+  auto second_packet = QuicMakeUnique<Packet>();
   second_packet->size = 500;
   queue.AcceptPacket(std::move(second_packet));
   EXPECT_EQ(600u, queue.bytes_queued());
   EXPECT_EQ(1u, queue.packets_queued());
   EXPECT_EQ(0u, acceptor.packets()->size());
 
-  auto third_packet = base::MakeUnique<Packet>();
+  auto third_packet = QuicMakeUnique<Packet>();
   third_packet->size = 400;
   queue.AcceptPacket(std::move(third_packet));
   EXPECT_EQ(1000u, queue.bytes_queued());
@@ -420,7 +425,7 @@ TEST(SimulatorTest, SwitchedNetwork) {
 class AlarmToggler : public Actor {
  public:
   AlarmToggler(Simulator* simulator,
-               std::string name,
+               string name,
                QuicAlarm* alarm,
                QuicTime::Delta interval)
       : Actor(simulator, name),
@@ -564,6 +569,52 @@ TEST(SimulatorTest, RunFor) {
   EXPECT_EQ(33, counter.get_value());
 }
 
+class MockPacketFilter : public PacketFilter {
+ public:
+  MockPacketFilter(Simulator* simulator, string name, Endpoint* endpoint)
+      : PacketFilter(simulator, name, endpoint) {}
+  MOCK_METHOD1(FilterPacket, bool(const Packet&));
+};
+
+// Set up two trivial packet filters, one allowing any packets, and one dropping
+// all of them.
+TEST(SimulatorTest, PacketFilter) {
+  const QuicBandwidth bandwidth =
+      QuicBandwidth::FromBytesPerSecond(1024 * 1024);
+  const QuicTime::Delta base_propagation_delay =
+      QuicTime::Delta::FromMilliseconds(5);
+
+  Simulator simulator;
+  LinkSaturator saturator_a(&simulator, "Saturator A", 1000, "Saturator B");
+  LinkSaturator saturator_b(&simulator, "Saturator B", 1000, "Saturator A");
+
+  // Attach packets to the switch to create a delay between the point at which
+  // the packet is generated and the point at which it is filtered.  Note that
+  // if the saturators were connected directly, the link would be always
+  // available for the endpoint which has all of its packets dropped, resulting
+  // in saturator looping infinitely.
+  Switch network_switch(&simulator, "Switch", 8,
+                        bandwidth * base_propagation_delay * 10);
+  StrictMock<MockPacketFilter> a_to_b_filter(&simulator, "A -> B filter",
+                                             network_switch.port(1));
+  StrictMock<MockPacketFilter> b_to_a_filter(&simulator, "B -> A filter",
+                                             network_switch.port(2));
+  SymmetricLink link_a(&a_to_b_filter, &saturator_b, bandwidth,
+                       base_propagation_delay);
+  SymmetricLink link_b(&b_to_a_filter, &saturator_a, bandwidth,
+                       base_propagation_delay);
+
+  // Allow packets from A to B, but not from B to A.
+  EXPECT_CALL(a_to_b_filter, FilterPacket(_)).WillRepeatedly(Return(true));
+  EXPECT_CALL(b_to_a_filter, FilterPacket(_)).WillRepeatedly(Return(false));
+
+  // Run the simulation for a while, and expect that only B will receive any
+  // packets.
+  simulator.RunFor(QuicTime::Delta::FromSeconds(10));
+  EXPECT_GE(saturator_b.counter()->packets(), 1u);
+  EXPECT_EQ(saturator_a.counter()->packets(), 0u);
+}
+
 // Set up a traffic policer in one direction that throttles at 25% of link
 // bandwidth, and put two link saturators at each endpoint.
 TEST(SimulatorTest, TrafficPolicer) {
@@ -587,8 +638,7 @@ TEST(SimulatorTest, TrafficPolicer) {
 
   SymmetricLink link1(&saturator1, network_switch.port(1), bandwidth,
                       base_propagation_delay);
-  SymmetricLink link2(&saturator2, policer.output(), bandwidth,
-                      base_propagation_delay);
+  SymmetricLink link2(&saturator2, &policer, bandwidth, base_propagation_delay);
 
   // Ensure the initial burst passes without being dropped at all.
   bool simulator_result = simulator.RunUntilOrTimeout(
@@ -646,8 +696,7 @@ TEST(SimulatorTest, TrafficPolicerBurst) {
 
   SymmetricLink link1(&saturator1, network_switch.port(1), bandwidth,
                       base_propagation_delay);
-  SymmetricLink link2(&saturator2, policer.output(), bandwidth,
-                      base_propagation_delay);
+  SymmetricLink link2(&saturator2, &policer, bandwidth, base_propagation_delay);
 
   // Ensure at least one packet is sent on each side.
   bool simulator_result = simulator.RunUntilOrTimeout(

@@ -33,6 +33,36 @@ namespace system.display {
     long bottom;
   };
 
+  dictionary Point {
+    // The x-coordinate of the point.
+    long x;
+
+    // The y-coordinate of the point.
+    long y;
+  };
+
+  dictionary TouchCalibrationPair {
+    // The coordinates of the display point.
+    Point displayPoint;
+
+    // The coordinates of the touch point corresponding to the display point.
+    Point touchPoint;
+  };
+
+  dictionary TouchCalibrationPairQuad {
+    // First pair of touch and display point required for touch calibration.
+    TouchCalibrationPair pair1;
+
+    // Second pair of touch and display point required for touch calibration.
+    TouchCalibrationPair pair2;
+
+    // Third pair of touch and display point required for touch calibration.
+    TouchCalibrationPair pair3;
+
+    // Fourth pair of touch and display point required for touch calibration.
+    TouchCalibrationPair pair4;
+  };
+
   dictionary DisplayMode {
     // The display mode width in device independent (user visible) pixels.
     long width;
@@ -127,6 +157,9 @@ namespace system.display {
     // isSelected=true. Only available on Chrome OS. Will be set to an empty
     // array on other platforms.
     DisplayMode[] modes;
+
+    // True if this display has a touch input device associated with it.
+    boolean hasTouchSupport;
   };
 
   dictionary DisplayProperties {
@@ -174,6 +207,7 @@ namespace system.display {
   callback DisplayLayoutCallback = void (DisplayLayout[] layouts);
   callback SetDisplayUnitInfoCallback = void();
   callback SetDisplayLayoutCallback = void();
+  callback NativeTouchCalibrationCallback = void(boolean success);
 
   interface Functions {
     // Get the information of all attached display devices.
@@ -242,6 +276,41 @@ namespace system.display {
     // and hiding the overlay.
     // |id|: The display's unique identifier.
     static void overscanCalibrationComplete(DOMString id);
+
+    // Displays the native touch calibration UX for the display with |id| as
+    // display id. This will show an overlay on the screen with required
+    // instructions on how to proceed. The callback will be invoked in case of
+    // successful calibraion only. If the calibration fails, this will throw an
+    // error.
+    // |id|: The display's unique identifier.
+    // |callback|: Optional callback to inform the caller that the touch
+    //      calibration has ended. The argument of the callback informs if the
+    //      calibration was a success or not.
+    static void showNativeTouchCalibration(
+        DOMString id, optional NativeTouchCalibrationCallback callback);
+
+    // Starts custom touch calibration for a display. This should be called when
+    // using a custom UX for collecting calibration data. If another touch
+    // calibration is already in progress this will throw an error.
+    // |id|: The display's unique identifier.
+    static void startCustomTouchCalibration(DOMString id);
+
+    // Sets the touch calibration pairs for a display. These |pairs| would be
+    // used to calibrate the touch screen for display with |id| called in
+    // startCustomTouchCalibration(). Always call |startCustomTouchCalibration|
+    // before calling this method. If another touch calibration is already in
+    // progress this will throw an error.
+    // |pairs|: The pairs of point used to calibrate the display.
+    // |bounds|: Bounds of the display when the touch calibration was performed.
+    //     |bounds.left| and |bounds.top| values are ignored.
+    static void completeCustomTouchCalibration(TouchCalibrationPairQuad pairs,
+                                               Bounds bounds);
+
+    // Resets the touch calibration for the display and brings it back to its
+    // default state by clearing any touch calibration data associated with the
+    // display.
+    // |id|: The display's unique identifier.
+    static void clearTouchCalibration(DOMString id);
   };
 
   interface Events {

@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/common/accessibility_messages.h"
 #include "ui/accessibility/ax_text_utils.h"
@@ -131,6 +130,12 @@ bool BrowserAccessibility::IsTextOnlyObject() const {
   return GetRole() == ui::AX_ROLE_STATIC_TEXT ||
          GetRole() == ui::AX_ROLE_LINE_BREAK ||
          GetRole() == ui::AX_ROLE_INLINE_TEXT_BOX;
+}
+
+bool BrowserAccessibility::IsLineBreakObject() const {
+  return GetRole() == ui::AX_ROLE_LINE_BREAK ||
+         (IsTextOnlyObject() && GetParent() &&
+          GetParent()->GetRole() == ui::AX_ROLE_LINE_BREAK);
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetChild(
@@ -450,8 +455,13 @@ gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
 
     const std::vector<int32_t>& character_offsets =
         child->GetIntListAttribute(ui::AX_ATTR_CHARACTER_OFFSETS);
-    if (static_cast<int>(character_offsets.size()) != child_length)
-      continue;
+    int character_offsets_length = static_cast<int>(character_offsets.size());
+    if (character_offsets_length < child_length) {
+      // Blink might not return pixel offsets for all characters.
+      // Clamp the character range to be within the number of provided pixels.
+      local_start = std::min(local_start, character_offsets_length);
+      local_end = std::min(local_end, character_offsets_length);
+    }
     int start_pixel_offset =
         local_start > 0 ? character_offsets[local_start - 1] : 0;
     int end_pixel_offset =
@@ -491,8 +501,6 @@ gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
                                        child_rect.width(), bottom - top);
         break;
       }
-      default:
-        NOTREACHED();
     }
 
     if (bounds.width() == 0 && bounds.height() == 0)
@@ -981,6 +989,12 @@ bool BrowserAccessibility::IsCellOrTableHeaderRole() const {
   return (GetRole() == ui::AX_ROLE_CELL ||
           GetRole() == ui::AX_ROLE_COLUMN_HEADER ||
           GetRole() == ui::AX_ROLE_ROW_HEADER);
+}
+
+bool BrowserAccessibility::IsTableOrGridOrTreeGridRole() const {
+  return (GetRole() == ui::AX_ROLE_TABLE ||
+          GetRole() == ui::AX_ROLE_GRID ||
+          GetRole() == ui::AX_ROLE_TREE_GRID);
 }
 
 bool BrowserAccessibility::HasCaret() const {

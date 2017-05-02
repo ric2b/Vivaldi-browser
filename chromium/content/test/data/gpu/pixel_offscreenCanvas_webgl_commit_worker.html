@@ -2,7 +2,7 @@
 
 <!-- READ BEFORE UPDATING:
 If this test is updated make sure to increment the "revision" value of the
-associated test in content/test/gpu/page_sets/pixel_tests.py. This will ensure
+associated test in content/test/gpu/gpu_tests/pixel_test_pages.py. This will ensure
 that the baseline images are regenerated on the next run.
 -->
 
@@ -15,9 +15,12 @@ that the baseline images are regenerated on the next run.
 }
 </style>
 <script id="myWorker" type="text/worker">
-function drawTriangle(canvas)
+
+var g_frameNumber = 0;
+var gl;
+
+function drawTriangle()
 {
-  var gl = canvas.getContext("webgl");
   gl.clearColor(0, 1, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -56,14 +59,31 @@ function drawTriangle(canvas)
   gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
 
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 3);
+}
 
-  gl.commit();
+function drawLoop()
+{
+  if (g_frameNumber < 3) {
+    gl.clearColor(1, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    g_frameNumber++;
+    gl.commit().then(drawLoop);
+  } else {
+    drawTriangle();
+    gl.commit();
+
+    // The following clear is never committed
+    gl.clearColor(0, 0, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    self.postMessage("");
+  }
 }
 
 self.onmessage = function(e) {
   var transferredOffscreenCanvas = e.data;
-  drawTriangle(transferredOffscreenCanvas);
-  self.postMessage("");
+  gl = transferredOffscreenCanvas.getContext("webgl");
+  drawLoop();
 };
 </script>
 <script>
@@ -84,10 +104,10 @@ function draw()
   var canvas = document.getElementById("c");
   var offscreenCanvas = canvas.transferControlToOffscreen();
   var worker = makeWorker(document.getElementById("myWorker").textContent);
-  worker.postMessage(offscreenCanvas, [offscreenCanvas]);
   worker.onmessage = function (e) {
     waitForFinish();
   }
+  worker.postMessage(offscreenCanvas, [offscreenCanvas]);
 }
 
 function waitForFinish()
@@ -98,7 +118,7 @@ function waitForFinish()
   } else {
     g_swapsBeforeAck--;
     document.getElementById('container').style.zIndex = g_swapsBeforeAck + 1;
-    window.webkitRequestAnimationFrame(waitForFinish);
+    window.requestAnimationFrame(waitForFinish);
   }
 }
 </script>

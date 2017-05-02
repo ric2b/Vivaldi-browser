@@ -39,7 +39,7 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     Common.moduleSetting('textEditorIndent').addChangeListener(this.update.bind(this));
 
     this._sectionsContainer = this.element.createChild('div');
-    this._swatchPopoverHelper = new UI.SwatchPopoverHelper();
+    this._swatchPopoverHelper = new InlineEditor.SwatchPopoverHelper();
     this._linkifier = new Components.Linkifier(Elements.StylesSidebarPane._maxLinkLength, /* useLinkDecorator */ true);
 
     this.element.classList.add('styles-pane');
@@ -47,9 +47,6 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     /** @type {!Array<!Elements.SectionBlock>} */
     this._sectionBlocks = [];
     Elements.StylesSidebarPane._instance = this;
-
-    SDK.targetManager.addModelListener(
-        SDK.CSSModel, SDK.CSSModel.Events.LayoutEditorChange, this._onLayoutEditorChange, this);
     UI.context.addFlavorChangeListener(SDK.DOMNode, this.forceUpdate, this);
   }
 
@@ -151,22 +148,10 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   }
 
   /**
-   * @param {!Common.Event} event
-   */
-  _onLayoutEditorChange(event) {
-    var cssModel = /** @type {!SDK.CSSModel} */ (event.target);
-    var styleSheetId = event.data['id'];
-    var sourceRange = /** @type {!Protocol.CSS.SourceRange} */ (event.data['range']);
-    var range = Common.TextRange.fromObject(sourceRange);
-    this._decorator = new Elements.PropertyChangeHighlighter(this, cssModel, styleSheetId, range);
-    this.update();
-  }
-
-  /**
    * @param {!SDK.CSSProperty} cssProperty
    */
   revealProperty(cssProperty) {
-    this._decorator = new Elements.PropertyRevealHighlighter(this, cssProperty);
+    this._decorator = new Elements.StylePropertyHighlighter(this, cssProperty);
     this._decorator.perform();
     this.update();
   }
@@ -589,7 +574,7 @@ Elements.StylePropertiesSection = class {
 
     this._titleElement = this.element.createChild('div', 'styles-section-title ' + (rule ? 'styles-selector' : ''));
 
-    this.propertiesTreeOutline = new TreeOutlineInShadow();
+    this.propertiesTreeOutline = new UI.TreeOutlineInShadow();
     this.propertiesTreeOutline.registerRequiredCSS('elements/stylesSectionTree.css');
     this.propertiesTreeOutline.element.classList.add('style-properties', 'matched-styles', 'monospace');
     this.propertiesTreeOutline.section = this;
@@ -625,8 +610,10 @@ Elements.StylePropertiesSection = class {
         this.editable = false;
       } else {
         // Check this is a real CSSRule, not a bogus object coming from Elements.BlankStylePropertiesSection.
-        if (rule.styleSheetId)
-          this.navigable = !!rule.resourceURL();
+        if (rule.styleSheetId) {
+          var header = rule.cssModel().styleSheetHeaderForId(rule.styleSheetId);
+          this.navigable = !header.isAnonymousInlineStyleSheet();
+        }
       }
     }
 
@@ -661,16 +648,13 @@ Elements.StylePropertiesSection = class {
       return createTextNode('');
 
     var ruleLocation;
-    if (rule instanceof SDK.CSSStyleRule) {
-      var matchingSelectors = matchedStyles.matchingSelectors(rule);
-      var firstMatchingIndex = matchingSelectors.length ? matchingSelectors[0] : 0;
-      ruleLocation = rule.selectors[firstMatchingIndex].range;
-    } else if (rule instanceof SDK.CSSKeyframeRule) {
+    if (rule instanceof SDK.CSSStyleRule)
+      ruleLocation = rule.style.range;
+    else if (rule instanceof SDK.CSSKeyframeRule)
       ruleLocation = rule.key().range;
-    }
 
     var header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
-    if (ruleLocation && rule.styleSheetId && header && header.resourceURL()) {
+    if (ruleLocation && rule.styleSheetId && header && !header.isAnonymousInlineStyleSheet()) {
       return Elements.StylePropertiesSection._linkifyRuleLocation(
           matchedStyles.cssModel(), linkifier, rule.styleSheetId, ruleLocation);
     }
@@ -735,25 +719,27 @@ Elements.StylePropertiesSection = class {
     var items = [];
 
     var textShadowButton = new UI.ToolbarButton(Common.UIString('Add text-shadow'), 'largeicon-text-shadow');
-    textShadowButton.addEventListener('click', this._onInsertShadowPropertyClick.bind(this, 'text-shadow'));
+    textShadowButton.addEventListener(
+        UI.ToolbarButton.Events.Click, this._onInsertShadowPropertyClick.bind(this, 'text-shadow'));
     items.push(textShadowButton);
 
     var boxShadowButton = new UI.ToolbarButton(Common.UIString('Add box-shadow'), 'largeicon-box-shadow');
-    boxShadowButton.addEventListener('click', this._onInsertShadowPropertyClick.bind(this, 'box-shadow'));
+    boxShadowButton.addEventListener(
+        UI.ToolbarButton.Events.Click, this._onInsertShadowPropertyClick.bind(this, 'box-shadow'));
     items.push(boxShadowButton);
 
     var colorButton = new UI.ToolbarButton(Common.UIString('Add color'), 'largeicon-foreground-color');
-    colorButton.addEventListener('click', this._onInsertColorPropertyClick.bind(this));
+    colorButton.addEventListener(UI.ToolbarButton.Events.Click, this._onInsertColorPropertyClick, this);
     items.push(colorButton);
 
     var backgroundButton = new UI.ToolbarButton(Common.UIString('Add background-color'), 'largeicon-background-color');
-    backgroundButton.addEventListener('click', this._onInsertBackgroundColorPropertyClick.bind(this));
+    backgroundButton.addEventListener(UI.ToolbarButton.Events.Click, this._onInsertBackgroundColorPropertyClick, this);
     items.push(backgroundButton);
 
     var newRuleButton = null;
     if (this._style.parentRule) {
       newRuleButton = new UI.ToolbarButton(Common.UIString('Insert Style Rule Below'), 'largeicon-add');
-      newRuleButton.addEventListener('click', this._onNewRuleClick.bind(this));
+      newRuleButton.addEventListener(UI.ToolbarButton.Events.Click, this._onNewRuleClick, this);
       items.push(newRuleButton);
     }
 
@@ -896,7 +882,7 @@ Elements.StylePropertiesSection = class {
    * @param {!Common.Event} event
    */
   _onNewRuleClick(event) {
-    event.consume();
+    event.data.consume();
     var rule = this._style.parentRule;
     var range = Common.TextRange.createFromLocation(rule.style.range.endLine, rule.style.range.endColumn + 1);
     this._parentPane._addBlankSection(this, /** @type {string} */ (rule.styleSheetId), range);
@@ -907,7 +893,7 @@ Elements.StylePropertiesSection = class {
    * @param {!Common.Event} event
    */
   _onInsertShadowPropertyClick(propertyName, event) {
-    event.consume(true);
+    event.data.consume(true);
     var treeElement = this.addNewBlankProperty();
     treeElement.property.name = propertyName;
     treeElement.property.value = '0 0 black';
@@ -921,7 +907,7 @@ Elements.StylePropertiesSection = class {
    * @param {!Common.Event} event
    */
   _onInsertColorPropertyClick(event) {
-    event.consume(true);
+    event.data.consume(true);
     var treeElement = this.addNewBlankProperty();
     treeElement.property.name = 'color';
     treeElement.property.value = 'black';
@@ -935,7 +921,7 @@ Elements.StylePropertiesSection = class {
    * @param {!Common.Event} event
    */
   _onInsertBackgroundColorPropertyClick(event) {
-    event.consume(true);
+    event.data.consume(true);
     var treeElement = this.addNewBlankProperty();
     treeElement.property.name = 'background-color';
     treeElement.property.value = 'white';
@@ -1124,9 +1110,12 @@ Elements.StylePropertiesSection = class {
 
     var selectorTexts = rule.selectors.map(selector => selector.text);
     var matchingSelectorIndexes = this._matchedStyles.matchingSelectors(/** @type {!SDK.CSSStyleRule} */ (rule));
-    var matchingSelectors = new Array(selectorTexts.length).fill(false);
+    var matchingSelectors = /** @type {!Array<boolean>} */ (new Array(selectorTexts.length).fill(false));
     for (var matchingIndex of matchingSelectorIndexes)
       matchingSelectors[matchingIndex] = true;
+
+    if (this._parentPane._isEditingStyle)
+      return;
 
     var fragment = this._hoverableSelectorsMode ? this._renderHoverableSelectors(selectorTexts, matchingSelectors) :
                                                   this._renderSimplifiedSelectors(selectorTexts, matchingSelectors);
@@ -1251,10 +1240,11 @@ Elements.StylePropertiesSection = class {
     if (!event.target.isComponentSelectionCollapsed())
       return;
 
-    if (this._checkWillCancelEditing())
+    if (this.propertiesTreeOutline.element.shadowRoot.firstChild &&
+        !this.propertiesTreeOutline.element.shadowRoot.firstChild.isComponentSelectionCollapsed())
       return;
 
-    if (event.target.enclosingNodeOrSelfWithNodeName('a'))
+    if (this._checkWillCancelEditing())
       return;
 
     if (event.target.classList.contains('header') || this.element.classList.contains('read-only') ||
@@ -1527,7 +1517,6 @@ Elements.StylePropertiesSection = class {
     var oldSelectorRange = rule.selectorRange();
     if (!oldSelectorRange)
       return Promise.resolve();
-    var selectedNode = this._parentPane.node();
     return rule.setSelectorText(newContent)
         .then(onSelectorsUpdated.bind(this, /** @type {!SDK.CSSStyleRule} */ (rule), oldSelectorRange));
   }
@@ -1733,7 +1722,6 @@ Elements.KeyframePropertiesSection = class extends Elements.StylePropertiesSecti
     var oldRange = rule.key().range;
     if (!oldRange)
       return Promise.resolve();
-    var selectedNode = this._parentPane.node();
     return rule.setKeyText(newContent).then(updateSourceRanges.bind(this));
   }
 
@@ -1778,7 +1766,7 @@ Elements.KeyframePropertiesSection = class extends Elements.StylePropertiesSecti
 /**
  * @unrestricted
  */
-Elements.StylePropertyTreeElement = class extends TreeElement {
+Elements.StylePropertyTreeElement = class extends UI.TreeElement {
   /**
    * @param {!Elements.StylesSidebarPane} stylesPane
    * @param {!SDK.CSSMatchedStyles} matchedStyles
@@ -1878,13 +1866,13 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
       return createTextNode(text);
 
     if (!this._editable()) {
-      var swatch = UI.ColorSwatch.create();
+      var swatch = InlineEditor.ColorSwatch.create();
       swatch.setColor(color);
       return swatch;
     }
 
     var swatchPopoverHelper = this._parentPane._swatchPopoverHelper;
-    var swatch = UI.ColorSwatch.create();
+    var swatch = InlineEditor.ColorSwatch.create();
     swatch.setColor(color);
     swatch.setFormat(Common.Color.detectColorFormat(swatch.color()));
     var swatchIcon = new Elements.ColorSwatchPopoverIcon(this, swatchPopoverHelper, swatch);
@@ -1936,10 +1924,10 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
    * @return {!Node}
    */
   _processBezier(text) {
-    if (!this._editable() || !Common.Geometry.CubicBezier.parse(text))
+    if (!this._editable() || !UI.Geometry.CubicBezier.parse(text))
       return createTextNode(text);
     var swatchPopoverHelper = this._parentPane._swatchPopoverHelper;
-    var swatch = UI.BezierSwatch.create();
+    var swatch = InlineEditor.BezierSwatch.create();
     swatch.setBezierText(text);
     new Elements.BezierPopoverIcon(this, swatchPopoverHelper, swatch);
     return swatch;
@@ -1955,9 +1943,9 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
       return createTextNode(propertyValue);
     var shadows;
     if (propertyName === 'text-shadow')
-      shadows = Common.CSSShadowModel.parseTextShadow(propertyValue);
+      shadows = InlineEditor.CSSShadowModel.parseTextShadow(propertyValue);
     else
-      shadows = Common.CSSShadowModel.parseBoxShadow(propertyValue);
+      shadows = InlineEditor.CSSShadowModel.parseBoxShadow(propertyValue);
     if (!shadows.length)
       return createTextNode(propertyValue);
     var container = createDocumentFragment();
@@ -1966,7 +1954,7 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
       if (i !== 0)
         container.appendChild(createTextNode(', '));  // Add back commas and spaces between each shadow.
       // TODO(flandy): editing the property value should use the original value with all spaces.
-      var cssShadowSwatch = UI.CSSShadowSwatch.create();
+      var cssShadowSwatch = InlineEditor.CSSShadowSwatch.create();
       cssShadowSwatch.setCSSShadow(shadows[i]);
       new Elements.ShadowSwatchPopoverHelper(this, swatchPopoverHelper, cssShadowSwatch);
       var colorSwatch = cssShadowSwatch.colorSwatch();
@@ -2123,10 +2111,30 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
     }
   }
 
+  /**
+   * @override
+   */
+  onexpand() {
+    this._updateExpandElement();
+  }
+
+  /**
+   * @override
+   */
+  oncollapse() {
+    this._updateExpandElement();
+  }
+
+  _updateExpandElement() {
+    if (this.expanded)
+      this._expandElement.setIconType('smallicon-triangle-bottom');
+    else
+      this._expandElement.setIconType('smallicon-triangle-right');
+  }
+
   updateTitle() {
     this._updateState();
-    this._expandElement = createElement('span');
-    this._expandElement.className = 'expand-element';
+    this._expandElement = UI.Icon.create('smallicon-triangle-right', 'expand-icon');
 
     var propertyRenderer =
         new Elements.StylesSidebarPropertyRenderer(this._style.parentRule, this.node(), this.name, this.value);
@@ -2337,8 +2345,15 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
       selectElement.parentElement.scrollIntoViewIfNeeded(false);
 
     var applyItemCallback = !isEditingName ? this._applyFreeFlowStyleTextEdit.bind(this) : undefined;
-    var cssCompletions = isEditingName ? SDK.cssMetadata().allProperties() :
-                                         SDK.cssMetadata().propertyValues(this.nameElement.textContent);
+    var cssCompletions = [];
+    if (isEditingName) {
+      cssCompletions = SDK.cssMetadata().allProperties();
+      cssCompletions =
+          cssCompletions.filter(property => SDK.cssMetadata().isSVGProperty(property) === this.node().isSVGNode());
+    } else {
+      cssCompletions = SDK.cssMetadata().propertyValues(this.nameElement.textContent);
+    }
+
     this._prompt = new Elements.StylesSidebarPane.CSSPropertyPrompt(cssCompletions, this, isEditingName);
     this._prompt.setAutocompletionTimeout(0);
     if (applyItemCallback) {
@@ -2522,7 +2537,7 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
     var isEditingName = context.isEditingName;
 
     // Determine where to move to before making changes
-    var createNewProperty, moveToPropertyName, moveToSelector;
+    var createNewProperty, moveToSelector;
     var isDataPasted = 'originalName' in context;
     var isDirtyViaPaste = isDataPasted && (this.nameElement.textContent !== context.originalName ||
                                            this.valueElement.textContent !== context.originalValue);
@@ -2533,12 +2548,12 @@ Elements.StylePropertyTreeElement = class extends TreeElement {
     if (moveDirection === 'forward' && (!isEditingName || isPropertySplitPaste) ||
         moveDirection === 'backward' && isEditingName) {
       moveTo = moveTo._findSibling(moveDirection);
-      if (moveTo)
-        moveToPropertyName = moveTo.name;
-      else if (moveDirection === 'forward' && (!this._newProperty || userInput))
-        createNewProperty = true;
-      else if (moveDirection === 'backward')
-        moveToSelector = true;
+      if (!moveTo) {
+        if (moveDirection === 'forward' && (!this._newProperty || userInput))
+          createNewProperty = true;
+        else if (moveDirection === 'backward')
+          moveToSelector = true;
+      }
     }
 
     // Make the Changes and trigger the moveToNextCallback after updating.
@@ -2888,7 +2903,7 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
 
     var prefixResults = [];
     var anywhereResults = [];
-    this._cssCompletions.forEach(filterCompletions);
+    this._cssCompletions.forEach(filterCompletions.bind(this));
     var results = prefixResults.concat(anywhereResults);
 
     if (!this._isEditingName && !results.length && query.length > 1 && '!important'.startsWith(lowerQuery))
@@ -2902,13 +2917,16 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
 
     /**
      * @param {string} completion
+     * @this {Elements.StylesSidebarPane.CSSPropertyPrompt}
      */
     function filterCompletions(completion) {
       var index = completion.indexOf(lowerQuery);
-      if (index === 0)
-        prefixResults.push({title: completion, priority: SDK.cssMetadata().propertyUsageWeight(completion)});
-      else if (index > -1)
+      if (index === 0) {
+        var priority = this._isEditingName ? SDK.cssMetadata().propertyUsageWeight(completion) : 1;
+        prefixResults.push({title: completion, priority: priority});
+      } else if (index > -1) {
         anywhereResults.push({title: completion});
+      }
     }
   }
 };
@@ -2982,7 +3000,7 @@ Elements.StylesSidebarPropertyRenderer = class {
     var regexes = [SDK.CSSMetadata.VariableRegex, SDK.CSSMetadata.URLRegex];
     var processors = [createTextNode, this._processURL.bind(this)];
     if (this._bezierHandler && SDK.cssMetadata().isBezierAwareProperty(this._propertyName)) {
-      regexes.push(Common.Geometry.CubicBezier.Regex);
+      regexes.push(UI.Geometry.CubicBezier.Regex);
       processors.push(this._bezierHandler);
     }
     if (this._colorHandler && SDK.cssMetadata().isColorAwareProperty(this._propertyName)) {
@@ -3016,7 +3034,7 @@ Elements.StylesSidebarPropertyRenderer = class {
       hrefUrl = Common.ParsedURL.completeURL(this._rule.resourceURL(), url);
     else if (this._node)
       hrefUrl = this._node.resolveURL(url);
-    container.appendChild(Components.Linkifier.linkifyURLAsNode(hrefUrl || url, url));
+    container.appendChild(Components.Linkifier.linkifyURL(hrefUrl || url, url, '', undefined, undefined, true));
     container.createTextChild(')');
     return container;
   }
@@ -3029,7 +3047,7 @@ Elements.StylesSidebarPropertyRenderer = class {
 Elements.StylesSidebarPane.ButtonProvider = class {
   constructor() {
     this._button = new UI.ToolbarButton(Common.UIString('New Style Rule'), 'largeicon-add');
-    this._button.addEventListener('click', this._clicked, this);
+    this._button.addEventListener(UI.ToolbarButton.Events.Click, this._clicked, this);
     var longclickTriangle = UI.Icon.create('largeicon-longclick-triangle', 'long-click-glyph');
     this._button.element.appendChild(longclickTriangle);
 
@@ -3047,7 +3065,10 @@ Elements.StylesSidebarPane.ButtonProvider = class {
     }
   }
 
-  _clicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _clicked(event) {
     Elements.StylesSidebarPane._instance._createNewRuleInViaInspectorStyleSheet();
   }
 

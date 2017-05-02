@@ -77,12 +77,13 @@
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
+#include "media/base/media_switches.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/device_form_factor.h"
 #include "ui/base/touch/touch_device.h"
-#include "ui/base/touch/touch_enabled.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/color_space.h"
@@ -431,26 +432,31 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   // On Android, user gestures are normally required, unless that requirement
   // is disabled with a command-line switch or the equivalent field trial is
   // is set to "Enabled".
-  const std::string autoplay_group_name = base::FieldTrialList::FindFullName(
-      "MediaElementAutoplay");
   prefs.user_gesture_required_for_media_playback = !command_line.HasSwitch(
-      switches::kDisableGestureRequirementForMediaPlayback) &&
-          (autoplay_group_name.empty() || autoplay_group_name != "Enabled");
+      switches::kDisableGestureRequirementForMediaPlayback);
 
   prefs.progress_bar_completion = GetProgressBarCompletionPolicy();
 
   prefs.use_solid_color_scrollbars = true;
-#endif
+#else  // defined(OS_ANDROID)
+  prefs.cross_origin_media_playback_requires_user_gesture =
+      base::FeatureList::GetInstance()->IsEnabled(
+          features::kCrossOriginMediaPlaybackRequiresUserGesture);
+#endif  // defined(OS_ANDROID)
 
-  // Handle autoplay gesture override experiment.
-  // Note that anything but a well-formed string turns the experiment off.
-  prefs.autoplay_experiment_mode = base::FieldTrialList::FindFullName(
-      "MediaElementGestureOverrideExperiment");
-
-  prefs.touch_enabled = ui::AreTouchEventsEnabled();
-  prefs.device_supports_touch = prefs.touch_enabled &&
-      ui::GetTouchScreensAvailability() ==
-          ui::TouchScreensAvailability::ENABLED;
+  prefs.device_supports_touch = ui::GetTouchScreensAvailability() ==
+                                ui::TouchScreensAvailability::ENABLED;
+  const std::string touch_enabled_switch =
+      command_line.HasSwitch(switches::kTouchEventFeatureDetection)
+          ? command_line.GetSwitchValueASCII(
+                switches::kTouchEventFeatureDetection)
+          : switches::kTouchEventFeatureDetectionAuto;
+  prefs.touch_event_feature_detection_enabled =
+      (touch_enabled_switch == switches::kTouchEventFeatureDetectionAuto)
+          ? prefs.device_supports_touch
+          : (touch_enabled_switch.empty() ||
+             touch_enabled_switch ==
+                 switches::kTouchEventFeatureDetectionEnabled);
   std::tie(prefs.available_pointer_types, prefs.available_hover_types) =
       ui::GetAvailablePointerAndHoverTypes();
   prefs.primary_pointer_type =
@@ -459,7 +465,9 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       ui::GetPrimaryHoverType(prefs.available_hover_types);
 
 #if defined(OS_ANDROID)
-  prefs.device_supports_mouse = false;
+  prefs.video_fullscreen_orientation_lock_enabled =
+      base::FeatureList::IsEnabled(media::kVideoFullscreenOrientationLock) &&
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
 #endif
 
   prefs.pointer_events_max_touch_points = ui::MaxTouchPoints();
@@ -492,7 +500,15 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
   prefs.color_correct_rendering_enabled =
-      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering);
+      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering) ||
+      command_line.HasSwitch(cc::switches::kEnableTrueColorRendering);
+
+  prefs.color_correct_rendering_default_mode_enabled =
+      command_line.HasSwitch(
+          switches::kEnableColorCorrectRenderingDefaultMode);
+
+  prefs.true_color_rendering_enabled =
+      command_line.HasSwitch(cc::switches::kEnableTrueColorRendering);
 
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
@@ -523,6 +539,9 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   if (delegate_ && delegate_->HideDownloadUI())
     prefs.hide_download_ui = true;
+
+  prefs.background_video_track_optimization_enabled =
+      base::FeatureList::IsEnabled(media::kBackgroundVideoTrackOptimization);
 
   std::map<std::string, std::string> expensive_background_throttling_prefs;
   variations::GetVariationParamsByFeature(
@@ -742,7 +761,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderViewHostImpl, msg)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RenderProcessGone, OnRenderProcessGone)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ShowView, OnShowView)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowFullscreenWidget,
                         OnShowFullscreenWidget)
@@ -758,7 +776,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnRouteCloseEvent)
     IPC_MESSAGE_HANDLER(ViewHostMsg_TakeFocus, OnTakeFocus)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ClosePage_ACK, OnClosePageACK)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_DidZoomURL, OnDidZoomURL)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Focus, OnFocus)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -784,22 +801,6 @@ void RenderViewHostImpl::ShutdownAndDestroy() {
   delete this;
 }
 
-void RenderViewHostImpl::CreateNewWindow(
-    int32_t route_id,
-    int32_t main_frame_route_id,
-    int32_t main_frame_widget_route_id,
-    const mojom::CreateNewWindowParams& params,
-    SessionStorageNamespace* session_storage_namespace) {
-  mojom::CreateNewWindowParamsPtr validated_params(params.Clone());
-  GetProcess()->FilterURL(false, &validated_params->target_url);
-  GetProcess()->FilterURL(false, &validated_params->opener_url);
-  GetProcess()->FilterURL(true, &validated_params->opener_security_origin);
-
-  delegate_->CreateNewWindow(GetSiteInstance(), route_id, main_frame_route_id,
-                             main_frame_widget_route_id, *validated_params,
-                             session_storage_namespace);
-}
-
 void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
                                          blink::WebPopupType popup_type) {
   delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, popup_type);
@@ -807,15 +808,6 @@ void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
 
 void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id) {
   delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id);
-}
-
-void RenderViewHostImpl::OnShowView(int route_id,
-                                    WindowOpenDisposition disposition,
-                                    const gfx::Rect& initial_rect,
-                                    bool user_gesture) {
-  delegate_->ShowCreatedWindow(GetProcess()->GetID(), route_id, disposition,
-                               initial_rect, user_gesture);
-  Send(new ViewMsg_Move_ACK(route_id));
 }
 
 void RenderViewHostImpl::OnShowWidget(int route_id,
@@ -914,7 +906,7 @@ void RenderViewHostImpl::OnFocus() {
 
 void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  if (mouse_event.type == WebInputEvent::MouseWheel &&
+  if (mouse_event.type() == WebInputEvent::MouseWheel &&
       GetWidget()->ignore_input_events()) {
     delegate_->OnIgnoredUIEvent();
   }
@@ -923,7 +915,7 @@ void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
 bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
   if (GetWidget()->ignore_input_events()) {
-    if (key_event.type == WebInputEvent::RawKeyDown)
+    if (key_event.type() == WebInputEvent::RawKeyDown)
       delegate_->OnIgnoredUIEvent();
     return false;
   }
@@ -966,10 +958,6 @@ bool RenderViewHostImpl::IsFocusedElementEditable() {
   return delegate_ && delegate_->IsFocusedElementEditable();
 }
 
-void RenderViewHostImpl::Zoom(PageZoom zoom) {
-  Send(new ViewMsg_Zoom(GetRoutingID(), zoom));
-}
-
 void RenderViewHostImpl::DisableScrollbarsForThreshold(const gfx::Size& size) {
   Send(new ViewMsg_DisableScrollbarsForSmallWindows(GetRoutingID(), size));
 }
@@ -1007,17 +995,6 @@ void RenderViewHostImpl::ExecutePluginActionAtLocation(
 
 void RenderViewHostImpl::NotifyMoveOrResizeStarted() {
   Send(new ViewMsg_MoveOrResizeStarted(GetRoutingID()));
-}
-
-void RenderViewHostImpl::OnDidZoomURL(double zoom_level,
-                                      const GURL& url) {
-  HostZoomMapImpl* host_zoom_map =
-      static_cast<HostZoomMapImpl*>(HostZoomMap::Get(GetSiteInstance()));
-
-  host_zoom_map->SetZoomLevelForView(GetProcess()->GetID(),
-                                     GetRoutingID(),
-                                     zoom_level,
-                                     net::GetHostOrSpecFromURL(url));
 }
 
 void RenderViewHostImpl::SelectWordAroundCaret() {

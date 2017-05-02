@@ -18,10 +18,6 @@
 class PrefRegistrySimple;
 class PrefService;
 
-namespace gfx {
-class Image;
-}  // namespace gfx
-
 namespace ntp_snippets {
 
 // Provides content suggestions from the bookmarks model.
@@ -29,7 +25,6 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
                                     public bookmarks::BookmarkModelObserver {
  public:
   BookmarkSuggestionsProvider(ContentSuggestionsProvider::Observer* observer,
-                              CategoryFactory* category_factory,
                               bookmarks::BookmarkModel* bookmark_model,
                               PrefService* pref_service);
   ~BookmarkSuggestionsProvider() override;
@@ -91,7 +86,7 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
       bookmarks::BookmarkModel* model,
       const std::set<GURL>& removed_urls) override {}
 
-  void ConvertBookmark(const bookmarks::BookmarkNode* bookmark,
+  void ConvertBookmark(const bookmarks::BookmarkNode& bookmark,
                        std::vector<ContentSuggestion>* suggestions);
 
   // The actual method to fetch bookmarks - follows each call to FetchBookmarks
@@ -113,11 +108,6 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
 
   base::Time node_to_change_last_visit_date_;
   base::Time end_of_list_last_visit_date_;
-
-  // TODO(jkrcal): Remove this field and the pref after M55.
-  // For six weeks after first installing M54, this is true and the
-  // fallback implemented in BookmarkLastVisitUtils is activated.
-  bool creation_date_fallback_;
 
   // By default, only visits to bookmarks on Android are considered when
   // deciding which bookmarks to suggest. Should we also consider visits on

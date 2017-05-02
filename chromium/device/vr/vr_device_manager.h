@@ -43,6 +43,7 @@ class VRDeviceManager {
 
  private:
   friend class VRDeviceManagerTest;
+  friend class VRDisplayImplTest;
   friend class VRServiceImplTest;
 
   VRDeviceManager();
@@ -71,8 +72,7 @@ class VRDeviceManager {
 
   bool vr_initialized_;
 
-  using ServiceList = std::vector<VRServiceImpl*>;
-  ServiceList services_;
+  std::set<VRServiceImpl*> services_;
 
   // For testing. If true will not delete self when consumer count reaches 0.
   bool keep_alive_;

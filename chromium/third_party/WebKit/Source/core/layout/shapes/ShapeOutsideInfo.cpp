@@ -98,7 +98,7 @@ static bool checkShapeImageOrigin(Document& document,
     return true;
 
   ASSERT(styleImage.cachedImage());
-  ImageResource& imageResource = *(styleImage.cachedImage());
+  ImageResourceContent& imageResource = *(styleImage.cachedImage());
   if (imageResource.isAccessAllowed(document.getSecurityOrigin()))
     return true;
 
@@ -226,11 +226,11 @@ const Shape& ShapeOutsideInfo::computedShape() const {
 inline LayoutUnit borderBeforeInWritingMode(const LayoutBox& layoutBox,
                                             WritingMode writingMode) {
   switch (writingMode) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return LayoutUnit(layoutBox.borderTop());
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       return LayoutUnit(layoutBox.borderLeft());
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       return LayoutUnit(layoutBox.borderRight());
   }
 
@@ -242,11 +242,11 @@ inline LayoutUnit borderAndPaddingBeforeInWritingMode(
     const LayoutBox& layoutBox,
     WritingMode writingMode) {
   switch (writingMode) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return layoutBox.borderTop() + layoutBox.paddingTop();
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       return layoutBox.borderLeft() + layoutBox.paddingLeft();
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       return layoutBox.borderRight() + layoutBox.paddingRight();
   }
 

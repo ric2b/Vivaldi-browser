@@ -9,10 +9,10 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/gtest_util.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "mojo/public/cpp/bindings/string.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "mojo/public/cpp/test_support/test_support.h"
 #include "mojo/public/interfaces/bindings/tests/sample_interfaces.mojom.h"
@@ -140,7 +140,7 @@ class BindingCallbackTest : public testing::Test {
 TEST_F(BindingCallbackTest, Basic) {
   // Create the ServerImpl and the Binding.
   InterfaceImpl server_impl;
-  Binding<sample::Provider> binding(&server_impl, GetProxy(&interface_ptr_));
+  Binding<sample::Provider> binding(&server_impl, MakeRequest(&interface_ptr_));
 
   // Initialize the test values.
   server_impl.resetLastServerValueSeen();
@@ -199,7 +199,8 @@ TEST_F(BindingCallbackTest, DeleteBindingThenRunCallback) {
   base::RunLoop run_loop;
   {
     // Create the binding in an inner scope so it can be deleted first.
-    Binding<sample::Provider> binding(&server_impl, GetProxy(&interface_ptr_));
+    Binding<sample::Provider> binding(&server_impl,
+                                      MakeRequest(&interface_ptr_));
     interface_ptr_.set_connection_error_handler(run_loop.QuitClosure());
 
     // Initialize the test values.
@@ -244,7 +245,8 @@ TEST_F(BindingCallbackTest, DeleteBindingThenDeleteCallback) {
   InterfaceImpl server_impl;
   {
     // Create the binding in an inner scope so it can be deleted first.
-    Binding<sample::Provider> binding(&server_impl, GetProxy(&interface_ptr_));
+    Binding<sample::Provider> binding(&server_impl,
+                                      MakeRequest(&interface_ptr_));
 
     // Initialize the test values.
     server_impl.resetLastServerValueSeen();
@@ -275,7 +277,7 @@ TEST_F(BindingCallbackTest, DeleteBindingThenDeleteCallback) {
 TEST_F(BindingCallbackTest, CloseBindingBeforeDeletingCallback) {
   // Create the ServerImpl and the Binding.
   InterfaceImpl server_impl;
-  Binding<sample::Provider> binding(&server_impl, GetProxy(&interface_ptr_));
+  Binding<sample::Provider> binding(&server_impl, MakeRequest(&interface_ptr_));
 
   // Initialize the test values.
   server_impl.resetLastServerValueSeen();
@@ -310,7 +312,7 @@ TEST_F(BindingCallbackTest, CloseBindingBeforeDeletingCallback) {
 TEST_F(BindingCallbackTest, DeleteCallbackBeforeBindingDeathTest) {
   // Create the ServerImpl and the Binding.
   InterfaceImpl server_impl;
-  Binding<sample::Provider> binding(&server_impl, GetProxy(&interface_ptr_));
+  Binding<sample::Provider> binding(&server_impl, MakeRequest(&interface_ptr_));
 
   // Initialize the test values.
   server_impl.resetLastServerValueSeen();
@@ -328,17 +330,7 @@ TEST_F(BindingCallbackTest, DeleteCallbackBeforeBindingDeathTest) {
   EXPECT_EQ(7, server_impl.last_server_value_seen());
   EXPECT_EQ(0, last_client_callback_value_seen_);
 
-#if (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) && !defined(OS_ANDROID)
-  // Delete the callback without running it. This should cause a crash in debug
-  // builds due to a DCHECK.
-  std::string regex("Check failed: !is_valid");
-#if defined(OS_WIN)
-  // TODO(msw): Fix MOJO_DCHECK logs and EXPECT_DEATH* on Win: crbug.com/535014
-  regex.clear();
-#endif  // OS_WIN
-  EXPECT_DEATH_IF_SUPPORTED(server_impl.DeleteCallback(), regex.c_str());
-#endif  // (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) &&
-        // !defined(OS_ANDROID)
+  EXPECT_DCHECK_DEATH(server_impl.DeleteCallback());
 }
 
 }  // namespace

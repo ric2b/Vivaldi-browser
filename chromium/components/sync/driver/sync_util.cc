@@ -10,6 +10,8 @@
 #include "components/sync/driver/sync_driver_switches.h"
 #include "url/gurl.h"
 
+#include "sync/vivaldi_sync_urls.h"
+
 namespace {
 
 // Returns string that represents system in UserAgent.
@@ -48,9 +50,9 @@ std::string GetSystemString(bool is_tablet) {
 namespace syncer {
 namespace internal {
 
-const char* kSyncServerUrl = "https://clients4.google.com/chrome-sync";
+const char* kSyncServerUrl = SYNC_URL("/vivid-sync");
 
-const char* kSyncDevServerUrl = "https://clients4.google.com/chrome-sync/dev";
+const char* kSyncDevServerUrl = TEST_SYNC_URL("/vivid-sync");
 
 std::string FormatUserAgentForSync(const std::string& system,
                                    version_info::Channel channel) {

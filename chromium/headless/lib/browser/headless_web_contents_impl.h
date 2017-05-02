@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_web_contents.h"
@@ -19,7 +20,6 @@ class Window;
 }
 
 namespace content {
-class BrowserContext;
 class DevToolsAgentHost;
 class WebContents;
 }
@@ -29,12 +29,12 @@ class Size;
 }
 
 namespace headless {
-class HeadlessDevToolsHostImpl;
 class HeadlessBrowserImpl;
 class WebContentsObserverAdapter;
 
 class HeadlessWebContentsImpl : public HeadlessWebContents,
                                 public HeadlessDevToolsTarget,
+                                public content::RenderProcessHostObserver,
                                 public content::WebContentsObserver {
  public:
   ~HeadlessWebContentsImpl() override;
@@ -56,8 +56,16 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   HeadlessDevToolsTarget* GetDevToolsTarget() override;
 
   // HeadlessDevToolsTarget implementation:
-  void AttachClient(HeadlessDevToolsClient* client) override;
+  bool AttachClient(HeadlessDevToolsClient* client) override;
+  void ForceAttachClient(HeadlessDevToolsClient* client) override;
   void DetachClient(HeadlessDevToolsClient* client) override;
+  bool IsAttached() override;
+
+  // RenderProcessHostObserver implementation:
+  void RenderProcessExited(content::RenderProcessHost* host,
+                           base::TerminationStatus status,
+                           int exit_code) override;
+  void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;
 
   // content::WebContentsObserver implementation:
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
@@ -88,7 +96,8 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   scoped_refptr<content::DevToolsAgentHost> agent_host_;
   std::list<MojoService> mojo_services_;
 
-  HeadlessBrowserContextImpl* browser_context_;  // Not owned.
+  HeadlessBrowserContextImpl* browser_context_;      // Not owned.
+  content::RenderProcessHost* render_process_host_;  // Not owned.
 
   using ObserverMap =
       std::unordered_map<HeadlessWebContents::Observer*,

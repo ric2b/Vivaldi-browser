@@ -11,30 +11,27 @@
 #include <string>
 #include <vector>
 
-#include "base/atomicops.h"
 #include "base/base_export.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string_piece.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/task_scheduler/priority_queue.h"
 #include "base/task_scheduler/scheduler_lock.h"
 #include "base/task_scheduler/scheduler_worker.h"
 #include "base/task_scheduler/scheduler_worker_pool.h"
-#include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/scheduler_worker_stack.h"
 #include "base/task_scheduler/sequence.h"
 #include "base/task_scheduler/task.h"
-#include "base/task_scheduler/task_traits.h"
-#include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 
 namespace base {
 
 class HistogramBase;
-class TimeDelta;
+class SchedulerWorkerPoolParams;
+class TaskTraits;
 
 namespace internal {
 
@@ -114,17 +111,12 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   class SchedulerSingleThreadTaskRunner;
   class SchedulerWorkerDelegateImpl;
 
-  SchedulerWorkerPoolImpl(StringPiece name,
-                          SchedulerWorkerPoolParams::IORestriction
-                              io_restriction,
-                          const TimeDelta& suggested_reclaim_time,
+  SchedulerWorkerPoolImpl(const SchedulerWorkerPoolParams& params,
                           TaskTracker* task_tracker,
                           DelayedTaskManager* delayed_task_manager);
 
   bool Initialize(
-      ThreadPriority priority_hint,
-      SchedulerWorkerPoolParams::StandbyThreadPolicy standby_thread_policy,
-      size_t max_threads,
+      const SchedulerWorkerPoolParams& params,
       const ReEnqueueSequenceCallback& re_enqueue_sequence_callback);
 
   // Wakes up |worker|.
@@ -161,9 +153,6 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
 
   // PriorityQueue from which all threads of this worker pool get work.
   PriorityQueue shared_priority_queue_;
-
-  // Indicates whether Tasks on this worker pool are allowed to make I/O calls.
-  const SchedulerWorkerPoolParams::IORestriction io_restriction_;
 
   // Suggested reclaim time for workers.
   const TimeDelta suggested_reclaim_time_;
@@ -208,14 +197,6 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   // TaskScheduler.NumTasksBetweenWaits.[worker pool name] histogram.
   // Intentionally leaked.
   HistogramBase* const num_tasks_between_waits_histogram_;
-
-  // TaskScheduler.TaskLatency.[worker pool name].[task priority] histograms.
-  // Indexed by task priority. Histograms are allocated on demand to reduce
-  // memory usage (some task priorities might never run in this
-  // SchedulerThreadPoolImpl). Intentionally leaked.
-  subtle::AtomicWord
-      task_latency_histograms_[static_cast<int>(TaskPriority::HIGHEST) + 1] =
-          {};
 
   TaskTracker* const task_tracker_;
   DelayedTaskManager* const delayed_task_manager_;

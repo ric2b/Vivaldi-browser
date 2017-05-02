@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "components/discardable_memory/public/interfaces/discardable_shared_memory_manager.mojom.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_runner.h"
@@ -23,8 +24,8 @@
 #include "services/ui/public/interfaces/accessibility_manager.mojom.h"
 #include "services/ui/public/interfaces/clipboard.mojom.h"
 #include "services/ui/public/interfaces/display_manager.mojom.h"
-#include "services/ui/public/interfaces/gpu_service.mojom.h"
-#include "services/ui/public/interfaces/ime.mojom.h"
+#include "services/ui/public/interfaces/gpu.mojom.h"
+#include "services/ui/public/interfaces/ime/ime.mojom.h"
 #include "services/ui/public/interfaces/user_access_manager.mojom.h"
 #include "services/ui/public/interfaces/user_activity_monitor.mojom.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
@@ -32,7 +33,6 @@
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/public/interfaces/window_tree_host.mojom.h"
 #include "services/ui/ws/platform_display_init_params.h"
-#include "services/ui/ws/touch_controller.h"
 #include "services/ui/ws/user_id.h"
 #include "services/ui/ws/window_server_delegate.h"
 
@@ -40,12 +40,12 @@
 #include "ui/ozone/public/client_native_pixmap_factory.h"
 #endif
 
-namespace display {
-class PlatformScreen;
+namespace discardable_memory {
+class DiscardableSharedMemoryManager;
 }
 
-namespace gfx {
-class Rect;
+namespace display {
+class ScreenManager;
 }
 
 namespace service_manager {
@@ -57,7 +57,6 @@ namespace ui {
 class PlatformEventSource;
 
 namespace ws {
-class ForwardingWindowManager;
 class WindowServer;
 }
 
@@ -67,7 +66,7 @@ class Service
       public service_manager::InterfaceFactory<mojom::AccessibilityManager>,
       public service_manager::InterfaceFactory<mojom::Clipboard>,
       public service_manager::InterfaceFactory<mojom::DisplayManager>,
-      public service_manager::InterfaceFactory<mojom::GpuService>,
+      public service_manager::InterfaceFactory<mojom::Gpu>,
       public service_manager::InterfaceFactory<mojom::IMERegistrar>,
       public service_manager::InterfaceFactory<mojom::IMEServer>,
       public service_manager::InterfaceFactory<mojom::UserAccessManager>,
@@ -76,6 +75,8 @@ class Service
           mojom::WindowManagerWindowTreeFactory>,
       public service_manager::InterfaceFactory<mojom::WindowTreeFactory>,
       public service_manager::InterfaceFactory<mojom::WindowTreeHostFactory>,
+      public service_manager::InterfaceFactory<
+          discardable_memory::mojom::DiscardableSharedMemoryManager>,
       public service_manager::InterfaceFactory<mojom::WindowServerTest> {
  public:
   Service();
@@ -109,7 +110,6 @@ class Service
   void OnFirstDisplayReady() override;
   void OnNoMoreDisplays() override;
   bool IsTestConfig() const override;
-  void UpdateTouchTransforms() override;
 
   // service_manager::InterfaceFactory<mojom::AccessibilityManager>
   // implementation.
@@ -124,9 +124,9 @@ class Service
   void Create(const service_manager::Identity& remote_identity,
               mojom::DisplayManagerRequest request) override;
 
-  // service_manager::InterfaceFactory<mojom::GpuService> implementation.
+  // service_manager::InterfaceFactory<mojom::Gpu> implementation.
   void Create(const service_manager::Identity& remote_identity,
-              mojom::GpuServiceRequest request) override;
+              mojom::GpuRequest request) override;
 
   // service_manager::InterfaceFactory<mojom::IMERegistrar> implementation.
   void Create(const service_manager::Identity& remote_identity,
@@ -158,6 +158,12 @@ class Service
   void Create(const service_manager::Identity& remote_identity,
               mojom::WindowTreeHostFactoryRequest request) override;
 
+  // service_manager::InterfaceFactory<
+  //    discardable_memory::mojom::DiscardableSharedMemoryManager>:
+  void Create(const service_manager::Identity& remote_identity,
+              discardable_memory::mojom::DiscardableSharedMemoryManagerRequest
+                  request) override;
+
   // service_manager::InterfaceFactory<mojom::WindowServerTest> implementation.
   void Create(const service_manager::Identity& remote_identity,
               mojom::WindowServerTestRequest request) override;
@@ -181,11 +187,13 @@ class Service
 
   // Manages display hardware and handles display management. May register Mojo
   // interfaces and must outlive service_manager::InterfaceRegistry.
-  std::unique_ptr<display::PlatformScreen> platform_screen_;
+  std::unique_ptr<display::ScreenManager> screen_manager_;
 
-  std::unique_ptr<ws::TouchController> touch_controller_;
   IMERegistrarImpl ime_registrar_;
   IMEServerImpl ime_server_;
+
+  std::unique_ptr<discardable_memory::DiscardableSharedMemoryManager>
+      discardable_shared_memory_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(Service);
 };

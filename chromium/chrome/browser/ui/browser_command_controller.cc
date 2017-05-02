@@ -35,7 +35,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_utils.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
@@ -537,7 +536,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ToggleDevToolsWindow(browser_, DevToolsToggleAction::Show());
       break;
     case IDC_DEV_TOOLS_CONSOLE:
-      ToggleDevToolsWindow(browser_, DevToolsToggleAction::ShowConsole());
+      ToggleDevToolsWindow(browser_, DevToolsToggleAction::ShowConsolePanel());
       break;
     case IDC_DEV_TOOLS_DEVICES:
       InspectUI::InspectDevices(browser_);
@@ -636,7 +635,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
         service_manager::Connector* connector =
             content::ServiceManagerConnection::GetForProcess()->GetConnector();
         mash::mojom::LaunchablePtr launchable;
-        connector->ConnectToInterface("touch_hud", &launchable);
+        connector->BindInterface("touch_hud", &launchable);
         launchable->Launch(mash::mojom::kWindow,
                            mash::mojom::LaunchMode::DEFAULT);
       } else {

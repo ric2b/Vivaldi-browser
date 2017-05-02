@@ -11,6 +11,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/gcm/base/mcs_util.h"
 #include "google_apis/gcm/engine/fake_connection_handler.h"
 #include "google_apis/gcm/monitoring/fake_gcm_stats_recorder.h"
@@ -90,7 +91,7 @@ class TestConnectionFactoryImpl : public ConnectionFactoryImpl {
   void InitializeFactory();
 
   // Overridden stubs.
-  void ConnectImpl() override;
+  void StartConnection() override;
   void InitHandler() override;
   std::unique_ptr<net::BackoffEntry> CreateBackoffEntry(
       const net::BackoffEntry::Policy* const policy) override;
@@ -163,7 +164,7 @@ TestConnectionFactoryImpl::~TestConnectionFactoryImpl() {
   EXPECT_EQ(0, num_expected_attempts_);
 }
 
-void TestConnectionFactoryImpl::ConnectImpl() {
+void TestConnectionFactoryImpl::StartConnection() {
   ASSERT_GT(num_expected_attempts_, 0);
   ASSERT_FALSE(GetConnectionHandler()->CanSendMessage());
   std::unique_ptr<mcs_proto::LoginRequest> request(BuildLoginRequest(0, 0, ""));
@@ -260,6 +261,14 @@ class ConnectionFactoryImplTest
   void OnConnected(const GURL& current_server,
                    const net::IPEndPoint& ip_endpoint) override;
   void OnDisconnected() override;
+
+  // Get the client events recorded by the event tracker.
+  const google::protobuf::RepeatedPtrField<mcs_proto::ClientEvent>
+  GetClientEvents() {
+    mcs_proto::LoginRequest login_request;
+    factory()->event_tracker_.WriteToLoginRequest(&login_request);
+    return login_request.client_event();
+  }
 
  private:
   void ConnectionsComplete();
@@ -368,11 +377,24 @@ TEST_F(ConnectionFactoryImplTest, MultipleFailuresThenSucceed) {
   EXPECT_GE((retry_time - connect_time).InMilliseconds(),
             CalculateBackoff(kNumAttempts));
 
+  // There should be one failed client event for each failed connection.
+  const auto client_events = GetClientEvents();
+  ASSERT_EQ(kNumAttempts, client_events.size());
+
+  for (const auto& client_event : client_events) {
+    EXPECT_EQ(mcs_proto::ClientEvent::FAILED_CONNECTION, client_event.type());
+    EXPECT_EQ(net::ERR_CONNECTION_FAILED, client_event.error_code());
+  }
+
   factory()->SetConnectResult(net::OK);
   WaitForConnections();
   EXPECT_TRUE(factory()->NextRetryAttempt().is_null());
   EXPECT_TRUE(factory()->IsEndpointReachable());
   EXPECT_TRUE(connected_server().is_valid());
+
+  // Old client events should have been reset after the successful connection.
+  const auto new_client_events = GetClientEvents();
+  ASSERT_EQ(0, new_client_events.size());
 }
 
 // Network change events should trigger canary connections.
@@ -567,6 +589,58 @@ TEST_F(ConnectionFactoryImplTest, ConnectionResetRace) {
 
   // Re-connection should succeed.
   EXPECT_TRUE(factory()->IsEndpointReachable());
+}
+
+TEST_F(ConnectionFactoryImplTest, MultipleFailuresWrapClientEvents) {
+  const int kNumAttempts = 50;
+  factory()->SetMultipleConnectResults(net::ERR_CONNECTION_FAILED,
+                                       kNumAttempts);
+
+  factory()->Connect();
+  WaitForConnections();
+
+  // There should be one failed client event for each failed connection, but
+  // there is a maximum cap of kMaxClientEvents, which is 30. There should also
+  // be a single event which records the events which were discarded.
+  auto client_events = GetClientEvents();
+  ASSERT_EQ(31, client_events.size());
+
+  bool found_discarded_events = false;
+  for (const auto& client_event : client_events) {
+    if (client_event.type() == mcs_proto::ClientEvent::DISCARDED_EVENTS) {
+      // There should only be one event for discarded events.
+      EXPECT_FALSE(found_discarded_events);
+      found_discarded_events = true;
+      // There should be 50-30=20 discarded events.
+      EXPECT_EQ(20U, client_event.number_discarded_events());
+    } else {
+      EXPECT_EQ(mcs_proto::ClientEvent::FAILED_CONNECTION, client_event.type());
+      EXPECT_EQ(net::ERR_CONNECTION_FAILED, client_event.error_code());
+    }
+  }
+  EXPECT_TRUE(found_discarded_events);
+
+  factory()->SetConnectResult(net::OK);
+  WaitForConnections();
+  EXPECT_TRUE(factory()->IsEndpointReachable());
+  EXPECT_TRUE(connected_server().is_valid());
+
+  // Old client events should have been reset after the successful connection.
+  client_events = GetClientEvents();
+  ASSERT_EQ(0, client_events.size());
+
+  // Test that EndConnectionAttempt doesn't write empty events to the tracker.
+  // There should be 2 events: 1) the successful connection which was previously
+  // established. 2) the unsuccessful connection triggered as a result of the
+  // SOCKET_FAILURE signal. The NETWORK_CHANGE signal should not cause an
+  // additional event since there is no in progress event.
+  factory()->SetConnectResult(net::ERR_CONNECTION_FAILED);
+  factory()->SignalConnectionReset(ConnectionFactory::SOCKET_FAILURE);
+  factory()->SignalConnectionReset(ConnectionFactory::NETWORK_CHANGE);
+  WaitForConnections();
+
+  client_events = GetClientEvents();
+  ASSERT_EQ(2, client_events.size());
 }
 
 }  // namespace gcm

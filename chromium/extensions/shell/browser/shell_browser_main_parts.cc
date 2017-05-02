@@ -67,6 +67,10 @@
 #include "extensions/shell/browser/shell_nacl_browser_delegate.h"
 #endif
 
+#if defined(USE_AURA) && defined(USE_X11)
+#include "ui/events/devices/x11/touch_factory_x11.h"
+#endif
+
 using base::CommandLine;
 using content::BrowserContext;
 
@@ -89,7 +93,9 @@ ShellBrowserMainParts::~ShellBrowserMainParts() {
 }
 
 void ShellBrowserMainParts::PreMainMessageLoopStart() {
-  // TODO(jamescook): Initialize touch here?
+#if defined(USE_AURA) && defined(USE_X11)
+  ui::TouchFactory::SetTouchDeviceListFromCommandLine();
+#endif
 #if defined(OS_MACOSX)
   MainPartsPreMainMessageLoopStartMac();
 #endif
@@ -130,8 +136,6 @@ int ShellBrowserMainParts::PreCreateThreads() {
 
   content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       kExtensionScheme);
-  content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-      kExtensionResourceScheme);
 
   // Return no error.
   return 0;
@@ -155,6 +159,8 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
 #if defined(USE_AURA)
   aura::Env::GetInstance()->set_context_factory(content::GetContextFactory());
+  aura::Env::GetInstance()->set_context_factory_private(
+      content::GetContextFactoryPrivate());
 #endif
 
   storage_monitor::StorageMonitor::Create();

@@ -27,7 +27,6 @@ class SuspendableScriptExecutor final
   static void createAndRun(LocalFrame*,
                            int worldID,
                            const HeapVector<ScriptSourceCode>& sources,
-                           int extensionGroup,
                            bool userGesture,
                            WebScriptExecutionCallback*);
   static void createAndRun(LocalFrame*,
@@ -40,7 +39,7 @@ class SuspendableScriptExecutor final
                            WebScriptExecutionCallback*);
   ~SuspendableScriptExecutor() override;
 
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 

@@ -13,6 +13,7 @@
         color: inherit;
         padding: 0;
         top: 0;
+        width: 512px;
       }
 
       :host::backdrop {
@@ -50,9 +51,7 @@
       .body-container {
         display: flex;
         flex-direction: column;
-        max-width: 800px;
-        min-width: 512px;
-        /* TODO(dbeam): use <paper-dialog-scrollable> to get dividers? */
+        /* TODO(dbeam): copy <paper-dialog-scrollable>'s dividers? */
         overflow: auto;
       }
 

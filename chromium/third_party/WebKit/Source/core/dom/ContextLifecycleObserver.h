@@ -33,14 +33,44 @@
 
 namespace blink {
 
+class LocalDOMWindow;
+class LocalFrame;
+
+// ContextClient and ContextLifecycleObserver are helpers to associate an
+// object with an ExecutionContext.
+//
+// - getExecutionContext() returns null after the context is detached.
+// - frame() is a syntax sugar for getExecutionContext()->frame(). It returns
+//   null after the context is detached or the context is not a Document.
+class CORE_EXPORT ContextClient : public GarbageCollectedMixin {
+ public:
+  ExecutionContext* getExecutionContext() const;
+  LocalFrame* frame() const;
+
+  DECLARE_VIRTUAL_TRACE();
+
+ protected:
+  explicit ContextClient(ExecutionContext*);
+  explicit ContextClient(LocalFrame*);
+
+ private:
+  WeakMember<ExecutionContext> m_executionContext;
+};
+
+// ContextLifecycleObserver provides an additional contextDestroyed() hook
+// to execute cleanup code when a context is destroyed. Prefer the simpler
+// ContextClient when possible.
 class CORE_EXPORT ContextLifecycleObserver
     : public LifecycleObserver<ExecutionContext, ContextLifecycleObserver> {
  public:
+  virtual void contextDestroyed(ExecutionContext*) {}
+
   ExecutionContext* getExecutionContext() const { return lifecycleContext(); }
+  LocalFrame* frame() const;
 
   enum Type {
     GenericType,
-    ActiveDOMObjectType,
+    SuspendableObjectType,
   };
 
   Type observerType() const { return m_observerType; }
@@ -52,6 +82,40 @@ class CORE_EXPORT ContextLifecycleObserver
 
  private:
   Type m_observerType;
+};
+
+// DOMWindowClient is a helper to associate an object with a LocalDOMWindow.
+//
+// - domWindow() returns null after the window is detached.
+// - frame() is a syntax sugar for domWindow()->frame(). It returns
+//   null after the window is detached.
+//
+// If the object is a per-ExecutionContext thing, use ContextClient/
+// ContextLifecycleObserver. If the object is a per-DOMWindow thing, use
+// DOMWindowClient. Basically, DOMWindowClient is expected to be used (only)
+// for objects directly held by LocalDOMWindow. Other objects should use
+// ContextClient/ContextLifecycleObserver.
+//
+// There is a subtle difference between the timing when the context gets
+// detached and the timing when the window gets detached. In common cases,
+// these two happen at the same timing. The only exception is a case where
+// a frame navigates from an initial empty document to another same-origin
+// document. In this case, a Document is recreated but a DOMWindow is reused.
+// Hence, in the navigated document ContextClient::getExecutionContext()
+// returns null while DOMWindowClient::domWindow() keeps returning the window.
+class CORE_EXPORT DOMWindowClient : public GarbageCollectedMixin {
+ public:
+  LocalDOMWindow* domWindow() const;
+  LocalFrame* frame() const;
+
+  DECLARE_VIRTUAL_TRACE();
+
+ protected:
+  explicit DOMWindowClient(LocalDOMWindow*);
+  explicit DOMWindowClient(LocalFrame*);
+
+ private:
+  WeakMember<LocalDOMWindow> m_domWindow;
 };
 
 }  // namespace blink

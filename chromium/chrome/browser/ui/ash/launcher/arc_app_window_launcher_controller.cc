@@ -5,12 +5,12 @@
 
 #include <string>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shared/app_types.h"
@@ -18,7 +18,8 @@
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "base/memory/ptr_util.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -254,7 +255,7 @@ ArcAppWindowLauncherController::ArcAppWindowLauncherController(
     ChromeLauncherController* owner,
     ash::ShelfDelegate* shelf_delegate)
     : AppWindowLauncherController(owner), shelf_delegate_(shelf_delegate) {
-  if (arc::ArcAuthService::IsAllowedForProfile(owner->profile())) {
+  if (arc::ArcSessionManager::IsAllowedForProfile(owner->profile())) {
     observed_profile_ = owner->profile();
     StartObserving(observed_profile_);
   }
@@ -314,7 +315,7 @@ void ArcAppWindowLauncherController::ActiveUserChanged(
 
 void ArcAppWindowLauncherController::AdditionalUserAddedToSession(
     Profile* profile) {
-  DCHECK(!arc::ArcAuthService::IsAllowedForProfile(profile));
+  DCHECK(!arc::ArcSessionManager::IsAllowedForProfile(profile));
 }
 
 void ArcAppWindowLauncherController::OnWindowInitialized(aura::Window* window) {
@@ -422,8 +423,8 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
       base::MakeUnique<AppWindow>(task_id, info->app_shelf_id(), widget, this));
   RegisterApp(info);
   DCHECK(info->app_window()->controller());
-  ash::WmWindowAura::Get(window)->SetIntProperty(
-      ash::WmWindowProperty::SHELF_ID, info->app_window()->shelf_id());
+  ash::WmWindow::Get(window)->SetIntProperty(ash::WmWindowProperty::SHELF_ID,
+                                             info->app_window()->shelf_id());
   if (ash::WmShell::Get()
           ->maximize_mode_controller()
           ->IsMaximizeModeWindowManagerEnabled()) {

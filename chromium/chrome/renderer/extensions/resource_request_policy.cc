@@ -21,7 +21,7 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -38,7 +38,7 @@ ResourceRequestPolicy::ResourceRequestPolicy(Dispatcher* dispatcher)
 // extension_protocols.cc's AllowExtensionResourceLoad.
 bool ResourceRequestPolicy::CanRequestResource(
     const GURL& resource_url,
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     ui::PageTransition transition_type) {
   CHECK(resource_url.SchemeIs(kExtensionScheme));
 
@@ -54,9 +54,9 @@ bool ResourceRequestPolicy::CanRequestResource(
   // hybrid hosted/packaged apps. The one exception is access to icons, since
   // some extensions want to be able to do things like create their own
   // launchers.
-  std::string resource_root_relative_path =
-      resource_url.path().empty() ? std::string()
-      : resource_url.path().substr(1);
+  base::StringPiece resource_root_relative_path =
+      resource_url.path_piece().empty() ? base::StringPiece()
+                                        : resource_url.path_piece().substr(1);
   if (extension->is_hosted_app() &&
       !IconsInfo::GetIcons(extension)
           .ContainsPath(resource_root_relative_path)) {
@@ -112,26 +112,6 @@ bool ResourceRequestPolicy::CanRequestResource(
                                     blink::WebString::fromUTF8(message)));
       return false;
     }
-  }
-
-  return true;
-}
-
-bool ResourceRequestPolicy::CanRequestExtensionResourceScheme(
-    const blink::WebURL& resource_url,
-    blink::WebFrame* frame) {
-  CHECK(resource_url.protocolIs(kExtensionResourceScheme));
-
-  GURL frame_url = frame->document().url();
-  if (!frame_url.is_empty() && !frame_url.SchemeIs(kExtensionScheme)) {
-    std::string message = base::StringPrintf(
-        "Denying load of %s. chrome-extension-resources:// can only be "
-        "loaded from extensions.",
-        resource_url.string().utf8().c_str());
-    frame->addMessageToConsole(
-        blink::WebConsoleMessage(blink::WebConsoleMessage::LevelError,
-                                  blink::WebString::fromUTF8(message)));
-    return false;
   }
 
   return true;

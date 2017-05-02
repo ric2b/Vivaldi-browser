@@ -78,9 +78,9 @@ void DefaultAudioDestinationHandler::createDestination() {
   float hardwareSampleRate = AudioDestination::hardwareSampleRate();
   VLOG(1) << ">>>> hardwareSampleRate = " << hardwareSampleRate;
 
-  m_destination = AudioDestination::create(
-      *this, m_inputDeviceId, m_numberOfInputChannels, channelCount(),
-      hardwareSampleRate, context()->getSecurityOrigin());
+  m_destination =
+      AudioDestination::create(*this, channelCount(), hardwareSampleRate,
+                               context()->getSecurityOrigin());
 }
 
 void DefaultAudioDestinationHandler::startRendering() {
@@ -101,6 +101,10 @@ void DefaultAudioDestinationHandler::stopRendering() {
 
 unsigned long DefaultAudioDestinationHandler::maxChannelCount() const {
   return AudioDestination::maxChannelCount();
+}
+
+size_t DefaultAudioDestinationHandler::callbackBufferSize() const {
+  return m_destination->callbackBufferSize();
 }
 
 void DefaultAudioDestinationHandler::setChannelCount(

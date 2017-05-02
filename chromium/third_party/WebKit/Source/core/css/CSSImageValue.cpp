@@ -24,10 +24,9 @@
 #include "core/dom/Document.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/FetchRequest.h"
-#include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Settings.h"
-#include "core/loader/MixedContentChecker.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/StyleFetchedImage.h"
 #include "core/style/StyleInvalidImage.h"
 #include "platform/CrossOriginAttributeValue.h"
@@ -65,11 +64,11 @@ StyleImage* CSSImageValue::cacheImage(const Document& document,
     if (crossOrigin != CrossOriginAttributeNotSet)
       request.setCrossOriginAccessControl(document.getSecurityOrigin(),
                                           crossOrigin);
-    if (document.settings() && document.settings()->fetchImagePlaceholders())
+    if (document.settings() && document.settings()->getFetchImagePlaceholders())
       request.setAllowImagePlaceholder();
 
-    if (ImageResource* cachedImage =
-            ImageResource::fetch(request, document.fetcher()))
+    if (ImageResourceContent* cachedImage =
+            ImageResourceContent::fetch(request, document.fetcher()))
       m_cachedImage =
           StyleFetchedImage::create(cachedImage, document, request.url());
     else
@@ -83,36 +82,28 @@ void CSSImageValue::restoreCachedResourceIfNeeded(
     const Document& document) const {
   if (!m_cachedImage || !document.fetcher() || m_absoluteURL.isNull())
     return;
-  if (document.fetcher()->cachedResource(KURL(ParsedURLString, m_absoluteURL)))
-    return;
 
-  ImageResource* resource = m_cachedImage->cachedImage();
+  ImageResourceContent* resource = m_cachedImage->cachedImage();
   if (!resource)
     return;
 
-  FetchRequest request(ResourceRequest(m_absoluteURL),
-                       m_initiatorName.isEmpty() ? FetchInitiatorTypeNames::css
-                                                 : m_initiatorName,
-                       resource->options());
-  request.mutableResourceRequest().setRequestContext(
-      WebURLRequest::RequestContextImage);
-  MixedContentChecker::shouldBlockFetch(
-      document.frame(), resource->lastResourceRequest(),
-      resource->lastResourceRequest().url(), MixedContentChecker::SendReport);
-  document.fetcher()->requestLoadStarted(
-      resource->identifier(), resource, request,
-      ResourceFetcher::ResourceLoadingFromCache);
+  resource->emulateLoadStartedForInspector(
+      document.fetcher(), KURL(ParsedURLString, m_absoluteURL),
+      m_initiatorName.isEmpty() ? FetchInitiatorTypeNames::css
+                                : m_initiatorName);
 }
 
 bool CSSImageValue::hasFailedOrCanceledSubresources() const {
   if (!m_cachedImage)
     return false;
-  if (Resource* cachedResource = m_cachedImage->cachedImage())
+  if (ImageResourceContent* cachedResource = m_cachedImage->cachedImage())
     return cachedResource->loadFailedOrCanceled();
   return true;
 }
 
 bool CSSImageValue::equals(const CSSImageValue& other) const {
+  if (m_absoluteURL.isEmpty() && other.m_absoluteURL.isEmpty())
+    return m_relativeURL == other.m_relativeURL;
   return m_absoluteURL == other.m_absoluteURL;
 }
 

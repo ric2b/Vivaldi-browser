@@ -30,12 +30,12 @@ Polymer({
      */
     pageVisibility: Object,
 
-<if expr="_google_chrome and not chromeos">
+// <if expr="_google_chrome and not chromeos">
     /** @type {MetricsReporting} */
     metricsReporting_: Object,
 
     showRestart_: Boolean,
-</if>
+// </if>
 
     /** @private */
     safeBrowsingExtendedReportingEnabled_: Boolean,
@@ -44,26 +44,16 @@ Polymer({
     showClearBrowsingDataDialog_: Boolean,
   },
 
-<if expr="_google_chrome">
-  observers: [
-    'updateSpellingService_(prefs.spellcheck.use_spelling_service.value)',
-  ],
-</if>
-
   ready: function() {
     this.ContentSettingsTypes = settings.ContentSettingsTypes;
 
-<if expr="_google_chrome">
-    this.updateSpellingService_();
-</if>
-
-<if expr="_google_chrome and not chromeos">
+// <if expr="_google_chrome and not chromeos">
     var boundSetMetricsReporting = this.setMetricsReporting_.bind(this);
     this.addWebUIListener('metrics-reporting-change', boundSetMetricsReporting);
 
     var browserProxy = settings.PrivacyPageBrowserProxyImpl.getInstance();
     browserProxy.getMetricsReporting().then(boundSetMetricsReporting);
-</if>
+// </if>
 
     var boundSetSber = this.setSafeBrowsingExtendedReporting_.bind(this);
     this.addWebUIListener('safe-browsing-extended-reporting-change',
@@ -80,13 +70,13 @@ Polymer({
 
   /** @private */
   onManageCertificatesTap_: function() {
-<if expr="use_nss_certs">
+// <if expr="use_nss_certs">
     settings.navigateTo(settings.Route.CERTIFICATES);
-</if>
-<if expr="is_win or is_macosx">
+// </if>
+// <if expr="is_win or is_macosx">
     settings.PrivacyPageBrowserProxyImpl.getInstance().
         showManageSSLCertificates();
-</if>
+// </if>
   },
 
   /**
@@ -121,11 +111,11 @@ Polymer({
         'https://support.google.com/chrome/?p=settings_manage_exceptions');
   },
 
-<if expr="_google_chrome and not chromeos">
+// <if expr="_google_chrome and not chromeos">
   /** @private */
-  onMetricsReportingCheckboxTap_: function() {
+  onMetricsReportingControlTap_: function() {
     var browserProxy = settings.PrivacyPageBrowserProxyImpl.getInstance();
-    var enabled = this.$.metricsReportingCheckbox.checked;
+    var enabled = this.$.metricsReportingControl.checked;
     browserProxy.setMetricsReportingEnabled(enabled);
   },
 
@@ -149,12 +139,12 @@ Polymer({
   onRestartTap_: function() {
     settings.LifetimeBrowserProxyImpl.getInstance().restart();
   },
-</if>
+// </if>
 
   /** @private */
-  onSafeBrowsingExtendedReportingCheckboxTap_: function() {
+  onSafeBrowsingExtendedReportingControlTap_: function() {
     var browserProxy = settings.PrivacyPageBrowserProxyImpl.getInstance();
-    var enabled = this.$.safeBrowsingExtendedReportingCheckbox.checked;
+    var enabled = this.$.safeBrowsingExtendedReportingControl.checked;
     browserProxy.setSafeBrowsingExtendedReportingEnabled(enabled);
   },
 
@@ -164,20 +154,6 @@ Polymer({
   setSafeBrowsingExtendedReporting_: function(enabled) {
     this.safeBrowsingExtendedReportingEnabled_ = enabled;
   },
-
-<if expr="_google_chrome">
-  /** @private */
-  updateSpellingService_: function() {
-    this.$.spellingServiceToggleButton.checked =
-        this.get('prefs.spellcheck.use_spelling_service.value');
-  },
-
-  /** @private */
-  onUseSpellingServiceTap_: function() {
-    this.set('prefs.spellcheck.use_spelling_service.value',
-        this.$.spellingServiceToggleButton.checked);
-  },
-</if>
 
   /**
    * The sub-page title for the site or content settings.
@@ -189,4 +165,12 @@ Polymer({
         loadTimeData.getString('siteSettings') :
         loadTimeData.getString('contentSettings');
   },
+
+// <if expr="chromeos">
+  /** @private */
+  onAdobeFlashStorageClicked_: function() {
+    window.open('https://www.macromedia.com/support/' +
+        'documentation/en/flashplayer/help/settings_manager07.html');
+  },
+// </if>
 });

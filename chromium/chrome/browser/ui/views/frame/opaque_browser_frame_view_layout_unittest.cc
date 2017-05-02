@@ -236,7 +236,7 @@ class OpaqueBrowserFrameViewLayoutTest : public views::ViewsTestBase {
           (maximized ? OBFVL::kCaptionSpacing
                      : -GetLayoutSize(NEW_TAB_BUTTON).width());
     }
-    int tabstrip_x = GetLayoutInsets(AVATAR_ICON).right();
+    int tabstrip_x = OpaqueBrowserFrameView::kAvatarIconPadding;
     if (show_caption_buttons && caption_buttons_on_left) {
       int right_of_close =
           maximized ? kMaximizedExtraCloseWidth : OBFVL::kFrameBorderThickness;
@@ -339,7 +339,6 @@ class OpaqueBrowserFrameViewLayoutTest : public views::ViewsTestBase {
   TabIconView* tab_icon_view_ = nullptr;
   views::Label* window_title_ = nullptr;
 
-  AvatarMenuButton* menu_button_ = nullptr;
   views::MenuButton* avatar_button_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(OpaqueBrowserFrameViewLayoutTest);

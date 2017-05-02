@@ -1,3 +1,5 @@
+# Stop Windows python license check presubmit errors by forcing LF checkout.
+*.py  text eol=lf
 *       -text
 *.cc text eol=lf
 *.h text eol=lf

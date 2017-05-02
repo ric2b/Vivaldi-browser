@@ -47,11 +47,15 @@ enum PaintLayerType {
   ForcedPaintLayer
 };
 
+enum : uint32_t {
+  BackgroundPaintInGraphicsLayer = 1 << 0,
+  BackgroundPaintInScrollingContents = 1 << 1
+};
+using BackgroundPaintLocation = uint32_t;
+
 // Modes for some of the line-related functions.
 enum LinePositionMode { PositionOnContainingLine, PositionOfInteriorLineBoxes };
 enum LineDirectionMode { HorizontalLine, VerticalLine };
-
-class InlineFlowBox;
 
 struct LayoutBoxModelObjectRareData {
   WTF_MAKE_NONCOPYABLE(LayoutBoxModelObjectRareData);
@@ -191,9 +195,9 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   bool hasNonEmptyLayoutSize() const;
   bool usesCompositedScrolling() const;
 
-  // Checks if all of the background's layers can be painted as locally
-  // attached.
-  bool hasLocalEquivalentBackground() const;
+  // Returns which layers backgrounds should be painted into for overflow
+  // scrolling boxes.
+  BackgroundPaintLocation backgroundPaintLocation() const;
 
   // These return the CSS computed padding values.
   LayoutUnit computedCSSPaddingTop() const {
@@ -406,13 +410,15 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   bool backgroundStolenForBeingBody(
       const ComputedStyle* rootElementStyle = nullptr) const;
 
-  void absoluteQuads(Vector<FloatQuad>& quads) const override;
+  void absoluteQuads(Vector<FloatQuad>& quads,
+                     MapCoordinatesFlags mode = 0) const override;
 
  protected:
   // Compute absolute quads for |this|, but not any continuations. May only be
   // called for objects which can be or have continuations, i.e. LayoutInline or
   // LayoutBlockFlow.
-  virtual void absoluteQuadsForSelf(Vector<FloatQuad>& quads) const;
+  virtual void absoluteQuadsForSelf(Vector<FloatQuad>& quads,
+                                    MapCoordinatesFlags mode = 0) const;
 
   void willBeDestroyed() override;
 
@@ -511,7 +517,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
 
   LayoutBoxModelObjectRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = makeUnique<LayoutBoxModelObjectRareData>();
+      m_rareData = WTF::makeUnique<LayoutBoxModelObjectRareData>();
     return *m_rareData.get();
   }
 

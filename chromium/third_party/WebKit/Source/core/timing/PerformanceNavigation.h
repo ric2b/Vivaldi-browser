@@ -33,7 +33,7 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/frame/DOMWindowProperty.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -42,10 +42,11 @@ class LocalFrame;
 class ScriptState;
 class ScriptValue;
 
+// Legacy support for NT1(https://www.w3.org/TR/navigation-timing/).
 class CORE_EXPORT PerformanceNavigation final
     : public GarbageCollected<PerformanceNavigation>,
       public ScriptWrappable,
-      public DOMWindowProperty {
+      public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(PerformanceNavigation);
 

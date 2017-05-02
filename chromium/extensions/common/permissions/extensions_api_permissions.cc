@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/socket_permission.h"
 #include "extensions/common/permissions/usb_device_permission.h"
@@ -64,6 +65,7 @@ ExtensionsAPIPermissions::GetAllPermissions() const {
       {APIPermission::kMetricsPrivate, "metricsPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kNetworkingConfig, "networking.config"},
+      {APIPermission::kNetworkingOnc, "networking.onc"},
       {APIPermission::kNetworkingPrivate, "networkingPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kPower, "power"},

@@ -371,33 +371,21 @@ void OmniboxFieldTrial::GetSuggestPollingStrategy(bool* from_last_keystroke,
   }
 }
 
-bool OmniboxFieldTrial::HQPExperimentalScoringEnabled() {
-  return variations::GetVariationParamValue(
-      kBundledExperimentFieldTrialName,
-      kHQPExperimentalScoringEnabledParam) == "true";
-}
-
 std::string OmniboxFieldTrial::HQPExperimentalScoringBuckets() {
-  if (!HQPExperimentalScoringEnabled())
-    return "";
-
   return variations::GetVariationParamValue(
       kBundledExperimentFieldTrialName,
       kHQPExperimentalScoringBucketsParam);
 }
 
 float OmniboxFieldTrial::HQPExperimentalTopicalityThreshold() {
-  if (!HQPExperimentalScoringEnabled())
-    return -1;
-
-  std::string topicality_threhold_str =
-    variations::GetVariationParamValue(
-        kBundledExperimentFieldTrialName,
-        kHQPExperimentalScoringTopicalityThresholdParam);
+  std::string topicality_threshold_str = variations::GetVariationParamValue(
+      kBundledExperimentFieldTrialName,
+      kHQPExperimentalScoringTopicalityThresholdParam);
 
   double topicality_threshold;
-  if (!base::StringToDouble(topicality_threhold_str, &topicality_threshold))
-    return -1;
+  if (topicality_threshold_str.empty() ||
+      !base::StringToDouble(topicality_threshold_str, &topicality_threshold))
+    return 0.8f;
 
   return static_cast<float>(topicality_threshold);
 }
@@ -441,6 +429,28 @@ float OmniboxFieldTrial::HQPTypedValue() {
   double typed_value;
   base::StringToDouble(typed_value_str, &typed_value);
   return typed_value;
+}
+
+OmniboxFieldTrial::NumMatchesScores OmniboxFieldTrial::HQPNumMatchesScores() {
+  std::string str = variations::GetVariationParamValue(
+      kBundledExperimentFieldTrialName, kHQPNumMatchesScoresRule);
+  // The parameter is a comma-separated list of (number, value) pairs, e.g.
+  // "1:3,2:2.5,3:2,4:1.5".
+  // This is a best-effort conversion; we trust the hand-crafted parameters
+  // downloaded from the server to be perfect.  There's no need to handle
+  // errors smartly.
+  base::StringPairs kv_pairs;
+  if (!base::SplitStringIntoKeyValuePairs(str, ':', ',', &kv_pairs))
+    return NumMatchesScores{};
+  NumMatchesScores num_matches_scores(kv_pairs.size());
+  for (size_t i = 0; i < kv_pairs.size(); ++i) {
+    base::StringToSizeT(kv_pairs[i].first, &num_matches_scores[i].first);
+    // The input must be sorted by number of matches.
+    DCHECK((i == 0) ||
+           (num_matches_scores[i].first > num_matches_scores[i - 1].first));
+    base::StringToDouble(kv_pairs[i].second, &num_matches_scores[i].second);
+  }
+  return num_matches_scores;
 }
 
 size_t OmniboxFieldTrial::HQPNumTitleWordsToAllow() {
@@ -521,6 +531,47 @@ OmniboxFieldTrial::GetEmphasizeTitlesConditionForInput(
   return static_cast<EmphasizeTitlesCondition>(value);
 }
 
+// static
+bool OmniboxFieldTrial::InPhysicalWebZeroSuggestFieldTrial() {
+  return variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
+                                            kPhysicalWebZeroSuggestRule) ==
+         "true";
+}
+
+// static
+bool OmniboxFieldTrial::InPhysicalWebAfterTypingFieldTrial() {
+  return variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
+                                            kPhysicalWebAfterTypingRule) ==
+         "true";
+}
+
+// static
+int OmniboxFieldTrial::GetPhysicalWebZeroSuggestBaseRelevance() {
+  std::string param_value(variations::GetVariationParamValue(
+      kBundledExperimentFieldTrialName,
+      kPhysicalWebZeroSuggestBaseRelevanceParam));
+  int base_relevance;
+  if (!param_value.empty() && base::StringToInt(param_value, &base_relevance))
+    return base_relevance;
+  // Default relevance score of the first Physical Web URL autocomplete match
+  // when the user has not typed in the omnibox. This score is intended to be
+  // between ClipboardURLProvider and ZeroSuggestProvider.
+  return 700;
+}
+
+// static
+int OmniboxFieldTrial::GetPhysicalWebAfterTypingBaseRelevance() {
+  std::string param_value(variations::GetVariationParamValue(
+      kBundledExperimentFieldTrialName,
+      kPhysicalWebAfterTypingBaseRelevanceParam));
+  int base_relevance;
+  if (!param_value.empty() && base::StringToInt(param_value, &base_relevance))
+    return base_relevance;
+  // Default relevance score of the first Physical Web URL autocomplete match
+  // when the user is typing in the omnibox.
+  return 700;
+}
+
 const char OmniboxFieldTrial::kBundledExperimentFieldTrialName[] =
     "OmniboxBundledExperimentV1";
 const char OmniboxFieldTrial::kDisableProvidersRule[] = "DisableProviders";
@@ -548,6 +599,8 @@ const char OmniboxFieldTrial::kHQPFixFewVisitsBugRule[] = "HQPFixFewVisitsBug";
 const char OmniboxFieldTrial::kHQPFreqencyUsesSumRule[] = "HQPFreqencyUsesSum";
 const char OmniboxFieldTrial::kHQPMaxVisitsToScoreRule[] =
     "HQPMaxVisitsToScoreRule";
+const char OmniboxFieldTrial::kHQPNumMatchesScoresRule[] =
+    "HQPNumMatchesScores";
 const char OmniboxFieldTrial::kHQPNumTitleWordsRule[] = "HQPNumTitleWords";
 const char OmniboxFieldTrial::kHQPAlsoDoHUPLikeScoringRule[] =
     "HQPAlsoDoHUPLikeScoring";
@@ -560,6 +613,10 @@ const char OmniboxFieldTrial::kKeywordRequiresPrefixMatchRule[] =
 const char OmniboxFieldTrial::kKeywordScoreForSufficientlyCompleteMatchRule[] =
     "KeywordScoreForSufficientlyCompleteMatch";
 const char OmniboxFieldTrial::kEmphasizeTitlesRule[] = "EmphasizeTitles";
+const char OmniboxFieldTrial::kPhysicalWebZeroSuggestRule[] =
+    "PhysicalWebZeroSuggest";
+const char OmniboxFieldTrial::kPhysicalWebAfterTypingRule[] =
+    "PhysicalWebAfterTyping";
 
 const char OmniboxFieldTrial::kHUPNewScoringEnabledParam[] =
     "HUPExperimentalScoringEnabled";
@@ -580,13 +637,16 @@ const char OmniboxFieldTrial::kHUPNewScoringVisitedCountScoreBucketsParam[] =
 const char OmniboxFieldTrial::kHUPNewScoringVisitedCountUseDecayFactorParam[] =
     "VisitedCountUseDecayFactor";
 
-const char OmniboxFieldTrial::kHQPExperimentalScoringEnabledParam[] =
-    "HQPExperimentalScoringEnabled";
 const char OmniboxFieldTrial::kHQPExperimentalScoringBucketsParam[] =
     "HQPExperimentalScoringBuckets";
 const char
     OmniboxFieldTrial::kHQPExperimentalScoringTopicalityThresholdParam[] =
       "HQPExperimentalScoringTopicalityThreshold";
+
+const char OmniboxFieldTrial::kPhysicalWebZeroSuggestBaseRelevanceParam[] =
+    "PhysicalWebZeroSuggestBaseRelevance";
+const char OmniboxFieldTrial::kPhysicalWebAfterTypingBaseRelevanceParam[] =
+    "PhysicalWebAfterTypingBaseRelevanceParam";
 
 // static
 int OmniboxFieldTrial::kDefaultMinimumTimeBetweenSuggestQueriesMs = 100;

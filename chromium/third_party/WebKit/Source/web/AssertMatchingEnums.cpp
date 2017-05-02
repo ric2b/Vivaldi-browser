@@ -91,6 +91,7 @@
 #include "public/platform/WebMediaPlayerClient.h"
 #include "public/platform/WebMediaSource.h"
 #include "public/platform/WebMediaStreamSource.h"
+#include "public/platform/WebMouseWheelEvent.h"
 #include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebReferrerPolicy.h"
 #include "public/platform/WebScrollbar.h"
@@ -223,6 +224,7 @@ STATIC_ASSERT_ENUM(WebAXRoleDisclosureTriangle, DisclosureTriangleRole);
 STATIC_ASSERT_ENUM(WebAXRoleDiv, DivRole);
 STATIC_ASSERT_ENUM(WebAXRoleDocument, DocumentRole);
 STATIC_ASSERT_ENUM(WebAXRoleEmbeddedObject, EmbeddedObjectRole);
+STATIC_ASSERT_ENUM(WebAXRoleFeed, FeedRole);
 STATIC_ASSERT_ENUM(WebAXRoleFigcaption, FigcaptionRole);
 STATIC_ASSERT_ENUM(WebAXRoleFigure, FigureRole);
 STATIC_ASSERT_ENUM(WebAXRoleFooter, FooterRole);
@@ -298,6 +300,7 @@ STATIC_ASSERT_ENUM(WebAXRoleTabPanel, TabPanelRole);
 STATIC_ASSERT_ENUM(WebAXRoleTab, TabRole);
 STATIC_ASSERT_ENUM(WebAXRoleTableHeaderContainer, TableHeaderContainerRole);
 STATIC_ASSERT_ENUM(WebAXRoleTable, TableRole);
+STATIC_ASSERT_ENUM(WebAXRoleTerm, TermRole);
 STATIC_ASSERT_ENUM(WebAXRoleTextField, TextFieldRole);
 STATIC_ASSERT_ENUM(WebAXRoleTime, TimeRole);
 STATIC_ASSERT_ENUM(WebAXRoleTimer, TimerRole);
@@ -333,6 +336,16 @@ STATIC_ASSERT_ENUM(WebAXStateSelectable, AXSelectableState);
 STATIC_ASSERT_ENUM(WebAXStateSelected, AXSelectedState);
 STATIC_ASSERT_ENUM(WebAXStateVertical, AXVerticalState);
 STATIC_ASSERT_ENUM(WebAXStateVisited, AXVisitedState);
+
+STATIC_ASSERT_ENUM(WebAXSupportedAction::None, AXSupportedAction::None);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Activate, AXSupportedAction::Activate);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Check, AXSupportedAction::Check);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Click, AXSupportedAction::Click);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Jump, AXSupportedAction::Jump);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Open, AXSupportedAction::Open);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Press, AXSupportedAction::Press);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Select, AXSupportedAction::Select);
+STATIC_ASSERT_ENUM(WebAXSupportedAction::Uncheck, AXSupportedAction::Uncheck);
 
 STATIC_ASSERT_ENUM(WebAXTextDirectionLR, AccessibilityTextDirectionLTR);
 STATIC_ASSERT_ENUM(WebAXTextDirectionRL, AccessibilityTextDirectionRTL);
@@ -394,8 +407,6 @@ STATIC_ASSERT_ENUM(WebAXDescriptionFromUninitialized,
                    AXDescriptionFromUninitialized);
 STATIC_ASSERT_ENUM(WebAXDescriptionFromAttribute, AXDescriptionFromAttribute);
 STATIC_ASSERT_ENUM(WebAXDescriptionFromContents, AXDescriptionFromContents);
-STATIC_ASSERT_ENUM(WebAXDescriptionFromPlaceholder,
-                   AXDescriptionFromPlaceholder);
 STATIC_ASSERT_ENUM(WebAXDescriptionFromRelatedElement,
                    AXDescriptionFromRelatedElement);
 
@@ -564,32 +575,6 @@ STATIC_ASSERT_ENUM(WebMediaPlayer::ReadyStateHaveFutureData,
                    HTMLMediaElement::kHaveFutureData);
 STATIC_ASSERT_ENUM(WebMediaPlayer::ReadyStateHaveEnoughData,
                    HTMLMediaElement::kHaveEnoughData);
-
-#if OS(MACOSX)
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseNone, PlatformWheelEventPhaseNone);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseBegan,
-                   PlatformWheelEventPhaseBegan);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseStationary,
-                   PlatformWheelEventPhaseStationary);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseChanged,
-                   PlatformWheelEventPhaseChanged);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseEnded,
-                   PlatformWheelEventPhaseEnded);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseCancelled,
-                   PlatformWheelEventPhaseCancelled);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseMayBegin,
-                   PlatformWheelEventPhaseMayBegin);
-
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseNone, WheelEventPhaseNone);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseBegan, WheelEventPhaseBegan);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseStationary,
-                   WheelEventPhaseStationary);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseChanged, WheelEventPhaseChanged);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseEnded, WheelEventPhaseEnded);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseCancelled,
-                   WheelEventPhaseCancelled);
-STATIC_ASSERT_ENUM(WebMouseWheelEvent::PhaseMayBegin, WheelEventPhaseMayBegin);
-#endif
 
 STATIC_ASSERT_ENUM(WebScrollbar::Horizontal, HorizontalScrollbar);
 STATIC_ASSERT_ENUM(WebScrollbar::Vertical, VerticalScrollbar);

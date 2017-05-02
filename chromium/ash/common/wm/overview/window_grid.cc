@@ -21,13 +21,13 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/command_line.h"
 #include "base/i18n/string_search.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -44,6 +44,7 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow.h"
+#include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/window_animations.h"
 
 namespace ash {
@@ -56,7 +57,7 @@ struct WindowSelectorItemComparator {
   explicit WindowSelectorItemComparator(const WmWindow* target_window)
       : target(target_window) {}
 
-  bool operator()(WindowSelectorItem* window) const {
+  bool operator()(std::unique_ptr<WindowSelectorItem>& window) const {
     return window->GetWindow() == target;
   }
 
@@ -225,6 +226,7 @@ gfx::Vector2d GetSlideVectorForFadeIn(WindowSelector::Direction direction,
 // |border_color|, otherwise |border_color| parameter is ignored.
 // The new background widget starts with |initial_opacity| and then fades in.
 views::Widget* CreateBackgroundWidget(WmWindow* root_window,
+                                      ui::LayerType layer_type,
                                       SkColor background_color,
                                       int border_thickness,
                                       int border_radius,
@@ -236,6 +238,7 @@ views::Widget* CreateBackgroundWidget(WmWindow* root_window,
   params.keep_on_top = false;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.layer_type = layer_type;
   params.accept_events = false;
   widget->set_focus_on_creation(false);
   // Parenting in kShellWindowId_WallpaperContainer allows proper layering of
@@ -250,12 +253,15 @@ views::Widget* CreateBackgroundWidget(WmWindow* root_window,
   widget_window->SetVisibilityAnimationTransition(::wm::ANIMATE_NONE);
   // The background widget should not activate the shelf when passing under it.
   widget_window->GetWindowState()->set_ignored_by_shelf(true);
-
-  views::View* content_view =
-      new RoundedRectView(border_radius, SK_ColorTRANSPARENT);
-  content_view->set_background(new BackgroundWith1PxBorder(
-      background_color, border_color, border_thickness, border_radius));
-  widget->SetContentsView(content_view);
+  if (params.layer_type == ui::LAYER_SOLID_COLOR) {
+    widget_window->GetLayer()->SetColor(background_color);
+  } else {
+    views::View* content_view =
+        new RoundedRectView(border_radius, SK_ColorTRANSPARENT);
+    content_view->set_background(new BackgroundWith1PxBorder(
+        background_color, border_color, border_thickness, border_radius));
+    widget->SetContentsView(content_view);
+  }
   widget_window->GetParent()->StackChildAtTop(widget_window);
   widget->Show();
   widget_window->SetOpacity(initial_opacity);
@@ -288,15 +294,16 @@ WindowGrid::WindowGrid(WmWindow* root_window,
   for (auto* window : windows_in_root) {
     window_observer_.Add(window);
     window_state_observer_.Add(window->GetWindowState());
-    window_list_.push_back(new WindowSelectorItem(window, window_selector_));
+    window_list_.push_back(
+        base::MakeUnique<WindowSelectorItem>(window, window_selector_));
   }
 }
 
 WindowGrid::~WindowGrid() {}
 
 void WindowGrid::Shutdown() {
-  for (auto iter = window_list_.begin(); iter != window_list_.end(); ++iter)
-    (*iter)->Shutdown();
+  for (const auto& window : window_list_)
+    window->Shutdown();
 
   if (shield_widget_) {
     // Fade out the shield widget. This animation continues past the lifetime
@@ -307,7 +314,7 @@ void WindowGrid::Shutdown() {
         widget_window->GetLayer()->GetAnimator());
     animation_settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
         kOverviewSelectorTransitionMilliseconds));
-    animation_settings.SetTweenType(gfx::Tween::EASE_IN_2);
+    animation_settings.SetTweenType(gfx::Tween::EASE_OUT);
     animation_settings.SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
     // CleanupAnimationObserver will delete itself (and the shield widget) when
@@ -327,8 +334,8 @@ void WindowGrid::Shutdown() {
 
 void WindowGrid::PrepareForOverview() {
   InitShieldWidget();
-  for (auto iter = window_list_.begin(); iter != window_list_.end(); ++iter)
-    (*iter)->PrepareForOverview();
+  for (const auto& window : window_list_)
+    window->PrepareForOverview();
   prepared_for_overview_ = true;
 }
 
@@ -523,11 +530,11 @@ WindowSelectorItem* WindowGrid::SelectedWindow() const {
   if (!selection_widget_)
     return nullptr;
   CHECK(selected_index_ < window_list_.size());
-  return window_list_[selected_index_];
+  return window_list_[selected_index_].get();
 }
 
 bool WindowGrid::Contains(const WmWindow* window) const {
-  for (const WindowSelectorItem* window_item : window_list_) {
+  for (const auto& window_item : window_list_) {
     if (window_item->Contains(window))
       return true;
   }
@@ -536,12 +543,12 @@ bool WindowGrid::Contains(const WmWindow* window) const {
 
 void WindowGrid::FilterItems(const base::string16& pattern) {
   base::i18n::FixedPatternStringSearchIgnoringCaseAndAccents finder(pattern);
-  for (auto iter = window_list_.begin(); iter != window_list_.end(); iter++) {
-    if (finder.Search((*iter)->GetWindow()->GetTitle(), nullptr, nullptr)) {
-      (*iter)->SetDimmed(false);
+  for (const auto& window : window_list_) {
+    if (finder.Search(window->GetWindow()->GetTitle(), nullptr, nullptr)) {
+      window->SetDimmed(false);
     } else {
-      (*iter)->SetDimmed(true);
-      if (selection_widget_ && SelectedWindow() == *iter) {
+      window->SetDimmed(true);
+      if (selection_widget_ && SelectedWindow() == window.get()) {
         SelectedWindow()->SetSelected(false);
         selection_widget_.reset();
         selector_shadow_.reset();
@@ -566,9 +573,8 @@ void WindowGrid::WindowClosing(WindowSelectorItem* window) {
 void WindowGrid::OnWindowDestroying(WmWindow* window) {
   window_observer_.Remove(window);
   window_state_observer_.Remove(window->GetWindowState());
-  ScopedVector<WindowSelectorItem>::iterator iter =
-      std::find_if(window_list_.begin(), window_list_.end(),
-                   WindowSelectorItemComparator(window));
+  auto iter = std::find_if(window_list_.begin(), window_list_.end(),
+                           WindowSelectorItemComparator(window));
 
   DCHECK(iter != window_list_.end());
 
@@ -623,10 +629,11 @@ void WindowGrid::OnPostWindowStateTypeChange(wm::WindowState* window_state,
   if (IsMinimizedStateType(old_type) == IsMinimizedStateType(new_type))
     return;
 
-  auto iter = std::find_if(window_list_.begin(), window_list_.end(),
-                           [window_state](WindowSelectorItem* item) {
-                             return item->Contains(window_state->window());
-                           });
+  auto iter =
+      std::find_if(window_list_.begin(), window_list_.end(),
+                   [window_state](std::unique_ptr<WindowSelectorItem>& item) {
+                     return item->Contains(window_state->window());
+                   });
   if (iter != window_list_.end()) {
     (*iter)->OnMinimizedStateChanged();
     PositionWindows(false);
@@ -642,9 +649,9 @@ void WindowGrid::InitShieldWidget() {
        SHELF_BACKGROUND_MAXIMIZED)
           ? 1.f
           : 0.f;
-  shield_widget_.reset(CreateBackgroundWidget(
-      root_window_, kShieldColor, 0, 0, SK_ColorTRANSPARENT, initial_opacity));
-
+  shield_widget_.reset(
+      CreateBackgroundWidget(root_window_, ui::LAYER_SOLID_COLOR, kShieldColor,
+                             0, 0, SK_ColorTRANSPARENT, initial_opacity));
   WmWindow* widget_window =
       WmLookup::Get()->GetWindowForWidget(shield_widget_.get());
   const gfx::Rect bounds = widget_window->GetParent()->GetBounds();
@@ -655,7 +662,7 @@ void WindowGrid::InitShieldWidget() {
       widget_window->GetLayer()->GetAnimator());
   animation_settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
       kOverviewSelectorTransitionMilliseconds));
-  animation_settings.SetTweenType(gfx::Tween::EASE_IN);
+  animation_settings.SetTweenType(gfx::Tween::EASE_OUT);
   animation_settings.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
   shield_widget_->SetOpacity(kShieldOpacity);
@@ -663,8 +670,9 @@ void WindowGrid::InitShieldWidget() {
 
 void WindowGrid::InitSelectionWidget(WindowSelector::Direction direction) {
   selection_widget_.reset(CreateBackgroundWidget(
-      root_window_, kWindowSelectionColor, kWindowSelectionBorderThickness,
-      kWindowSelectionRadius, kWindowSelectionBorderColor, 0.f));
+      root_window_, ui::LAYER_TEXTURED, kWindowSelectionColor,
+      kWindowSelectionBorderThickness, kWindowSelectionRadius,
+      kWindowSelectionBorderColor, 0.f));
   WmWindow* widget_window =
       WmLookup::Get()->GetWindowForWidget(selection_widget_.get());
   const gfx::Rect target_bounds =
@@ -675,7 +683,7 @@ void WindowGrid::InitSelectionWidget(WindowSelector::Direction direction) {
   widget_window->SetName("OverviewModeSelector");
 
   selector_shadow_.reset(new ::wm::Shadow());
-  selector_shadow_->Init(::wm::Shadow::STYLE_ACTIVE);
+  selector_shadow_->Init(::wm::ShadowElevation::LARGE);
   selector_shadow_->layer()->SetVisible(true);
   selection_widget_->GetLayer()->SetMasksToBounds(false);
   selection_widget_->GetLayer()->Add(selector_shadow_->layer());
@@ -796,7 +804,7 @@ bool WindowGrid::FitWindowRectsInBounds(const gfx::Rect& bounds,
   // determine each item's scale.
   const gfx::Size item_size(0, height);
   size_t i = 0;
-  for (auto* window : window_list_) {
+  for (const auto& window : window_list_) {
     const gfx::Rect target_bounds = window->GetTargetBoundsInScreen();
     const int width =
         std::max(1, gfx::ToFlooredInt(target_bounds.width() *

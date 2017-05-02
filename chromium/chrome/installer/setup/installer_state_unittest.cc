@@ -27,7 +27,6 @@
 #include "chrome/installer/util/fake_installation_state.h"
 #include "chrome/installer/util/fake_product_state.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/master_preferences.h"
@@ -62,20 +61,15 @@ class MockInstallerState : public InstallerState {
   void set_target_path(const base::FilePath& target_path) {
     target_path_ = target_path;
   }
-  static bool IsFileInUse(const base::FilePath& file) {
-    return InstallerState::IsFileInUse(file);
-  }
   const base::Version& critical_update_version() const {
     return critical_update_version_;
   }
 };
 
 TEST_F(InstallerStateTest, WithProduct) {
-  const bool multi_install = false;
   const bool system_level = true;
   base::CommandLine cmd_line = base::CommandLine::FromString(
       std::wstring(L"setup.exe") +
-      (multi_install ? L" --multi-install --chrome" : L"") +
       (system_level ? L" --system-level" : L""));
   MasterPreferences prefs(cmd_line);
   InstallationState machine_state;
@@ -83,7 +77,6 @@ TEST_F(InstallerStateTest, WithProduct) {
   MockInstallerState installer_state;
   installer_state.Initialize(cmd_line, prefs, machine_state);
   installer_state.set_target_path(test_dir_.GetPath());
-  EXPECT_EQ(1U, installer_state.products().size());
   EXPECT_EQ(system_level, installer_state.system_install());
 
   const char kCurrentVersion[] = "1.2.3.4";
@@ -95,8 +88,7 @@ TEST_F(InstallerStateTest, WithProduct) {
   {
     RegistryOverrideManager override_manager;
     override_manager.OverrideRegistry(root);
-    BrowserDistribution* dist = BrowserDistribution::GetSpecificDistribution(
-        BrowserDistribution::CHROME_BROWSER);
+    BrowserDistribution* dist = BrowserDistribution::GetDistribution();
     RegKey chrome_key(root, dist->GetVersionKey().c_str(), KEY_ALL_ACCESS);
     EXPECT_TRUE(chrome_key.Valid());
     if (chrome_key.Valid()) {
@@ -123,12 +115,16 @@ TEST_F(InstallerStateTest, InstallerResult) {
   std::wstring value;
   DWORD dw_value;
 
-  // check results for a fresh install of single Chrome
-  {
+  // Check results for a fresh install of Chrome and the same for an attempt at
+  // multi-install, which is now ignored.
+  static constexpr const wchar_t* kCommandLines[] = {
+      L"setup.exe --system-level",
+      L"setup.exe --system-level --multi-install --chrome",
+  };
+  for (const wchar_t* command_line : kCommandLines) {
     RegistryOverrideManager override_manager;
     override_manager.OverrideRegistry(root);
-    base::CommandLine cmd_line =
-        base::CommandLine::FromString(L"setup.exe --system-level");
+    base::CommandLine cmd_line = base::CommandLine::FromString(command_line);
     const MasterPreferences prefs(cmd_line);
     InstallationState machine_state;
     machine_state.Initialize();
@@ -136,9 +132,7 @@ TEST_F(InstallerStateTest, InstallerResult) {
     state.Initialize(cmd_line, prefs, machine_state);
     state.WriteInstallerResult(installer::FIRST_INSTALL_SUCCESS,
                                IDS_INSTALL_OS_ERROR_BASE, &launch_cmd);
-    BrowserDistribution* distribution =
-        BrowserDistribution::GetSpecificDistribution(
-            BrowserDistribution::CHROME_BROWSER);
+    BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
     EXPECT_EQ(ERROR_SUCCESS,
         key.Open(root, distribution->GetStateKey().c_str(), KEY_READ));
     EXPECT_EQ(ERROR_SUCCESS,
@@ -154,87 +148,6 @@ TEST_F(InstallerStateTest, InstallerResult) {
         key.ReadValue(installer::kInstallerSuccessLaunchCmdLine, &value));
     EXPECT_EQ(launch_cmd, value);
   }
-
-  // check results for a fresh install of multi Chrome
-  {
-    RegistryOverrideManager override_manager;
-    override_manager.OverrideRegistry(root);
-    base::CommandLine cmd_line = base::CommandLine::FromString(
-        L"setup.exe --system-level --multi-install --chrome");
-    const MasterPreferences prefs(cmd_line);
-    InstallationState machine_state;
-    machine_state.Initialize();
-    InstallerState state;
-    state.Initialize(cmd_line, prefs, machine_state);
-    state.WriteInstallerResult(installer::FIRST_INSTALL_SUCCESS, 0,
-                               &launch_cmd);
-    BrowserDistribution* distribution =
-        BrowserDistribution::GetSpecificDistribution(
-            BrowserDistribution::CHROME_BROWSER);
-    BrowserDistribution* binaries =
-        BrowserDistribution::GetSpecificDistribution(
-            BrowserDistribution::CHROME_BINARIES);
-    EXPECT_EQ(ERROR_SUCCESS,
-        key.Open(root, distribution->GetStateKey().c_str(), KEY_READ));
-    EXPECT_EQ(ERROR_SUCCESS,
-        key.ReadValue(installer::kInstallerSuccessLaunchCmdLine, &value));
-    EXPECT_EQ(launch_cmd, value);
-    EXPECT_EQ(ERROR_SUCCESS,
-        key.Open(root, binaries->GetStateKey().c_str(), KEY_READ));
-    EXPECT_EQ(ERROR_SUCCESS,
-        key.ReadValue(installer::kInstallerSuccessLaunchCmdLine, &value));
-    EXPECT_EQ(launch_cmd, value);
-    key.Close();
-  }
-}
-
-// Test GetCurrentVersion when migrating single Chrome to multi
-TEST_F(InstallerStateTest, GetCurrentVersionMigrateChrome) {
-  using installer::FakeInstallationState;
-
-  const bool system_install = false;
-  FakeInstallationState machine_state;
-
-  // Pretend that this version of single-install Chrome is already installed.
-  machine_state.AddChrome(system_install, false,
-                          new base::Version(chrome::kChromeVersion));
-
-  // Now we're invoked to install multi Chrome.
-  base::CommandLine cmd_line(
-      base::CommandLine::FromString(L"setup.exe --multi-install --chrome"));
-  MasterPreferences prefs(cmd_line);
-  InstallerState installer_state;
-  installer_state.Initialize(cmd_line, prefs, machine_state);
-
-  // Is the Chrome version picked up?
-  std::unique_ptr<base::Version> version(
-      installer_state.GetCurrentVersion(machine_state));
-  EXPECT_TRUE(version.get() != NULL);
-}
-
-TEST_F(InstallerStateTest, IsFileInUse) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-
-  base::FilePath temp_file;
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &temp_file));
-
-  EXPECT_FALSE(MockInstallerState::IsFileInUse(temp_file));
-
-  {
-    // Open a handle to the file with the same access mode and sharing options
-    // as the loader.
-    base::win::ScopedHandle temp_handle(CreateFile(
-        temp_file.value().c_str(), SYNCHRONIZE | FILE_EXECUTE,
-        FILE_SHARE_DELETE | FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0));
-    ASSERT_TRUE(temp_handle.IsValid());
-
-    // The file should now be in use.
-    EXPECT_TRUE(MockInstallerState::IsFileInUse(temp_file));
-  }
-
-  // And once the handle is gone, it should no longer be in use.
-  EXPECT_FALSE(MockInstallerState::IsFileInUse(temp_file));
 }
 
 TEST_F(InstallerStateTest, InitializeTwice) {
@@ -259,30 +172,24 @@ TEST_F(InstallerStateTest, InitializeTwice) {
 
   InstallerState installer_state;
 
-  // Initialize the instance to install multi Chrome.
+  // Initialize the instance to install user-level Chrome.
   {
-    base::CommandLine cmd_line(
-        base::CommandLine::FromString(L"setup.exe --multi-install --chrome"));
+    base::CommandLine cmd_line(base::CommandLine::FromString(L"setup.exe"));
     MasterPreferences prefs(cmd_line);
     installer_state.Initialize(cmd_line, prefs, machine_state);
   }
   // Confirm the expected state.
   EXPECT_EQ(InstallerState::USER_LEVEL, installer_state.level());
-  EXPECT_EQ(InstallerState::MULTI_PACKAGE, installer_state.package_type());
-  EXPECT_EQ(InstallerState::MULTI_INSTALL, installer_state.operation());
-  EXPECT_TRUE(wcsstr(installer_state.target_path().value().c_str(),
-                     BrowserDistribution::GetSpecificDistribution(
-                         BrowserDistribution::CHROME_BINARIES)->
-                         GetInstallSubDir().c_str()));
+  EXPECT_EQ(InstallerState::SINGLE_INSTALL_OR_UPDATE,
+            installer_state.operation());
+  EXPECT_TRUE(wcsstr(
+      installer_state.target_path().value().c_str(),
+      BrowserDistribution::GetDistribution()->GetInstallSubDir().c_str()));
   EXPECT_FALSE(installer_state.verbose_logging());
   EXPECT_EQ(installer_state.state_key(),
-            BrowserDistribution::GetSpecificDistribution(
-                BrowserDistribution::CHROME_BROWSER)->GetStateKey());
-  EXPECT_EQ(installer_state.state_type(), BrowserDistribution::CHROME_BROWSER);
-  EXPECT_TRUE(installer_state.multi_package_binaries_distribution());
-  EXPECT_TRUE(installer_state.FindProduct(BrowserDistribution::CHROME_BROWSER));
+            BrowserDistribution::GetDistribution()->GetStateKey());
 
-  // Now initialize it to install system-level single Chrome.
+  // Now initialize it to install system-level Chrome.
   {
     base::CommandLine cmd_line(base::CommandLine::FromString(
         L"setup.exe --system-level --verbose-logging"));
@@ -292,19 +199,14 @@ TEST_F(InstallerStateTest, InitializeTwice) {
 
   // Confirm that the old state is gone.
   EXPECT_EQ(InstallerState::SYSTEM_LEVEL, installer_state.level());
-  EXPECT_EQ(InstallerState::SINGLE_PACKAGE, installer_state.package_type());
   EXPECT_EQ(InstallerState::SINGLE_INSTALL_OR_UPDATE,
             installer_state.operation());
-  EXPECT_TRUE(wcsstr(installer_state.target_path().value().c_str(),
-                     BrowserDistribution::GetSpecificDistribution(
-                         BrowserDistribution::CHROME_BROWSER)->
-                         GetInstallSubDir().c_str()));
+  EXPECT_TRUE(wcsstr(
+      installer_state.target_path().value().c_str(),
+      BrowserDistribution::GetDistribution()->GetInstallSubDir().c_str()));
   EXPECT_TRUE(installer_state.verbose_logging());
   EXPECT_EQ(installer_state.state_key(),
-            BrowserDistribution::GetSpecificDistribution(
-                BrowserDistribution::CHROME_BROWSER)->GetStateKey());
-  EXPECT_EQ(installer_state.state_type(), BrowserDistribution::CHROME_BROWSER);
-  EXPECT_TRUE(installer_state.FindProduct(BrowserDistribution::CHROME_BROWSER));
+            BrowserDistribution::GetDistribution()->GetStateKey());
 }
 
 // A fixture for testing InstallerState::DetermineCriticalVersion.  Individual

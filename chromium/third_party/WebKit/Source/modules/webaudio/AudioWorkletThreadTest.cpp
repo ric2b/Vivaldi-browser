@@ -9,6 +9,7 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -34,10 +35,12 @@ namespace {
 class TestAudioWorkletReportingProxy : public WorkerReportingProxy {
  public:
   static std::unique_ptr<TestAudioWorkletReportingProxy> create() {
-    return wrapUnique(new TestAudioWorkletReportingProxy());
+    return WTF::wrapUnique(new TestAudioWorkletReportingProxy());
   }
 
   // (Empty) WorkerReportingProxy implementation:
+  void countFeature(UseCounter::Feature) override {}
+  void countDeprecation(UseCounter::Feature) override {}
   void reportException(const String& errorMessage,
                        std::unique_ptr<SourceLocation>,
                        int exceptionId) override {}
@@ -46,6 +49,9 @@ class TestAudioWorkletReportingProxy : public WorkerReportingProxy {
                             const String& message,
                             SourceLocation*) override {}
   void postMessageToPageInspector(const String&) override {}
+  ParentFrameTaskRunners* getParentFrameTaskRunners() override {
+    return m_parentFrameTaskRunners.get();
+  }
 
   void didEvaluateWorkerScript(bool success) override {}
   void didCloseWorkerGlobalScope() override {}
@@ -53,7 +59,10 @@ class TestAudioWorkletReportingProxy : public WorkerReportingProxy {
   void didTerminateWorkerThread() override {}
 
  private:
-  TestAudioWorkletReportingProxy() {}
+  TestAudioWorkletReportingProxy()
+      : m_parentFrameTaskRunners(ParentFrameTaskRunners::create(nullptr)) {}
+
+  Persistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
 };
 
 }  // namespace
@@ -76,7 +85,7 @@ class AudioWorkletThreadTest : public ::testing::Test {
         KURL(ParsedURLString, "http://fake.url/"), "fake user agent", "",
         nullptr, DontPauseWorkerGlobalScopeOnStart, nullptr, "",
         m_securityOrigin.get(), nullptr, WebAddressSpaceLocal, nullptr, nullptr,
-        V8CacheOptionsDefault));
+        WorkerV8Settings::Default()));
     return thread;
   }
 

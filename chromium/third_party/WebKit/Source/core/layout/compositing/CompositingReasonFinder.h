@@ -5,6 +5,7 @@
 #ifndef CompositingReasonFinder_h
 #define CompositingReasonFinder_h
 
+#include "core/CoreExport.h"
 #include "core/layout/compositing/CompositingTriggers.h"
 #include "platform/graphics/CompositingReasons.h"
 #include "wtf/Allocator.h"
@@ -17,7 +18,7 @@ class LayoutObject;
 class ComputedStyle;
 class LayoutView;
 
-class CompositingReasonFinder {
+class CORE_EXPORT CompositingReasonFinder {
   DISALLOW_NEW();
   WTF_MAKE_NONCOPYABLE(CompositingReasonFinder);
 
@@ -31,14 +32,15 @@ class CompositingReasonFinder {
 
   bool hasOverflowScrollTrigger() const;
   bool requiresCompositingForScrollableFrame() const;
-  bool requiresCompositingForAnimation(const ComputedStyle&) const;
+  static bool requiresCompositingForAnimation(const ComputedStyle&);
+  static bool requiresCompositingForEffectAnimation(const ComputedStyle&);
+  static bool requiresCompositingForTransformAnimation(const ComputedStyle&);
+  static bool requiresCompositingForTransform(const LayoutObject&);
 
  private:
   bool isMainFrame() const;
 
   CompositingReasons nonStyleDeterminedDirectReasons(const PaintLayer*) const;
-
-  bool requiresCompositingForTransform(LayoutObject*) const;
   bool requiresCompositingForScrollDependentPosition(const PaintLayer*) const;
 
   LayoutView& m_layoutView;

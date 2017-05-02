@@ -114,10 +114,11 @@ void PageWidgetDelegate::paintIgnoringCompositing(Page& page,
 
 WebInputEventResult PageWidgetDelegate::handleInputEvent(
     PageWidgetEventHandler& handler,
-    const WebInputEvent& event,
+    const WebCoalescedInputEvent& coalescedEvent,
     LocalFrame* root) {
-  if (event.modifiers & WebInputEvent::IsTouchAccessibility &&
-      WebInputEvent::isMouseEventType(event.type)) {
+  const WebInputEvent& event = coalescedEvent.event();
+  if (event.modifiers() & WebInputEvent::IsTouchAccessibility &&
+      WebInputEvent::isMouseEventType(event.type())) {
     PlatformMouseEventBuilder pme(root->view(),
                                   static_cast<const WebMouseEvent&>(event));
 
@@ -136,7 +137,7 @@ WebInputEventResult PageWidgetDelegate::handleInputEvent(
     }
   }
 
-  switch (event.type) {
+  switch (event.type()) {
     // FIXME: WebKit seems to always return false on mouse events processing
     // methods. For now we'll assume it has processed them (as we are only
     // interested in whether keyboard events are processed).
@@ -145,7 +146,8 @@ WebInputEventResult PageWidgetDelegate::handleInputEvent(
     case WebInputEvent::MouseMove:
       if (!root || !root->view())
         return WebInputEventResult::HandledSuppressed;
-      handler.handleMouseMove(*root, static_cast<const WebMouseEvent&>(event));
+      handler.handleMouseMove(*root, static_cast<const WebMouseEvent&>(event),
+                              coalescedEvent.getCoalescedEventsPointers());
       return WebInputEventResult::HandledSystem;
     case WebInputEvent::MouseLeave:
       if (!root || !root->view())
@@ -201,8 +203,9 @@ WebInputEventResult PageWidgetDelegate::handleInputEvent(
     case WebInputEvent::TouchScrollStarted:
       if (!root || !root->view())
         return WebInputEventResult::NotHandled;
-      return handler.handleTouchEvent(*root,
-                                      static_cast<const WebTouchEvent&>(event));
+      return handler.handleTouchEvent(
+          *root, static_cast<const WebTouchEvent&>(event),
+          coalescedEvent.getCoalescedEventsPointers());
     case WebInputEvent::GesturePinchBegin:
     case WebInputEvent::GesturePinchEnd:
     case WebInputEvent::GesturePinchUpdate:
@@ -218,10 +221,13 @@ WebInputEventResult PageWidgetDelegate::handleInputEvent(
 // ----------------------------------------------------------------
 // Default handlers for PageWidgetEventHandler
 
-void PageWidgetEventHandler::handleMouseMove(LocalFrame& mainFrame,
-                                             const WebMouseEvent& event) {
+void PageWidgetEventHandler::handleMouseMove(
+    LocalFrame& mainFrame,
+    const WebMouseEvent& event,
+    const std::vector<const WebInputEvent*>& coalescedEvents) {
   mainFrame.eventHandler().handleMouseMoveEvent(
-      PlatformMouseEventBuilder(mainFrame.view(), event));
+      PlatformMouseEventBuilder(mainFrame.view(), event),
+      createPlatformMouseEventVector(mainFrame.view(), coalescedEvents));
 }
 
 void PageWidgetEventHandler::handleMouseLeave(LocalFrame& mainFrame,
@@ -245,15 +251,18 @@ void PageWidgetEventHandler::handleMouseUp(LocalFrame& mainFrame,
 WebInputEventResult PageWidgetEventHandler::handleMouseWheel(
     LocalFrame& mainFrame,
     const WebMouseWheelEvent& event) {
-  return mainFrame.eventHandler().handleWheelEvent(
-      PlatformWheelEventBuilder(mainFrame.view(), event));
+  WebMouseWheelEvent transformedEvent =
+      TransformWebMouseWheelEvent(mainFrame.view(), event);
+  return mainFrame.eventHandler().handleWheelEvent(transformedEvent);
 }
 
 WebInputEventResult PageWidgetEventHandler::handleTouchEvent(
     LocalFrame& mainFrame,
-    const WebTouchEvent& event) {
+    const WebTouchEvent& event,
+    const std::vector<const WebInputEvent*>& coalescedEvents) {
   return mainFrame.eventHandler().handleTouchEvent(
-      PlatformTouchEventBuilder(mainFrame.view(), event));
+      PlatformTouchEventBuilder(mainFrame.view(), event),
+      createPlatformTouchEventVector(mainFrame.view(), coalescedEvents));
 }
 
 }  // namespace blink

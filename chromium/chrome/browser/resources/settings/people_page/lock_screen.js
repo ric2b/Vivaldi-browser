@@ -37,6 +37,18 @@ Polymer({
       type: Object,
       observer: 'onSetModesChanged_'
     },
+
+    /**
+     * writeUma_ is a function that handles writing uma stats. It may be
+     * overridden for tests.
+     *
+     * @type {Function}
+     * @private
+     */
+    writeUma_: {
+      type: Object,
+      value: function() { return settings.recordLockScreenProgress; }
+    }
   },
 
   /** selectedUnlockType is defined in LockStateBehavior. */
@@ -118,8 +130,13 @@ Polymer({
     return this.i18n('lockScreenSetupPinButton');
   },
 
-  /** @private */
-  onConfigurePin_: function() {
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onConfigurePin_: function(e) {
+    e.preventDefault();
     this.$.setupPin.open();
+    this.writeUma_(LockScreenProgress.CHOOSE_PIN_OR_PASSWORD);
   },
 });

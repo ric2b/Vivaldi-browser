@@ -34,10 +34,8 @@
 #include "WebFloatPoint.h"
 #include "WebSize.h"
 
-class SkBitmap;
-
 namespace cc {
-class AnimationTimeline;
+class AnimationHost;
 }
 
 namespace blink {
@@ -46,9 +44,7 @@ class WebCompositeAndReadbackAsyncCallback;
 class WebLayer;
 class WebLayoutAndPaintAsyncCallback;
 struct WebPoint;
-struct WebSelectionBound;
 class WebSelection;
-class WebWidget;
 
 class WebLayerTreeView {
  public:
@@ -60,9 +56,8 @@ class WebLayerTreeView {
   virtual void setRootLayer(const WebLayer&) {}
   virtual void clearRootLayer() {}
 
-  // TODO(loyso): These should use CompositorAnimationTimeline. crbug.com/584551
-  virtual void attachCompositorAnimationTimeline(cc::AnimationTimeline*) {}
-  virtual void detachCompositorAnimationTimeline(cc::AnimationTimeline*) {}
+  // TODO(loyso): This should use CompositorAnimationHost. crbug.com/584551
+  virtual cc::AnimationHost* compositorAnimationHost() { return nullptr; }
 
   // View properties ---------------------------------------------------
 

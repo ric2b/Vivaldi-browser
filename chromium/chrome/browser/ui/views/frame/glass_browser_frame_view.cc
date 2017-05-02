@@ -139,8 +139,7 @@ GlassBrowserFrameView::~GlassBrowserFrameView() {
 
 gfx::Rect GlassBrowserFrameView::GetBoundsForTabStrip(
     views::View* tabstrip) const {
-  const int x =
-      incognito_bounds_.right() + GetLayoutInsets(AVATAR_ICON).right();
+  const int x = incognito_bounds_.right() + kAvatarIconPadding;
   int end_x = width() - ClientBorderThickness(false);
   if (!CaptionButtonsOnLeadingEdge()) {
     end_x = std::min(MinimizeButtonX(), end_x) -
@@ -509,9 +508,9 @@ int GlassBrowserFrameView::TitlebarHeight(bool restored) const {
 
 int GlassBrowserFrameView::WindowTopY() const {
   // The window top is SM_CYSIZEFRAME pixels when maximized (see the comment in
-  // FrameTopBorderThickness()) and 1 pixel when restored. Unfortunately we
-  // can't represent either of those at hidpi without using non-integral dips,
-  // so we return the closest reasonable values instead.
+  // FrameTopBorderThickness()) and floor(system dsf) pixels when restored.
+  // Unfortunately we can't represent either of those at hidpi without using
+  // non-integral dips, so we return the closest reasonable values instead.
   return IsMaximized() ? FrameTopBorderThickness(false) : 1;
 }
 
@@ -556,7 +555,10 @@ bool GlassBrowserFrameView::ShowSystemIcon() const {
 }
 
 SkColor GlassBrowserFrameView::GetTitlebarColor() const {
-  return GetThemeProvider()->GetColor(ThemeProperties::COLOR_FRAME);
+  const ui::ThemeProvider* tp = GetThemeProvider();
+  return ShouldPaintAsActive()
+             ? tp->GetColor(ThemeProperties::COLOR_FRAME)
+             : tp->GetColor(ThemeProperties::COLOR_FRAME_INACTIVE);
 }
 
 Windows10CaptionButton* GlassBrowserFrameView::CreateCaptionButton(
@@ -574,8 +576,11 @@ void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
   gfx::ScopedCanvas scoped_canvas(canvas);
   float scale = canvas->UndoDeviceScaleFactor();
   // This is the pixel-accurate version of WindowTopY(). Scaling the DIP values
-  // here compounds precision error, which exposes unpainted client area.
-  const int y = IsMaximized() ? FrameTopBorderThicknessPx(false) : 1;
+  // here compounds precision error, which exposes unpainted client area. When
+  // restored it uses the system dsf instead of the per-monitor dsf to match
+  // Windows' behavior.
+  const int y = IsMaximized() ? FrameTopBorderThicknessPx(false)
+                              : std::floor(display::win::GetDPIScale());
 
   // Draw the top of the accent border.
   //
@@ -614,6 +619,13 @@ void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
                          titlebar_rect.y(), titlebar_rect.width(),
                          titlebar_rect.height());
   }
+  const gfx::ImageSkia frame_overlay_image = GetFrameOverlayImage();
+  if (!frame_overlay_image.isNull()) {
+    canvas->DrawImageInt(frame_overlay_image, 0, 0, frame_overlay_image.width(),
+                         frame_overlay_image.height(), titlebar_rect.x(),
+                         titlebar_rect.y(), frame_overlay_image.width() * scale,
+                         frame_overlay_image.height() * scale, true);
+  }
 }
 
 void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
@@ -647,7 +659,7 @@ void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
   gfx::Rect tabstrip_bounds(GetBoundsForTabStrip(browser_view()->tabstrip()));
   tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
   canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
-                                SkRegion::kDifference_Op);
+                                SkClipOp::kDifference);
   separator_rect.set_y(tabstrip_bounds.bottom());
   BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
                                       separator_rect, true);
@@ -732,7 +744,6 @@ void GlassBrowserFrameView::LayoutProfileSwitcher() {
 }
 
 void GlassBrowserFrameView::LayoutIncognitoIcon() {
-  const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
   const gfx::Size size(GetIncognitoAvatarIcon().size());
   int x = ClientBorderThickness(false);
   // In RTL, the icon needs to start after the caption buttons.
@@ -743,11 +754,11 @@ void GlassBrowserFrameView::LayoutIncognitoIcon() {
                                   : 0);
   }
   const int bottom = GetTopInset(false) + browser_view()->GetTabStripHeight() -
-                     insets.bottom();
-  incognito_bounds_.SetRect(x + (profile_indicator_icon() ? insets.left() : 0),
-                            bottom - size.height(),
-                            profile_indicator_icon() ? size.width() : 0,
-                            size.height());
+                     kAvatarIconPadding;
+  incognito_bounds_.SetRect(
+      x + (profile_indicator_icon() ? kAvatarIconPadding : 0),
+      bottom - size.height(), profile_indicator_icon() ? size.width() : 0,
+      size.height());
   if (profile_indicator_icon())
     profile_indicator_icon()->SetBoundsRect(incognito_bounds_);
 }

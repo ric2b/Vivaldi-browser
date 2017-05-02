@@ -10,6 +10,10 @@
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ui/gfx/ios/uikit_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 bool IsIPadIdiom() {
   UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
   return idiom == UIUserInterfaceIdiomPad;
@@ -106,6 +110,7 @@ void CalculateProjection(CGSize originalSize,
       break;
 
     case ProjectionMode::kAspectFill:
+    case ProjectionMode::kAspectFillAlignTop:
       if (targetAspectRatio < aspectRatio) {
         // Clip the x-axis.
         projectTo.size.width = targetSize.height * aspectRatio;
@@ -118,6 +123,9 @@ void CalculateProjection(CGSize originalSize,
         projectTo.size.height = targetSize.width / aspectRatio;
         projectTo.origin.x = 0;
         projectTo.origin.y = (targetSize.height - projectTo.size.height) / 2;
+      }
+      if (projectionMode == ProjectionMode::kAspectFillAlignTop) {
+        projectTo.origin.y = 0;
       }
       break;
 

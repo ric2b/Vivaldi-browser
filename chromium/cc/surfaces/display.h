@@ -56,7 +56,7 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
           gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
           const RendererSettings& settings,
           const FrameSinkId& frame_sink_id,
-          std::unique_ptr<BeginFrameSource> begin_frame_source,
+          BeginFrameSource* begin_frame_source,
           std::unique_ptr<OutputSurface> output_surface,
           std::unique_ptr<DisplayScheduler> scheduler,
           std::unique_ptr<TextureMailboxDeleter> texture_mailbox_deleter);
@@ -86,9 +86,7 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   // SurfaceObserver implementation.
   void OnSurfaceDamaged(const SurfaceId& surface, bool* changed) override;
-  void OnSurfaceCreated(const SurfaceId& surface_id,
-                        const gfx::Size& frame,
-                        float device_scale_factor) override;
+  void OnSurfaceCreated(const SurfaceInfo& surface_info) override;
 
   bool has_scheduler() const { return !!scheduler_; }
   DirectRenderer* renderer_for_testing() const { return renderer_.get(); }
@@ -115,9 +113,9 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   bool swapped_since_resize_ = false;
   bool output_is_secure_ = false;
 
-  // The begin_frame_source_ is often known by the output_surface_ and
-  // the scheduler_.
-  std::unique_ptr<BeginFrameSource> begin_frame_source_;
+  // The begin_frame_source_ is not owned here, and also often known by the
+  // output_surface_ and the scheduler_.
+  BeginFrameSource* begin_frame_source_;
   std::unique_ptr<OutputSurface> output_surface_;
   std::unique_ptr<DisplayScheduler> scheduler_;
   std::unique_ptr<ResourceProvider> resource_provider_;

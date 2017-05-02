@@ -19,6 +19,7 @@
 #include "base/values.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/trace_constants.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
@@ -101,7 +102,8 @@ TransportConnectJob::TransportConnectJob(
           priority,
           respect_limits,
           delegate,
-          NetLogWithSource::Make(net_log, NetLogSourceType::CONNECT_JOB)),
+          NetLogWithSource::Make(net_log,
+                                 NetLogSourceType::TRANSPORT_CONNECT_JOB)),
       params_(params),
       resolver_(host_resolver),
       client_socket_factory_(client_socket_factory),
@@ -267,7 +269,8 @@ int TransportConnectJob::DoResolveHost() {
 }
 
 int TransportConnectJob::DoResolveHostComplete(int result) {
-  TRACE_EVENT0("net", "TransportConnectJob::DoResolveHostComplete");
+  TRACE_EVENT0(kNetTracingCategory,
+               "TransportConnectJob::DoResolveHostComplete");
   connect_timing_.dns_end = base::TimeTicks::Now();
   // Overwrite connection start time, since for connections that do not go
   // through proxies, |connect_start| should not include dns lookup time.

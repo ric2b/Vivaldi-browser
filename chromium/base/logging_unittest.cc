@@ -9,6 +9,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_WIN)
+#include <excpt.h>
+#include <windows.h>
+#endif  // OS_WIN
+
 namespace logging {
 
 namespace {
@@ -190,6 +195,59 @@ TEST_F(LoggingTest, CheckStreamsAreLazy) {
 
 #endif
 
+#if defined(OFFICIAL_BUILD) && defined(OS_WIN)
+NOINLINE void CheckContainingFunc(int death_location) {
+  CHECK(death_location != 1);
+  CHECK(death_location != 2);
+  CHECK(death_location != 3);
+}
+
+int GetCheckExceptionData(EXCEPTION_POINTERS* p, DWORD* code, void** addr) {
+  *code = p->ExceptionRecord->ExceptionCode;
+  *addr = p->ExceptionRecord->ExceptionAddress;
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+
+TEST_F(LoggingTest, CheckCausesDistinctBreakpoints) {
+  DWORD code1 = 0;
+  DWORD code2 = 0;
+  DWORD code3 = 0;
+  void* addr1 = nullptr;
+  void* addr2 = nullptr;
+  void* addr3 = nullptr;
+
+  // Record the exception code and addresses.
+  __try {
+    CheckContainingFunc(1);
+  } __except (
+      GetCheckExceptionData(GetExceptionInformation(), &code1, &addr1)) {
+  }
+
+  __try {
+    CheckContainingFunc(2);
+  } __except (
+      GetCheckExceptionData(GetExceptionInformation(), &code2, &addr2)) {
+  }
+
+  __try {
+    CheckContainingFunc(3);
+  } __except (
+      GetCheckExceptionData(GetExceptionInformation(), &code3, &addr3)) {
+  }
+
+  // Ensure that the exception codes are correct (in particular, breakpoints,
+  // not access violations).
+  EXPECT_EQ(STATUS_BREAKPOINT, code1);
+  EXPECT_EQ(STATUS_BREAKPOINT, code2);
+  EXPECT_EQ(STATUS_BREAKPOINT, code3);
+
+  // Ensure that none of the CHECKs are colocated.
+  EXPECT_NE(addr1, addr2);
+  EXPECT_NE(addr1, addr3);
+  EXPECT_NE(addr2, addr3);
+}
+#endif  // OFFICIAL_BUILD && OS_WIN
+
 TEST_F(LoggingTest, DebugLoggingReleaseBehavior) {
 #if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
   int debug_only_variable = 1;
@@ -216,6 +274,14 @@ TEST_F(LoggingTest, DcheckStreamsAreLazy) {
       << mock_log_source.Log();
 #endif
 }
+
+void DcheckEmptyFunction1() {
+  // Provide a body so that Release builds do not cause the compiler to
+  // optimize DcheckEmptyFunction1 and DcheckEmptyFunction2 as a single
+  // function, which breaks the Dcheck tests below.
+  LOG(INFO) << "DcheckEmptyFunction1";
+}
+void DcheckEmptyFunction2() {}
 
 TEST_F(LoggingTest, Dcheck) {
 #if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
@@ -258,6 +324,31 @@ TEST_F(LoggingTest, Dcheck) {
   EXPECT_EQ(0, log_sink_call_count);
   DCHECK_EQ(Animal::DOG, Animal::CAT);
   EXPECT_EQ(DCHECK_IS_ON() ? 1 : 0, log_sink_call_count);
+
+  // Test DCHECK on functions and function pointers.
+  log_sink_call_count = 0;
+  struct MemberFunctions {
+    void MemberFunction1() {
+      // See the comment in DcheckEmptyFunction1().
+      LOG(INFO) << "Do not merge with MemberFunction2.";
+    }
+    void MemberFunction2() {}
+  };
+  void (MemberFunctions::*mp1)() = &MemberFunctions::MemberFunction1;
+  void (MemberFunctions::*mp2)() = &MemberFunctions::MemberFunction2;
+  void (*fp1)() = DcheckEmptyFunction1;
+  void (*fp2)() = DcheckEmptyFunction2;
+  void (*fp3)() = DcheckEmptyFunction1;
+  DCHECK_EQ(fp1, fp3);
+  EXPECT_EQ(0, log_sink_call_count);
+  DCHECK_EQ(mp1, &MemberFunctions::MemberFunction1);
+  EXPECT_EQ(0, log_sink_call_count);
+  DCHECK_EQ(mp2, &MemberFunctions::MemberFunction2);
+  EXPECT_EQ(0, log_sink_call_count);
+  DCHECK_EQ(fp1, fp2);
+  EXPECT_EQ(DCHECK_IS_ON() ? 1 : 0, log_sink_call_count);
+  DCHECK_EQ(mp2, &MemberFunctions::MemberFunction1);
+  EXPECT_EQ(DCHECK_IS_ON() ? 2 : 0, log_sink_call_count);
 }
 
 TEST_F(LoggingTest, DcheckReleaseBehavior) {

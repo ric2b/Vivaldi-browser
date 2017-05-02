@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser;
 
 import android.app.Dialog;
-import android.test.suitebuilder.annotation.LargeTest;
+import android.support.test.filters.LargeTest;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
@@ -84,7 +84,7 @@ public class UsbChooserDialogTest extends ChromeActivityTestCaseBase<ChromeActiv
     }
 
     private static void selectItem(final UsbChooserDialogWithFakeNatives chooserDialog,
-            int position) throws InterruptedException {
+            int position) {
         final Dialog dialog = chooserDialog.mItemChooserDialog.getDialogForTesting();
         final ListView items = (ListView) dialog.findViewById(R.id.items);
         final Button button = (Button) dialog.findViewById(R.id.positive);
@@ -128,7 +128,7 @@ public class UsbChooserDialogTest extends ChromeActivityTestCaseBase<ChromeActiv
     }
 
     @LargeTest
-    public void testCancel() throws InterruptedException {
+    public void testCancel() {
         Dialog dialog = mChooserDialog.mItemChooserDialog.getDialogForTesting();
         assertTrue(dialog.isShowing());
 

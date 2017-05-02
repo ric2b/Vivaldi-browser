@@ -30,6 +30,14 @@ double TestTaskManager::GetCpuUsage(TaskId task_id) const {
   return 0.0;
 }
 
+base::Time TestTaskManager::GetStartTime(TaskId task_id) const {
+  return base::Time();
+}
+
+base::TimeDelta TestTaskManager::GetCpuTime(TaskId task_id) const {
+  return base::TimeDelta();
+}
+
 int64_t TestTaskManager::GetPhysicalMemoryUsage(TaskId task_id) const {
   return -1;
 }
@@ -49,6 +57,10 @@ int64_t TestTaskManager::GetSwappedMemoryUsage(TaskId task_id) const {
 int64_t TestTaskManager::GetGpuMemoryUsage(TaskId task_id,
                                            bool* has_duplicates) const {
   return -1;
+}
+
+base::MemoryState TestTaskManager::GetMemoryState(TaskId task_id) const {
+  return base::MemoryState::UNKNOWN;
 }
 
 int TestTaskManager::GetIdleWakeupsPerSecond(TaskId task_id) const {

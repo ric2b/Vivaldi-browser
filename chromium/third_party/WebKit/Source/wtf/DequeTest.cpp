@@ -175,8 +175,8 @@ template <typename OwnPtrDeque>
 void ownPtrTest() {
   int destructNumber = 0;
   OwnPtrDeque deque;
-  deque.append(wrapUnique(new DestructCounter(0, &destructNumber)));
-  deque.append(wrapUnique(new DestructCounter(1, &destructNumber)));
+  deque.append(WTF::wrapUnique(new DestructCounter(0, &destructNumber)));
+  deque.append(WTF::wrapUnique(new DestructCounter(1, &destructNumber)));
   EXPECT_EQ(2u, deque.size());
 
   std::unique_ptr<DestructCounter>& counter0 = deque.first();
@@ -221,7 +221,7 @@ void ownPtrTest() {
   size_t count = 1025;
   destructNumber = 0;
   for (size_t i = 0; i < count; ++i)
-    deque.prepend(wrapUnique(new DestructCounter(i, &destructNumber)));
+    deque.prepend(WTF::wrapUnique(new DestructCounter(i, &destructNumber)));
 
   // Deque relocation must not destruct std::unique_ptr element.
   EXPECT_EQ(0, destructNumber);
@@ -601,6 +601,36 @@ TEST(DequeTest, RemoveWhileIterating) {
     for (int v : deque)
       EXPECT_EQ(i + 2, v);
   }
+}
+
+struct Item {
+  Item(int value1, int value2) : value1(value1), value2(value2) {}
+  int value1;
+  int value2;
+};
+
+TEST(DequeTest, emplace_back) {
+  Deque<Item> deque;
+  deque.emplace_back(1, 2);
+  deque.emplace_back(3, 4);
+
+  EXPECT_EQ(2u, deque.size());
+  EXPECT_EQ(1, deque[0].value1);
+  EXPECT_EQ(2, deque[0].value2);
+  EXPECT_EQ(3, deque[1].value1);
+  EXPECT_EQ(4, deque[1].value2);
+}
+
+TEST(DequeTest, emplace_front) {
+  Deque<Item> deque;
+  deque.emplace_front(1, 2);
+  deque.emplace_front(3, 4);
+
+  EXPECT_EQ(2u, deque.size());
+  EXPECT_EQ(3, deque[0].value1);
+  EXPECT_EQ(4, deque[0].value2);
+  EXPECT_EQ(1, deque[1].value1);
+  EXPECT_EQ(2, deque[1].value2);
 }
 
 }  // anonymous namespace

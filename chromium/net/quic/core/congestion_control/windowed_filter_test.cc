@@ -4,15 +4,13 @@
 //
 #include "net/quic/core/congestion_control/windowed_filter.h"
 
-#include "base/logging.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
 #include "net/quic/core/quic_bandwidth.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
 namespace test {
-namespace {
 
 class WindowedFilterTest : public ::testing::Test {
  public:
@@ -182,7 +180,6 @@ TEST_F(WindowedFilterTest, SampleChangesThirdBestMin) {
   // Latest sample was recorded at 100ms.
   QuicTime now = QuicTime::Zero() + QuicTime::Delta::FromMilliseconds(101);
   windowed_min_rtt_.Update(rtt_sample, now);
-  windowed_min_rtt_.Update(rtt_sample, now);
   EXPECT_EQ(rtt_sample, windowed_min_rtt_.GetThirdBest());
   EXPECT_EQ(QuicTime::Delta::FromMilliseconds(40),
             windowed_min_rtt_.GetSecondBest());
@@ -328,7 +325,6 @@ TEST_F(WindowedFilterTest, ExpireAllMins) {
   // See crbug/616957
   ASSERT_LT(windowed_min_rtt_.GetThirdBest(),
             QuicTime::Delta::Infinite() - QuicTime::Delta::FromMilliseconds(5));
-
   // Third best min sample was recorded at 100ms, so expiry time is 199ms.
   QuicTime now = QuicTime::Zero() + QuicTime::Delta::FromMilliseconds(200);
   windowed_min_rtt_.Update(rtt_sample, now);
@@ -357,8 +353,8 @@ TEST_F(WindowedFilterTest, ExpireCounterBasedMax) {
   WindowedFilter<uint64_t, MaxFilter<uint64_t>, uint64_t, uint64_t> max_filter(
       2, 0, 0);
 
-  // Insert 50000 at t = 1.
   const uint64_t kBest = 50000;
+  // Insert 50000 at t = 1.
   max_filter.Update(50000, 1);
   EXPECT_EQ(kBest, max_filter.GetBest());
   UpdateWithIrrelevantSamples(&max_filter, 20, 1);
@@ -387,6 +383,5 @@ TEST_F(WindowedFilterTest, ExpireCounterBasedMax) {
   EXPECT_EQ(kNewBest, max_filter.GetBest());
 }
 
-}  // namespace
 }  // namespace test
 }  // namespace net

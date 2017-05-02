@@ -9,6 +9,7 @@ import android.graphics.Rect;
 import android.os.Parcelable;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.ui.OverscrollRefreshHandler;
 
 /**
  * The WebContents Java wrapper to allow communicating with the native WebContents object.
@@ -267,8 +268,8 @@ public interface WebContents extends Parcelable {
     /**
      * Dispatches a Message event to the specified frame.
      */
-    void postMessageToFrame(
-            String frameName, String message, String targetOrigin, int[] sentPortIds);
+    void postMessageToFrame(String frameName, String message,
+            String sourceOrigin, String targetOrigin, int[] sentPortIds);
 
     /**
      * Creates a message channel for sending postMessage requests and returns the ports for
@@ -318,6 +319,13 @@ public interface WebContents extends Parcelable {
      */
     void removeObserver(WebContentsObserver observer);
 
+    /**
+     * Sets a handler to handle swipe to refresh events.
+     *
+     * @param handler The handler to install.
+     */
+    void setOverscrollRefreshHandler(OverscrollRefreshHandler handler);
+
     public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
             ContentBitmapCallback callback);
     /**
@@ -344,4 +352,12 @@ public interface WebContents extends Parcelable {
      */
     public int downloadImage(String url, boolean isFavicon, int maxBitmapSize,
             boolean bypassCache, ImageDownloadCallback callback);
+
+    /**
+     * Issues a fake notification about the renderer being killed.
+     *
+     * @param wasOomProtected True if the renderer was protected from the OS out-of-memory killer
+     *                        (e.g. renderer for the currently selected tab)
+     */
+    public void simulateRendererKilledForTesting(boolean wasOomProtected);
 }

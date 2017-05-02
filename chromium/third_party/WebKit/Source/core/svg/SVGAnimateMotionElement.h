@@ -40,9 +40,7 @@ class SVGAnimateMotionElement final : public SVGAnimationElement {
 
   bool hasValidTarget() override;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
 
   void resetAnimatedType() override;
   void clearAnimatedType() override;
@@ -65,6 +63,8 @@ class SVGAnimateMotionElement final : public SVGAnimationElement {
   bool m_hasToPointAtEndOfDuration;
 
   void updateAnimationMode() override;
+
+  void invalidateForAnimateMotionTransformChange(LayoutObject& target);
 
   // Note: we do not support percentage values for to/from coords as the spec
   // implies we should (opera doesn't either)

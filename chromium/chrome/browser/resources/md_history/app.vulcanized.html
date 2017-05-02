@@ -31,7 +31,8 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 :root {
   /* This is a custom, Chrome-specific color that does not have a --paper or
    * --google equivalent. */
-  --md-background-color: rgb(241, 241, 241);
+  --md-background-color: #f1f1f1;
+  --md-loading-message-color: #6e6e6e;
   /* This is --google-blue-700, rewritten as a native custom property for speed.
    */
   --md-toolbar-color: rgb(51, 103, 214);
@@ -207,6 +208,41 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
   </template>
 
   </dom-module>
+<iron-iconset-svg name="cr" size="24">
+  <svg>
+    <defs>
+      
+      <g id="add"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></g>
+      <g id="arrow-drop-up"><path d="M7 14l5-5 5 5z"></path></g>
+      <g id="arrow-drop-down"><path d="M7 10l5 5 5-5z"></path></g>
+      <g id="cancel"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"></path></g>
+<if expr="chromeos">
+      <g id="check"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></g>
+</if>
+      <g id="chevron-right"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></g>
+      <g id="clear"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></g>
+      <g id="close"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></g>
+      <g id="delete"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></g>
+      <g id="domain"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"></path></g>
+      <g id="expand-less"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"></path></g>
+      <g id="expand-more"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"></path></g>
+      <g id="extension"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"></path></g>
+      <g id="file-download"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></g>
+      <g id="folder"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"></path></g>
+      <g id="fullscreen"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path></g>
+      <g id="group"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"></path></g>
+      <g id="menu"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path></g>
+      <g id="more-vert"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></g>
+      <g id="open-in-new"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></g>
+      <g id="person"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></g>
+      <g id="print"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"></path></g>
+      <g id="search"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path></g>
+      <g id="settings"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"></path></g>
+      <g id="star"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></g>
+      <g id="warning"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"></path></g>
+    </defs>
+  </svg>
+</iron-iconset-svg>
 <dom-module id="paper-ripple" assetpath="chrome://resources/polymer/v1_0/paper-ripple/" css-build="shadow">
 
   <template>
@@ -679,39 +715,6 @@ iron-icon {
   </template>
 
   </dom-module>
-<iron-iconset-svg name="cr" size="24">
-  <svg>
-    <defs>
-      
-      <g id="add"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></g>
-      <g id="arrow-drop-down"><path d="M7 10l5 5 5-5z"></path></g>
-      <g id="cancel"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"></path></g>
-<if expr="chromeos">
-      <g id="check"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></g>
-</if>
-      <g id="chevron-right"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path></g>
-      <g id="clear"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></g>
-      <g id="close"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></g>
-      <g id="delete"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></g>
-      <g id="domain"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"></path></g>
-      <g id="expand-less"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"></path></g>
-      <g id="expand-more"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"></path></g>
-      <g id="extension"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"></path></g>
-      <g id="file-download"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></g>
-      <g id="fullscreen"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path></g>
-      <g id="group"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"></path></g>
-      <g id="menu"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path></g>
-      <g id="more-vert"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></g>
-      <g id="open-in-new"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></g>
-      <g id="person"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></g>
-      <g id="print"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"></path></g>
-      <g id="search"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path></g>
-      <g id="settings"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"></path></g>
-      <g id="star"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></g>
-      <g id="warning"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"></path></g>
-    </defs>
-  </svg>
-</iron-iconset-svg>
 <dom-module id="paper-spinner-styles" assetpath="chrome://resources/polymer/v1_0/paper-spinner/" css-build="shadow">
   <template>
     <style scope="paper-spinner-styles">:host {
@@ -1831,13 +1834,12 @@ paper-icon-button {
 }
 
 paper-spinner-lite {
-  --paper-spinner-color: white;
-        height: 20px;
+  height: var(--cr-icon-height-width_-_height); width: var(--cr-icon-height-width_-_width);
+        --paper-spinner-color: white;
         margin: 0 6px;
         opacity: 0;
         padding: 6px;
         position: absolute;
-        width: 20px;
 }
 
 paper-spinner-lite[active] {
@@ -1867,7 +1869,7 @@ label {
         white-space: nowrap;
 }
 
-:host([has-search-text_]) label {
+:host([has-search-text]) label {
   visibility: hidden;
 }
 
@@ -1896,7 +1898,7 @@ input[type='search']::-webkit-search-decoration, input[type='search']::-webkit-s
 }
 
 :host(:not([narrow]):not([showing-search])) #icon, :host(:not([narrow])) #prompt {
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 :host([narrow]:not([showing-search])) #searchTerm {
@@ -1924,10 +1926,10 @@ input[type='search']::-webkit-search-decoration, input[type='search']::-webkit-s
     </paper-icon-button>
     <div id="searchTerm">
       <label id="prompt" for="searchInput">[[label]]</label>
-      <input id="searchInput" type="search" on-input="onSearchInput_" on-search="onSearchTermSearch" on-keydown="onSearchTermKeydown" on-focus="onInputFocus_" on-blur="onInputBlur_" incremental="" autofocus="">
+      <input id="searchInput" type="search" on-input="onSearchTermInput" on-search="onSearchTermSearch" on-keydown="onSearchTermKeydown_" on-focus="onInputFocus_" on-blur="onInputBlur_" incremental="" autofocus="">
       
     </div>
-    <template is="dom-if" if="[[hasSearchText_]]">
+    <template is="dom-if" if="[[hasSearchText]]">
       <paper-icon-button icon="cr:cancel" id="clearSearch" title="[[clearLabel]]" on-tap="clearSearch_">
       </paper-icon-button>
     </template>
@@ -1938,6 +1940,7 @@ input[type='search']::-webkit-search-decoration, input[type='search']::-webkit-s
     <style scope="cr-toolbar">:host {
   --cr-toolbar-field-width: 580px;
         --cr-toolbar-height: 56px;
+        align-items: center;
         color: #fff;
         display: flex;
         height: var(--cr-toolbar-height);
@@ -1945,7 +1948,7 @@ input[type='search']::-webkit-search-decoration, input[type='search']::-webkit-s
 
 h1 {
   -webkit-margin-start: 6px;
-        -webkit-padding-end: 2px;
+        -webkit-padding-end: 12px;
         flex: 1;
         font-size: 123%;
         font-weight: 400;
@@ -1955,12 +1958,15 @@ h1 {
 }
 
 #leftContent {
-  -webkit-padding-start: 18px;
-        align-items: center;
-        box-sizing: border-box;
-        display: flex;
-        position: absolute;
+  -webkit-margin-start: 12px;
+        position: relative;
         transition: opacity 100ms;
+}
+
+#leftSpacer {
+  -webkit-margin-start: 6px;
+        align-items: center;
+        display: flex;
 }
 
 #menuButton {
@@ -1973,27 +1979,13 @@ h1 {
 }
 
 #centeredContent {
-  -webkit-margin-start: var(--cr-toolbar-field-margin, 0);
-        display: flex;
+  display: flex;
         flex: 1 1 0;
         justify-content: center;
 }
 
-:host([narrow_]) #centeredContent {
-  -webkit-padding-end: var(--cr-toolbar-field-end-padding, 12px);
-}
-
-:host(:not([narrow_])) h1 {
-  ;
-}
-
-:host(:not([narrow_])) #leftContent {
-  max-width: calc((100% - var(--cr-toolbar-field-width)) / 2);
-        ;
-}
-
-:host(:not([narrow_])) #rightContent {
-  position: var(--cr-toolbar-right-content-wide_-_position); left: var(--cr-toolbar-right-content-wide_-_left); right: var(--cr-toolbar-right-content-wide_-_right);
+#rightContent {
+  -webkit-margin-end: 12px;
 }
 
 :host([narrow_]) #centeredContent {
@@ -2001,7 +1993,17 @@ h1 {
 }
 
 :host([narrow_][showing-search_]) #leftContent {
-  opacity: 0;
+  position: absolute;
+        opacity: 0;
+}
+
+:host(:not([narrow_])) #leftContent {
+  flex: 1 1 var(--cr-toolbar-field-margin, 0);
+}
+
+:host(:not([narrow_])) #rightContent {
+  flex: 1 1 0;
+        text-align: end;
 }
 
 #menuPromo {
@@ -2026,7 +2028,7 @@ h1 {
 #menuPromo::before {
   background: inherit;
         
-        clip-path: polygon(0 105%, 100% 105%, 50% 0);  
+        clip-path: polygon(0 105%, 100% 105%, 50% 0);
         content: '';
         display: block;
         left: 10px;
@@ -2055,18 +2057,20 @@ h1 {
 
 </style>
     <div id="leftContent">
-      
-      <template is="dom-if" if="[[showMenu]]" restamp="">
-        <paper-icon-button id="menuButton" icon="cr:menu" on-tap="onMenuTap_" title="[[titleIfNotShowMenuPromo_(menuLabel, showMenuPromo)]]" aria-label$="[[menuLabel]]">
-        </paper-icon-button>
-        <template is="dom-if" if="[[showMenuPromo]]">
-          <div id="menuPromo" role="tooltip">
-            [[menuPromo]]
-            <button id="closePromo" on-tap="onClosePromoTap_" aria-label$="[[closeMenuPromo]]">✕</button>
-          
-        </div></template>
-      </template>
-      <h1>[[pageName]]</h1>
+      <div id="leftSpacer">
+        
+        <template is="dom-if" if="[[showMenu]]" restamp="">
+          <paper-icon-button id="menuButton" icon="cr:menu" on-tap="onMenuTap_" title="[[titleIfNotShowMenuPromo_(menuLabel, showMenuPromo)]]" aria-label$="[[menuLabel]]">
+          </paper-icon-button>
+          <template is="dom-if" if="[[showMenuPromo]]">
+            <div id="menuPromo" role="tooltip">
+              [[menuPromo]]
+              <button id="closePromo" on-tap="onClosePromoTap_" aria-label$="[[closeMenuPromo]]">✕</button>
+            
+          </div></template>
+        </template>
+        <h1>[[pageName]]</h1>
+      </div>
     </div>
 
     <div id="centeredContent">
@@ -2097,14 +2101,20 @@ h1 {
     --card-first-last-item-padding: 8px;
     --card-max-width: 960px;
     --card-min-width: 550px;
-    --card-padding-between: 20px;
+    --card-padding-between: 16px;
     --card-padding-side: 24px;
     --card-sizing_-_margin:  0 auto; --card-sizing_-_max-width:  var(--card-max-width); --card-sizing_-_min-width:  var(--card-min-width); --card-sizing_-_padding:  0 var(--card-padding-side); --card-sizing_-_width:  calc(100% - 2 * var(--card-padding-side));;
     --first-card-padding-top: 24px;
+    --history-item-time-color: #646464;
+    --interactive-color: var(--google-blue-500);
     --item-height: 44px;
-    --primary-text-color: #333;
-    --secondary-text-color: #757575;
+    --link-color: var(--google-blue-700);
+    --primary-text-color: var(--paper-grey-800);
+    --secondary-text-color: var(--paper-grey-600);
+    --separator-color: rgba(0, 0, 0, 0.08);
     --side-bar-width: 256px;
+    --sidebar-footer-text-color: #6e6e6e;
+    --sidebar-unselected-color: #5a5a5a;
     --toolbar-grouped-height: 101px;
     --toolbar-height: 56px;
 }
@@ -2116,13 +2126,16 @@ h1 {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -2134,20 +2147,13 @@ h1 {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -2175,21 +2181,20 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
@@ -2205,13 +2210,16 @@ button.more-vert-button div {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -2223,20 +2231,13 @@ button.more-vert-button div {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -2264,21 +2265,20 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
@@ -2297,7 +2297,7 @@ cr-toolbar, #overlay-buttons, #overlay-wrapper, #toolbar-container {
 }
 
 :host([items-selected_]) {
-  background: rgb(68, 136, 255);
+  background: var(--interactive-color);
 }
 
 #toolbar-container {
@@ -2305,21 +2305,11 @@ cr-toolbar, #overlay-buttons, #overlay-wrapper, #toolbar-container {
 }
 
 cr-toolbar {
-  --cr-toolbar-field-end-padding: 0;
-        --cr-toolbar-field-margin: var(--side-bar-width);
-        --cr-toolbar-right-content-wide_-_position:  absolute; --cr-toolbar-right-content-wide_-_right:  0; --cr-toolbar-right-content-wide_-_left: initial;;
-}
-
-:host-context([dir=rtl]) cr-toolbar {
-  --cr-toolbar-right-content-wide_-_position:  absolute; --cr-toolbar-right-content-wide_-_left:  0; --cr-toolbar-right-content-wide_-_right: initial;;
+  --cr-toolbar-field-margin: var(--side-bar-width);
 }
 
 :host([has-drawer]) cr-toolbar {
   --cr-toolbar-field-margin: 0;
-}
-
-cr-toolbar .more-actions {
-  -webkit-margin-end: 12px;
 }
 
 #info-button {
@@ -2346,7 +2336,7 @@ iron-dropdown {
   box-shadow: var(--shadow-elevation-2dp_-_box-shadow);
         background-color: white;
         border-radius: 2px;
-        color: var(--paper-grey-800);
+        color: var(--primary-text-color);
         overflow: hidden;
         padding: 12px 20px;
 }
@@ -2372,27 +2362,19 @@ paper-button {
 #cancel-icon-button {
   -webkit-margin-end: 24px;
         -webkit-margin-start: 2px;
-        height: 36px;
-        min-width: 36px;
-        width: 36px;
 }
 
-#grouped-nav-container paper-icon-button {
-  --paper-icon-button-ink-color: rgba(255, 255, 255, 0.4);
-        -webkit-margin-start: 24px;
-        flex: 0 0 auto;
+paper-tabs {
+  --paper-tabs_-_font-size: apply-shim-inherit;;
+        --paper-tabs-selection-bar-color: #fff;
+        -webkit-margin-start: 32px;
+        height: calc(var(--toolbar-grouped-height) - var(--toolbar-height));
+        min-width: 300px;
 }
 
 paper-tab {
   --paper-tab-ink: rgba(255, 255, 255, 0.4);
-        font-size: 13px;
         text-transform: uppercase;
-}
-
-paper-tabs {
-  --paper-tabs-selection-bar-color: var(--google-blue-500);
-        height: calc(var(--toolbar-grouped-height) - var(--toolbar-height));
-        min-width: 300px;
 }
 
 #grouped-buttons-container {
@@ -2400,12 +2382,8 @@ paper-tabs {
         display: flex;
 }
 
-#grouped-range-buttons {
-  -webkit-margin-start: 32px;
-}
-
 #grouped-nav-container {
-  -webkit-margin-end: 24px;
+  -webkit-margin-end: 16px;
         align-items: center;
         display: flex;
         flex: 1;
@@ -2420,12 +2398,22 @@ paper-tabs {
 }
 
 #grouped-date {
-  flex: 0 1 auto;
+  -webkit-margin-end: 8px;
+        flex: 0 1 auto;
         opacity: 0.7;
         overflow: hidden;
         text-align: right;
         text-overflow: ellipsis;
         white-space: nowrap;
+}
+
+#grouped-nav-container button {
+  -webkit-margin-start: 8px;
+        flex: 0 0 auto;
+}
+
+#grouped-nav-container button[disabled] {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 :host-context([dir=rtl]) .rtl-reversible {
@@ -2454,8 +2442,9 @@ paper-tabs {
       <template is="dom-if" if="[[itemsSelected_]]">
         <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
           <div id="overlay-buttons">
-            <paper-icon-button icon="cr:clear" id="cancel-icon-button" on-tap="onClearSelectionTap_" title="$i18n{cancel}">
-            </paper-icon-button>
+            <button is="paper-icon-button-light" id="cancel-icon-button" class="icon-button" on-tap="onClearSelectionTap_" title="$i18n{cancel}">
+              <iron-icon icon="cr:clear"></iron-icon>
+            </button>
             <div id="number-selected">[[numberOfItemsSelected_(count)]]</div>
             <paper-button id="cancel-button" on-tap="onClearSelectionTap_">
               $i18n{cancel}
@@ -2469,7 +2458,7 @@ paper-tabs {
     </div>
     <template is="dom-if" if="[[isGroupedMode]]">
       <div id="grouped-buttons-container">
-        <paper-tabs attr-for-selected="value" selected="{{groupedRange}}" id="grouped-range-buttons">
+        <paper-tabs attr-for-selected="value" selected="{{groupedRange}}">
           <paper-tab value="0">$i18n{rangeAllTime}</paper-tab>
           <paper-tab value="1">$i18n{rangeWeek}</paper-tab>
           <paper-tab value="2">$i18n{rangeMonth}</paper-tab>
@@ -2478,9 +2467,15 @@ paper-tabs {
           <span id="grouped-date">
             {{getHistoryInterval_(queryStartTime, queryEndTime)}}
           </span>
-          <paper-icon-button icon="history:today" alt="$i18n{rangeToday}" title="$i18n{rangeToday}"></paper-icon-button>
-          <paper-icon-button icon="history:chevron-left" alt="$i18n{rangePrevious}" title="$i18n{rangePrevious}" class="rtl-reversible"></paper-icon-button>
-          <paper-icon-button icon="cr:chevron-right" alt="$i18n{rangeNext}" title="$i18n{rangeNext}" class="rtl-reversible"></paper-icon-button>
+          <button is="paper-icon-button-light" id="today-button" class="icon-button" title="$i18n{rangeToday}" on-tap="onTodayTap_" disabled="[[isToday_(groupedOffset)]]">
+            <iron-icon icon="history:today"></iron-icon>
+          </button>
+          <button is="paper-icon-button-light" id="prev-button" title="$i18n{rangePrevious}" class="icon-button rtl-reversible" on-tap="onPrevTap_" disabled="[[!hasMoreResults]]">
+            <iron-icon icon="history:chevron-left"></iron-icon>
+          </button>
+          <button is="paper-icon-button-light" id="next-button" title="$i18n{rangeNext}" class="icon-button rtl-reversible" on-tap="onNextTap_" disabled="[[isToday_(groupedOffset)]]">
+            <iron-icon icon="cr:chevron-right"></iron-icon>
+          </button>
         </div>
       </div>
     </template>
@@ -2490,6 +2485,17 @@ paper-tabs {
 <style is="custom-style" css-build="shadow">html {
   --cr-actionable_-_cursor:  pointer;;
     --cr-focused-item-color: var(--google-grey-300);
+    
+    --cr-icon-padding: 8px;
+
+    
+    --cr-icon-ripple-size: 36px;
+    --cr-icon-size: 20px;
+
+    --cr-icon-height-width_-_height:  var(--cr-icon-size); --cr-icon-height-width_-_width:  var(--cr-icon-size);
+
+    --cr-paper-icon-button-margin_-_-webkit-margin-end:  -8px; --cr-paper-icon-button-margin_-_-webkit-margin-start:  16px;
+
     --cr-selectable-focus_-_background-color:  var(--cr-focused-item-color); --cr-selectable-focus_-_outline:  none;
     --cr-separator-line: 1px solid rgba(0, 0, 0, 0.06);
     --paper-checkbox-ink-size: 40px;
@@ -2526,6 +2532,36 @@ paper-tabs {
 
 [actionable] {
   cursor: var(--cr-actionable_-_cursor);
+}
+
+button[is='paper-icon-button-light'] {
+  -webkit-margin-end: var(--cr-paper-icon-button-margin_-_-webkit-margin-end); -webkit-margin-start: var(--cr-paper-icon-button-margin_-_-webkit-margin-start);
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: var(--cr-icon-size);
+        flex-shrink: 0;
+        height: var(--cr-icon-ripple-size);
+        width: var(--cr-icon-ripple-size);
+}
+
+button[is='paper-icon-button-light'].subpage-arrow {
+  background-image: url("chrome://resources/images/arrow_right.svg");
+}
+
+button[is='paper-icon-button-light'].icon-external {
+  background-image: url("chrome://resources/images/open_in_new.svg");
+}
+
+.subpage-arrow, .icon-external {
+  display: none;
+}
+
+paper-icon-button.subpage-arrow {
+  background-image: url("chrome://resources/images/arrow_right.svg");
+}
+
+[actionable] :-webkit-any(.subpage-arrow, .icon-external), [actionable]:-webkit-any(.subpage-arrow, .icon-external) {
+  display: block;
 }
 
 [scrollable] {
@@ -2688,13 +2724,16 @@ paper-tabs {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -2706,20 +2745,13 @@ paper-tabs {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -2747,28 +2779,26 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
 
 :host {
-  --checked-color: rgb(68, 136, 255);
-        display: block;
+  display: block;
         outline: none;
         pointer-events: none;
 }
@@ -2831,7 +2861,7 @@ button {
 }
 
 :host([selected]) #checkbox {
-  color: var(--checked-color);
+  color: var(--interactive-color);
 }
 
 #checkmark {
@@ -2859,8 +2889,8 @@ button {
 }
 
 :host([selected]) #checkmark {
-  background: var(--checked-color);
-        border-color: var(--checked-color);
+  background: var(--interactive-color);
+        border-color: var(--interactive-color);
 }
 
 :host([selected]) #checkmark::after {
@@ -2871,7 +2901,7 @@ button {
 }
 
 #time-accessed {
-  color: #646464;
+  color: var(--history-item-time-color);
         min-width: 96px;
 }
 
@@ -2892,7 +2922,7 @@ button {
 }
 
 #bookmark-star {
-  color: var(--checked-color);
+  color: var(--interactive-color);
         height: 32px;
         width: 32px;
 }
@@ -2999,13 +3029,16 @@ button {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -3017,20 +3050,13 @@ button {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -3058,21 +3084,20 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
@@ -3110,13 +3135,16 @@ iron-list {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -3128,20 +3156,13 @@ iron-list {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -3169,21 +3190,20 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
@@ -3215,6 +3235,36 @@ paper-spinner {
 
 [actionable] {
   cursor: var(--cr-actionable_-_cursor);
+}
+
+button[is='paper-icon-button-light'] {
+  -webkit-margin-end: var(--cr-paper-icon-button-margin_-_-webkit-margin-end); -webkit-margin-start: var(--cr-paper-icon-button-margin_-_-webkit-margin-start);
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: var(--cr-icon-size);
+        flex-shrink: 0;
+        height: var(--cr-icon-ripple-size);
+        width: var(--cr-icon-ripple-size);
+}
+
+button[is='paper-icon-button-light'].subpage-arrow {
+  background-image: url("chrome://resources/images/arrow_right.svg");
+}
+
+button[is='paper-icon-button-light'].icon-external {
+  background-image: url("chrome://resources/images/open_in_new.svg");
+}
+
+.subpage-arrow, .icon-external {
+  display: none;
+}
+
+paper-icon-button.subpage-arrow {
+  background-image: url("chrome://resources/images/arrow_right.svg");
+}
+
+[actionable] :-webkit-any(.subpage-arrow, .icon-external), [actionable]:-webkit-any(.subpage-arrow, .icon-external) {
+  display: block;
 }
 
 [scrollable] {
@@ -3270,8 +3320,9 @@ dialog .body {
 }
 
 </style>
-    <iron-pages id="content" attr-for-selected="id" selected="[[selectedPage_]]">
-      <history-list id="infinite-list" querying="[[queryState.querying]]" searched-term="[[queryResult.info.term]]"></history-list>
+    <iron-pages id="content" attr-for-selected="id" selected="[[selectedPage_]]" fallback-selection="infinite-list">
+      <history-list id="infinite-list" querying="[[queryState.querying]]" searched-term="[[queryResult.info.term]]">
+      </history-list>
       <template is="dom-if" if="[[grouped]]">
         <history-grouped-list id="grouped-list" range="[[groupedRange]]" query-start-time="[[queryResult.info.queryStartTime]]" query-end-time="[[queryResult.info.queryEndTime]]" searched-term="[[queryResult.info.term]]">
         </history-grouped-list>
@@ -3294,14 +3345,14 @@ dialog .body {
     </template>
 
     <template is="cr-lazy-render" id="sharedMenu">
-      <cr-shared-menu>
-        <paper-item id="menuMoreButton" class="menu-item" on-tap="onMoreFromSiteTap_">
+      <dialog is="cr-action-menu">
+        <button id="menuMoreButton" class="dropdown-item" on-tap="onMoreFromSiteTap_">
           $i18n{moreFromSite}
-        </paper-item>
-        <paper-item id="menuRemoveButton" class="menu-item" disabled="[[!canDeleteHistory_()]]" on-tap="onRemoveFromHistoryTap_">
+        </button>
+        <button id="menuRemoveButton" class="dropdown-item" disabled="[[!canDeleteHistory_()]]" on-tap="onRemoveFromHistoryTap_">
           $i18n{removeFromHistory}
-        </paper-item>
-      </cr-shared-menu>
+        </button>
+      </dialog>
     </template>
   </template>
   </dom-module>
@@ -3392,13 +3443,16 @@ dialog .body {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -3410,20 +3464,13 @@ dialog .body {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -3451,21 +3498,20 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
@@ -3478,12 +3524,8 @@ button.more-vert-button div {
         width: var(--side-bar-width);
 }
 
-:host([drawer]) {
-  height: calc(100% - var(--toolbar-height));
-}
-
 div.separator {
-  background-color: rgba(0, 0, 0, 0.08);
+  background-color: var(--separator-color);
         flex-shrink: 0;
         height: 1px;
         margin: 8px 0;
@@ -3505,7 +3547,7 @@ div.separator {
 iron-selector {
   -webkit-user-select: none;
         background-color: transparent;
-        color: #5a5a5a;
+        color: var(--sidebar-unselected-color);
         display: flex;
         flex: 1;
         flex-direction: column;
@@ -3522,7 +3564,7 @@ iron-selector > a {
         color: inherit;
         cursor: pointer;
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         min-height: 48px;
         position: relative;
@@ -3530,7 +3572,7 @@ iron-selector > a {
 }
 
 iron-selector > a.iron-selected {
-  color: var(--google-blue-500);
+  color: var(--link-color);
 }
 
 #spacer {
@@ -3538,7 +3580,7 @@ iron-selector > a.iron-selected {
 }
 
 #footer {
-  color: var(--paper-grey-600);
+  color: var(--sidebar-footer-text-color);
         width: var(--side-bar-width);
 }
 
@@ -3550,8 +3592,7 @@ iron-selector > a.iron-selected {
 }
 
 #footer a {
-  color: var(--google-blue-700);
-        text-decoration: none;
+  text-decoration: none;
 }
 
 </style>
@@ -3585,13 +3626,16 @@ iron-selector > a.iron-selected {
   display: none !important;
 }
 
+a {
+  color: var(--link-color);
+}
+
 .card-title {
   align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: var(--primary-text-color);
         display: flex;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 48px;
         line-height: 48px;
@@ -3603,20 +3647,13 @@ iron-selector > a.iron-selected {
 
 .centered-message {
   align-items: center;
-        color: #b4b4b4;
+        color: var(--md-loading-message-color);
         display: flex;
         flex: 1;
-        font-size: 14px;
+        font-size: 108%;
         font-weight: 500;
         height: 100%;
         justify-content: center;
-}
-
-.menu-item {
-  -webkit-user-select: none;
-        cursor: pointer;
-        font: inherit;
-        white-space: nowrap;
 }
 
 .website-icon {
@@ -3644,27 +3681,27 @@ button.icon-button {
 }
 
 button.icon-button iron-icon {
-  color: var(--secondary-text-color);
-        height: 20px;
+  height: 20px;
         width: 20px;
 }
 
 button.more-vert-button {
   height: 36px;
-        padding: 6px;
+        padding: 8px;
         width: 36px;
 }
 
 button.more-vert-button div {
   border: 2px solid var(--secondary-text-color);
         border-radius: 2px;
-        margin: 1px 10px;
+        margin: 1px 8px;
         pointer-events: none;
         transform: scale(0.8);
 }
 
 :host {
-  display: block;
+  color: var(--primary-text-color);
+        display: block;
         height: 100%;
         overflow: hidden;
         z-index: 0;
@@ -3697,29 +3734,6 @@ history-toolbar {
   height: 100%;
 }
 
-#drawer:unresolved {
-  display: none;
-}
-
-#drawer {
-  z-index: 3;
-}
-
-#drawer-header {
-  align-items: center;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-        box-sizing: border-box;
-        display: flex;
-        height: var(--toolbar-height);
-}
-
-h1 {
-  -webkit-padding-start: 24px;
-        color: rgb(66, 66, 66);
-        font-size: 123%;
-        font-weight: 400;
-}
-
 #drop-shadow {
   box-shadow: inset 0 5px 6px -3px rgba(0, 0, 0, 0.4);
         height: 6px;
@@ -3739,9 +3753,9 @@ h1 {
 </style>
     <history-router selected-page="{{selectedPage_}}" query-state="{{queryState_}}">
     </history-router>
-    <history-toolbar id="toolbar" spinner-active="[[shouldShowSpinner_(queryState_.querying,
+    <history-toolbar id="toolbar" grouped-offset="{{queryState_.groupedOffset}}" grouped-range="{{queryState_.range}}" has-drawer="[[hasDrawer_]]" is-grouped-mode="{{grouped_}}" query-end-time="[[queryResult_.info.queryEndTime]]" has-more-results="[[!queryResult_.info.finished]]" query-start-time="[[queryResult_.info.queryStartTime]]" querying="[[queryState_.querying]]" search-term="{{queryState_.searchTerm}}" show-menu-promo="[[showMenuPromo_]]" show-sync-notice="[[showSyncNotice_(hasSyncedResults, selectedPage_)]]" spinner-active="[[shouldShowSpinner_(queryState_.querying,
                                              queryState_.incremental,
-                                             queryState_.searchTerm)]]" is-grouped-mode="{{grouped_}}" grouped-range="{{queryState_.range}}" search-term="{{queryState_.searchTerm}}" query-start-time="[[queryResult_.info.queryStartTime]]" query-end-time="[[queryResult_.info.queryEndTime]]" has-drawer="[[hasDrawer_]]" show-sync-notice="[[showSyncNotice_(hasSyncedResults, selectedPage_)]]" show-menu-promo="[[showMenuPromo_]]">
+                                             queryState_.searchTerm)]]">
     </history-toolbar>
 
     <div id="main-container">
@@ -3758,14 +3772,12 @@ h1 {
       <div id="drop-shadow"></div>
     </div>
 
-    <template is="dom-if" if="[[hasDrawer_]]">
-      <app-drawer id="drawer" swipe-open="" align="start" tabindex="0">
-        <div id="drawer-header">
-          <h1>$i18n{title}</h1>
-        </div>
-        <history-side-bar id="drawer-side-bar" selected-page="{{selectedPage_}}" show-footer="[[showSidebarFooter]]" drawer="">
+    <template is="cr-lazy-render" id="drawer">
+      <dialog is="cr-drawer" swipe-open="">
+        <div class="drawer-header">$i18n{title}</div>
+        <history-side-bar id="drawer-side-bar" class="drawer-content" selected-page="{{selectedPage_}}" show-footer="[[showSidebarFooter]]">
         </history-side-bar>
-      </app-drawer>
+      </dialog>
     </template>
 
     <iron-media-query query="(max-width: 1023px)" query-matches="{{hasDrawer_}}">

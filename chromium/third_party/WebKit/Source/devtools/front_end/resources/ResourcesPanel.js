@@ -38,7 +38,7 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
 
     this._resourcesLastSelectedItemSetting = Common.settings.createSetting('resourcesLastSelectedItem', {});
 
-    this._sidebarTree = new TreeOutlineInShadow();
+    this._sidebarTree = new UI.TreeOutlineInShadow();
     this._sidebarTree.element.classList.add('resources-sidebar');
     this._sidebarTree.registerRequiredCSS('resources/resourcesSidebar.css');
     this._sidebarTree.element.classList.add('filter-all');
@@ -113,10 +113,10 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
 
   /**
    * @param {string} title
-   * @return {!TreeElement}
+   * @return {!UI.TreeElement}
    */
   _addSidebarSection(title) {
-    var treeElement = new TreeElement(title, true);
+    var treeElement = new UI.TreeElement(title, true);
     treeElement.listItemElement.classList.add('storage-group-list-item');
     treeElement.setCollapsible(false);
     treeElement.selectable = false;
@@ -134,8 +134,8 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
     this._target = target;
     this._databaseModel = Resources.DatabaseModel.fromTarget(target);
 
-    this._databaseModel.addEventListener(Resources.DatabaseModel.Events.DatabaseAdded, this._databaseAdded, this);
-    this._databaseModel.addEventListener(Resources.DatabaseModel.Events.DatabasesRemoved, this._resetWebSQL, this);
+    this._databaseModel.on(Resources.DatabaseModel.DatabaseAddedEvent, this._databaseAdded, this);
+    this._databaseModel.on(Resources.DatabaseModel.DatabasesRemovedEvent, this._resetWebSQL, this);
 
     var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(target);
     if (!resourceTreeModel)
@@ -164,8 +164,8 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
       resourceTreeModel.removeEventListener(
           SDK.ResourceTreeModel.Events.WillLoadCachedResources, this._resetWithFrames, this);
     }
-    this._databaseModel.removeEventListener(Resources.DatabaseModel.Events.DatabaseAdded, this._databaseAdded, this);
-    this._databaseModel.removeEventListener(Resources.DatabaseModel.Events.DatabasesRemoved, this._resetWebSQL, this);
+    this._databaseModel.off(Resources.DatabaseModel.DatabaseAddedEvent, this._databaseAdded, this);
+    this._databaseModel.off(Resources.DatabaseModel.DatabasesRemovedEvent, this._resetWebSQL, this);
 
     this._resetWithFrames();
   }
@@ -382,19 +382,11 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {!Resources.DatabaseModel.DatabaseAddedEvent} event
    */
   _databaseAdded(event) {
-    var database = /** @type {!Resources.Database} */ (event.data);
-    this._addDatabase(database);
-  }
-
-  /**
-   * @param {!Resources.Database} database
-   */
-  _addDatabase(database) {
-    var databaseTreeElement = new Resources.DatabaseTreeElement(this, database);
-    this._databaseTreeElements.set(database, databaseTreeElement);
+    var databaseTreeElement = new Resources.DatabaseTreeElement(this, event.database);
+    this._databaseTreeElements.set(event.database, databaseTreeElement);
     this.databasesListTreeElement.appendChild(databaseTreeElement);
   }
 
@@ -836,7 +828,7 @@ Resources.ResourcesPanel.ResourceRevealer = class {
 /**
  * @unrestricted
  */
-Resources.BaseStorageTreeElement = class extends TreeElement {
+Resources.BaseStorageTreeElement = class extends UI.TreeElement {
   /**
    * @param {!Resources.ResourcesPanel} storagePanel
    * @param {string} title
@@ -1264,8 +1256,8 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
    * @param {!Common.Event} event
    */
   _cacheAdded(event) {
-    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data);
-    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.target);
+    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data.cache);
+    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.data.model);
     this._addCache(model, cache);
   }
 
@@ -1283,8 +1275,8 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
    * @param {!Common.Event} event
    */
   _cacheRemoved(event) {
-    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data);
-    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.target);
+    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data.cache);
+    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.data.model);
 
     var swCacheTreeElement = this._cacheTreeElement(model, cache);
     if (!swCacheTreeElement)
@@ -1529,8 +1521,8 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Common.Event} event
    */
   _indexedDBAdded(event) {
-    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data);
-    var model = /** @type {!Resources.IndexedDBModel} */ (event.target);
+    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data.databaseId);
+    var model = /** @type {!Resources.IndexedDBModel} */ (event.data.model);
     this._addIndexedDB(model, databaseId);
   }
 
@@ -1549,8 +1541,8 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Common.Event} event
    */
   _indexedDBRemoved(event) {
-    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data);
-    var model = /** @type {!Resources.IndexedDBModel} */ (event.target);
+    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data.databaseId);
+    var model = /** @type {!Resources.IndexedDBModel} */ (event.data.model);
 
     var idbDatabaseTreeElement = this._idbDatabaseTreeElement(model, databaseId);
     if (!idbDatabaseTreeElement)
@@ -1565,8 +1557,8 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Common.Event} event
    */
   _indexedDBLoaded(event) {
-    var database = /** @type {!Resources.IndexedDBModel.Database} */ (event.data);
-    var model = /** @type {!Resources.IndexedDBModel} */ (event.target);
+    var database = /** @type {!Resources.IndexedDBModel.Database} */ (event.data.database);
+    var model = /** @type {!Resources.IndexedDBModel} */ (event.data.model);
 
     var idbDatabaseTreeElement = this._idbDatabaseTreeElement(model, database.databaseId);
     if (!idbDatabaseTreeElement)

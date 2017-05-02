@@ -108,13 +108,13 @@ int TableLayoutAlgorithmFixed::calcWidthArray() {
       if (currentEffectiveColumn >= nEffCols) {
         m_table->appendEffectiveColumn(span);
         nEffCols++;
-        m_width.append(Length());
+        m_width.push_back(Length());
         spanInCurrentEffectiveColumn = span;
       } else {
         if (span < m_table->spanOfEffectiveColumn(currentEffectiveColumn)) {
           m_table->splitEffectiveColumn(currentEffectiveColumn, span);
           nEffCols++;
-          m_width.append(Length());
+          m_width.push_back(Length());
         }
         spanInCurrentEffectiveColumn =
             m_table->spanOfEffectiveColumn(currentEffectiveColumn);
@@ -296,7 +296,7 @@ void TableLayoutAlgorithmFixed::layout() {
     }
   } else {
     // Divide the remaining width among the auto columns.
-    ASSERT(autoSpan >= numAuto);
+    DCHECK_GE(autoSpan, numAuto);
     int remainingWidth = tableLogicalWidth - totalFixedWidth -
                          totalPercentWidth - hspacing * (autoSpan - numAuto);
     int lastAuto = 0;
@@ -310,7 +310,7 @@ void TableLayoutAlgorithmFixed::layout() {
           break;
         lastAuto = i;
         numAuto--;
-        ASSERT(autoSpan >= span);
+        DCHECK_GE(autoSpan, span);
         autoSpan -= span;
       }
     }

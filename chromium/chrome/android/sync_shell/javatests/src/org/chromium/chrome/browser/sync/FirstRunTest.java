@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.sync;
 
 import android.accounts.Account;
 import android.os.Bundle;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -72,7 +72,7 @@ public class FirstRunTest extends SyncTestBase {
         // User should be signed in and the sync backend should initialize, but sync should not
         // become fully active until the settings page is closed.
         assertEquals(testAccount, SigninTestUtil.getCurrentAccount());
-        SyncTestUtil.waitForBackendInitialized();
+        SyncTestUtil.waitForEngineInitialized();
         assertFalse(SyncTestUtil.isSyncActive());
 
         // Close the settings fragment.
@@ -103,8 +103,7 @@ public class FirstRunTest extends SyncTestBase {
      * @param showSettings Whether to show the settings page.
      * @return The Preferences activity if showSettings was YES; null otherwise.
      */
-    private Preferences processFirstRun(String account, ShowSettings showSettings)
-            throws InterruptedException {
+    private Preferences processFirstRun(String account, ShowSettings showSettings) {
         FirstRunSignInProcessor.setFirstRunFlowSignInComplete(mContext, false);
         Bundle data = new Bundle();
         data.putString(FirstRunActivity.RESULT_SIGNIN_ACCOUNT_NAME, account);

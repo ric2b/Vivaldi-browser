@@ -95,6 +95,30 @@ Resources.ServiceWorkersView = class extends UI.VBox {
   _registrationUpdated(event) {
     var registration = /** @type {!SDK.ServiceWorkerRegistration} */ (event.data);
     this._updateRegistration(registration);
+    this._gcRegistrations();
+  }
+
+  _gcRegistrations() {
+    var hasNonDeletedRegistrations = false;
+    var securityOrigins = new Set(this._securityOriginManager.securityOrigins());
+    for (var registration of this._manager.registrations().values()) {
+      var visible = this._showAllCheckbox.checked() || securityOrigins.has(registration.securityOrigin);
+      if (!visible)
+        continue;
+      if (!registration.canBeRemoved()) {
+        hasNonDeletedRegistrations = true;
+        break;
+      }
+    }
+
+    if (!hasNonDeletedRegistrations)
+      return;
+
+    for (var registration of this._manager.registrations().values()) {
+      var visible = this._showAllCheckbox.checked() || securityOrigins.has(registration.securityOrigin);
+      if (visible && registration.canBeRemoved())
+        this._removeRegistrationFromList(registration);
+    }
   }
 
   /**
@@ -128,6 +152,13 @@ Resources.ServiceWorkersView = class extends UI.VBox {
    */
   _registrationDeleted(event) {
     var registration = /** @type {!SDK.ServiceWorkerRegistration} */ (event.data);
+    this._removeRegistrationFromList(registration);
+  }
+
+  /**
+   * @param {!SDK.ServiceWorkerRegistration} registration
+   */
+  _removeRegistrationFromList(registration) {
     var section = this._sections.get(registration);
     if (section)
       section._section.remove();
@@ -154,18 +185,18 @@ Resources.ServiceWorkersView.Section = class {
     this._toolbar = section.createToolbar();
     this._toolbar.renderAsLinks();
     this._updateButton = new UI.ToolbarButton(Common.UIString('Update'), undefined, Common.UIString('Update'));
-    this._updateButton.addEventListener('click', this._updateButtonClicked.bind(this));
+    this._updateButton.addEventListener(UI.ToolbarButton.Events.Click, this._updateButtonClicked, this);
     this._toolbar.appendToolbarItem(this._updateButton);
     this._pushButton = new UI.ToolbarButton(Common.UIString('Emulate push event'), undefined, Common.UIString('Push'));
-    this._pushButton.addEventListener('click', this._pushButtonClicked.bind(this));
+    this._pushButton.addEventListener(UI.ToolbarButton.Events.Click, this._pushButtonClicked, this);
     this._toolbar.appendToolbarItem(this._pushButton);
     this._syncButton =
         new UI.ToolbarButton(Common.UIString('Emulate background sync event'), undefined, Common.UIString('Sync'));
-    this._syncButton.addEventListener('click', this._syncButtonClicked.bind(this));
+    this._syncButton.addEventListener(UI.ToolbarButton.Events.Click, this._syncButtonClicked, this);
     this._toolbar.appendToolbarItem(this._syncButton);
     this._deleteButton =
         new UI.ToolbarButton(Common.UIString('Unregister service worker'), undefined, Common.UIString('Unregister'));
-    this._deleteButton.addEventListener('click', this._unregisterButtonClicked.bind(this));
+    this._deleteButton.addEventListener(UI.ToolbarButton.Events.Click, this._unregisterButtonClicked, this);
     this._toolbar.appendToolbarItem(this._deleteButton);
 
     // Preserve the order.
@@ -232,7 +263,7 @@ Resources.ServiceWorkersView.Section = class {
       var scriptElement = this._section.appendField(Common.UIString('Source'));
       scriptElement.removeChildren();
       var fileName = Common.ParsedURL.extractName(active.scriptURL);
-      scriptElement.appendChild(Components.Linkifier.linkifyURLAsNode(active.scriptURL, fileName));
+      scriptElement.appendChild(Components.Linkifier.linkifyURL(active.scriptURL, fileName));
       scriptElement.createChild('div', 'report-field-value-subtitle').textContent =
           Common.UIString('Received %s', new Date(active.scriptResponseTime * 1000).toLocaleString());
 
@@ -282,7 +313,7 @@ Resources.ServiceWorkersView.Section = class {
 
     this._section.setFieldVisible(Common.UIString('Errors'), !!this._registration.errors.length);
     var errorsValue = this._wrapWidget(this._section.appendField(Common.UIString('Errors')));
-    var errorsLabel = createLabel(String(this._registration.errors.length), 'smallicon-error');
+    var errorsLabel = UI.createLabel(String(this._registration.errors.length), 'smallicon-error');
     errorsLabel.classList.add('service-worker-errors-label');
     errorsValue.appendChild(errorsLabel);
     this._moreButton = createLink(
@@ -315,23 +346,35 @@ Resources.ServiceWorkersView.Section = class {
     if (this._errorsList.childElementCount > 100)
       this._errorsList.firstElementChild.remove();
     message.appendChild(this._linkifier.linkifyScriptLocation(target, null, error.sourceURL, error.lineNumber));
-    message.appendChild(createLabel('#' + error.versionId + ': ' + error.errorMessage, 'smallicon-error'));
+    message.appendChild(UI.createLabel('#' + error.versionId + ': ' + error.errorMessage, 'smallicon-error'));
   }
 
-  _unregisterButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _unregisterButtonClicked(event) {
     this._manager.deleteRegistration(this._registration.id);
   }
 
-  _updateButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _updateButtonClicked(event) {
     this._manager.updateRegistration(this._registration.id);
   }
 
-  _pushButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _pushButtonClicked(event) {
     var data = 'Test push message from DevTools.';
     this._manager.deliverPushMessage(this._registration.id, data);
   }
 
-  _syncButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _syncButtonClicked(event) {
     var tag = 'test-tag-from-devtools';
     var lastChance = true;
     this._manager.dispatchSyncEvent(this._registration.id, tag, lastChance);
@@ -417,11 +460,5 @@ Resources.ServiceWorkersView.Section = class {
     var contentElement = createElement('div');
     shadowRoot.appendChild(contentElement);
     return contentElement;
-  }
-
-  _dispose() {
-    this._linkifier.dispose();
-    if (this._pendingUpdate)
-      clearTimeout(this._pendingUpdate);
   }
 };

@@ -30,7 +30,7 @@ class MidiManagerAndroid {
     /**
      * Set true when this instance is successfully initialized.
      */
-    private boolean mIsInitialized = false;
+    private boolean mIsInitialized;
     /**
      * The devices held by this manager.
      */
@@ -67,7 +67,7 @@ class MidiManagerAndroid {
      * @param nativeManagerPointer The native pointer to a midi::MidiManagerAndroid object.
      */
     private MidiManagerAndroid(Context context, long nativeManagerPointer) {
-        assert ThreadUtils.runningOnUiThread();
+        assert !ThreadUtils.runningOnUiThread();
 
         mManager = (MidiManager) context.getSystemService(Context.MIDI_SERVICE);
         mHandler = new Handler(ThreadUtils.getUiThreadLooper());

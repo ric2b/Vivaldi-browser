@@ -8,12 +8,15 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/ui/infobar_view_delegate.h"
-#import "ios/public/provider/chrome/browser/ui/infobar_view_protocol.h"
+#import "ios/chrome/browser/ui/infobars/infobar_view.h"
+#import "ios/chrome/browser/ui/infobars/infobar_view_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -53,13 +56,11 @@ ConfirmInfoBarDelegate::InfoBarButton UITagToButton(NSUInteger tag) {
 #pragma mark -
 #pragma mark InfoBarController
 
-- (base::scoped_nsobject<UIView<InfoBarViewProtocol>>)
-    viewForDelegate:(infobars::InfoBarDelegate*)delegate
-              frame:(CGRect)frame {
-  base::scoped_nsobject<UIView<InfoBarViewProtocol>> infoBarView;
+- (InfoBarView*)viewForDelegate:(infobars::InfoBarDelegate*)delegate
+                          frame:(CGRect)frame {
   _confirmInfobarDelegate = delegate->AsConfirmInfoBarDelegate();
-  infoBarView.reset(
-      ios::GetChromeBrowserProvider()->CreateInfoBarView(frame, self.delegate));
+  InfoBarView* infoBarView =
+      [[InfoBarView alloc] initWithFrame:frame delegate:self.delegate];
   // Model data.
   gfx::Image modelIcon = _confirmInfobarDelegate->GetIcon();
   int buttons = _confirmInfobarDelegate->GetButtons();
@@ -105,7 +106,7 @@ ConfirmInfoBarDelegate::InfoBarButton UITagToButton(NSUInteger tag) {
   return infoBarView;
 }
 
-- (void)updateInfobarLabel:(UIView<InfoBarViewProtocol>*)view {
+- (void)updateInfobarLabel:(InfoBarView*)view {
   if (!_confirmInfobarDelegate->GetMessageText().length())
     return;
   if (_confirmInfobarDelegate->GetLinkText().length()) {

@@ -7,10 +7,10 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_v2app.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -50,13 +50,10 @@ gfx::Image GetAppListIcon(extensions::AppWindow* app_window) {
 
 ExtensionAppWindowLauncherItemController::
     ExtensionAppWindowLauncherItemController(
-        Type type,
         const std::string& app_id,
         const std::string& launch_id,
         ChromeLauncherController* controller)
-    : AppWindowLauncherItemController(type, app_id, launch_id, controller) {
-  DCHECK_NE(TYPE_APP_PANEL, type);
-}
+    : AppWindowLauncherItemController(app_id, launch_id, controller) {}
 
 ExtensionAppWindowLauncherItemController::
     ~ExtensionAppWindowLauncherItemController() {}
@@ -99,7 +96,7 @@ ExtensionAppWindowLauncherItemController::GetApplicationList(int event_flags) {
     if (result.IsEmpty())
       result = GetAppListIcon(app_window);
 
-    items.push_back(new ChromeLauncherAppMenuItemV2App(
+    items.push_back(base::MakeUnique<ChromeLauncherAppMenuItemV2App>(
         app_window->GetTitle(),
         &result,  // Will be copied
         app_id(), launcher_controller(), index,
@@ -107,17 +104,4 @@ ExtensionAppWindowLauncherItemController::GetApplicationList(int event_flags) {
     ++index;
   }
   return items;
-}
-
-ash::ShelfItemDelegate::PerformedAction
-ExtensionAppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
-  if (windows().empty())
-    return kNoAction;
-  return AppWindowLauncherItemController::ItemSelected(event);
-}
-
-ash::ShelfMenuModel*
-ExtensionAppWindowLauncherItemController::CreateApplicationMenu(
-    int event_flags) {
-  return new LauncherApplicationMenuItemModel(GetApplicationList(event_flags));
 }

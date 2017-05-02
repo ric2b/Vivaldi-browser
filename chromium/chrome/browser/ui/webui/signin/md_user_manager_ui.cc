@@ -6,11 +6,13 @@
 
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/ui/webui/signin/signin_create_profile_handler.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/browser/ui/webui/signin/user_manager_screen_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/features.h"
@@ -27,17 +29,21 @@
 #endif
 
 MDUserManagerUI::MDUserManagerUI(content::WebUI* web_ui)
-    : WebUIController(web_ui),
-      signin_create_profile_handler_(new SigninCreateProfileHandler()),
-      user_manager_screen_handler_(new UserManagerScreenHandler()) {
-  // The web_ui object takes ownership of these handlers, and will
-  // destroy them when it (the WebUI) is destroyed.
-  web_ui->AddMessageHandler(signin_create_profile_handler_);
-  web_ui->AddMessageHandler(user_manager_screen_handler_);
+    : WebUIController(web_ui) {
+  auto signin_create_profile_handler =
+      base::MakeUnique<SigninCreateProfileHandler>();
+  signin_create_profile_handler_ = signin_create_profile_handler.get();
+  web_ui->AddMessageHandler(std::move(signin_create_profile_handler));
+  auto user_manager_screen_handler =
+      base::MakeUnique<UserManagerScreenHandler>();
+  user_manager_screen_handler_ = user_manager_screen_handler.get();
+  web_ui->AddMessageHandler(std::move(user_manager_screen_handler));
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  auto signin_supervised_user_import_handler =
+      base::MakeUnique<SigninSupervisedUserImportHandler>();
   signin_supervised_user_import_handler_ =
-      new SigninSupervisedUserImportHandler();
-  web_ui->AddMessageHandler(signin_supervised_user_import_handler_);
+      signin_supervised_user_import_handler.get();
+  web_ui->AddMessageHandler(std::move(signin_supervised_user_import_handler));
 #endif
 
   base::DictionaryValue localized_strings;
@@ -47,11 +53,9 @@ MDUserManagerUI::MDUserManagerUI(content::WebUI* web_ui)
   // Set up the chrome://md-user-manager/ source.
   content::WebUIDataSource::Add(profile, CreateUIDataSource(localized_strings));
 
-#if defined(ENABLE_THEMES)
   // Set up the chrome://theme/ source
   ThemeSource* theme = new ThemeSource(profile);
   content::URLDataSource::Add(profile, theme);
-#endif
 }
 
 MDUserManagerUI::~MDUserManagerUI() {}
@@ -63,6 +67,7 @@ content::WebUIDataSource* MDUserManagerUI::CreateUIDataSource(
   source->AddLocalizedStrings(localized_strings);
   source->AddBoolean("profileShortcutsEnabled",
                      ProfileShortcutManager::IsFeatureEnabled());
+  source->AddBoolean("isForceSigninEnabled", signin::IsForceSigninEnabled());
 
   source->SetJsonPath("strings.js");
 

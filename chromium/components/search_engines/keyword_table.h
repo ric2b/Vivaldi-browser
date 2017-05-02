@@ -36,7 +36,6 @@ class Statement;
 //   keyword
 //   favicon_url
 //   url
-//   show_in_default_list
 //   safe_for_autoreplace
 //   originating_url
 //   date_created           This column was added after we allowed keywords.
@@ -131,6 +130,8 @@ class KeywordTable : public WebDatabaseTable {
   // Table migration functions.
   bool MigrateToVersion53AddNewTabURLColumn();
   bool MigrateToVersion59RemoveExtensionKeywords();
+  bool MigrateToVersion68RemoveShowInDefaultListColumn();
+  bool MigrateToVersion69AddLastVisitedColumn();
 
  private:
   friend class KeywordTableTest;
@@ -164,10 +165,6 @@ class KeywordTable : public WebDatabaseTable {
   bool GetKeywordAsString(TemplateURLID id,
                           const std::string& table_name,
                           std::string* result);
-
-  // Migrates table |name| (which should be either "keywords" or
-  // "keywords_backup") from version 44 to version 45.
-  bool MigrateKeywordsTableForVersion45(const std::string& name);
 
   DISALLOW_COPY_AND_ASSIGN(KeywordTable);
 };

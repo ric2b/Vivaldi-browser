@@ -18,6 +18,7 @@
 #include "content/child/shared_worker_devtools_agent.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/worker_messages.h"
+#include "content/public/common/appcache_info.h"
 #include "content/public/common/origin_util.h"
 #include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/render_thread_impl.h"
@@ -40,10 +41,10 @@ class SharedWorkerWebApplicationCacheHostImpl
  public:
   SharedWorkerWebApplicationCacheHostImpl(
       blink::WebApplicationCacheHostClient* client)
-      : WebApplicationCacheHostImpl(client,
-                                    RenderThreadImpl::current()
-                                        ->appcache_dispatcher()
-                                        ->backend_proxy()) {}
+      : WebApplicationCacheHostImpl(
+            client,
+            RenderThreadImpl::current()->appcache_dispatcher()->backend_proxy(),
+            kAppCacheNoHostId) {}
 
   // Main resource loading is different for workers. The main resource is
   // loaded by the worker using WorkerScriptLoader.
@@ -93,8 +94,12 @@ class WebServiceWorkerNetworkProviderImpl
         static_cast<DataSourceExtraData*>(data_source->getExtraData())
             ->is_secure_context);
     request.setExtraData(extra_data.release());
-    // Explicitly set the SkipServiceWorker flag for subresources here if the
-    // renderer process hasn't received SetControllerServiceWorker message.
+    // If the provider does not have a controller at this point, the renderer
+    // expects subresource requests to never be handled by a controlling service
+    // worker, so set the SkipServiceWorker flag here. Otherwise, a service
+    // worker that is in the process of becoming the controller (i.e., via
+    // claim()) on the browser-side could handle the request and break the
+    // assumptions of the renderer.
     if (request.getRequestContext() !=
             blink::WebURLRequest::RequestContextSharedWorker &&
         !provider->IsControlledByServiceWorker() &&
@@ -147,8 +152,10 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
   }
   worker_devtools_agent_.reset(
       new SharedWorkerDevToolsAgent(route_id, impl_));
-  impl_->startWorkerContext(url, name_, content_security_policy,
-                            security_policy_type, creation_address_space);
+  impl_->startWorkerContext(
+      url, blink::WebString::fromUTF16(name_),
+      blink::WebString::fromUTF16(content_security_policy),
+      security_policy_type, creation_address_space);
 }
 
 EmbeddedSharedWorkerStub::~EmbeddedSharedWorkerStub() {

@@ -17,11 +17,11 @@
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/system/web_notification/ash_popup_alignment_delegate.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -45,19 +45,15 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/layout/fill_layout.h"
 
-#if defined(OS_CHROMEOS)
-
 namespace message_center {
 
 MessageCenterTrayDelegate* CreateMessageCenterTray() {
-  // On Windows+Ash the Tray will not be hosted in ash::Shell.
+  // On non-CrOS, the Tray will not be hosted in ash::Shell.
   NOTREACHED();
   return nullptr;
 }
 
 }  // namespace message_center
-
-#endif  // defined(OS_CHROMEOS)
 
 namespace ash {
 namespace {
@@ -636,7 +632,7 @@ void WebNotificationTray::UpdateTrayContent() {
     counter_->SetVisible(false);
   }
 
-  SetVisible(IsLoggedIn());
+  SetVisible(IsLoggedIn() && ShouldShowMessageCenter());
   PreferredSizeChanged();
   Layout();
   SchedulePaint();

@@ -36,19 +36,11 @@
 
 namespace blink {
 
-class ExecutionContext;
-
 class StringCallback : public GarbageCollectedFinalized<StringCallback> {
  public:
   virtual ~StringCallback() {}
   DEFINE_INLINE_VIRTUAL_TRACE() {}
   virtual void handleEvent(const String& data) = 0;
-
-  // Helper to post callback task.
-  static void scheduleCallback(StringCallback*,
-                               ExecutionContext*,
-                               const String& data,
-                               const String& instrumentationName);
 };
 
 }  // namespace blink

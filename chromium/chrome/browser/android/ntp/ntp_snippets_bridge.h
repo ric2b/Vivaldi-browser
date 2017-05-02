@@ -31,12 +31,9 @@ class NTPSnippetsBridge
     : public ntp_snippets::ContentSuggestionsService::Observer {
  public:
   NTPSnippetsBridge(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& j_bridge,
                     const base::android::JavaParamRef<jobject>& j_profile);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-
-  void SetObserver(JNIEnv* env,
-                   const base::android::JavaParamRef<jobject>& obj,
-                   const base::android::JavaParamRef<jobject>& j_observer);
 
   base::android::ScopedJavaLocalRef<jintArray> GetCategories(
       JNIEnv* env,
@@ -69,13 +66,17 @@ class NTPSnippetsBridge
       jint j_category_id,
       const base::android::JavaParamRef<jobjectArray>& j_displayed_suggestions);
 
+  void ReloadSuggestions(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
   void DismissSuggestion(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jurl,
       jint global_position,
       jint j_category_id,
-      jint category_position,
+      jint position_in_category,
       const base::android::JavaParamRef<jstring>& id_within_category);
 
   void DismissCategory(JNIEnv* env,
@@ -96,7 +97,7 @@ class NTPSnippetsBridge
                          const base::android::JavaParamRef<jobject>& obj,
                          jint global_position,
                          jint j_category_id,
-                         jint category_position,
+                         jint position_in_category,
                          jlong publish_timestamp_ms,
                          jfloat score);
 
@@ -104,7 +105,8 @@ class NTPSnippetsBridge
                           const base::android::JavaParamRef<jobject>& obj,
                           jint global_position,
                           jint j_category_id,
-                          jint category_position,
+                          jint category_index,
+                          jint position_in_category,
                           jlong publish_timestamp_ms,
                           jfloat score,
                           int windowOpenDisposition);
@@ -113,7 +115,7 @@ class NTPSnippetsBridge
                               const base::android::JavaParamRef<jobject>& obj,
                               jint global_position,
                               jint j_category_id,
-                              jint category_position,
+                              jint position_in_category,
                               jlong publish_timestamp_ms,
                               jfloat score);
 
@@ -127,6 +129,13 @@ class NTPSnippetsBridge
                            jint j_category_id,
                            jint position);
 
+  void OnNTPInitialized(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj);
+  void OnColdStart(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj);
+  void OnActivityWarmResumed(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj);
+
   static bool Register(JNIEnv* env);
 
  private:
@@ -139,6 +148,7 @@ class NTPSnippetsBridge
       ntp_snippets::CategoryStatus new_status) override;
   void OnSuggestionInvalidated(
       const ntp_snippets::ContentSuggestion::ID& suggestion_id) override;
+  void OnFullRefreshRequired() override;
   void ContentSuggestionsServiceShutdown() override;
 
   void OnImageFetched(base::android::ScopedJavaGlobalRef<jobject> callback,
@@ -148,8 +158,6 @@ class NTPSnippetsBridge
       ntp_snippets::Status status,
       std::vector<ntp_snippets::ContentSuggestion> suggestions);
 
-  ntp_snippets::Category CategoryFromIDValue(jint id);
-
   ntp_snippets::ContentSuggestionsService* content_suggestions_service_;
   history::HistoryService* history_service_;
   base::CancelableTaskTracker tracker_;
@@ -158,8 +166,8 @@ class NTPSnippetsBridge
                  ntp_snippets::ContentSuggestionsService::Observer>
       content_suggestions_service_observer_;
 
-  // Used to notify the Java side when new snippets have been fetched.
-  base::android::ScopedJavaGlobalRef<jobject> observer_;
+  // The Java SnippetsBridge.
+  base::android::ScopedJavaGlobalRef<jobject> bridge_;
 
   base::WeakPtrFactory<NTPSnippetsBridge> weak_ptr_factory_;
 

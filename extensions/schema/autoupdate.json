@@ -22,6 +22,35 @@
             "description": "Indicates whether we want the auto-update ui to appear."
           }
         ]
+      },
+      {
+        "name": "isUpdateNotifierEnabled",
+        "type": "function",
+        "description": "Checks whether the update notifier is set to run on startup.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "result"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "enableUpdateNotifier",
+        "type": "function",
+        "description": "Sets the update notifier to run on startup and launches it.",
+        "parameters": []
+      },
+      {
+        "name": "disableUpdateNotifier",
+        "type": "function",
+        "description": "Removes the update notifier from autorun and attempts to terminate it.",
+        "parameters": []
       }
     ],
     "events": [

@@ -28,14 +28,6 @@ _EXCLUDED_PATHS = (
 )
 
 
-# The NetscapePlugIn library is excluded from pan-project as it will soon
-# be deleted together with the rest of the NPAPI and it's not worthwhile to
-# update the coding style until then.
-_TESTRUNNER_PATHS = (
-    r"^content[\\\/]shell[\\\/]tools[\\\/]plugin[\\\/].*",
-)
-
-
 # Fragment of a regular expression that matches C++ and Objective-C++
 # implementation files.
 _IMPLEMENTATION_EXTENSIONS = r'\.(cc|cpp|cxx|mm)$'
@@ -46,7 +38,7 @@ _IMPLEMENTATION_EXTENSIONS = r'\.(cc|cpp|cxx|mm)$'
 _TEST_CODE_EXCLUDED_PATHS = (
     r'.*[\\\/](fake_|test_|mock_).+%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.+_test_(base|support|util)%s' % _IMPLEMENTATION_EXTENSIONS,
-    r'.+_(api|browser|kif|perf|pixel|unit|ui)?test(_[a-z]+)?%s' %
+    r'.+_(api|browser|eg|perf|pixel|unit|ui)?test(_[a-z]+)?%s' %
         _IMPLEMENTATION_EXTENSIONS,
     r'.+profile_sync_service_harness%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.*[\\\/](test|tool(s)?)[\\\/].*',
@@ -195,7 +187,6 @@ _BANNED_CPP_FUNCTIONS = (
       (
         r"^base[\\\/]process[\\\/]process_linux\.cc$",
         r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
-        r"^blimp[\\\/]engine[\\\/]app[\\\/]blimp_browser_main_parts\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
         r"^chrome[\\\/]browser[\\\/]lifetime[\\\/]application_lifetime\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]"
@@ -216,6 +207,7 @@ _BANNED_CPP_FUNCTIONS = (
         r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]local_test_server\.cc$",
         r"^net[\\\/]test[\\\/]test_data_directory\.cc$",
         r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
+        r"^remoting[\\\/]protocol[\\\/]webrtc_transport\.cc$",
         r"^ui[\\\/]base[\\\/]material_design[\\\/]"
             "material_design_controller\.cc$",
         r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_mac\.cc$",
@@ -314,24 +306,6 @@ _BANNED_CPP_FUNCTIONS = (
       True,
       (),
     ),
-    (
-      r'STLDeleteElements',  # http://crbug.com/555865
-      (
-        'This call is obsolete with C++ 11; create a container with owning',
-        'pointers instead (e.g. std::vector<std::unique_ptr<x>> ).',
-      ),
-      True,
-      (),
-    ),
-    (
-      r'STLDeleteValues',  # http://crbug.com/555865
-      (
-        'This call is obsolete with C++ 11; create a map with owning',
-        'pointers instead (e.g. std::map<std::string, std::unique_ptr<x>> ).',
-      ),
-      True,
-      (),
-    ),
 )
 
 
@@ -369,7 +343,6 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
 
 
 _GENERIC_PYDEPS_FILES = [
-    'build/secondary/tools/swarming_client/isolate.pydeps',
 ]
 
 
@@ -777,6 +750,26 @@ def _CheckFilePermissions(input_api, output_api):
         long_text=error.output)]
 
 
+def _CheckTeamTags(input_api, output_api):
+  """Checks that OWNERS files have consistent TEAM and COMPONENT tags."""
+  checkteamtags_tool = input_api.os_path.join(
+      input_api.PresubmitLocalPath(),
+      'tools', 'checkteamtags', 'checkteamtags.py')
+  args = [input_api.python_executable, checkteamtags_tool,
+          '--root', input_api.change.RepositoryRoot()]
+  files = [f.LocalPath() for f in input_api.AffectedFiles(include_deletes=False)
+           if input_api.os_path.basename(f.AbsoluteLocalPath()).upper() ==
+           'OWNERS']
+  try:
+    if files:
+      input_api.subprocess.check_output(args + files)
+    return []
+  except input_api.subprocess.CalledProcessError as error:
+    return [output_api.PresubmitError(
+        'checkteamtags.py failed:',
+        long_text=error.output)]
+
+
 def _CheckNoAuraWindowPropertyHInHeaders(input_api, output_api):
   """Makes sure we don't include ui/aura/window_property.h
   in header files.
@@ -979,6 +972,21 @@ def _CheckForVersionControlConflicts(input_api, output_api):
   if errors:
     results.append(output_api.PresubmitError(
       'Version control conflict markers found, please resolve.', errors))
+  return results
+
+def _CheckGoogleSupportAnswerUrl(input_api, output_api):
+  pattern = input_api.re.compile('support\.google\.com\/chrome.*/answer')
+  errors = []
+  for f in input_api.AffectedFiles():
+    for line_num, line in f.ChangedContents():
+      if pattern.search(line):
+        errors.append('    %s:%d %s' % (f.LocalPath(), line_num, line))
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitPromptWarning(
+      'Found Google support URL addressed by answer number. Please replace with '
+      'a p= identifier instead. See crbug.com/679462\n', errors))
   return results
 
 
@@ -1186,7 +1194,8 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^ui[\\\/]aura[\\\/]bench[\\\/]bench_main\.cc$",
                  r"^ui[\\\/]ozone[\\\/]platform[\\\/]cast[\\\/]",
                  r"^storage[\\\/]browser[\\\/]fileapi[\\\/]" +
-                     r"dump_file_system.cc$",))
+                     r"dump_file_system.cc$",
+                 r"^headless[\\\/]app[\\\/]headless_shell\.cc$"))
   source_file_filter = lambda x: input_api.FilterSourceFile(
       x, white_list=(file_inclusion_pattern,), black_list=black_list)
 
@@ -1559,30 +1568,50 @@ def _CheckIpcOwners(input_api, output_api):
   return results
 
 
-def _CheckMojoUsesNewWrapperTypes(input_api, output_api):
-  """Checks to make sure that all newly added mojom targets map array/map/string
-     to STL (for chromium) or WTF (for blink) types.
-     TODO(yzshen): remove this check once crbug.com/624136 is completed.
+def _CheckUselessForwardDeclarations(input_api, output_api):
+  """Checks that added or removed lines in non third party affected
+     header files do not lead to new useless class or struct forward
+     declaration.
   """
-  files = []
-  pattern = input_api.re.compile(r'use_new_wrapper_types.*false',
-                                 input_api.re.MULTILINE)
-
-  for f in input_api.AffectedFiles():
-    if not f.LocalPath().endswith(('.gyp', '.gypi', 'gn', 'gni')):
+  results = []
+  class_pattern = input_api.re.compile(r'^class\s+(\w+);$',
+                                       input_api.re.MULTILINE)
+  struct_pattern = input_api.re.compile(r'^struct\s+(\w+);$',
+                                        input_api.re.MULTILINE)
+  for f in input_api.AffectedFiles(include_deletes=False):
+    if (f.LocalPath().startswith('third_party') and
+        not f.LocalPath().startswith('third_party/WebKit') and
+        not f.LocalPath().startswith('third_party\\WebKit')):
       continue
 
-    for _, line in f.ChangedContents():
-      if pattern.search(line):
-        files.append(f)
-        break
+    if not f.LocalPath().endswith('.h'):
+      continue
 
-  if len(files):
-    return [output_api.PresubmitError(
-        'Do not introduce new mojom targets with use_new_wrapper_types set to '
-        'false. The mode is deprecated and will be removed soon.',
-        files)]
-  return []
+    contents = input_api.ReadFile(f)
+    fwd_decls = input_api.re.findall(class_pattern, contents)
+    fwd_decls.extend(input_api.re.findall(struct_pattern, contents))
+
+    useless_fwd_decls = []
+    for decl in fwd_decls:
+      count = sum(1 for _ in input_api.re.finditer(
+        r'\b%s\b' % input_api.re.escape(decl), contents))
+      if count == 1:
+        useless_fwd_decls.append(decl)
+
+    if not useless_fwd_decls:
+      continue
+
+    for line in f.GenerateScmDiff().splitlines():
+      if (line.startswith('-') and not line.startswith('--') or
+          line.startswith('+') and not line.startswith('++')):
+        for decl in useless_fwd_decls:
+          if input_api.re.search(r'\b%s\b' % decl, line[1:]):
+            results.append(output_api.PresubmitPromptWarning(
+              '%s: %s forward declaration is becoming useless' %
+              (f.LocalPath(), decl)))
+            useless_fwd_decls.remove(decl)
+
+  return results
 
 
 def _CheckAndroidToastUsage(input_api, output_api):
@@ -1723,6 +1752,29 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
         'Dot in log tags cause them to be elided in crash reports.\n' + REF_MSG,
         tag_with_dot_errors))
 
+  return results
+
+
+def _CheckAndroidTestAnnotationUsage(input_api, output_api):
+  """Checks that android.test.suitebuilder.annotation.* is no longer used."""
+  deprecated_annotation_import_pattern = input_api.re.compile(
+      r'^import android\.test\.suitebuilder\.annotation\..*;',
+      input_api.re.MULTILINE)
+  sources = lambda x: input_api.FilterSourceFile(
+      x, white_list=(r'.*\.java$',), black_list=None)
+  errors = []
+  for f in input_api.AffectedFiles(sources):
+    for line_num, line in f.ChangedContents():
+      if deprecated_annotation_import_pattern.search(line):
+        errors.append("%s:%d" % (f.LocalPath(), line_num))
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitError(
+      'Annotations in android.test.suitebuilder.annotation have been'
+      ' deprecated since API level 24. Please use android.support.test.filters'
+      ' from //third_party/android_support_test_runner:runner_java instead.'
+      ' Contact yolandyan@chromium.org if you have any questions.', errors))
   return results
 
 
@@ -1879,7 +1931,7 @@ def _CheckSingletonInHeaders(input_api, output_api):
   return []
 
 
-def _CheckNoDeprecatedCompiledResourcesGYP(input_api, output_api):
+def _CheckNoDeprecatedCompiledResourcesGyp(input_api, output_api):
   """Checks for old style compiled_resources.gyp files."""
   is_compiled_resource = lambda fp: fp.endswith('compiled_resources.gyp')
 
@@ -1913,6 +1965,7 @@ _DEPRECATED_CSS = [
   ( "-webkit-background-origin", "background-origin" ),
   ( "-webkit-background-size", "background-size" ),
   ( "-webkit-box-shadow", "box-shadow" ),
+  ( "-webkit-user-select", "user-select" ),
 
   # Functions
   ( "-webkit-gradient", "gradient" ),
@@ -1923,7 +1976,7 @@ _DEPRECATED_CSS = [
   ( "-webkit-repeating-radial-gradient", "repeating-radial-gradient" ),
 ]
 
-def _CheckNoDeprecatedCSS(input_api, output_api):
+def _CheckNoDeprecatedCss(input_api, output_api):
   """ Make sure that we don't use deprecated CSS
       properties, functions or values. Our external
       documentation and iOS CSS for dom distiller
@@ -1958,7 +2011,7 @@ _DEPRECATED_JS = [
   ( "__defineSetter__", "Object.defineProperty" ),
 ]
 
-def _CheckNoDeprecatedJS(input_api, output_api):
+def _CheckNoDeprecatedJs(input_api, output_api):
   """Make sure that we don't use deprecated JS in Chrome code."""
   results = []
   file_inclusion_pattern = (r".+\.js$",)  # TODO(dbeam): .html?
@@ -1976,12 +2029,34 @@ def _CheckNoDeprecatedJS(input_api, output_api):
   return results
 
 
+def _CheckForRiskyJsFeatures(input_api, output_api):
+  maybe_ios_js = (r"^(ios|components|ui\/webui\/resources)\/.+\.js$", )
+  file_filter = lambda f: input_api.FilterSourceFile(f, white_list=maybe_ios_js)
+
+  arrow_lines = []
+  for f in input_api.AffectedFiles(file_filter=file_filter):
+    for lnum, line in f.ChangedContents():
+      if ' => ' in line:
+        arrow_lines.append((f.LocalPath(), lnum))
+
+  if not arrow_lines:
+    return []
+
+  return [output_api.PresubmitPromptWarning("""
+Use of => operator detected in:
+%s
+Please ensure your code does not run on iOS9 (=> (arrow) does not work there).
+https://chromium.googlesource.com/chromium/src/+/master/docs/es6_chromium.md#Arrow-Functions
+""" % "\n".join("  %s:%d\n" % line for line in arrow_lines))]
+
+
 def _AndroidSpecificOnUploadChecks(input_api, output_api):
   """Groups checks that target android code."""
   results = []
   results.extend(_CheckAndroidCrLogUsage(input_api, output_api))
   results.extend(_CheckAndroidNewMdpiAssetLocation(input_api, output_api))
   results.extend(_CheckAndroidToastUsage(input_api, output_api))
+  results.extend(_CheckAndroidTestAnnotationUsage(input_api, output_api))
   return results
 
 
@@ -1990,8 +2065,9 @@ def _CommonChecks(input_api, output_api):
   results = []
   results.extend(input_api.canned_checks.PanProjectChecks(
       input_api, output_api,
-      excluded_paths=_EXCLUDED_PATHS + _TESTRUNNER_PATHS))
-  results.extend(_CheckAuthorizedAuthor(input_api, output_api))
+      excluded_paths=_EXCLUDED_PATHS))
+  results.extend(
+      input_api.canned_checks.CheckAuthorizedAuthor(input_api, output_api))
   results.extend(
       _CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api))
   results.extend(_CheckNoIOStreamInHeaders(input_api, output_api))
@@ -2004,6 +2080,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckNoTrinaryTrueFalse(input_api, output_api))
   results.extend(_CheckUnwantedDependencies(input_api, output_api))
   results.extend(_CheckFilePermissions(input_api, output_api))
+  results.extend(_CheckTeamTags(input_api, output_api))
   results.extend(_CheckNoAuraWindowPropertyHInHeaders(input_api, output_api))
   results.extend(_CheckIncludeOrder(input_api, output_api))
   results.extend(_CheckForVersionControlConflicts(input_api, output_api))
@@ -2023,17 +2100,18 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckForAnonymousVariables(input_api, output_api))
   results.extend(_CheckCygwinShell(input_api, output_api))
   results.extend(_CheckUserActionUpdate(input_api, output_api))
-  results.extend(_CheckNoDeprecatedCSS(input_api, output_api))
-  results.extend(_CheckNoDeprecatedJS(input_api, output_api))
+  results.extend(_CheckNoDeprecatedCss(input_api, output_api))
+  results.extend(_CheckNoDeprecatedJs(input_api, output_api))
   results.extend(_CheckParseErrors(input_api, output_api))
   results.extend(_CheckForIPCRules(input_api, output_api))
   results.extend(_CheckForWindowsLineEndings(input_api, output_api))
   results.extend(_CheckSingletonInHeaders(input_api, output_api))
-  results.extend(_CheckNoDeprecatedCompiledResourcesGYP(input_api, output_api))
+  results.extend(_CheckNoDeprecatedCompiledResourcesGyp(input_api, output_api))
   results.extend(_CheckPydepsNeedsUpdating(input_api, output_api))
   results.extend(_CheckJavaStyle(input_api, output_api))
   results.extend(_CheckIpcOwners(input_api, output_api))
-  results.extend(_CheckMojoUsesNewWrapperTypes(input_api, output_api))
+  results.extend(_CheckUselessForwardDeclarations(input_api, output_api))
+  results.extend(_CheckForRiskyJsFeatures(input_api, output_api))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -2041,33 +2119,6 @@ def _CommonChecks(input_api, output_api):
         input_api.PresubmitLocalPath(),
         whitelist=[r'^PRESUBMIT_test\.py$']))
   return results
-
-
-def _CheckAuthorizedAuthor(input_api, output_api):
-  """For non-googler/chromites committers, verify the author's email address is
-  in AUTHORS.
-  """
-  author = input_api.change.author_email
-  if not author:
-    input_api.logging.info('No author, skipping AUTHOR check')
-    return []
-  authors_path = input_api.os_path.join(
-      input_api.PresubmitLocalPath(), 'AUTHORS')
-  valid_authors = (
-      input_api.re.match(r'[^#]+\s+\<(.+?)\>\s*$', line)
-      for line in open(authors_path))
-  valid_authors = [item.group(1).lower() for item in valid_authors if item]
-  if not any(input_api.fnmatch.fnmatch(author.lower(), valid)
-             for valid in valid_authors):
-    input_api.logging.info('Valid authors are %s', ', '.join(valid_authors))
-    return [output_api.PresubmitPromptWarning(
-        ('%s is not in AUTHORS file. If you are a new contributor, please visit'
-        '\n'
-        'http://www.chromium.org/developers/contributing-code and read the '
-        '"Legal" section\n'
-        'If you are a chromite, verify the contributor signed the CLA.') %
-        author)]
-  return []
 
 
 def _CheckPatchFiles(input_api, output_api):
@@ -2242,8 +2293,10 @@ def _CheckSyslogUseWarning(input_api, output_api, source_file_filter=None,
   """Checks that all source files use SYSLOG properly."""
   syslog_files = []
   for f in input_api.AffectedSourceFiles(source_file_filter):
-    if 'SYSLOG' in input_api.ReadFile(f, 'rb'):
-      syslog_files.append(f.LocalPath())
+    for line_number, line in f.ChangedContents():
+      if 'SYSLOG' in line:
+        syslog_files.append(f.LocalPath() + ':' + str(line_number))
+
   if syslog_files:
     return [output_api.PresubmitPromptWarning(
         'Please make sure there are no privacy sensitive bits of data in SYSLOG'
@@ -2260,6 +2313,7 @@ def CheckChangeOnUpload(input_api, output_api):
   results.extend(_CheckUmaHistogramChanges(input_api, output_api))
   results.extend(_AndroidSpecificOnUploadChecks(input_api, output_api))
   results.extend(_CheckSyslogUseWarning(input_api, output_api))
+  results.extend(_CheckGoogleSupportAnswerUrl(input_api, output_api))
   return results
 
 

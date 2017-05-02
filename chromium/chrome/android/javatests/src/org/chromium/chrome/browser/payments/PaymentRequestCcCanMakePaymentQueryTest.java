@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
@@ -37,7 +37,7 @@ public class PaymentRequestCcCanMakePaymentQueryTest extends PaymentRequestTestB
     @Feature({"Payments"})
     public void testCanMakePayment() throws InterruptedException, ExecutionException,
             TimeoutException {
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"true"});
 
         // Repeating a query does not count against the quota.

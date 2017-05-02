@@ -13,14 +13,18 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/alert_indicator_button.h"
+#include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/touch_uma/touch_uma.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -48,7 +52,6 @@
 #include "ui/gfx/path.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -93,25 +96,6 @@ const double kSelectedTabThrobScale = 0.95 - kSelectedTabOpacity;
 // errors may lead to tabs in the same tabstrip having different sizes.
 // 8 = normal/incognito, active/inactive, 2 sizes within tabstrip.
 const size_t kMaxImageCacheSize = 8;
-
-// Height of the miniature tab strip in immersive mode.
-const int kImmersiveTabHeight = 3;
-
-// Height of the small tab indicator rectangles in immersive mode.
-const int kImmersiveBarHeight = 2;
-
-// Color for active and inactive tabs in the immersive mode light strip. These
-// should be a little brighter than the color of the normal art assets for tabs,
-// which for active tabs is 230, 230, 230 and for inactive is 184, 184, 184.
-const SkColor kImmersiveActiveTabColor = SkColorSetRGB(235, 235, 235);
-const SkColor kImmersiveInactiveTabColor = SkColorSetRGB(190, 190, 190);
-
-// The minimum opacity (out of 1) when a tab (either active or inactive) is
-// throbbing in the immersive mode light strip.
-const double kImmersiveTabMinThrobOpacity = 0.66;
-
-// Number of steps in the immersive mode loading animation.
-const int kImmersiveLoadingStepCount = 32;
 
 const char kTabCloseButtonName[] = "TabCloseButton";
 
@@ -494,7 +478,8 @@ bool Tab::ThrobberView::CanProcessEventsWithinSubtree() const {
 
 void Tab::ThrobberView::OnPaint(gfx::Canvas* canvas) {
   const TabRendererData::NetworkState state = owner_->data().network_state;
-  if (state == TabRendererData::NETWORK_STATE_NONE)
+  if (state == TabRendererData::NETWORK_STATE_NONE ||
+      state == TabRendererData::NETWORK_STATE_ERROR)
     return;
 
   const ui::ThemeProvider* tp = GetThemeProvider();
@@ -533,7 +518,6 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
       dragging_(false),
       detached_(false),
       favicon_hiding_offset_(0),
-      immersive_loading_step_(0),
       should_display_crashed_favicon_(false),
       pulse_animation_(new gfx::ThrobAnimation(this)),
       crash_icon_animation_(new FaviconCrashAnimation(this)),
@@ -583,11 +567,9 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
   // on the current theme and active state.  The hovered and pressed images
   // don't depend on the these, so we can set them here.
   const gfx::ImageSkia& hovered = gfx::CreateVectorIcon(
-      gfx::VectorIconId::TAB_CLOSE_HOVERED_PRESSED,
-      SkColorSetRGB(0xDB, 0x44, 0x37));
+      kTabCloseHoveredPressedIcon, SkColorSetRGB(0xDB, 0x44, 0x37));
   const gfx::ImageSkia& pressed = gfx::CreateVectorIcon(
-      gfx::VectorIconId::TAB_CLOSE_HOVERED_PRESSED,
-      SkColorSetRGB(0xA8, 0x35, 0x2A));
+      kTabCloseHoveredPressedIcon, SkColorSetRGB(0xA8, 0x35, 0x2A));
   close_button_->SetImage(views::CustomButton::STATE_HOVERED, &hovered);
   close_button_->SetImage(views::CustomButton::STATE_PRESSED, &pressed);
 
@@ -674,9 +656,10 @@ void Tab::SetData(const TabRendererData& data) {
 
 void Tab::UpdateLoadingAnimation(TabRendererData::NetworkState state) {
   if (state == data_.network_state &&
-      state == TabRendererData::NETWORK_STATE_NONE) {
-    // If the network state is none and hasn't changed, do nothing. Otherwise we
-    // need to advance the animation frame.
+      (state == TabRendererData::NETWORK_STATE_NONE ||
+       state == TabRendererData::NETWORK_STATE_ERROR)) {
+    // If the network state is none or is a network error and hasn't changed,
+    // do nothing. Otherwise we need to advance the animation frame.
     return;
   }
 
@@ -728,8 +711,7 @@ gfx::Size Tab::GetMinimumActiveSize() {
 // static
 gfx::Size Tab::GetStandardSize() {
   const int kNetTabWidth = 193;
-  return gfx::Size(kNetTabWidth + GetLayoutConstant(TABSTRIP_TAB_OVERLAP),
-                   GetMinimumInactiveSize().height());
+  return gfx::Size(kNetTabWidth + kOverlap, GetMinimumInactiveSize().height());
 }
 
 // static
@@ -739,13 +721,8 @@ int Tab::GetTouchWidth() {
 
 // static
 int Tab::GetPinnedWidth() {
-  return GetMinimumInactiveSize().width() +
-         GetLayoutConstant(TAB_PINNED_CONTENT_WIDTH);
-}
-
-// static
-int Tab::GetImmersiveHeight() {
-  return kImmersiveTabHeight;
+  constexpr int kTabPinnedContentWidth = 23;
+  return GetMinimumInactiveSize().width() + kTabPinnedContentWidth;
 }
 
 // static
@@ -852,10 +829,7 @@ void Tab::OnPaint(gfx::Canvas* canvas) {
           &clip))
     return;
 
-  if (controller_->IsImmersiveStyle())
-    PaintImmersiveTab(canvas);
-  else
-    PaintTab(canvas, clip);
+  PaintTab(canvas, clip);
 }
 
 void Tab::Layout() {
@@ -919,9 +893,9 @@ void Tab::Layout() {
   // Size the title to fill the remaining width and use all available height.
   const bool show_title = ShouldRenderAsNormalTab();
   if (show_title) {
-    const int title_spacing = GetLayoutConstant(TAB_FAVICON_TITLE_SPACING);
-    int title_left = showing_icon_ ?
-        (favicon_bounds_.right() + title_spacing) : start;
+    constexpr int kTitleSpacing = 6;
+    int title_left =
+        showing_icon_ ? (favicon_bounds_.right() + kTitleSpacing) : start;
     int title_width = lb.right() - title_left;
     if (showing_alert_indicator_) {
       title_width =
@@ -1100,7 +1074,7 @@ void Tab::OnGestureEvent(ui::GestureEvent* event) {
 
 void Tab::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_TAB;
-  node_data->SetName(data_.title);
+  node_data->SetName(controller_->GetAccessibleTabName(this));
   node_data->AddStateFlag(ui::AX_STATE_MULTISELECTABLE);
   node_data->AddStateFlag(ui::AX_STATE_SELECTABLE);
   controller_->UpdateTabAccessibilityState(this, node_data);
@@ -1167,50 +1141,6 @@ void Tab::PaintTab(gfx::Canvas* canvas, const gfx::Path& clip) {
     PaintIcon(canvas);
 }
 
-void Tab::PaintImmersiveTab(gfx::Canvas* canvas) {
-  // Use transparency for the draw-attention animation.
-  int alpha = 255;
-  if (pulse_animation_->is_animating() && !data().pinned) {
-    alpha = pulse_animation_->CurrentValueBetween(
-        255, gfx::ToRoundedInt(255 * kImmersiveTabMinThrobOpacity));
-  }
-
-  // Draw a gray rectangle to represent the tab. This works for pinned tabs as
-  // well as regular ones. The active tab has a brigher bar.
-  SkColor color =
-      IsActive() ? kImmersiveActiveTabColor : kImmersiveInactiveTabColor;
-  gfx::Rect bar_rect = GetImmersiveBarRect();
-  canvas->FillRect(bar_rect, SkColorSetA(color, alpha));
-
-  // Paint network activity indicator.
-  // TODO(jamescook): Replace this placeholder animation with a real one.
-  // For now, let's go with a Cylon eye effect, but in blue.
-  if (data().network_state != TabRendererData::NETWORK_STATE_NONE) {
-    const SkColor kEyeColor = SkColorSetARGB(alpha, 71, 138, 217);
-    int eye_width = bar_rect.width() / 3;
-    int eye_offset = bar_rect.width() * immersive_loading_step_ /
-        kImmersiveLoadingStepCount;
-    if (eye_offset + eye_width < bar_rect.width()) {
-      // Draw a single indicator strip because it fits inside |bar_rect|.
-      gfx::Rect eye_rect(
-          bar_rect.x() + eye_offset, 0, eye_width, kImmersiveBarHeight);
-      canvas->FillRect(eye_rect, kEyeColor);
-    } else {
-      // Draw two indicators to simulate the eye "wrapping around" to the left
-      // side. The first part fills the remainder of the bar.
-      int right_eye_width = bar_rect.width() - eye_offset;
-      gfx::Rect right_eye_rect(
-          bar_rect.x() + eye_offset, 0, right_eye_width, kImmersiveBarHeight);
-      canvas->FillRect(right_eye_rect, kEyeColor);
-      // The second part parts the remaining |eye_width| on the left.
-      int left_eye_width = eye_offset + eye_width - bar_rect.width();
-      gfx::Rect left_eye_rect(
-          bar_rect.x(), 0, left_eye_width, kImmersiveBarHeight);
-      canvas->FillRect(left_eye_rect, kEyeColor);
-    }
-  }
-}
-
 void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas,
                                      const gfx::Path& clip) {
   bool has_custom_image;
@@ -1271,7 +1201,7 @@ void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas,
       use_fill_and_stroke_images ? canvas : nullptr);
   if (use_fill_and_stroke_images) {
     canvas->DrawImageInt(it->fill_image, 0, 0);
-    canvas->sk_canvas()->clipPath(clip, SkRegion::kDifference_Op, true);
+    canvas->sk_canvas()->clipPath(clip, SkClipOp::kDifference, true);
   }
   canvas->DrawImageInt(it->stroke_image, 0, 0);
 }
@@ -1390,9 +1320,10 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
     return;
 
   // Throbber will do its own painting.
-  if (data().network_state != TabRendererData::NETWORK_STATE_NONE)
+  if (data().network_state != TabRendererData::NETWORK_STATE_NONE &&
+      data().network_state != TabRendererData::NETWORK_STATE_ERROR) {
     return;
-
+  }
   // Ensure that |favicon_| is created.
   if (favicon_.isNull()) {
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
@@ -1424,25 +1355,8 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
 
 void Tab::AdvanceLoadingAnimation() {
   const TabRendererData::NetworkState state = data().network_state;
-  if (controller_->IsImmersiveStyle()) {
-    throbber_->SetVisible(false);
-    if (state == TabRendererData::NETWORK_STATE_WAITING) {
-      // Waiting steps backwards.
-      immersive_loading_step_ =
-          (immersive_loading_step_ - 1 + kImmersiveLoadingStepCount) %
-          kImmersiveLoadingStepCount;
-    } else if (state == TabRendererData::NETWORK_STATE_LOADING) {
-      immersive_loading_step_ =
-          (immersive_loading_step_ + 1) % kImmersiveLoadingStepCount;
-    } else {
-      immersive_loading_step_ = 0;
-    }
-
-    SchedulePaintInRect(GetImmersiveBarRect());
-    return;
-  }
-
-  if (state == TabRendererData::NETWORK_STATE_NONE) {
+  if (state == TabRendererData::NETWORK_STATE_NONE ||
+      state == TabRendererData::NETWORK_STATE_ERROR) {
     throbber_->ResetStartTimes();
     throbber_->SetVisible(false);
     ScheduleIconPaint();
@@ -1558,8 +1472,8 @@ void Tab::OnButtonColorMaybeChanged() {
     button_color_ = new_button_color;
     title_->SetEnabledColor(title_color);
     alert_indicator_button_->OnParentTabButtonColorChanged();
-    const gfx::ImageSkia& close_button_normal_image = gfx::CreateVectorIcon(
-        gfx::VectorIconId::TAB_CLOSE_NORMAL, button_color_);
+    const gfx::ImageSkia& close_button_normal_image =
+        gfx::CreateVectorIcon(kTabCloseNormalIcon, button_color_);
     close_button_->SetImage(views::CustomButton::STATE_NORMAL,
                             &close_button_normal_image);
   }
@@ -1575,12 +1489,4 @@ void Tab::ScheduleIconPaint() {
     bounds.set_height(height() - bounds.y());
   bounds.set_x(GetMirroredXForRect(bounds));
   SchedulePaintInRect(bounds);
-}
-
-gfx::Rect Tab::GetImmersiveBarRect() const {
-  // The main bar is as wide as the normal tab's horizontal top line.
-  gfx::Rect contents = GetContentsBounds();
-  contents.set_y(0);
-  contents.set_height(kImmersiveBarHeight);
-  return contents;
 }

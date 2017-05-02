@@ -125,30 +125,27 @@ class ErrorWebCacheForTests : public WebServiceWorkerCache {
   }
 
   // From WebServiceWorkerCache:
-  void dispatchMatch(CacheMatchCallbacks* callbacks,
+  void dispatchMatch(std::unique_ptr<CacheMatchCallbacks> callbacks,
                      const WebServiceWorkerRequest& webRequest,
                      const QueryParams& queryParams) override {
     m_lastErrorWebCacheMethodCalled = "dispatchMatch";
     checkUrlIfProvided(webRequest.url());
     checkQueryParamsIfProvided(queryParams);
 
-    std::unique_ptr<CacheMatchCallbacks> ownedCallbacks(wrapUnique(callbacks));
     return callbacks->onError(m_error);
   }
 
-  void dispatchMatchAll(CacheWithResponsesCallbacks* callbacks,
+  void dispatchMatchAll(std::unique_ptr<CacheWithResponsesCallbacks> callbacks,
                         const WebServiceWorkerRequest& webRequest,
                         const QueryParams& queryParams) override {
     m_lastErrorWebCacheMethodCalled = "dispatchMatchAll";
     checkUrlIfProvided(webRequest.url());
     checkQueryParamsIfProvided(queryParams);
 
-    std::unique_ptr<CacheWithResponsesCallbacks> ownedCallbacks(
-        wrapUnique(callbacks));
     return callbacks->onError(m_error);
   }
 
-  void dispatchKeys(CacheWithRequestsCallbacks* callbacks,
+  void dispatchKeys(std::unique_ptr<CacheWithRequestsCallbacks> callbacks,
                     const WebServiceWorkerRequest& webRequest,
                     const QueryParams& queryParams) override {
     m_lastErrorWebCacheMethodCalled = "dispatchKeys";
@@ -157,18 +154,15 @@ class ErrorWebCacheForTests : public WebServiceWorkerCache {
       checkQueryParamsIfProvided(queryParams);
     }
 
-    std::unique_ptr<CacheWithRequestsCallbacks> ownedCallbacks(
-        wrapUnique(callbacks));
     return callbacks->onError(m_error);
   }
 
   void dispatchBatch(
-      CacheBatchCallbacks* callbacks,
+      std::unique_ptr<CacheBatchCallbacks> callbacks,
       const WebVector<BatchOperation>& batchOperations) override {
     m_lastErrorWebCacheMethodCalled = "dispatchBatch";
     checkBatchOperationsIfProvided(batchOperations);
 
-    std::unique_ptr<CacheBatchCallbacks> ownedCallbacks(wrapUnique(callbacks));
     return callbacks->onError(m_error);
   }
 
@@ -200,9 +194,13 @@ class ErrorWebCacheForTests : public WebServiceWorkerCache {
       const String expectedRequestUrl =
           KURL(expectedBatchOperations[i].request.url());
       EXPECT_EQ(expectedRequestUrl, KURL(batchOperations[i].request.url()));
-      const String expectedResponseUrl =
-          KURL(expectedBatchOperations[i].response.url());
-      EXPECT_EQ(expectedResponseUrl, KURL(batchOperations[i].response.url()));
+      ASSERT_EQ(expectedBatchOperations[i].response.urlList().size(),
+                batchOperations[i].response.urlList().size());
+      for (size_t j = 0;
+           j < expectedBatchOperations[i].response.urlList().size(); ++j) {
+        EXPECT_EQ(expectedBatchOperations[i].response.urlList()[j],
+                  batchOperations[i].response.urlList()[j]);
+      }
       CompareQueryParamsForTest(expectedBatchOperations[i].matchParams,
                                 batchOperations[i].matchParams);
     }
@@ -238,7 +236,7 @@ class CacheStorageTest : public ::testing::Test {
 
   Cache* createCache(ScopedFetcherForTests* fetcher,
                      WebServiceWorkerCache* webCache) {
-    return Cache::create(fetcher, wrapUnique(webCache));
+    return Cache::create(fetcher, WTF::wrapUnique(webCache));
   }
 
   ScriptState* getScriptState() {
@@ -251,7 +249,7 @@ class CacheStorageTest : public ::testing::Test {
   v8::Local<v8::Context> context() { return getScriptState()->context(); }
 
   Request* newRequestFromUrl(const String& url) {
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     Request* request = Request::create(getScriptState(), url, exceptionState);
     EXPECT_FALSE(exceptionState.hadException());
     return exceptionState.hadException() ? 0 : request;
@@ -473,7 +471,9 @@ TEST_F(CacheStorageTest, BatchOperationArguments) {
   ASSERT(request);
 
   WebServiceWorkerResponse webResponse;
-  webResponse.setURL(KURL(ParsedURLString, url));
+  std::vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, url));
+  webResponse.setURLList(urlList);
   Response* response = Response::create(getScriptState(), webResponse);
 
   WebVector<WebServiceWorkerCache::BatchOperation> expectedDeleteOperations(
@@ -533,10 +533,9 @@ class MatchTestCache : public NotImplementedErrorCache {
   MatchTestCache(WebServiceWorkerResponse& response) : m_response(response) {}
 
   // From WebServiceWorkerCache:
-  void dispatchMatch(CacheMatchCallbacks* callbacks,
+  void dispatchMatch(std::unique_ptr<CacheMatchCallbacks> callbacks,
                      const WebServiceWorkerRequest& webRequest,
                      const QueryParams& queryParams) override {
-    std::unique_ptr<CacheMatchCallbacks> ownedCallbacks(wrapUnique(callbacks));
     return callbacks->onSuccess(m_response);
   }
 
@@ -552,7 +551,9 @@ TEST_F(CacheStorageTest, MatchResponseTest) {
   const String responseUrl = "http://match.response.test/";
 
   WebServiceWorkerResponse webResponse;
-  webResponse.setURL(KURL(ParsedURLString, responseUrl));
+  std::vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, responseUrl));
+  webResponse.setURLList(urlList);
   webResponse.setResponseType(WebServiceWorkerResponseTypeDefault);
 
   Cache* cache = createCache(fetcher, new MatchTestCache(webResponse));
@@ -573,11 +574,9 @@ class KeysTestCache : public NotImplementedErrorCache {
   KeysTestCache(WebVector<WebServiceWorkerRequest>& requests)
       : m_requests(requests) {}
 
-  void dispatchKeys(CacheWithRequestsCallbacks* callbacks,
+  void dispatchKeys(std::unique_ptr<CacheWithRequestsCallbacks> callbacks,
                     const WebServiceWorkerRequest& webRequest,
                     const QueryParams& queryParams) override {
-    std::unique_ptr<CacheWithRequestsCallbacks> ownedCallbacks(
-        wrapUnique(callbacks));
     return callbacks->onSuccess(m_requests);
   }
 
@@ -623,18 +622,15 @@ class MatchAllAndBatchTestCache : public NotImplementedErrorCache {
   MatchAllAndBatchTestCache(WebVector<WebServiceWorkerResponse>& responses)
       : m_responses(responses) {}
 
-  void dispatchMatchAll(CacheWithResponsesCallbacks* callbacks,
+  void dispatchMatchAll(std::unique_ptr<CacheWithResponsesCallbacks> callbacks,
                         const WebServiceWorkerRequest& webRequest,
                         const QueryParams& queryParams) override {
-    std::unique_ptr<CacheWithResponsesCallbacks> ownedCallbacks(
-        wrapUnique(callbacks));
     return callbacks->onSuccess(m_responses);
   }
 
   void dispatchBatch(
-      CacheBatchCallbacks* callbacks,
+      std::unique_ptr<CacheBatchCallbacks> callbacks,
       const WebVector<BatchOperation>& batchOperations) override {
-    std::unique_ptr<CacheBatchCallbacks> ownedCallbacks(wrapUnique(callbacks));
     return callbacks->onSuccess();
   }
 
@@ -654,9 +650,9 @@ TEST_F(CacheStorageTest, MatchAllAndBatchResponseTest) {
   expectedUrls[1] = url2;
 
   WebVector<WebServiceWorkerResponse> webResponses(size_t(2));
-  webResponses[0].setURL(KURL(ParsedURLString, url1));
+  webResponses[0].setURLList(std::vector<KURL>({KURL(ParsedURLString, url1)}));
   webResponses[0].setResponseType(WebServiceWorkerResponseTypeDefault);
-  webResponses[1].setURL(KURL(ParsedURLString, url2));
+  webResponses[1].setURLList(std::vector<KURL>({KURL(ParsedURLString, url2)}));
   webResponses[1].setResponseType(WebServiceWorkerResponseTypeDefault);
 
   Cache* cache =

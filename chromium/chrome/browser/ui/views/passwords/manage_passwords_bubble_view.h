@@ -9,8 +9,6 @@
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 
-class ManagePasswordsIconViews;
-
 namespace content {
 class WebContents;
 }
@@ -25,6 +23,8 @@ class WebContents;
 //
 class ManagePasswordsBubbleView : public LocationBarBubbleDelegateView {
  public:
+  static constexpr int kDesiredBubbleWidth = 370;
+
   // Shows the bubble.
   static void ShowBubble(content::WebContents* web_contents,
                          DisplayReason reason);

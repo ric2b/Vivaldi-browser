@@ -24,8 +24,6 @@
 
 namespace image_writer_api = extensions::api::image_writer_private;
 
-class Profile;
-
 namespace content {
 class BrowserContext;
 }
@@ -105,6 +103,9 @@ class OperationManager : public BrowserContextKeyedAPI,
 
   Operation* GetOperation(const ExtensionId& extension_id);
   void DeleteOperation(const ExtensionId& extension_id);
+
+  // Accessor to the associated profile download folder
+  base::FilePath GetAssociatedDownloadFolder();
 
   friend class BrowserContextKeyedAPIFactory<OperationManager>;
   typedef std::map<ExtensionId, scoped_refptr<Operation> > OperationMap;

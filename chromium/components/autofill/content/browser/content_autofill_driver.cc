@@ -159,15 +159,15 @@ void ContentAutofillDriver::PopupHidden() {
 
 gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
     const gfx::RectF& bounding_box) {
-  gfx::Point orig_point(bounding_box.x(), bounding_box.y());
-  gfx::Point transformed_point;
-  transformed_point =
-      render_frame_host_->GetView()->TransformPointToRootCoordSpace(orig_point);
+  content::RenderWidgetHostView* view = render_frame_host_->GetView();
+  if (!view)
+    return bounding_box;
 
-  gfx::RectF new_box;
-  new_box.SetRect(transformed_point.x(), transformed_point.y(),
-                  bounding_box.width(), bounding_box.height());
-  return new_box;
+  gfx::Point orig_point(bounding_box.x(), bounding_box.y());
+  gfx::Point transformed_point =
+      view->TransformPointToRootCoordSpace(orig_point);
+  return gfx::RectF(transformed_point.x(), transformed_point.y(),
+                    bounding_box.width(), bounding_box.height());
 }
 
 void ContentAutofillDriver::DidInteractWithCreditCardForm() {
@@ -216,10 +216,6 @@ void ContentAutofillDriver::HidePopup() {
   autofill_manager_->OnHidePopup();
 }
 
-void ContentAutofillDriver::PingAck() {
-  autofill_external_delegate_.OnPingAck();
-}
-
 void ContentAutofillDriver::FocusNoLongerOnForm() {
   autofill_manager_->OnFocusNoLongerOnForm();
 }
@@ -264,7 +260,7 @@ const mojom::AutofillAgentPtr& ContentAutofillDriver::GetAutofillAgent() {
   // Here is a lazy binding, and will not reconnect after connection error.
   if (!autofill_agent_) {
     render_frame_host_->GetRemoteInterfaces()->GetInterface(
-        mojo::GetProxy(&autofill_agent_));
+        mojo::MakeRequest(&autofill_agent_));
   }
 
   return autofill_agent_;

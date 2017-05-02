@@ -25,6 +25,7 @@
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "core/editing/InputMethodController.h"
+#include "core/input/InputDeviceCapabilities.h"
 #include "platform/WindowsKeyboardCodes.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebInputEvent.h"
@@ -54,11 +55,11 @@ const AtomicString& eventTypeForKeyboardEventType(WebInputEvent::Type type) {
 }
 
 KeyboardEvent::KeyLocationCode keyLocationCode(const WebInputEvent& key) {
-  if (key.modifiers & WebInputEvent::IsKeyPad)
+  if (key.modifiers() & WebInputEvent::IsKeyPad)
     return KeyboardEvent::kDomKeyLocationNumpad;
-  if (key.modifiers & WebInputEvent::IsLeft)
+  if (key.modifiers() & WebInputEvent::IsLeft)
     return KeyboardEvent::kDomKeyLocationLeft;
-  if (key.modifiers & WebInputEvent::IsRight)
+  if (key.modifiers() & WebInputEvent::IsRight)
     return KeyboardEvent::kDomKeyLocationRight;
   return KeyboardEvent::kDomKeyLocationStandard;
 }
@@ -89,15 +90,17 @@ KeyboardEvent::KeyboardEvent() : m_location(kDomKeyLocationStandard) {}
 KeyboardEvent::KeyboardEvent(const WebKeyboardEvent& key,
                              LocalDOMWindow* domWindow)
     : UIEventWithKeyState(
-          eventTypeForKeyboardEventType(key.type),
+          eventTypeForKeyboardEventType(key.type()),
           true,
           true,
           domWindow,
           0,
-          static_cast<PlatformEvent::Modifiers>(key.modifiers),
-          key.timeStampSeconds,
-          InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities()),
-      m_keyEvent(makeUnique<WebKeyboardEvent>(key)),
+          static_cast<PlatformEvent::Modifiers>(key.modifiers()),
+          TimeTicks::FromSeconds(key.timeStampSeconds()),
+          domWindow
+              ? domWindow->getInputDeviceCapabilities()->firesTouchEvents(false)
+              : nullptr),
+      m_keyEvent(WTF::makeUnique<WebKeyboardEvent>(key)),
       // TODO(crbug.com/482880): Fix this initialization to lazy initialization.
       m_code(Platform::current()->domCodeStringFromEnum(key.domCode)),
       m_key(Platform::current()->domKeyStringFromEnum(key.domKey)),

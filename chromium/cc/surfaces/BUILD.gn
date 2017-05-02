@@ -2,11 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("surface_id") {
+import("//cc/cc.gni")
+
+cc_source_set("surface_id") {
   sources = [
+    "frame_sink_id.cc",
     "frame_sink_id.h",
+    "local_frame_id.cc",
     "local_frame_id.h",
+    "surface_id.cc",
     "surface_id.h",
+    "surface_info.h",
+    "surface_reference.cc",
+    "surface_reference.h",
+    "surface_reference_factory.h",
+    "surface_reference_owner.h",
     "surface_sequence.h",
     "surface_sequence_generator.cc",
     "surface_sequence_generator.h",
@@ -14,19 +24,30 @@ source_set("surface_id") {
 
   deps = [
     "//base",
+    "//mojo/public/cpp/bindings:struct_traits",
+    "//ui/gfx/geometry:geometry",
   ]
 }
 
-component("surfaces") {
+cc_component("surfaces") {
   output_name = "cc_surfaces"
   sources = [
+    "compositor_frame_sink_support.cc",
+    "compositor_frame_sink_support.h",
+    "compositor_frame_sink_support_client.h",
     "direct_compositor_frame_sink.cc",
     "direct_compositor_frame_sink.h",
+    "direct_surface_reference_factory.cc",
+    "direct_surface_reference_factory.h",
     "display.cc",
     "display.h",
     "display_client.h",
     "display_scheduler.cc",
     "display_scheduler.h",
+    "referenced_surface_tracker.cc",
+    "referenced_surface_tracker.h",
+    "sequence_surface_reference_factory.cc",
+    "sequence_surface_reference_factory.h",
     "surface.cc",
     "surface.h",
     "surface_aggregator.cc",
@@ -41,6 +62,7 @@ component("surfaces") {
     "surface_id_allocator.h",
     "surface_manager.cc",
     "surface_manager.h",
+    "surface_reference_manager.h",
     "surface_resource_holder.cc",
     "surface_resource_holder.h",
     "surfaces_export.h",
@@ -51,6 +73,7 @@ component("surfaces") {
   public_deps = [
     ":surface_id",
   ]
+
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
@@ -62,9 +85,4 @@ component("surfaces") {
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
-
-  if (is_android && !is_debug) {
-    configs -= [ "//build/config/compiler:default_optimization" ]
-    configs += [ "//build/config/compiler:optimize_max" ]
-  }
 }

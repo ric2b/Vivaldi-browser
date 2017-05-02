@@ -7,6 +7,14 @@ import("//ios/web/js_compile.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 
+group("all_tests") {
+  testonly = true
+  deps = [
+    ":ios_web_inttests",
+    ":ios_web_unittests",
+  ]
+}
+
 source_set("web_arc") {
   deps = [
     ":core",
@@ -23,7 +31,7 @@ source_set("web_arc") {
     "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/gfx",
-    "//ui/gfx/geometry:geometry",
+    "//ui/gfx/geometry",
     "//ui/resources",
     "//url",
   ]
@@ -31,8 +39,6 @@ source_set("web_arc") {
   sources = [
     "active_state_manager_impl.h",
     "active_state_manager_impl.mm",
-    "alloc_with_zone_interceptor.h",
-    "alloc_with_zone_interceptor.mm",
     "browser_state.mm",
     "browser_url_rewriter_impl.h",
     "browser_url_rewriter_impl.mm",
@@ -66,14 +72,6 @@ source_set("web_arc") {
     "net/cert_host_pair.h",
     "net/cert_policy.cc",
     "net/certificate_policy_cache.cc",
-    "net/clients/crw_js_injection_network_client.h",
-    "net/clients/crw_js_injection_network_client.mm",
-    "net/clients/crw_js_injection_network_client_factory.h",
-    "net/clients/crw_js_injection_network_client_factory.mm",
-    "net/clients/crw_redirect_network_client.h",
-    "net/clients/crw_redirect_network_client.mm",
-    "net/clients/crw_redirect_network_client_factory.h",
-    "net/clients/crw_redirect_network_client_factory.mm",
     "net/cookie_notification_bridge.h",
     "net/cookie_notification_bridge.mm",
     "net/crw_cert_verification_controller.h",
@@ -118,7 +116,6 @@ source_set("web_arc") {
     "public/security_style.h",
     "public/ssl_status.cc",
     "public/ssl_status.h",
-    "public/string_util.h",
     "public/url_data_source_ios.h",
     "public/url_scheme_util.h",
     "public/url_schemes.h",
@@ -143,6 +140,7 @@ source_set("web_arc") {
     "public/web_state/page_display_state.h",
     "public/web_state/page_display_state.mm",
     "public/web_state/ui/crw_content_view.h",
+    "public/web_state/ui/crw_context_menu_delegate.h",
     "public/web_state/ui/crw_generic_content_view.h",
     "public/web_state/ui/crw_native_content.h",
     "public/web_state/ui/crw_native_content_provider.h",
@@ -166,13 +164,14 @@ source_set("web_arc") {
     "public/webui/web_ui_ios_controller_factory.h",
     "public/webui/web_ui_ios_message_handler.cc",
     "public/webui/web_ui_ios_message_handler.h",
-    "string_util.cc",
     "url_scheme_util.mm",
     "url_util.cc",
     "web_kit_constants.cc",
     "web_state/blocked_popup_info.h",
     "web_state/blocked_popup_info.mm",
     "web_state/context_menu_params.mm",
+    "web_state/context_menu_params_utils.h",
+    "web_state/context_menu_params_utils.mm",
     "web_state/credential.cc",
     "web_state/crw_pass_kit_downloader.h",
     "web_state/crw_pass_kit_downloader.mm",
@@ -197,10 +196,14 @@ source_set("web_arc") {
     "web_state/js/page_script_util.mm",
     "web_state/page_viewport_state.h",
     "web_state/page_viewport_state.mm",
+    "web_state/ui/crw_context_menu_controller.h",
+    "web_state/ui/crw_context_menu_controller.mm",
     "web_state/ui/crw_generic_content_view.mm",
     "web_state/ui/crw_swipe_recognizer_provider.h",
     "web_state/ui/crw_touch_tracking_recognizer.h",
     "web_state/ui/crw_touch_tracking_recognizer.mm",
+    "web_state/ui/crw_wk_navigation_states.h",
+    "web_state/ui/crw_wk_navigation_states.mm",
     "web_thread_impl.cc",
     "web_thread_impl.h",
     "web_view_creation_util.mm",
@@ -246,13 +249,14 @@ source_set("web") {
     "//components/url_formatter",
     "//ios/net",
     "//ios/third_party/blink:html_tokenizer",
+    "//ios/web/public/image_fetcher",
     "//mojo/public/cpp/system",
     "//mojo/public/js",
     "//net",
     "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/gfx",
-    "//ui/gfx/geometry:geometry",
+    "//ui/gfx/geometry",
     "//ui/resources",
     "//url",
   ]
@@ -303,16 +307,15 @@ source_set("web") {
 }
 
 source_set("core") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   deps = [
     "//base",
     "//url",
   ]
 
   sources = [
-    "crw_network_activity_indicator_manager.h",
-    "crw_network_activity_indicator_manager.mm",
+    "history_state_util.cc",
     "history_state_util.h",
-    "history_state_util.mm",
   ]
 }
 
@@ -325,6 +328,8 @@ source_set("user_agent") {
     "public/user_agent.h",
     "public/user_agent.mm",
   ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("earl_grey_test_support") {
@@ -338,6 +343,7 @@ source_set("earl_grey_test_support") {
     "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey",
+    "//net",
   ]
 
   sources = [
@@ -360,23 +366,44 @@ source_set("test_support") {
     "//ios/testing:ios_test_support",
     "//ios/testing:ocmock_support",
     "//ios/third_party/gcdwebserver",
+    "//ios/web/public/image_fetcher",
     "//ios/web/test:mojo_bindings",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/ocmock",
-    "//ui/base:base",
+    "//ui/base",
   ]
 
   sources = [
-    "public/test/crw_test_js_injection_receiver.h",
-    "public/test/crw_test_js_injection_receiver.mm",
+    "public/test/fakes/crw_test_js_injection_receiver.h",
+    "public/test/fakes/crw_test_js_injection_receiver.mm",
+    "public/test/fakes/test_browser_state.cc",
+    "public/test/fakes/test_browser_state.h",
+    "public/test/fakes/test_java_script_dialog_presenter.h",
+    "public/test/fakes/test_java_script_dialog_presenter.mm",
+    "public/test/fakes/test_native_content.h",
+    "public/test/fakes/test_native_content.mm",
+    "public/test/fakes/test_native_content_provider.h",
+    "public/test/fakes/test_native_content_provider.mm",
+    "public/test/fakes/test_navigation_manager.h",
+    "public/test/fakes/test_navigation_manager.mm",
+    "public/test/fakes/test_web_client.h",
+    "public/test/fakes/test_web_client.mm",
+    "public/test/fakes/test_web_state.h",
+    "public/test/fakes/test_web_state.mm",
+    "public/test/fakes/test_web_state_delegate.h",
+    "public/test/fakes/test_web_state_delegate.mm",
+    "public/test/fakes/test_web_view_content_view.h",
+    "public/test/fakes/test_web_view_content_view.mm",
     "public/test/http_server.h",
     "public/test/http_server.mm",
     "public/test/http_server_util.h",
     "public/test/http_server_util.mm",
     "public/test/js_test_util.h",
     "public/test/js_test_util.mm",
+    "public/test/mock_image_data_fetcher.h",
+    "public/test/mock_image_data_fetcher.mm",
     "public/test/native_controller_test_util.h",
     "public/test/native_controller_test_util.mm",
     "public/test/navigation_test_util.h",
@@ -401,18 +428,10 @@ source_set("test_support") {
     "public/test/response_providers/string_response_provider.mm",
     "public/test/scoped_testing_web_client.h",
     "public/test/scoped_testing_web_client.mm",
-    "public/test/test_browser_state.cc",
-    "public/test/test_browser_state.h",
     "public/test/test_redirect_observer.h",
     "public/test/test_redirect_observer.mm",
-    "public/test/test_web_client.h",
-    "public/test/test_web_client.mm",
-    "public/test/test_web_state.h",
-    "public/test/test_web_state.mm",
     "public/test/test_web_thread.h",
     "public/test/test_web_thread_bundle.h",
-    "public/test/test_web_view_content_view.h",
-    "public/test/test_web_view_content_view.mm",
     "public/test/web_js_test.h",
     "public/test/web_test.h",
     "public/test/web_test.mm",
@@ -473,8 +492,10 @@ test("ios_web_unittests") {
     ":web",
     "//base",
     "//base/test:test_support",
+    "//components/url_formatter",
     "//ios/net",
     "//ios/testing:ocmock_support",
+    "//ios/web/public/image_fetcher:unit_tests",
     "//ios/web/test:mojo_bindings",
     "//net:test_support",
     "//services/service_manager/public/cpp",
@@ -486,9 +507,7 @@ test("ios_web_unittests") {
 
   sources = [
     "active_state_manager_impl_unittest.mm",
-    "alloc_with_zone_interceptor_unittest.mm",
     "browser_state_unittest.cc",
-    "crw_network_activity_indicator_manager_unittest.mm",
     "history_state_util_unittest.mm",
     "navigation/crw_session_controller_unittest.mm",
     "navigation/crw_session_entry_unittest.mm",
@@ -497,7 +516,6 @@ test("ios_web_unittests") {
     "navigation/nscoder_util_unittest.mm",
     "net/cert_host_pair_unittest.cc",
     "net/cert_policy_unittest.cc",
-    "net/clients/crw_js_injection_network_client_unittest.mm",
     "net/crw_cert_verification_controller_unittest.mm",
     "net/crw_ssl_status_updater_unittest.mm",
     "net/request_group_util_unittest.mm",
@@ -507,10 +525,9 @@ test("ios_web_unittests") {
     "public/origin_util_unittest.mm",
     "public/referrer_util_unittest.cc",
     "public/web_state/page_viewport_state_unittest.mm",
-    "string_util_unittest.cc",
-    "test/crw_fake_web_controller_observer_unittest.mm",
     "url_scheme_util_unittest.mm",
     "url_util_unittest.cc",
+    "web_state/context_menu_params_utils_unittest.mm",
     "web_state/crw_pass_kit_downloader_unittest.mm",
     "web_state/crw_web_view_scroll_view_proxy_unittest.mm",
     "web_state/error_translation_util_unittest.mm",
@@ -524,6 +541,7 @@ test("ios_web_unittests") {
     "web_state/ui/crw_web_controller_container_view_unittest.mm",
     "web_state/ui/crw_web_controller_observer_unittest.mm",
     "web_state/ui/crw_web_controller_unittest.mm",
+    "web_state/ui/crw_wk_navigation_states_unittest.mm",
     "web_state/ui/crw_wk_script_message_router_unittest.mm",
     "web_state/ui/web_view_js_utils_unittest.mm",
     "web_state/ui/wk_back_forward_list_item_holder_unittest.mm",
@@ -548,7 +566,7 @@ test("ios_web_inttests") {
     ":test_support",
     ":web",
     "//base/test:test_support",
-    "//ios/public/provider/web",
+    "//ios/testing:http_server_bundle_data",
     "//ios/web/test:mojo_bindings",
     "//ios/web/test:packed_resources",
     "//ios/web/test:resources",
@@ -560,6 +578,7 @@ test("ios_web_inttests") {
   ]
   sources = [
     "browser_state_web_view_partition_inttest.mm",
+    "navigation/window_location_inttest.mm",
     "public/test/http_server_inttest.mm",
     "test/run_all_unittests.cc",
     "webui/web_ui_mojo_inttest.mm",
@@ -577,7 +596,6 @@ js_compile_bundle("web_ui_bundle") {
     "webui/resources/web_ui_base.js",
     "webui/resources/web_ui_bind.js",
     "webui/resources/web_ui_bundle.js",
-    "webui/resources/web_ui_favicons.js",
     "webui/resources/web_ui_module_load_notifier.js",
     "webui/resources/web_ui_send.js",
   ]

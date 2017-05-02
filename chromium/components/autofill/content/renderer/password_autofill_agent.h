@@ -25,7 +25,6 @@
 
 namespace blink {
 class WebInputElement;
-class WebKeyboardEvent;
 class WebSecurityOrigin;
 }
 
@@ -94,6 +93,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   bool ShowSuggestions(const blink::WebInputElement& element,
                        bool show_all,
                        bool generation_popup_showing);
+
+  // Shows an Autofill-style popup with a warning that the form is not secure.
+  // This UI is shown when a username or password field is autofilled or edited
+  // on a non-secure page.
+  void ShowNotSecureWarning(const blink::WebInputElement& element);
 
   // Called when new form controls are inserted.
   void OnDynamicFormsSeen();

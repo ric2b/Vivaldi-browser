@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/ui/views/desktop_ios_promotion/desktop_ios_promotion_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/credentials_item_view.h"
 #include "chrome/browser/ui/views/passwords/credentials_selection_view.h"
@@ -41,9 +42,6 @@ int ManagePasswordsBubbleView::auto_signin_toast_timeout_ = 3;
 // Helpers --------------------------------------------------------------------
 
 namespace {
-
-const int kDesiredBubbleWidth = 370;
-const SkColor kWarmWelcomeColor = SkColorSetARGB(0xFF, 0x64, 0x64, 0x64);
 
 enum ColumnSetType {
   // | | (FILL, FILL) | |
@@ -77,7 +75,7 @@ enum TextRowType { ROW_SINGLE, ROW_MULTILINE };
 // to |layout|.
 void BuildColumnSet(views::GridLayout* layout, ColumnSetType type) {
   views::ColumnSet* column_set = layout->AddColumnSet(type);
-  int full_width = kDesiredBubbleWidth;
+  int full_width = ManagePasswordsBubbleView::kDesiredBubbleWidth;
   switch (type) {
     case SINGLE_VIEW_COLUMN_SET:
       column_set->AddColumn(views::GridLayout::FILL,
@@ -319,21 +317,6 @@ ManagePasswordsBubbleView::PendingView::PendingView(
     layout->AddPaddingRow(0, views::kUnrelatedControlVerticalSpacing);
   }
 
-  // Smart Lock warm welcome.
-  if (parent_->model()->ShouldShowGoogleSmartLockWelcome()) {
-    views::Label* smart_lock_label = new views::Label(
-        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SMART_LOCK_WELCOME));
-    smart_lock_label->SetMultiLine(true);
-    smart_lock_label->SetFontList(
-        ui::ResourceBundle::GetSharedInstance().GetFontList(
-            ui::ResourceBundle::SmallFont));
-    smart_lock_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    smart_lock_label->SetEnabledColor(kWarmWelcomeColor);
-    layout->StartRow(0, SINGLE_VIEW_COLUMN_SET);
-    layout->AddView(smart_lock_label);
-    layout->AddPaddingRow(0, views::kUnrelatedControlVerticalSpacing);
-  }
-
   // Button row.
   BuildColumnSet(layout, DOUBLE_BUTTON_COLUMN_SET);
   layout->StartRow(0, DOUBLE_BUTTON_COLUMN_SET);
@@ -351,7 +334,7 @@ void ManagePasswordsBubbleView::PendingView::ButtonPressed(
     const ui::Event& event) {
   if (sender == save_button_) {
     parent_->model()->OnSaveClicked();
-    if (parent_->model()->ReplaceToShowSignInPromoIfNeeded()) {
+    if (parent_->model()->ReplaceToShowPromotionIfNeeded()) {
       parent_->Refresh();
       return;
     }
@@ -828,7 +811,8 @@ bool ManagePasswordsBubbleView::ShouldShowWindowTitle() const {
 
 bool ManagePasswordsBubbleView::ShouldShowCloseButton() const {
   return model_.state() == password_manager::ui::PENDING_PASSWORD_STATE ||
-      model_.state() == password_manager::ui::CHROME_SIGN_IN_PROMO_STATE;
+         model_.state() == password_manager::ui::CHROME_SIGN_IN_PROMO_STATE ||
+         model_.state() == password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE;
 }
 
 void ManagePasswordsBubbleView::Refresh() {
@@ -855,6 +839,10 @@ void ManagePasswordsBubbleView::CreateChild() {
   } else if (model_.state() ==
              password_manager::ui::CHROME_SIGN_IN_PROMO_STATE) {
     AddChildView(new SignInPromoView(this));
+  } else if (model_.state() ==
+             password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE) {
+    AddChildView(new DesktopIOSPromotionView(
+        desktop_ios_promotion::PromotionEntryPoint::SAVE_PASSWORD_BUBBLE));
   } else {
     AddChildView(new ManageView(this));
   }

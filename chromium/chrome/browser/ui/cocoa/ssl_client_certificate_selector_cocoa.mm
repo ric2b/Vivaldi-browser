@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ssl/ssl_client_auth_observer.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_mac.h"
 #include "chrome/grit/generated_resources.h"
@@ -282,25 +283,17 @@ void ClearTableViewDataSourcesIfNeeded(NSWindow*) {}
 - (void)hideSheet {
   NSWindow* sheetWindow = [overlayWindow_ attachedSheet];
   [sheetWindow setAlphaValue:0.0];
+  [sheetWindow setIgnoresMouseEvents:YES];
 
   oldResizesSubviews_ = [[sheetWindow contentView] autoresizesSubviews];
   [[sheetWindow contentView] setAutoresizesSubviews:NO];
-
-  oldSheetFrame_ = [sheetWindow frame];
-  NSRect overlayFrame = [overlayWindow_ frame];
-  oldSheetFrame_.origin.x -= NSMinX(overlayFrame);
-  oldSheetFrame_.origin.y -= NSMinY(overlayFrame);
-  [sheetWindow setFrame:ui::kWindowSizeDeterminedLater display:NO];
 }
 
 - (void)unhideSheet {
   NSWindow* sheetWindow = [overlayWindow_ attachedSheet];
-  NSRect overlayFrame = [overlayWindow_ frame];
-  oldSheetFrame_.origin.x += NSMinX(overlayFrame);
-  oldSheetFrame_.origin.y += NSMinY(overlayFrame);
-  [sheetWindow setFrame:oldSheetFrame_ display:NO];
   [[sheetWindow contentView] setAutoresizesSubviews:oldResizesSubviews_];
-  [[overlayWindow_ attachedSheet] setAlphaValue:1.0];
+  [sheetWindow setAlphaValue:1.0];
+  [sheetWindow setIgnoresMouseEvents:NO];
 }
 
 - (void)pulseSheet {

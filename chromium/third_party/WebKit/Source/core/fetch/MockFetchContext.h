@@ -38,18 +38,19 @@ class MockFetchContext : public FetchContext {
   bool allowImage(bool imagesEnabled, const KURL&) const override {
     return true;
   }
-  bool canRequest(Resource::Type,
-                  const ResourceRequest&,
-                  const KURL&,
-                  const ResourceLoaderOptions&,
-                  bool forPreload,
-                  FetchRequest::OriginRestriction) const override {
-    return true;
+  ResourceRequestBlockedReason canRequest(
+      Resource::Type,
+      const ResourceRequest&,
+      const KURL&,
+      const ResourceLoaderOptions&,
+      bool forPreload,
+      FetchRequest::OriginRestriction) const override {
+    return ResourceRequestBlockedReason::None;
   }
   bool shouldLoadNewResource(Resource::Type) const override {
     return m_loadPolicy == kShouldLoadNewResource;
   }
-  WebTaskRunner* loadingTaskRunner() const override { return m_runner.get(); }
+  RefPtr<WebTaskRunner> loadingTaskRunner() const override { return m_runner; }
 
   void setCachePolicy(CachePolicy policy) { m_policy = policy; }
   CachePolicy getCachePolicy() const override { return m_policy; }
@@ -66,13 +67,13 @@ class MockFetchContext : public FetchContext {
   MockFetchContext(LoadPolicy loadPolicy)
       : m_loadPolicy(loadPolicy),
         m_policy(CachePolicyVerify),
-        m_runner(wrapUnique(new scheduler::FakeWebTaskRunner)),
+        m_runner(adoptRef(new scheduler::FakeWebTaskRunner)),
         m_complete(false),
         m_transferSize(-1) {}
 
   enum LoadPolicy m_loadPolicy;
   CachePolicy m_policy;
-  std::unique_ptr<scheduler::FakeWebTaskRunner> m_runner;
+  RefPtr<scheduler::FakeWebTaskRunner> m_runner;
   bool m_complete;
   long long m_transferSize;
 };

@@ -6,15 +6,16 @@
 
 #include "build/build_config.h"
 
+#include "sync/vivaldi_sync_urls.h"
+
 namespace variations {
 
 // Default server of Variations seed info.
 #if defined(OS_ANDROID)
 const char kDefaultServerUrl[] =
-    "https://clientservices.googleapis.com/chrome-variations/seed";
+    SYNC_URL("/chrome-variations/seed");
 #else
 const char kDefaultServerUrl[] =
-    "https://clients4.google.com/chrome-variations/seed";
+    SYNC_URL("/chrome-variations/seed");
 #endif
-
 }  // namespace variations

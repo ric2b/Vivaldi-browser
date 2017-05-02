@@ -24,8 +24,8 @@
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
+#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
-#include "content/public/common/console_message_level.h"
 #include "url/gurl.h"
 
 // Windows headers will redefine SendMessage.
@@ -35,11 +35,6 @@
 
 namespace IPC {
 class Message;
-}
-
-namespace service_manager {
-class InterfaceProvider;
-class InterfaceRegistry;
 }
 
 namespace content {
@@ -113,13 +108,13 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   // |params| should be populated with service worker version info needed
   // to start the worker.
   void Start(std::unique_ptr<EmbeddedWorkerStartParams> params,
+             mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
              const StatusCallback& callback);
 
   // Stops the worker. It is invalid to call this when the worker is
   // not in STARTING or RUNNING status.
-  // This returns false if stopping a worker fails immediately, e.g. when
-  // IPC couldn't be sent to the worker.
-  ServiceWorkerStatusCode Stop();
+  // This returns false when StopWorker IPC couldn't be sent to the worker.
+  bool Stop();
 
   // Stops the worker if the worker is not being debugged (i.e. devtools is
   // not attached). This method is called by a stop-worker timer to kill
@@ -134,19 +129,13 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   // Resumes the worker if it paused after download.
   void ResumeAfterDownload();
 
-  // Returns the service_manager::InterfaceRegistry and
-  // service_manager::InterfaceProvider for this
-  // worker. It is invalid to call this when the worker is not in STARTING or
-  // RUNNING status.
-  service_manager::InterfaceRegistry* GetInterfaceRegistry();
-  service_manager::InterfaceProvider* GetRemoteInterfaces();
-
   int embedded_worker_id() const { return embedded_worker_id_; }
   EmbeddedWorkerStatus status() const { return status_; }
   StartingPhase starting_phase() const {
     DCHECK_EQ(EmbeddedWorkerStatus::STARTING, status());
     return starting_phase_;
   }
+  int restart_count() const { return restart_count_; }
   int process_id() const;
   int thread_id() const { return thread_id_; }
   // This should be called only when the worker instance has a valid process,
@@ -190,7 +179,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   void OnURLJobCreatedForMainScript();
 
   // Add message to the devtools console.
-  void AddMessageToConsole(ConsoleMessageLevel level,
+  void AddMessageToConsole(blink::WebConsoleMessage::Level level,
                            const std::string& message);
 
   static std::string StatusToString(EmbeddedWorkerStatus status);
@@ -226,7 +215,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
                                      bool wait_for_debugger);
 
   // Sends StartWorker message via Mojo.
-  ServiceWorkerStatusCode SendMojoStartWorker(
+  ServiceWorkerStatusCode SendStartWorker(
       std::unique_ptr<EmbeddedWorkerStartParams> params);
 
   // Called back from StartTask after a start worker message is sent.
@@ -307,16 +296,18 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
 
   EmbeddedWorkerStatus status_;
   StartingPhase starting_phase_;
+  int restart_count_;
 
   // Current running information.
   std::unique_ptr<EmbeddedWorkerInstance::WorkerProcessHandle> process_handle_;
   int thread_id_;
 
-  // These are connected to the renderer process after OnThreadStarted.
-  std::unique_ptr<service_manager::InterfaceRegistry> interface_registry_;
-  std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
   // |client_| is used to send messages to the renderer process.
   mojom::EmbeddedWorkerInstanceClientPtr client_;
+
+  // TODO(shimazu): Remove this after EmbeddedWorkerStartParams is changed to
+  // a mojo struct.
+  mojom::ServiceWorkerEventDispatcherRequest pending_dispatcher_request_;
 
   // Whether devtools is attached or not.
   bool devtools_attached_;

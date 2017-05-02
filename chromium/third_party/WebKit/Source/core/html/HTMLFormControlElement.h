@@ -26,8 +26,9 @@
 #define HTMLFormControlElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/FormAssociatedElement.h"
+#include "core/html/FormAssociated.h"
 #include "core/html/LabelableElement.h"
+#include "core/html/ListedElement.h"
 
 namespace blink {
 
@@ -40,10 +41,11 @@ enum CheckValidityEventBehavior {
 };
 
 // HTMLFormControlElement is the default implementation of
-// FormAssociatedElement, and form-associated element implementations should use
+// ListedElement, and listed element implementations should use
 // HTMLFormControlElement unless there is a special reason.
 class CORE_EXPORT HTMLFormControlElement : public LabelableElement,
-                                           public FormAssociatedElement {
+                                           public ListedElement,
+                                           public FormAssociated {
   USING_GARBAGE_COLLECTED_MIXIN(HTMLFormControlElement);
 
  public:
@@ -127,14 +129,17 @@ class CORE_EXPORT HTMLFormControlElement : public LabelableElement,
 
   void copyNonAttributePropertiesFromElement(const Element&) override;
 
- protected:
-  HTMLFormControlElement(const QualifiedName& tagName,
-                         Document&,
-                         HTMLFormElement*);
+  FormAssociated* toFormAssociatedOrNull() override { return this; };
+  void associateWith(HTMLFormElement*) override;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  bool blocksFormSubmission() const { return m_blocksFormSubmission; }
+  void setBlocksFormSubmission(bool value) { m_blocksFormSubmission = value; }
+
+ protected:
+  HTMLFormControlElement(const QualifiedName& tagName, Document&);
+
+  void attributeChanged(const AttributeModificationParams&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   virtual void requiredAttributeChanged();
   virtual void disabledAttributeChanged();
   void attachLayoutTree(const AttachContext& = AttachContext()) override;
@@ -205,6 +210,7 @@ class CORE_EXPORT HTMLFormControlElement : public LabelableElement,
   bool m_validityIsDirty : 1;
 
   bool m_wasFocusedByMouse : 1;
+  bool m_blocksFormSubmission : 1;
 };
 
 inline bool isHTMLFormControlElement(const Element& element) {
@@ -213,7 +219,7 @@ inline bool isHTMLFormControlElement(const Element& element) {
 
 DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(HTMLFormControlElement);
 DEFINE_TYPE_CASTS(HTMLFormControlElement,
-                  FormAssociatedElement,
+                  ListedElement,
                   control,
                   control->isFormControlElement(),
                   control.isFormControlElement());

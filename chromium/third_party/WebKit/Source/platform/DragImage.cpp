@@ -150,7 +150,10 @@ std::unique_ptr<DragImage> DragImage::create(
   if (!image)
     return nullptr;
 
-  sk_sp<SkImage> skImage = image->imageForCurrentFrame();
+  // TODO(ccameron): DragImage needs to be color space aware.
+  // https://crbug.com/672316
+  sk_sp<SkImage> skImage =
+      image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   if (!skImage)
     return nullptr;
 
@@ -167,7 +170,8 @@ std::unique_ptr<DragImage> DragImage::create(
       !resizedImage->asLegacyBitmap(&bm, SkImage::kRO_LegacyBitmapMode))
     return nullptr;
 
-  return wrapUnique(new DragImage(bm, deviceScaleFactor, interpolationQuality));
+  return WTF::wrapUnique(
+      new DragImage(bm, deviceScaleFactor, interpolationQuality));
 }
 
 static Font deriveDragLabelFont(int size,
@@ -287,7 +291,7 @@ std::unique_ptr<DragImage> DragImage::create(const KURL& url,
   IntPoint textPos(
       kDragLabelBorderX,
       kDragLabelBorderY + labelFont.getFontDescription().computedPixelSize());
-  if (hasStrongDirectionality && textRun.direction() == RTL) {
+  if (hasStrongDirectionality && textRun.direction() == TextDirection::kRtl) {
     float textWidth = labelFont.width(textRun);
     int availableWidth = imageSize.width() - kDragLabelBorderX * 2;
     textPos.setX(availableWidth - ceilf(textWidth));

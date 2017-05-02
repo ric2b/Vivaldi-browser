@@ -3,10 +3,10 @@
  * found in the LICENSE file. */
 
 body {
-  -webkit-user-select: none;
   background-color: black;
   font-size: 84%;
   margin: 0;
+  user-select: none;
 }
 
 button {
@@ -1270,6 +1270,7 @@ files-toast {
 .slideshow-toolbar > div {
   background-position: center;
   background-repeat: no-repeat;
+  cursor: pointer;
   height: 48px;
   opacity: 0.8;
   pointer-events: auto;

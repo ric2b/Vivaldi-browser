@@ -27,6 +27,7 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "google_apis/gaia/gaia_switches.h"
+#include "media/media_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/vector_icons_public.h"
@@ -57,7 +58,7 @@ void ShowBadFlagsPrompt(Browser* browser) {
     translate::switches::kTranslateSecurityOrigin,
 
     // These flags undermine HTTPS / connection security.
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
     switches::kDisableWebRtcEncryption,
 #endif
     switches::kIgnoreCertificateErrors,
@@ -85,12 +86,6 @@ void ShowBadFlagsPrompt(Browser* browser) {
     // This flag allows people to whitelist certain origins as secure, even
     // if they are not.
     switches::kUnsafelyTreatInsecureOriginAsSecure,
-
-    // This flag disables WebUSB's CORS-like checks for origin to device
-    // communication, allowing any origin to ask the user for permission to
-    // connect to a device. It is intended for manufacturers testing their
-    // existing devices until https://crbug.com/598766 is implemented.
-    switches::kDisableWebUsbSecurity,
 
     NULL
   };

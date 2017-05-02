@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
@@ -125,6 +126,10 @@ constexpr char kPasswordPromptDialogHTMLPath[] =
     "people_page/password_prompt_dialog.html";
 constexpr char kPasswordPromptDialogJSPath[] =
     "people_page/password_prompt_dialog.js";
+constexpr char kLockScreenConstantsHTMLPath[] =
+    "people_page/lock_screen_constants.html";
+constexpr char kLockScreenConstantsJSPath[] =
+    "people_page/lock_screen_constants.js";
 constexpr char kLockStateBehaviorHTMLPath[] =
     "people_page/lock_state_behavior.html";
 constexpr char kLockStateBehaviorJSPath[] =
@@ -136,6 +141,18 @@ constexpr char kSetupPinJSPath[] = "people_page/setup_pin_dialog.js";
 constexpr char kSettingsRouteHTMLPath[] = "route.html";
 constexpr char kSettingsRouteJSPath[] = "route.js";
 constexpr char kSettingsSharedCSSHTMLPath[] = "settings_shared_css.html";
+constexpr char kSettingsBooleanControlBehaviorHTMLPath[] =
+    "controls/settings_boolean_control_behavior.html";
+constexpr char kSettingsBooleanControlBehaviorJSPath[] =
+    "controls/settings_boolean_control_behavior.js";
+constexpr char kSettingsPrefControlBehaviorHTMLPath[] =
+    "controls/pref_control_behavior.html";
+constexpr char kSettingsPrefControlBehaviorJSPath[] =
+    "controls/pref_control_behavior.js";
+constexpr char kSettingsToggleButtonHTMLPath[] =
+    "controls/settings_toggle_button.html";
+constexpr char kSettingsToggleButtonJSPath[] =
+    "controls/settings_toggle_button.js";
 constexpr char kSettingsVarsCSSHTMLPath[] = "settings_vars_css.html";
 constexpr char kSettingsPrefsBehaviorHTMLPath[] = "prefs/prefs_behavior.html";
 constexpr char kSettingsPrefsBehaviorJSPath[] = "prefs/prefs_behavior.js";
@@ -171,7 +188,6 @@ class OptionsUIHTMLSource : public content::URLDataSource {
  private:
   ~OptionsUIHTMLSource() override;
   void CreateDataSourceMap();
-  void AddReplacements(base::DictionaryValue* localized_strings);
 
   // Localized strings collection.
   std::unique_ptr<base::DictionaryValue> localized_strings_;
@@ -184,7 +200,6 @@ class OptionsUIHTMLSource : public content::URLDataSource {
 OptionsUIHTMLSource::OptionsUIHTMLSource(
     base::DictionaryValue* localized_strings) {
   DCHECK(localized_strings);
-  AddReplacements(localized_strings);
   localized_strings_.reset(localized_strings);
   CreateDataSourceMap();
 }
@@ -200,6 +215,8 @@ void OptionsUIHTMLSource::StartDataRequest(
   scoped_refptr<base::RefCountedMemory> response_bytes;
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   webui::SetLoadTimeDataDefaults(app_locale, localized_strings_.get());
+  ui::TemplateReplacementsFromDictionaryValue(*localized_strings_,
+                                              &replacements_);
 
   std::map<std::string, int>::iterator result;
   result = path_to_idr_map_.find(path);
@@ -257,6 +274,10 @@ void OptionsUIHTMLSource::CreateDataSourceMap() {
       IDR_OPTIONS_PASSWORD_PROMPT_DIALOG_HTML;
   path_to_idr_map_[kPasswordPromptDialogJSPath] =
       IDR_OPTIONS_PASSWORD_PROMPT_DIALOG_JS;
+  path_to_idr_map_[kLockScreenConstantsHTMLPath] =
+      IDR_OPTIONS_LOCK_SCREEN_CONSTANTS_HTML;
+  path_to_idr_map_[kLockScreenConstantsJSPath] =
+      IDR_OPTIONS_LOCK_SCREEN_CONSTANTS_JS;
   path_to_idr_map_[kLockStateBehaviorHTMLPath] =
       IDR_OPTIONS_LOCK_STATE_BEHAVIOR_HTML;
   path_to_idr_map_[kLockStateBehaviorJSPath] =
@@ -268,6 +289,17 @@ void OptionsUIHTMLSource::CreateDataSourceMap() {
   path_to_idr_map_[kSettingsRouteHTMLPath] = IDR_OPTIONS_ROUTE_HTML;
   path_to_idr_map_[kSettingsRouteJSPath] = IDR_OPTIONS_ROUTE_JS;
   path_to_idr_map_[kSettingsSharedCSSHTMLPath] = IDR_SETTINGS_SHARED_CSS_HTML;
+  path_to_idr_map_[kSettingsBooleanControlBehaviorHTMLPath] =
+      IDR_SETTINGS_BOOLEAN_CONTROL_BEHAVIOR_HTML;
+  path_to_idr_map_[kSettingsBooleanControlBehaviorJSPath] =
+      IDR_SETTINGS_BOOLEAN_CONTROL_BEHAVIOR_JS;
+  path_to_idr_map_[kSettingsPrefControlBehaviorHTMLPath] =
+      IDR_SETTINGS_PREF_CONTROL_BEHAVIOR_HTML;
+  path_to_idr_map_[kSettingsPrefControlBehaviorJSPath] =
+      IDR_SETTINGS_PREF_CONTROL_BEHAVIOR_JS;
+  path_to_idr_map_[kSettingsToggleButtonHTMLPath] =
+      IDR_SETTINGS_TOGGLE_BUTTON_HTML;
+  path_to_idr_map_[kSettingsToggleButtonJSPath] = IDR_SETTINGS_TOGGLE_BUTTON_JS;
   path_to_idr_map_[kSettingsVarsCSSHTMLPath] = IDR_SETTINGS_VARS_CSS_HTML;
   path_to_idr_map_[kSettingsPrefsBehaviorHTMLPath] =
       IDR_SETTINGS_PREFS_BEHAVIOR_HTML;
@@ -277,18 +309,6 @@ void OptionsUIHTMLSource::CreateDataSourceMap() {
   path_to_idr_map_[kSettingsPrefsTypesJSPath] = IDR_SETTINGS_PREFS_TYPES_JS;
   path_to_idr_map_[kOptionsPolymerHTMLPath] = IDR_OPTIONS_POLYMER_ELEMENTS_HTML;
 #endif
-}
-
-void OptionsUIHTMLSource::AddReplacements(
-    base::DictionaryValue* localized_strings) {
-  for (auto it = base::DictionaryValue::Iterator(*localized_strings);
-       !it.IsAtEnd(); it.Advance()) {
-    std::string str_value;
-    if (!it.value().GetAsString(&str_value)) {
-      continue;
-    }
-    replacements_[it.key()] = str_value;
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -439,7 +459,7 @@ OptionsUI::OptionsUI(content::WebUI* web_ui)
 #endif
   AddOptionsPageUIHandler(localized_strings, new HandlerOptionsHandler());
 
-  web_ui->AddMessageHandler(new MetricsHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
 
   // Enable extension API calls in the WebUI.
   extensions::TabHelper::CreateForWebContents(web_ui->GetWebContents());
@@ -506,8 +526,7 @@ void OptionsUI::ProcessAutocompleteSuggestions(
 void OptionsUI::DidStartProvisionalLoadForFrame(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url,
-    bool is_error_page,
-    bool is_iframe_srcdoc) {
+    bool is_error_page) {
   load_start_time_ = base::Time::Now();
   if (render_frame_host->GetRenderViewHost() ==
           web_ui()->GetWebContents()->GetRenderViewHost() &&
@@ -569,7 +588,7 @@ void OptionsUI::AddOptionsPageUIHandler(
   // Add only if handler's service is enabled.
   if (handler->IsEnabled()) {
     // Add handler to the list and also pass the ownership.
-    web_ui()->AddMessageHandler(handler.release());
+    web_ui()->AddMessageHandler(std::move(handler));
     handler_raw->GetLocalizedValues(localized_strings);
     handlers_.push_back(handler_raw);
   }

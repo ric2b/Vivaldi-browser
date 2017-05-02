@@ -27,18 +27,22 @@ class CORE_EXPORT PointerEventManager
   WTF_MAKE_NONCOPYABLE(PointerEventManager);
 
  public:
-  PointerEventManager(LocalFrame*, MouseEventManager*);
+  PointerEventManager(LocalFrame&, MouseEventManager&);
   DECLARE_TRACE();
 
   // Sends the mouse pointer events and the boundary events
   // that it may cause. It also sends the compat mouse events
   // and sets the newNodeUnderMouse if the capturing is set
   // in this function.
-  WebInputEventResult sendMousePointerEvent(Node* target,
-                                            const AtomicString& type,
-                                            const PlatformMouseEvent&);
+  WebInputEventResult sendMousePointerEvent(
+      Node* target,
+      const AtomicString& type,
+      const PlatformMouseEvent&,
+      const Vector<PlatformMouseEvent>& coalescedEvents);
 
-  WebInputEventResult handleTouchEvents(const PlatformTouchEvent&);
+  WebInputEventResult handleTouchEvents(
+      const PlatformTouchEvent&,
+      const Vector<PlatformTouchEvent>& coalescedEvents);
 
   // Sends boundary events pointerout/leave/over/enter and
   // mouseout/leave/over/enter to the corresponding targets.
@@ -71,10 +75,6 @@ class CORE_EXPORT PointerEventManager
   // Returns whether pointerId is for an active touch pointerevent and whether
   // the last event was sent to the given frame.
   bool isTouchPointerIdActiveOnFrame(int, LocalFrame*) const;
-
-  // TODO(crbug.com/625843): This can be hidden when mouse refactoring in
-  // EventHandler is done.
-  EventTarget* getMouseCapturingNode();
 
   // Returns true if the primary pointerdown corresponding to the given
   // |uniqueTouchEventId| was canceled. Also drops stale ids from
@@ -142,8 +142,10 @@ class CORE_EXPORT PointerEventManager
 
   // Sends touch pointer events and sets consumed bits in TouchInfo array
   // based on the return value of pointer event handlers.
-  void dispatchTouchPointerEvents(const PlatformTouchEvent&,
-                                  HeapVector<TouchEventManager::TouchInfo>&);
+  void dispatchTouchPointerEvents(
+      const PlatformTouchEvent&,
+      const Vector<PlatformTouchEvent>& coalescedEvents,
+      HeapVector<TouchEventManager::TouchInfo>&);
 
   // Returns whether the event is consumed or not.
   WebInputEventResult sendTouchPointerEvent(EventTarget*, PointerEvent*);

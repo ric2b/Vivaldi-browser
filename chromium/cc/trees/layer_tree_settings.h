@@ -89,7 +89,6 @@ class CC_EXPORT LayerTreeSettings {
   bool use_occlusion_for_tile_prioritization = false;
   bool verify_clip_tree_calculations = false;
   bool image_decode_tasks_enabled = false;
-  bool abort_commit_before_compositor_frame_sink_creation = true;
   bool use_layer_lists = false;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
   ManagedMemoryPolicy gpu_memory_policy;
@@ -102,6 +101,10 @@ class CC_EXPORT LayerTreeSettings {
   // raster rather than directly using the display items.
   bool use_cached_picture_raster = true;
   bool enable_color_correct_rendering = false;
+
+  // If set to true, this causes TileManager to verify that all required and NOW
+  // tiles come before lower priority tiles.
+  bool check_tile_priority_inversion = false;
 
   LayerTreeDebugState initial_debug_state;
 };

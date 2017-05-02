@@ -43,6 +43,9 @@ Polymer({
       value: false,
     },
 
+    /** @private {!chrome.networkingPrivate.GlobalPolicy|undefined} */
+    globalPolicy_: Object,
+
     /**
      * List of third party VPN providers.
      * @type {!Array<!chrome.networkingPrivate.ThirdPartyVPNProperties>}
@@ -58,28 +61,56 @@ Polymer({
 
   /** @override */
   attached: function() {
-    chrome.management.onInstalled.addListener(
-        this.onExtensionAdded_.bind(this));
-    chrome.management.onEnabled.addListener(this.onExtensionAdded_.bind(this));
+    this.boundOnExtensionAdded_ = this.boundOnExtensionAdded_ ||
+        this.onExtensionAdded_.bind(this);
+    chrome.management.onInstalled.addListener(this.boundOnExtensionAdded_);
+    chrome.management.onEnabled.addListener(this.boundOnExtensionAdded_);
+
+    this.boundOnExtensionRemoved_ = this.boundOnExtensionRemoved_ ||
+        this.onExtensionRemoved_.bind(this);
     chrome.management.onUninstalled.addListener(
-        this.onExtensionRemoved_.bind(this));
-    chrome.management.onDisabled.addListener(
-        this.onExtensionDisabled_.bind(this));
+        this.boundOnExtensionRemoved_);
+
+    this.boundOnExtensionDisabled_ = this.boundOnExtensionDisabled_ ||
+        this.onExtensionDisabled_.bind(this);
+    chrome.management.onDisabled.addListener(this.boundOnExtensionDisabled_);
 
     chrome.management.getAll(this.onGetAllExtensions_.bind(this));
+
+    this.networkingPrivate.getGlobalPolicy(function(policy) {
+      this.globalPolicy_ = policy;
+    }.bind(this));
   },
 
   /** @override */
   detached: function() {
     chrome.management.onInstalled.removeListener(
-        this.onExtensionAdded_.bind(this));
+        assert(this.boundOnExtensionAdded_));
     chrome.management.onEnabled.removeListener(
-        this.onExtensionAdded_.bind(this));
+        assert(this.boundOnExtensionAdded_));
     chrome.management.onUninstalled.removeListener(
-        this.onExtensionRemoved_.bind(this));
+        assert(this.boundOnExtensionRemoved_));
     chrome.management.onDisabled.removeListener(
-        this.onExtensionDisabled_.bind(this));
+        assert(this.boundOnExtensionDisabled_));
   },
+
+  /**
+   * Reference to the bound listener, such that it can be removed on detach.
+   * @private {Function}
+   */
+  boundOnExtensionAdded_: null,
+
+  /**
+   * Reference to the bound listener, such that it can be removed on detach.
+   * @private {Function}
+   */
+  boundOnExtensionRemoved_: null,
+
+  /**
+   * Reference to the bound listener, such that it can be removed on detach.
+   * @private {Function}
+   */
+  boundOnExtensionDisabled_: null,
 
   /**
    * @param {!{detail: !CrOnc.NetworkStateProperties}} event
@@ -199,6 +230,14 @@ Polymer({
    */
   onExtensionDisabled_: function(extension) {
     this.onExtensionRemoved_(extension.id);
+  },
+
+  /**
+   * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
+   * @return {boolean}
+   */
+  allowAddConnection_(globalPolicy) {
+    return !globalPolicy.AllowOnlyPolicyNetworksToConnect;
   },
 
   /**

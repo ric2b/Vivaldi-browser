@@ -34,10 +34,10 @@ class InheritedPaintChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedPaintChecker> create(
       CSSPropertyID property,
       const StyleColor& color) {
-    return wrapUnique(new InheritedPaintChecker(property, color));
+    return WTF::wrapUnique(new InheritedPaintChecker(property, color));
   }
   static std::unique_ptr<InheritedPaintChecker> create(CSSPropertyID property) {
-    return wrapUnique(new InheritedPaintChecker(property));
+    return WTF::wrapUnique(new InheritedPaintChecker(property));
   }
 
  private:
@@ -68,10 +68,10 @@ InterpolationValue CSSPaintInterpolationType::maybeConvertInherit(
   StyleColor parentColor;
   if (!PaintPropertyFunctions::getColor(cssProperty(), *state.parentStyle(),
                                         parentColor)) {
-    conversionCheckers.append(InheritedPaintChecker::create(cssProperty()));
+    conversionCheckers.push_back(InheritedPaintChecker::create(cssProperty()));
     return nullptr;
   }
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedPaintChecker::create(cssProperty(), parentColor));
   return InterpolationValue(
       CSSColorInterpolationType::createInterpolableColor(parentColor));
@@ -88,26 +88,27 @@ InterpolationValue CSSPaintInterpolationType::maybeConvertValue(
   return InterpolationValue(std::move(interpolableColor));
 }
 
-InterpolationValue CSSPaintInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSPaintInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
   // TODO(alancutter): Support capturing and animating with the visited paint
   // color.
   StyleColor underlyingColor;
-  if (!PaintPropertyFunctions::getColor(
-          cssProperty(), *environment.state().style(), underlyingColor))
+  if (!PaintPropertyFunctions::getColor(cssProperty(), *state.style(),
+                                        underlyingColor))
     return nullptr;
   return InterpolationValue(
       CSSColorInterpolationType::createInterpolableColor(underlyingColor));
 }
 
-void CSSPaintInterpolationType::apply(
+void CSSPaintInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableColor,
     const NonInterpolableValue*,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   PaintPropertyFunctions::setColor(
-      cssProperty(), *environment.state().style(),
+      cssProperty(), *state.style(),
       CSSColorInterpolationType::resolveInterpolableColor(interpolableColor,
-                                                          environment.state()));
+                                                          state));
 }
 
 }  // namespace blink

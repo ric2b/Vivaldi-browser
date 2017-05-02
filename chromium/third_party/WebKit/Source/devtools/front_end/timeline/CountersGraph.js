@@ -67,7 +67,7 @@ Timeline.CountersGraph = class extends UI.VBox {
     this._canvasContainer.addEventListener('mouseleave', this._onMouseLeave.bind(this), true);
     this._canvasContainer.addEventListener('click', this._onClick.bind(this), true);
     // We create extra timeline grid here to reuse its event dividers.
-    this._timelineGrid = new UI.TimelineGrid();
+    this._timelineGrid = new PerfUI.TimelineGrid();
     this._canvasContainer.appendChild(this._timelineGrid.dividersElement);
 
     this._counters = [];
@@ -100,6 +100,14 @@ Timeline.CountersGraph = class extends UI.VBox {
    */
   view() {
     return this;
+  }
+
+  /**
+   * @protected
+   * @return {!TimelineModel.TimelineModel}
+   */
+  model() {
+    return this._model;
   }
 
   /**
@@ -222,6 +230,12 @@ Timeline.CountersGraph = class extends UI.VBox {
    * @override
    */
   refreshRecords() {
+  }
+
+  /**
+   * @override
+   */
+  extensionDataAdded() {
   }
 
   _clear() {
@@ -508,7 +522,7 @@ Timeline.CountersGraph.CounterUI = class {
 };
 
 /**
- * @implements {UI.TimelineGrid.Calculator}
+ * @implements {PerfUI.TimelineGrid.Calculator}
  * @unrestricted
  */
 Timeline.CounterGraphCalculator = class {

@@ -501,14 +501,14 @@ ScriptPromise USBDevice::reset(ScriptState* scriptState) {
   return promise;
 }
 
-void USBDevice::contextDestroyed() {
+void USBDevice::contextDestroyed(ExecutionContext*) {
   m_device.reset();
   m_deviceRequests.clear();
 }
 
 DEFINE_TRACE(USBDevice) {
-  ContextLifecycleObserver::trace(visitor);
   visitor->trace(m_deviceRequests);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 int USBDevice::findConfigurationIndex(uint8_t configurationValue) const {
@@ -718,6 +718,12 @@ void USBDevice::asyncClose(ScriptPromiseResolver* resolver) {
 
 void USBDevice::onDeviceOpenedOrClosed(bool opened) {
   m_opened = opened;
+  if (!m_opened) {
+    m_claimedInterfaces.clearAll();
+    m_selectedAlternates.fill(0);
+    m_inEndpoints.clearAll();
+    m_outEndpoints.clearAll();
+  }
   m_deviceStateChangeInProgress = false;
 }
 
@@ -897,7 +903,7 @@ void USBDevice::asyncIsochronousTransferIn(
       resolver->reject(error);
       return;
     }
-    packets.append(USBIsochronousInTransferPacket::create(
+    packets.push_back(USBIsochronousInTransferPacket::create(
         convertTransferStatus(packet->status),
         buffer ? DOMDataView::create(buffer, byteOffset,
                                      packet->transferred_length)
@@ -921,7 +927,7 @@ void USBDevice::asyncIsochronousTransferOut(
       resolver->reject(error);
       return;
     }
-    packets.append(USBIsochronousOutTransferPacket::create(
+    packets.push_back(USBIsochronousOutTransferPacket::create(
         convertTransferStatus(packet->status), packet->transferred_length));
   }
   resolver->resolve(USBIsochronousOutTransferResult::create(packets));

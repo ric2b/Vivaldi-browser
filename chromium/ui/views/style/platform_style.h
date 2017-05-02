@@ -40,12 +40,18 @@ class VIEWS_EXPORT PlatformStyle {
   // Whether the default button for a dialog can be the Cancel button.
   static const bool kDialogDefaultButtonCanBeCancel;
 
-  // Whether dragging vertically above or below a text view's bounds selects to
-  // the left or right end of the text from the cursor, respectively.
-  static const bool kTextDragVerticallyDragsToEnd;
+  // Whether right clicking on text, selects the word under cursor.
+  static const bool kSelectWordOnRightClick;
 
   // The menu button's action to show the menu.
   static const CustomButton::NotifyAction kMenuNotifyActivationAction;
+
+  // Whether the Space key clicks a button on key press or key release.
+  static const CustomButton::KeyClickAction kKeyClickActionOnSpace;
+
+  // Whether the Return key clicks the focused control (on key press).
+  // Otherwise, Return does nothing unless it is handled by an accelerator.
+  static const bool kReturnClicksFocusedControl;
 
   // Whether TreeViews get a focus ring on the entire TreeView when focused.
   static const bool kTreeViewHasFocusRing;
@@ -56,6 +62,10 @@ class VIEWS_EXPORT PlatformStyle {
 
   // Whether ripples should be used for visual feedback on control activation.
   static const bool kUseRipples;
+
+  // Whether to mirror the arrow of bubble dialogs in RTL, such that the bubble
+  // opens in the opposite direction.
+  static const bool kMirrorBubbleArrowInRTLByDefault;
 
   // Creates an ImageSkia containing the image to use for the combobox arrow.
   // The |is_enabled| argument is true if the control the arrow is for is

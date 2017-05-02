@@ -45,12 +45,16 @@ void SVGForeignObjectPainter::paint(const PaintInfo& paintInfo) {
       paintInfoBeforeFiltering.context, m_layoutSVGForeignObject,
       m_layoutSVGForeignObject.localSVGTransform());
 
+  // In theory we should just let BlockPainter::paint() handle the clip, but for
+  // now we don't allow normal overflow clip for LayoutSVGBlock, so we have to
+  // apply clip manually. See LayoutSVGBlock::allowsOverflowClip() for details.
   Optional<FloatClipRecorder> clipRecorder;
-  if (SVGLayoutSupport::isOverflowHidden(&m_layoutSVGForeignObject))
+  if (SVGLayoutSupport::isOverflowHidden(&m_layoutSVGForeignObject)) {
     clipRecorder.emplace(paintInfoBeforeFiltering.context,
                          m_layoutSVGForeignObject,
                          paintInfoBeforeFiltering.phase,
-                         m_layoutSVGForeignObject.viewportRect());
+                         FloatRect(m_layoutSVGForeignObject.frameRect()));
+  }
 
   SVGPaintContext paintContext(m_layoutSVGForeignObject,
                                paintInfoBeforeFiltering);

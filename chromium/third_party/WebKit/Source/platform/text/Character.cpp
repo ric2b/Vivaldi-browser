@@ -30,6 +30,7 @@
 
 #include "platform/text/Character.h"
 
+#include "platform/text/ICUError.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 #include <algorithm>
@@ -74,12 +75,12 @@ static icu::UnicodeSet* createUnicodeSet(const UChar32* characters,
   return unicodeSet->contains(c);
 #else
 // Freezed trie tree, see CharacterDataGenerator.cpp.
-extern int32_t serializedCharacterDataSize;
-extern uint8_t serializedCharacterData[];
+extern const int32_t serializedCharacterDataSize;
+extern const uint8_t serializedCharacterData[];
 
 static UTrie2* createTrie() {
   // Create a Trie from the value array.
-  UErrorCode error = U_ZERO_ERROR;
+  ICUError error;
   UTrie2* trie = utrie2_openFromSerialized(
       UTrie2ValueBits::UTRIE2_16_VALUE_BITS, serializedCharacterData,
       serializedCharacterDataSize, nullptr, &error);
@@ -135,7 +136,7 @@ unsigned Character::expansionOpportunityCount(const LChar* characters,
     return length;
   }
 
-  if (direction == LTR) {
+  if (direction == TextDirection::kLtr) {
     for (size_t i = 0; i < length; ++i) {
       if (treatAsSpace(characters[i])) {
         count++;
@@ -164,7 +165,7 @@ unsigned Character::expansionOpportunityCount(const UChar* characters,
                                               bool& isAfterExpansion,
                                               const TextJustify textJustify) {
   unsigned count = 0;
-  if (direction == LTR) {
+  if (direction == TextDirection::kLtr) {
     for (size_t i = 0; i < length; ++i) {
       UChar32 character = characters[i];
       if (treatAsSpace(character)) {
@@ -253,7 +254,7 @@ String Character::normalizeSpaces(const UChar* characters, unsigned length) {
 }
 
 bool Character::isCommonOrInheritedScript(UChar32 character) {
-  UErrorCode status = U_ZERO_ERROR;
+  ICUError status;
   UScriptCode script = uscript_getScript(character, &status);
   return U_SUCCESS(status) &&
          (script == USCRIPT_COMMON || script == USCRIPT_INHERITED);

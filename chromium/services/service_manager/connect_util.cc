@@ -12,7 +12,7 @@
 
 namespace service_manager {
 
-mojo::ScopedMessagePipeHandle ConnectToInterfaceByName(
+mojo::ScopedMessagePipeHandle BindInterface(
     ServiceManager* service_manager,
     const Identity& source,
     const Identity& target,
@@ -21,7 +21,7 @@ mojo::ScopedMessagePipeHandle ConnectToInterfaceByName(
   std::unique_ptr<ConnectParams> params(new ConnectParams);
   params->set_source(source);
   params->set_target(target);
-  params->set_remote_interfaces(mojo::GetProxy(&remote_interfaces));
+  params->set_remote_interfaces(mojo::MakeRequest(&remote_interfaces));
   service_manager->Connect(std::move(params));
   mojo::MessagePipe pipe;
   remote_interfaces->GetInterface(interface_name, std::move(pipe.handle1));

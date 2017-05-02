@@ -8,7 +8,7 @@
 
 #include "chromecast/base/task_runner_impl.h"
 #include "chromecast/media/cma/backend/alsa/audio_decoder_alsa.h"
-#include "chromecast/media/cma/backend/video_decoder_default.h"
+#include "chromecast/media/cma/backend/video_decoder_null.h"
 
 namespace chromecast {
 namespace media {
@@ -35,7 +35,7 @@ MediaPipelineBackendAlsa::CreateVideoDecoder() {
   DCHECK_EQ(kStateUninitialized, state_);
   if (video_decoder_)
     return nullptr;
-  video_decoder_.reset(new VideoDecoderDefault());
+  video_decoder_.reset(new VideoDecoderNull());
   return video_decoder_.get();
 }
 
@@ -81,9 +81,9 @@ bool MediaPipelineBackendAlsa::Resume() {
 }
 
 bool MediaPipelineBackendAlsa::SetPlaybackRate(float rate) {
-  // TODO(kmackay) Implement this for rates other than 1.0.
-  if (rate != 1.0)
-    NOTIMPLEMENTED() << " unhandled rate: " << rate;
+  if (audio_decoder_) {
+    return audio_decoder_->SetPlaybackRate(rate);
+  }
   return true;
 }
 

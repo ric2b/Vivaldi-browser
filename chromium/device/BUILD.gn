@@ -37,6 +37,7 @@ test("device_unittests") {
     "bluetooth/bluetooth_service_record_win_unittest.cc",
     "bluetooth/bluetooth_task_manager_win_unittest.cc",
     "bluetooth/bluetooth_uuid_unittest.cc",
+    "bluetooth/device_unittest.cc",
     "bluetooth/string_util_icu_unittest.cc",
     "bluetooth/test/bluetooth_gatt_server_test.cc",
     "bluetooth/test/bluetooth_gatt_server_test.h",
@@ -50,6 +51,8 @@ test("device_unittests") {
     "bluetooth/test/bluetooth_test_win.h",
     "bluetooth/test/mock_bluetooth_cbcharacteristic_mac.h",
     "bluetooth/test/mock_bluetooth_cbcharacteristic_mac.mm",
+    "bluetooth/test/mock_bluetooth_cbdescriptor_mac.h",
+    "bluetooth/test/mock_bluetooth_cbdescriptor_mac.mm",
     "bluetooth/test/mock_bluetooth_cbperipheral_mac.h",
     "bluetooth/test/mock_bluetooth_cbperipheral_mac.mm",
     "bluetooth/test/mock_bluetooth_cbservice_mac.h",
@@ -61,6 +64,8 @@ test("device_unittests") {
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
     "gamepad/gamepad_provider_unittest.cc",
+    "gamepad/gamepad_service_unittest.cc",
+    "gamepad/public/interfaces/gamepad_struct_traits_unittest.cc",
     "generic_sensor/platform_sensor_and_provider_unittest_win.cc",
     "generic_sensor/platform_sensor_provider_unittest.cc",
     "power_monitor/power_monitor_message_broadcaster_unittest.cc",
@@ -77,8 +82,11 @@ test("device_unittests") {
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
+    "//device/bluetooth:mojo",
     "//device/gamepad",
     "//device/gamepad:test_helpers",
+    "//device/gamepad/public/interfaces",
+    "//device/gamepad/public/interfaces:gamepad_struct_traits_test",
     "//device/generic_sensor",
     "//device/generic_sensor:testing",
     "//device/geolocation:unittests",
@@ -93,6 +101,7 @@ test("device_unittests") {
     "//net",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/public:blink_headers",
     "//tools/usb_gadget",
     "//url",
   ]
@@ -102,8 +111,9 @@ test("device_unittests") {
     deps += [ "//dbus:test_support" ]
   }
 
-  if (is_linux) {
-    sources += [ "generic_sensor/linux/sensor_reader_unittest.cc" ]
+  if (!is_linux_without_udev) {
+    sources +=
+        [ "generic_sensor/platform_sensor_and_provider_unittest_linux.cc" ]
   }
 
   # HID and Serial:
@@ -137,6 +147,8 @@ test("device_unittests") {
       "test/test_device_client.cc",
       "test/test_device_client.h",
       "test/usb_test_gadget_impl.cc",
+      "u2f/u2f_apdu_unittest.cc",
+      "u2f/u2f_message_unittest.cc",
       "usb/mojo/device_impl_unittest.cc",
       "usb/mojo/device_manager_impl_unittest.cc",
       "usb/mojo/mock_permission_provider.cc",
@@ -151,6 +163,7 @@ test("device_unittests") {
     deps += [
       "//device/base",
       "//device/base:mocks",
+      "//device/u2f",
       "//device/usb",
       "//device/usb:test_support",
       "//device/usb/mojo",
@@ -238,6 +251,7 @@ test("device_unittests") {
   if (enable_webvr) {
     sources += [
       "vr/vr_device_manager_unittest.cc",
+      "vr/vr_display_impl_unittest.cc",
       "vr/vr_service_impl_unittest.cc",
     ]
 
@@ -273,6 +287,7 @@ if (is_android) {
     java_files = [
       "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",
       "generic_sensor/android/junit/src/org/chromium/device/sensors/PlatformSensorAndProviderTest.java",
+      "nfc/android/junit/src/org/chromium/device/nfc/NFCTest.java",
     ]
     deps = [
       "//base:base_java",
@@ -280,6 +295,9 @@ if (is_android) {
       "//device/gamepad:java",
       "//device/generic_sensor:java",
       "//device/generic_sensor/public/interfaces:interfaces_java",
+      "//device/nfc:mojo_bindings_java",
+      "//device/nfc/android:java",
+      "//mojo/public/java:bindings_java",
       "//third_party/android_tools:android_support_annotations_java",
     ]
     srcjar_deps = [ "//device/gamepad:java_enums_srcjar" ]

@@ -126,7 +126,7 @@ class StartPageView::StartPageTilesContainer
   AllAppsTileItemView* all_apps_button() { return all_apps_button_; }
 
   // Overridden from SearchResultContainerView:
-  int Update() override;
+  int DoUpdate() override;
   void UpdateSelectedIndex(int old_selected, int new_selected) override;
   void OnContainerSelected(bool from_bottom,
                            bool directional_movement) override;
@@ -171,7 +171,7 @@ TileItemView* StartPageView::StartPageTilesContainer::GetTileItemView(
   return search_result_tile_views_[index];
 }
 
-int StartPageView::StartPageTilesContainer::Update() {
+int StartPageView::StartPageTilesContainer::DoUpdate() {
   // Ignore updates and disable buttons when transitioning to a different
   // state.
   if (contents_view_->GetActiveState() != AppListModel::STATE_START) {
@@ -190,7 +190,7 @@ int StartPageView::StartPageTilesContainer::Update() {
       delete search_result_tile_views_[i];
     search_result_tile_views_.clear();
     RemoveChildView(all_apps_button_);
-    CreateAppsGrid(display_results.size());
+    CreateAppsGrid(std::min(kNumStartPageTiles, display_results.size()));
   }
 
   // Update the tile item results.
@@ -361,7 +361,7 @@ void StartPageView::OnShown() {
         app_list_main_view_->ShouldShowCustomLauncherPage());
   }
   tiles_container_->ClearSelectedIndex();
-  tiles_container_->set_num_results(tiles_container_->Update());
+  tiles_container_->Update();
   custom_launcher_page_background_->SetSelected(false);
 }
 

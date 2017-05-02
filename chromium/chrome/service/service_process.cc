@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/base_switches.h"
 #include "base/callback.h"
@@ -21,8 +22,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/scheduler_worker_pool_params.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
@@ -157,13 +161,29 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
     Teardown();
     return false;
   }
-  blocking_pool_ = new base::SequencedWorkerPool(
-      3, "ServiceBlocking", base::TaskPriority::USER_VISIBLE);
+
+  // Initialize TaskScheduler and redirect SequencedWorkerPool tasks to it.
+  constexpr int kMaxTaskSchedulerThreads = 3;
+  std::vector<base::SchedulerWorkerPoolParams> worker_pool_params_vector;
+  worker_pool_params_vector.emplace_back(
+      "CloudPrintServiceProcess", base::ThreadPriority::NORMAL,
+      base::SchedulerWorkerPoolParams::StandbyThreadPolicy::LAZY,
+      kMaxTaskSchedulerThreads, base::TimeDelta::FromSeconds(30),
+      base::SchedulerBackwardCompatibility::INIT_COM_STA);
+  base::TaskScheduler::CreateAndSetDefaultTaskScheduler(
+      worker_pool_params_vector,
+      base::Bind([](const base::TaskTraits&) -> size_t { return 0; }));
+  base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
+
+  blocking_pool_ =
+      new base::SequencedWorkerPool(kMaxTaskSchedulerThreads, "ServiceBlocking",
+                                    base::TaskPriority::USER_VISIBLE);
 
   // Initialize Mojo early so things can use it.
   mojo::edk::Init();
-  mojo_ipc_support_.reset(
-      new mojo::edk::ScopedIPCSupport(io_thread_->task_runner()));
+  mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
+      io_thread_->task_runner(),
+      mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
 
   request_context_getter_ = new ServiceURLRequestContextGetter();
 
@@ -257,6 +277,9 @@ bool ServiceProcess::Teardown() {
     blocking_pool_->Shutdown(kMaxNewShutdownBlockingTasks);
     blocking_pool_ = NULL;
   }
+
+  if (base::TaskScheduler::GetInstance())
+    base::TaskScheduler::GetInstance()->Shutdown();
 
   // The NetworkChangeNotifier must be destroyed after all other threads that
   // might use it have been shut down.

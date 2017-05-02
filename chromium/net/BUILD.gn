@@ -86,14 +86,26 @@ if (is_linux) {
   net_configs += [ "//build/config/linux:libresolv" ]
 }
 
+source_set("constants") {
+  sources = [
+    "base/trace_constants.cc",
+    "base/trace_constants.h",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
 component("net") {
   sources = gypi_values.net_nacl_common_sources
   net_unfiltered_sources = []
 
   deps = [
+    ":constants",
     ":net_resources",
     "//base",
     "//net/base/registry_controlled_domains",
+    "//net/data/ssl/wosign:wosign_domains",
     "//third_party/protobuf:protobuf_lite",
     "//url:url_features",
   ]
@@ -109,7 +121,6 @@ component("net") {
 
     deps += [
       "//base/third_party/dynamic_annotations",
-      "//components/prefs",
       "//sdch",
       "//third_party/zlib",
     ]
@@ -140,9 +151,6 @@ component("net") {
     if (!use_openssl_certs) {
       sources -= [
         "base/crypto_module_openssl.cc",
-        "base/keygen_handler_openssl.cc",
-        "base/openssl_private_key_store.h",
-        "base/openssl_private_key_store_memory.cc",
         "cert/cert_database_openssl.cc",
         "cert/cert_verify_proc_openssl.cc",
         "cert/cert_verify_proc_openssl.h",
@@ -151,14 +159,10 @@ component("net") {
         "ssl/openssl_client_key_store.cc",
         "ssl/openssl_client_key_store.h",
       ]
-      if (is_android) {
-        sources -= [ "base/openssl_private_key_store_android.cc" ]
-      }
     } else {
       if (is_android) {
         # Android doesn't use these even when using OpenSSL.
         sources -= [
-          "base/openssl_private_key_store_memory.cc",
           "cert/cert_database_openssl.cc",
           "cert/cert_verify_proc_openssl.cc",
           "cert/test_root_certs_openssl.cc",
@@ -180,8 +184,9 @@ component("net") {
     if (!use_nss_certs) {
       sources -= [
         "base/crypto_module_nss.cc",
-        "base/keygen_handler_nss.cc",
         "cert/cert_database_nss.cc",
+        "cert/internal/cert_issuer_source_nss.cc",
+        "cert/internal/cert_issuer_source_nss.h",
         "cert/internal/trust_store_nss.cc",
         "cert/internal/trust_store_nss.h",
         "cert/nss_cert_database.cc",
@@ -189,8 +194,6 @@ component("net") {
         "cert/x509_certificate_nss.cc",
         "ssl/client_cert_store_nss.cc",
         "ssl/client_cert_store_nss.h",
-        "third_party/mozilla_security_manager/nsKeygenHandler.cpp",
-        "third_party/mozilla_security_manager/nsKeygenHandler.h",
         "third_party/mozilla_security_manager/nsNSSCertificateDB.cpp",
         "third_party/mozilla_security_manager/nsNSSCertificateDB.h",
         "third_party/mozilla_security_manager/nsPKCS12Blob.cpp",
@@ -685,6 +688,7 @@ if (use_v8_in_net) {
     ]
 
     public_deps = [
+      ":constants",
       ":net",
     ]
     deps = [
@@ -701,8 +705,6 @@ if (use_v8_in_net && !is_android) {
     sources = [
       "dns/mojo_host_resolver_impl.cc",
       "dns/mojo_host_resolver_impl.h",
-      "proxy/in_process_mojo_proxy_resolver_factory.cc",
-      "proxy/in_process_mojo_proxy_resolver_factory.h",
       "proxy/mojo_proxy_resolver_factory.h",
       "proxy/proxy_resolver_factory_mojo.cc",
       "proxy/proxy_resolver_factory_mojo.h",
@@ -715,12 +717,6 @@ if (use_v8_in_net && !is_android) {
       "//base",
       "//mojo/public/cpp/bindings",
       "//net/interfaces",
-
-      # NOTE(amistry): As long as we support in-process Mojo v8 PAC, we need
-      # this dependency since in_process_mojo_proxy_resolver_factory creates
-      # the utility process side Mojo services in the browser process.
-      # Ultimately, this will go away when we only support out-of-process.
-      ":net_utility_services",
     ]
   }
 
@@ -1009,14 +1005,16 @@ if (is_linux) {
 
   source_set("epoll_quic_tools") {
     sources = [
+      "tools/quic/platform/impl/quic_epoll_clock.cc",
+      "tools/quic/platform/impl/quic_epoll_clock.h",
+      "tools/quic/platform/impl/quic_socket_utils.cc",
+      "tools/quic/platform/impl/quic_socket_utils.h",
       "tools/quic/quic_client.cc",
       "tools/quic/quic_client.h",
       "tools/quic/quic_default_packet_writer.cc",
       "tools/quic/quic_default_packet_writer.h",
       "tools/quic/quic_epoll_alarm_factory.cc",
       "tools/quic/quic_epoll_alarm_factory.h",
-      "tools/quic/quic_epoll_clock.cc",
-      "tools/quic/quic_epoll_clock.h",
       "tools/quic/quic_epoll_connection_helper.cc",
       "tools/quic/quic_epoll_connection_helper.h",
       "tools/quic/quic_packet_reader.cc",
@@ -1025,8 +1023,6 @@ if (is_linux) {
       "tools/quic/quic_packet_writer_wrapper.h",
       "tools/quic/quic_server.cc",
       "tools/quic/quic_server.h",
-      "tools/quic/quic_socket_utils.cc",
-      "tools/quic/quic_socket_utils.h",
     ]
     deps = [
       ":epoll_server",
@@ -1091,6 +1087,7 @@ if (is_android) {
   generate_jni("net_test_jni_headers") {
     sources = [
       "android/javatests/src/org/chromium/net/AndroidKeyStoreTestUtil.java",
+      "android/javatests/src/org/chromium/net/AndroidNetworkLibraryTestUtil.java",
       "test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticator.java",
       "test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerImpl.java",
     ]
@@ -1122,8 +1119,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_client_session.h",
     "tools/quic/quic_dispatcher.cc",
     "tools/quic/quic_dispatcher.h",
-    "tools/quic/quic_in_memory_cache.cc",
-    "tools/quic/quic_in_memory_cache.h",
+    "tools/quic/quic_http_response_cache.cc",
+    "tools/quic/quic_http_response_cache.h",
     "tools/quic/quic_per_connection_packet_writer.cc",
     "tools/quic/quic_per_connection_packet_writer.h",
     "tools/quic/quic_process_packet_interface.h",
@@ -1147,6 +1144,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server_stream.h",
     "tools/quic/quic_spdy_client_stream.cc",
     "tools/quic/quic_spdy_client_stream.h",
+    "tools/quic/quic_spdy_server_stream_base.cc",
+    "tools/quic/quic_spdy_server_stream_base.h",
     "tools/quic/quic_time_wait_list_manager.cc",
     "tools/quic/quic_time_wait_list_manager.h",
     "tools/quic/stateless_rejector.cc",
@@ -1252,6 +1251,7 @@ test("net_unittests") {
   defines = []
 
   deps = [
+    ":cert_verify_proc_whitelist_unittest_data",
     ":extras",
     ":net",
     ":simple_quic_tools",
@@ -1325,9 +1325,11 @@ test("net_unittests") {
 
   if (!use_nss_certs) {
     sources -= [
+      "cert/internal/cert_issuer_source_nss_unittest.cc",
       "cert/internal/trust_store_nss_unittest.cc",
       "cert/nss_cert_database_unittest.cc",
       "ssl/client_cert_store_nss_unittest.cc",
+      "ssl/ssl_platform_key_nss_unittest.cc",
     ]
     if (is_chromeos) {  # Already removed for all non-ChromeOS builds.
       sources -= [
@@ -1438,8 +1440,6 @@ test("net_unittests") {
     sources -= [
       # TODO(droger): The following tests are disabled because the
       # implementation is missing or incomplete.
-      # KeygenHandler::GenKeyAndSignChallenge() is not ported to iOS.
-      "base/keygen_handler_unittest.cc",
       "disk_cache/backend_unittest.cc",
       "disk_cache/blockfile/block_files_unittest.cc",
 
@@ -1539,6 +1539,11 @@ test("net_unittests") {
   if (is_win) {
     libs = [ "iphlpapi.lib" ]
   }
+
+  if (is_chromecast && use_nss_certs) {
+    sources += [ "ssl/ssl_platform_key_chromecast_unittest.cc" ]
+    sources -= [ "ssl/ssl_platform_key_nss_unittest.cc" ]
+  }
 }
 
 # !is_android && !is_win && !is_mac
@@ -1580,7 +1585,29 @@ if (!is_ios) {
     } else {
       sources -= [ "proxy/proxy_resolver_perftest.cc" ]
     }
+
+    # Some linker failures have been observed for this target on the Win64
+    # continuous builder, see crbug.com/659369.
+    # TODO(sebmarchand): Remove this once we have some data.
+    if (is_win && linkrepro_root_dir != "") {
+      ldflags = [ "/LINKREPRO:" + linkrepro_root_dir + "/" + target_name ]
+    }
   }
+}
+
+action_foreach("cert_verify_proc_whitelist_unittest_data") {
+  script = "//net/tools/dafsa/make_dafsa.py"
+  sources = [
+    "//net/cert/cert_verify_proc_whitelist_unittest1.gperf",
+  ]
+  outputs = [
+    "${target_gen_dir}/cert/{{source_name_part}}-inc.cc",
+  ]
+  args = [
+    "{{source}}",
+    rebase_path("${target_gen_dir}/cert/{{source_name_part}}-inc.cc",
+                root_build_dir),
+  ]
 }
 
 # Fuzzers
@@ -1592,6 +1619,8 @@ source_set("net_fuzzer_test_support") {
 
   sources = [
     "base/fuzzer_test_support.cc",
+    "dns/fuzzed_host_resolver.cc",
+    "dns/fuzzed_host_resolver.h",
     "filter/fuzzed_source_stream.cc",
     "filter/fuzzed_source_stream.h",
     "socket/fuzzed_datagram_client_socket.cc",
@@ -1788,8 +1817,6 @@ fuzzer_test("net_dns_hosts_parse_fuzzer") {
 
 fuzzer_test("net_host_resolver_impl_fuzzer") {
   sources = [
-    "dns/fuzzed_host_resolver.cc",
-    "dns/fuzzed_host_resolver.h",
     "dns/host_resolver_impl_fuzzer.cc",
   ]
   deps = [
@@ -1982,6 +2009,20 @@ fuzzer_test("net_socks5_client_socket_fuzzer") {
   ]
 }
 
+fuzzer_test("net_url_request_ftp_fuzzer") {
+  sources = [
+    "url_request/url_request_ftp_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
+  dict = "data/fuzzer_dictionaries/net_url_request_ftp_fuzzer.dict"
+  seed_corpus = "data/fuzzer_data/net_url_request_ftp_fuzzer/"
+}
+
 fuzzer_test("net_url_request_fuzzer") {
   sources = [
     "url_request/url_request_fuzzer.cc",
@@ -2042,4 +2083,27 @@ fuzzer_test("net_http_security_headers_hpkp_report_only_fuzzer") {
     "//url",
   ]
   dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
+}
+
+fuzzer_test("net_http_transport_security_state_static_fuzzer") {
+  sources = [
+    "http/transport_security_state_static_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+  dict =
+      "data/fuzzer_dictionaries/net_http_transport_security_state_fuzzer.dict"
+}
+
+if (host_toolchain == current_toolchain) {
+  executable("domain_security_preload_generator") {
+    sources = gypi_values.net_domain_security_state_generator_sources
+    deps = [
+      "//base",
+      "//crypto",
+      "//third_party/boringssl",
+    ]
+  }
 }

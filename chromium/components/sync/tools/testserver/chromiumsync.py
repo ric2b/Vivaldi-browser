@@ -99,7 +99,8 @@ ALL_TYPES = (
     EXTENSION_SETTINGS,
     FAVICON_IMAGES,
     FAVICON_TRACKING,
-    WIFI_CREDENTIAL) = range(37)
+    WIFI_CREDENTIAL,
+    NOTES) = range(37+1)
 
 # An enumeration on the frequency at which the server should send errors
 # to the client. This would be specified by the url that triggers the error.
@@ -154,6 +155,7 @@ SYNC_TYPE_TO_DESCRIPTOR = {
     THEME: SYNC_TYPE_FIELDS['theme'],
     TYPED_URL: SYNC_TYPE_FIELDS['typed_url'],
     WIFI_CREDENTIAL: SYNC_TYPE_FIELDS["wifi_credential"],
+    NOTES: SYNC_TYPE_FIELDS['notes'],
     }
 
 # The parent ID used to indicate a top-level node.
@@ -429,10 +431,8 @@ class UpdateSieve(object):
         elif marker.token:
           (timestamp, version) = pickle.loads(marker.token)
           self._migration_versions_to_check[data_type] = version
-        elif marker.HasField('token'):
-          timestamp = 0
         else:
-          raise ValueError('No timestamp information in progress marker.')
+          timestamp = 0
         data_type = ProtocolDataTypeIdToSyncType(marker.data_type_id)
         self._state[data_type] = timestamp
     elif request.HasField('from_timestamp'):
@@ -521,6 +521,8 @@ class SyncDataModel(object):
       PermanentItem('synced_bookmarks', name='Synced Bookmarks',
                     parent_tag='google_chrome_bookmarks', sync_type=BOOKMARK,
                     create_by_default=False),
+      PermanentItem('trash_bookmarks', name='Trash Bookmarks',
+                    parent_tag='google_chrome_bookmarks', sync_type=BOOKMARK),
       PermanentItem('google_chrome_autofill', name='Autofill',
                     parent_tag=ROOT_ID, sync_type=AUTOFILL),
       PermanentItem('google_chrome_autofill_profiles', name='Autofill Profiles',
@@ -598,6 +600,14 @@ class SyncDataModel(object):
                     parent_tag=ROOT_ID, sync_type=DICTIONARY),
       PermanentItem('google_chrome_articles', name='Articles',
                     parent_tag=ROOT_ID, sync_type=ARTICLE),
+      PermanentItem('vivaldi_notes', name='Notes',
+                    parent_tag=ROOT_ID, sync_type=NOTES),
+      PermanentItem('main_notes', name='Notes',
+                    parent_tag="vivaldi_notes", sync_type=NOTES),
+      PermanentItem('other_notes', name='Notes',
+                    parent_tag="vivaldi_notes", sync_type=NOTES),
+      PermanentItem('trash_notes', name='Notes',
+                    parent_tag="vivaldi_notes", sync_type=NOTES),
       ]
 
   def __init__(self):

@@ -3,16 +3,26 @@
 // found in the LICENSE file.
 
 #include "content/common/frame_replication_state.h"
+
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
 
 namespace content {
 
+FeaturePolicyParsedWhitelist::FeaturePolicyParsedWhitelist()
+    : matches_all_origins(false) {}
+
+FeaturePolicyParsedWhitelist::FeaturePolicyParsedWhitelist(
+    const FeaturePolicyParsedWhitelist& fppw) = default;
+
+FeaturePolicyParsedWhitelist::~FeaturePolicyParsedWhitelist() {}
+
 FrameReplicationState::FrameReplicationState()
     : sandbox_flags(blink::WebSandboxFlags::None),
       scope(blink::WebTreeScopeType::Document),
       insecure_request_policy(blink::kLeaveInsecureRequestsAlone),
-      has_potentially_trustworthy_unique_origin(false) {}
+      has_potentially_trustworthy_unique_origin(false),
+      has_received_user_gesture(false) {}
 
 FrameReplicationState::FrameReplicationState(
     blink::WebTreeScopeType scope,
@@ -20,7 +30,8 @@ FrameReplicationState::FrameReplicationState(
     const std::string& unique_name,
     blink::WebSandboxFlags sandbox_flags,
     blink::WebInsecureRequestPolicy insecure_request_policy,
-    bool has_potentially_trustworthy_unique_origin)
+    bool has_potentially_trustworthy_unique_origin,
+    bool has_received_user_gesture)
     : origin(),
       sandbox_flags(sandbox_flags),
       name(name),
@@ -28,7 +39,8 @@ FrameReplicationState::FrameReplicationState(
       scope(scope),
       insecure_request_policy(insecure_request_policy),
       has_potentially_trustworthy_unique_origin(
-          has_potentially_trustworthy_unique_origin) {}
+          has_potentially_trustworthy_unique_origin),
+      has_received_user_gesture(has_received_user_gesture) {}
 
 FrameReplicationState::FrameReplicationState(
     const FrameReplicationState& other) = default;

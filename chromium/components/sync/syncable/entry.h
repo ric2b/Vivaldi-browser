@@ -179,6 +179,11 @@ class Entry {
     return kernel_->ref(UNIQUE_BOOKMARK_TAG);
   }
 
+  const std::string& GetUniqueNotesTag() const {
+    DCHECK(kernel_);
+    return kernel_->ref(UNIQUE_NOTES_TAG);
+  }
+
   const sync_pb::EntitySpecifics& GetSpecifics() const {
     DCHECK(kernel_);
     return kernel_->ref(SPECIFICS);

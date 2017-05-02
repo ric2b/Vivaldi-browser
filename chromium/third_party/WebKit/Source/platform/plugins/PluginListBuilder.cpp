@@ -41,7 +41,7 @@ void PluginListBuilder::addPlugin(const WebString& name,
   info.name = name;
   info.desc = description;
   info.file = fileName;
-  m_results->append(info);
+  m_results->push_back(info);
 }
 
 void PluginListBuilder::addMediaTypeToLastPlugin(const WebString& name,
@@ -49,13 +49,13 @@ void PluginListBuilder::addMediaTypeToLastPlugin(const WebString& name,
   MimeClassInfo info;
   info.type = name;
   info.desc = description;
-  m_results->last().mimes.append(info);
+  m_results->back().mimes.push_back(info);
 }
 
 void PluginListBuilder::addFileExtensionToLastMediaType(
     const WebString& extension) {
-  MimeClassInfo& info = m_results->last().mimes.last();
-  info.extensions.append(extension);
+  MimeClassInfo& info = m_results->back().mimes.back();
+  info.extensions.push_back(extension);
 }
 
 }  // namespace blink

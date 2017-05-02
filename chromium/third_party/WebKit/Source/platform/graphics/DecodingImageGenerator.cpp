@@ -30,7 +30,7 @@
 #include "platform/graphics/ImageFrameGenerator.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/image-decoders/SegmentReader.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "third_party/skia/include/core/SkData.h"
 #include <memory>
 
@@ -142,16 +142,18 @@ SkImageGenerator* DecodingImageGenerator::create(SkData* data) {
   // don't really matter.
   std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(
       segmentReader, true, ImageDecoder::AlphaPremultiplied,
-      ImageDecoder::ColorSpaceApplied);
+      ColorBehavior::transformToGlobalTarget());
   if (!decoder || !decoder->isSizeAvailable())
     return nullptr;
 
   const IntSize size = decoder->size();
-  const SkImageInfo info = SkImageInfo::MakeN32(
-      size.width(), size.height(), kPremul_SkAlphaType, decoder->colorSpace());
+  const SkImageInfo info =
+      SkImageInfo::MakeN32(size.width(), size.height(), kPremul_SkAlphaType,
+                           decoder->colorSpaceForSkImages());
 
-  RefPtr<ImageFrameGenerator> frame = ImageFrameGenerator::create(
-      SkISize::Make(size.width(), size.height()), decoder->colorSpace(), false);
+  RefPtr<ImageFrameGenerator> frame =
+      ImageFrameGenerator::create(SkISize::Make(size.width(), size.height()),
+                                  false, decoder->colorBehavior());
   if (!frame)
     return nullptr;
 

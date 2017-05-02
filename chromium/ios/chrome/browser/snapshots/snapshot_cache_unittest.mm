@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
+#include "base/mac/scoped_nsobject.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
@@ -198,8 +199,11 @@ class SnapshotCacheTest : public PlatformTest {
   void TriggerMemoryWarning() {
     // _performMemoryWarning is a private API and must not be compiled into
     // official builds.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundeclared-selector"
     [[UIApplication sharedApplication]
         performSelector:@selector(_performMemoryWarning)];
+#pragma clang diagnostic pop
   }
 
   web::TestWebThreadBundle thread_bundle_;

@@ -25,10 +25,6 @@ namespace gpu {
 class GpuChannelHost;
 }
 
-namespace media {
-class VideoFrame;
-}
-
 namespace content {
 
 // Adapter to GpuJpegDecodeAccelerator for VideoCaptureDevice::Client. It takes
@@ -59,8 +55,7 @@ class CONTENT_EXPORT VideoCaptureGpuJpegDecoder
       const media::VideoCaptureFormat& frame_format,
       base::TimeTicks reference_time,
       base::TimeDelta timestamp,
-      std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> out_buffer)
-      override;
+      media::VideoCaptureDevice::Client::Buffer out_buffer) override;
 
   // JpegDecodeAccelerator::Client implementation.
   // These will be called on IO thread.

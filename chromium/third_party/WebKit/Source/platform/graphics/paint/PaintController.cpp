@@ -6,7 +6,7 @@
 
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "third_party/skia/include/core/SkPictureAnalyzer.h"
 #include "wtf/AutoReset.h"
 #include "wtf/text/StringBuilder.h"
@@ -21,7 +21,7 @@ namespace blink {
 void PaintController::setTracksRasterInvalidations(bool value) {
   if (value) {
     m_paintChunksRasterInvalidationTrackingMap =
-        wrapUnique(new RasterInvalidationTrackingMap<const PaintChunk>);
+        WTF::wrapUnique(new RasterInvalidationTrackingMap<const PaintChunk>);
   } else {
     m_paintChunksRasterInvalidationTrackingMap = nullptr;
   }
@@ -144,7 +144,7 @@ void PaintController::removeLastDisplayItem() {
   if (it != m_newDisplayItemIndicesByClient.end()) {
     Vector<size_t>& indices = it->value;
     if (!indices.isEmpty() &&
-        indices.last() == (m_newDisplayItemList.size() - 1))
+        indices.back() == (m_newDisplayItemList.size() - 1))
       indices.pop_back();
   }
 #endif
@@ -185,14 +185,14 @@ void PaintController::processNewItem(DisplayItem& displayItem) {
         // The status will end when the subsequence owner is invalidated or
         // deleted.
         displayItem.client().beginShouldKeepAlive(
-            m_currentSubsequenceClients.last());
+            m_currentSubsequenceClients.back());
       }
     }
 
     if (displayItem.getType() == DisplayItem::kSubsequence) {
-      m_currentSubsequenceClients.append(&displayItem.client());
+      m_currentSubsequenceClients.push_back(&displayItem.client());
     } else if (displayItem.getType() == DisplayItem::kEndSubsequence) {
-      CHECK(m_currentSubsequenceClients.last() == &displayItem.client());
+      CHECK(m_currentSubsequenceClients.back() == &displayItem.client());
       m_currentSubsequenceClients.pop_back();
     }
   }
@@ -316,7 +316,7 @@ void PaintController::addItemToIndexIfNeeded(
                 .add(&displayItem.client(), Vector<size_t>())
                 .storedValue->value
           : it->value;
-  indices.append(index);
+  indices.push_back(index);
 }
 
 size_t PaintController::findCachedItem(const DisplayItem::Id& id) {
@@ -465,6 +465,7 @@ void PaintController::copyCachedSubsequence(size_t& cachedItemIndex) {
   }
 }
 
+DISABLE_CFI_PERF
 static IntRect visualRectForDisplayItem(
     const DisplayItem& displayItem,
     const LayoutSize& offsetFromLayoutObject) {
@@ -482,6 +483,7 @@ void PaintController::resetCurrentListIndices() {
   m_skippedProbableUnderInvalidationCount = 0;
 }
 
+DISABLE_CFI_PERF
 void PaintController::commitNewDisplayItems(
     const LayoutSize& offsetFromLayoutObject) {
   TRACE_EVENT2("blink,benchmark", "PaintController::commitNewDisplayItems",
@@ -521,7 +523,22 @@ void PaintController::commitNewDisplayItems(
       if (item.client().isJustCreated())
         item.client().clearIsJustCreated();
       if (item.skippedCache())
-        skippedCacheClients.append(&item.client());
+        skippedCacheClients.push_back(&item.client());
+    }
+  }
+
+  if (!m_firstPainted) {
+    for (const auto& item : m_newDisplayItemList) {
+      if (item.isDrawing() &&
+          // Here we ignore all document-background paintings because we don't
+          // know if the background is default. ViewPainter should have called
+          // setFirstPainted() if this display item is for non-default
+          // background.
+          item.getType() != DisplayItem::kDocumentBackground &&
+          item.drawsContent()) {
+        m_firstPainted = true;
+        break;
+      }
     }
   }
 
@@ -632,7 +649,7 @@ void PaintController::generateChunkRasterInvalidationRects(
                     .add(&oldChunk.id->client, Vector<size_t>())
                     .storedValue->value
               : it->value;
-      indices.append(m_nextChunkToMatch);
+      indices.push_back(m_nextChunkToMatch);
     }
     ++m_nextChunkToMatch;
   }
@@ -656,7 +673,7 @@ void PaintController::generateChunkRasterInvalidationRects(
 void PaintController::addRasterInvalidationInfo(const DisplayItemClient* client,
                                                 PaintChunk& chunk,
                                                 const FloatRect& rect) {
-  chunk.rasterInvalidationRects.append(rect);
+  chunk.rasterInvalidationRects.push_back(rect);
   if (!m_paintChunksRasterInvalidationTrackingMap)
     return;
   RasterInvalidationInfo info;
@@ -668,7 +685,7 @@ void PaintController::addRasterInvalidationInfo(const DisplayItemClient* client,
   }
   RasterInvalidationTracking& tracking =
       m_paintChunksRasterInvalidationTrackingMap->add(&chunk);
-  tracking.trackedRasterInvalidations.append(info);
+  tracking.trackedRasterInvalidations.push_back(info);
 }
 
 void PaintController::generateChunkRasterInvalidationRectsComparingOldChunk(
@@ -824,71 +841,30 @@ void PaintController::checkUnderInvalidation() {
   ++m_underInvalidationCheckingBegin;
 }
 
-String PaintController::displayItemListAsDebugString(
-    const DisplayItemList& list,
-    bool showPictures) const {
-  StringBuilder stringBuilder;
-  size_t i = 0;
-  for (auto it = list.begin(); it != list.end(); ++it, ++i) {
-    const DisplayItem& displayItem = *it;
-    if (i)
-      stringBuilder.append(",\n");
-    stringBuilder.append(String::format("{index: %zu, ", i));
-#ifndef NDEBUG
-    displayItem.dumpPropertiesAsDebugString(stringBuilder);
-#endif
-
-    if (displayItem.hasValidClient()) {
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-      if (!displayItem.client().isAlive()) {
-        stringBuilder.append(", clientIsAlive: false");
-      } else {
-#else
-      // debugName() and clientCacheIsValid() can only be called on a live
-      // client, so only output it for m_newDisplayItemList, in which we are
-      // sure the clients are all alive.
-      if (&list == &m_newDisplayItemList) {
-#endif
-#ifdef NDEBUG
-        stringBuilder.append(
-            String::format("clientDebugName: \"%s\"",
-                           displayItem.client().debugName().ascii().data()));
-#endif
-        stringBuilder.append(", cacheIsValid: ");
-        stringBuilder.append(
-            clientCacheIsValid(displayItem.client()) ? "true" : "false");
-      }
-#ifndef NDEBUG
-      if (showPictures && displayItem.isDrawing()) {
-        if (const SkPicture* picture =
-                static_cast<const DrawingDisplayItem&>(displayItem).picture()) {
-          stringBuilder.append(", picture: ");
-          stringBuilder.append(pictureAsDebugString(picture));
-        }
-      }
-#endif
-    }
-    if (list.hasVisualRect(i)) {
-      IntRect visualRect = list.visualRect(i);
-      stringBuilder.append(String::format(
-          ", visualRect: [%d,%d %dx%d]", visualRect.x(), visualRect.y(),
-          visualRect.width(), visualRect.height()));
-    }
-    stringBuilder.append('}');
-  }
-  return stringBuilder.toString();
-}
-
 void PaintController::showDebugDataInternal(bool showPictures) const {
   WTFLogAlways("current display item list: [%s]\n",
-               displayItemListAsDebugString(
-                   m_currentPaintArtifact.getDisplayItemList(), showPictures)
+               m_currentPaintArtifact.getDisplayItemList()
+                   .subsequenceAsJSON(
+                       0, m_currentPaintArtifact.getDisplayItemList().size(),
+                       showPictures ? DisplayItemList::JsonOptions::ShowPictures
+                                    : DisplayItemList::JsonOptions::Default)
+                   ->toPrettyJSONString()
                    .utf8()
                    .data());
-  WTFLogAlways("new display item list: [%s]\n",
-               displayItemListAsDebugString(m_newDisplayItemList, showPictures)
-                   .utf8()
-                   .data());
+  // debugName() and clientCacheIsValid() can only be called on a live
+  // client, so only output it for m_newDisplayItemList, in which we are
+  // sure the clients are all alive.
+  WTFLogAlways(
+      "new display item list: [%s]\n",
+      m_newDisplayItemList
+          .subsequenceAsJSON(
+              0, m_newDisplayItemList.size(),
+              showPictures ? (DisplayItemList::JsonOptions::ShowPictures |
+                              DisplayItemList::JsonOptions::ShowClientDebugName)
+                           : DisplayItemList::JsonOptions::ShowClientDebugName)
+          ->toPrettyJSONString()
+          .utf8()
+          .data());
 }
 
 }  // namespace blink

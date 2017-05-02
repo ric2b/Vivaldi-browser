@@ -28,6 +28,7 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Range.h"
+#include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/CompositionUnderline.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
@@ -42,11 +43,12 @@ namespace blink {
 class Editor;
 class LocalFrame;
 class Range;
-class Text;
 
 class CORE_EXPORT InputMethodController final
-    : public GarbageCollected<InputMethodController> {
+    : public GarbageCollectedFinalized<InputMethodController>,
+      public SynchronousMutationObserver {
   WTF_MAKE_NONCOPYABLE(InputMethodController);
+  USING_GARBAGE_COLLECTED_MIXIN(InputMethodController);
 
  public:
   enum ConfirmCompositionBehavior {
@@ -55,22 +57,25 @@ class CORE_EXPORT InputMethodController final
   };
 
   static InputMethodController* create(LocalFrame&);
+  virtual ~InputMethodController();
   DECLARE_TRACE();
 
   // international text input composition
   bool hasComposition() const;
-  void setComposition(const String&,
-                      const Vector<CompositionUnderline>&,
+  void setComposition(const String& text,
+                      const Vector<CompositionUnderline>& underlines,
                       int selectionStart,
                       int selectionEnd);
-  void setCompositionFromExistingText(const Vector<CompositionUnderline>&,
+  void setCompositionFromExistingText(const Vector<CompositionUnderline>& text,
                                       unsigned compositionStart,
                                       unsigned compositionEnd);
 
   // Deletes ongoing composing text if any, inserts specified text, and
   // changes the selection according to relativeCaretPosition, which is
   // relative to the end of the inserting text.
-  bool commitText(const String& text, int relativeCaretPosition);
+  bool commitText(const String& text,
+                  const Vector<CompositionUnderline>& underlines,
+                  int relativeCaretPosition);
 
   // Inserts ongoing composing text; changes the selection to the end of
   // the inserting text if DoNotKeepSelection, or holds the selection if
@@ -85,7 +90,7 @@ class CORE_EXPORT InputMethodController final
   Range* compositionRange() const;
 
   void clear();
-  void documentDetached();
+  void documentAttached(Document*);
 
   PlainTextRange getSelectionOffsets() const;
   // Returns true if setting selection to specified offsets, otherwise false.
@@ -100,13 +105,15 @@ class CORE_EXPORT InputMethodController final
   WebTextInputInfo textInputInfo() const;
   WebTextInputType textInputType() const;
 
+  // Call this when we will change focus.
+  void willChangeFocus();
+
  private:
   Document& document() const;
   bool isAvailable() const;
 
   Member<LocalFrame> m_frame;
   Member<Range> m_compositionRange;
-  bool m_isDirty;
   bool m_hasComposition;
 
   explicit InputMethodController(LocalFrame&);
@@ -123,15 +130,24 @@ class CORE_EXPORT InputMethodController final
       const PlainTextRange&,
       FrameSelection::SetSelectionOptions = FrameSelection::CloseTyping);
 
+  void addCompositionUnderlines(const Vector<CompositionUnderline>& underlines,
+                                ContainerNode* rootEditableElement,
+                                unsigned offset);
+
   bool insertText(const String&);
-  bool insertTextAndMoveCaret(const String&, int relativeCaretPosition);
+  bool insertTextAndMoveCaret(const String&,
+                              int relativeCaretPosition,
+                              const Vector<CompositionUnderline>& underlines);
 
   // Inserts the given text string in the place of the existing composition.
   // Returns true if did replace.
   bool replaceComposition(const String& text);
   // Inserts the given text string in the place of the existing composition
   // and moves caret. Returns true if did replace and moved caret successfully.
-  bool replaceCompositionAndMoveCaret(const String&, int relativeCaretPosition);
+  bool replaceCompositionAndMoveCaret(
+      const String&,
+      int relativeCaretPosition,
+      const Vector<CompositionUnderline>& underlines);
 
   // Returns true if moved caret successfully.
   bool moveCaret(int newCaretPosition);
@@ -139,12 +155,11 @@ class CORE_EXPORT InputMethodController final
   PlainTextRange createSelectionRangeForSetComposition(int selectionStart,
                                                        int selectionEnd,
                                                        size_t textLength) const;
-  void setCompositionWithIncrementalText(const String&,
-                                         const Vector<CompositionUnderline>&,
-                                         int selectionStart,
-                                         int selectionEnd);
   int textInputFlags() const;
   WebTextInputMode inputModeOfFocusedElement() const;
+
+  // Implements |SynchronousMutationObserver|.
+  void contextDestroyed(Document*) final;
 };
 
 }  // namespace blink

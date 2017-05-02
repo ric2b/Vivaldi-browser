@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/remoting/remoting_source_impl.h"
 #include "media/remoting/rpc/proto_utils.h"
@@ -177,12 +178,12 @@ void FakeRemoterFactory::Create(mojom::RemotingSourcePtr source,
 scoped_refptr<RemotingSourceImpl> CreateRemotingSourceImpl(
     bool start_will_fail) {
   mojom::RemotingSourcePtr remoting_source;
-  mojom::RemotingSourceRequest remoting_source_request =
-      mojo::GetProxy(&remoting_source);
+  mojom::RemotingSourceRequest remoting_source_request(&remoting_source);
   mojom::RemoterPtr remoter;
   std::unique_ptr<mojom::RemoterFactory> remoter_factory =
       base::MakeUnique<FakeRemoterFactory>(start_will_fail);
-  remoter_factory->Create(std::move(remoting_source), mojo::GetProxy(&remoter));
+  remoter_factory->Create(std::move(remoting_source),
+                          mojo::MakeRequest(&remoter));
   return new RemotingSourceImpl(std::move(remoting_source_request),
                                 std::move(remoter));
 }

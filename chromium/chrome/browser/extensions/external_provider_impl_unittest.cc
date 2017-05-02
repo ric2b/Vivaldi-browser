@@ -36,10 +36,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
-#include "components/user_manager/fake_user_manager.h"
 #endif
 
 using ::testing::NotNull;
@@ -63,7 +63,7 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
   void InitServiceWithExternalProviders() {
 #if defined(OS_CHROMEOS)
     chromeos::ScopedUserManagerEnabler scoped_user_manager(
-        new user_manager::FakeUserManager);
+        new chromeos::FakeChromeUserManager);
 #endif
     InitializeExtensionServiceWithUpdaterAndPrefs();
 
@@ -99,10 +99,10 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
     ExtensionServiceTestBase::SetUp();
     test_server_.reset(new EmbeddedTestServer());
 
-    ASSERT_TRUE(test_server_->Start());
     test_server_->RegisterRequestHandler(
         base::Bind(&ExternalProviderImplTest::HandleRequest,
                    base::Unretained(this)));
+    ASSERT_TRUE(test_server_->Start());
 
     test_extension_cache_.reset(new ExtensionCacheFake());
 

@@ -4,6 +4,7 @@
 
 #include "build/build_config.h"
 #include "content/public/common/content_switches.h"
+#include "media/media_features.h"
 
 namespace switches {
 
@@ -29,6 +30,10 @@ const char kAgcStartupMinVolume[] = "agc-startup-min-volume";
 // By default, file:// URIs cannot read other file:// URIs. This is an
 // override for developers who need the old behavior for testing.
 const char kAllowFileAccessFromFiles[]      = "allow-file-access-from-files";
+
+// Enables TLS/SSL errors on localhost to be ignored (no interstitial,
+// no blocking of requests).
+const char kAllowInsecureLocalhost[] = "allow-insecure-localhost";
 
 // Allows loopback interface to be added in network list for peer connection.
 const char kAllowLoopbackInPeerConnection[] =
@@ -217,10 +222,6 @@ const char kDisableLowLatencyDxva[]         = "disable-low-latency-dxva";
 // Disables usage of the namespace sandbox.
 const char kDisableNamespaceSandbox[]       = "disable-namespace-sandbox";
 
-// Disables native GPU memory buffer support.
-const char kDisableNativeGpuMemoryBuffers[] =
-    "disable-native-gpu-memory-buffers";
-
 // Disables the Web Notification and the Push APIs.
 const char kDisableNotifications[]          = "disable-notifications";
 
@@ -281,6 +282,11 @@ const char kDisableSetuidSandbox[]          = "disable-setuid-sandbox";
 
 // Disable shared workers.
 const char kDisableSharedWorkers[]          = "disable-shared-workers";
+
+// Disable paint invalidation based on slimming paint.
+// See kEnableSlimmingPaintInvalidation.
+const char kDisableSlimmingPaintInvalidation[] =
+    "disable-slimming-paint-invalidation";
 
 // Disable smooth scrolling for testing.
 const char kDisableSmoothScrolling[]        = "disable-smooth-scrolling";
@@ -350,6 +356,14 @@ const char kEnableBlinkFeatures[]           = "enable-blink-features";
 // PlzNavigate: Use the experimental browser-side navigation path.
 const char kEnableBrowserSideNavigation[]   = "enable-browser-side-navigation";
 
+// Changes the behavior of the "default" color space conversion mode in
+// createImageBitmap. When enabled without kEnableColorCorrectRendering or
+// kEnableTrueColorRendering flags, "default" means color correct the image
+// bitmap to the display color space.
+const char kEnableColorCorrectRenderingDefaultMode[] =
+    "enable-color-correct-rendering-default-mode";
+
+
 // Enables display list based 2d canvas implementation. Options:
 //  1. Enable: allow browser to use display list for 2d canvas (browser makes
 //     decision).
@@ -408,9 +422,6 @@ const char kEnableLowResTiling[] = "enable-low-res-tiling";
 // builds.
 const char kEnableLogging[]                 = "enable-logging";
 
-// Enables the memory benchmarking extension
-const char kEnableMemoryBenchmarking[]      = "enable-memory-benchmarking";
-
 // Enables the network information API.
 const char kEnableNetworkInformation[]      = "enable-network-information";
 
@@ -457,6 +468,11 @@ const char kEnableSkiaBenchmarking[]        = "enable-skia-benchmarking";
 
 // Enables slimming paint phase 2: http://www.chromium.org/blink/slimming-paint
 const char kEnableSlimmingPaintV2[]         = "enable-slimming-paint-v2";
+
+// Enables paint invalidation based on slimming paint but without
+// the full slimming paint v2 compositing code. See: https://goo.gl/eQczQW
+const char kEnableSlimmingPaintInvalidation[] =
+    "enable-slimming-paint-invalidation";
 
 // On platforms that support it, enables smooth scroll animation.
 const char kEnableSmoothScrolling[]         = "enable-smooth-scrolling";
@@ -644,9 +660,6 @@ const char kMHTMLSkipNostoreAll[]           = "skip-nostore-all";
 
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
-
-// Disables a Mojo-based ServiceWorker implementation.
-const char kDisableMojoServiceWorker[]      = "disable-mojo-service-worker";
 
 // Mutes audio sent to the audio device so it is not audible during
 // automated testing.
@@ -842,6 +855,18 @@ const char kTestType[]                      = "test-type";
 // of the top document. This is a performance isolation mode.
 const char kTopDocumentIsolation[] = "top-document-isolation";
 
+// Enable support for touch event feature detection.
+const char kTouchEventFeatureDetection[] = "touch-events";
+
+// The values the kTouchEventFeatureDetection switch may have, as in
+// --touch-events=disabled.
+//   auto: enabled at startup when an attached touchscreen is present.
+const char kTouchEventFeatureDetectionAuto[] = "auto";
+//   enabled: touch events always enabled.
+const char kTouchEventFeatureDetectionEnabled[] = "enabled";
+//   disabled: touch events are disabled.
+const char kTouchEventFeatureDetectionDisabled[] = "disabled";
+
 // Controls how text selection granularity changes when touch text selection
 // handles are dragged. Should be "character" or "direction". If not specified,
 // the platform default is used.
@@ -857,9 +882,6 @@ const char kUseFakeUIForMediaStream[]     = "use-fake-ui-for-media-stream";
 // Use the Mandoline UI Service in the Chrome render process.
 const char kUseMusInRenderer[] = "use-mus-in-renderer";
 
-// Enable native GPU memory buffer support when available.
-const char kEnableNativeGpuMemoryBuffers[] = "enable-native-gpu-memory-buffers";
-
 // Texture target for CHROMIUM_image backed content textures.
 const char kContentImageTextureTarget[] = "content-image-texture-target";
 
@@ -868,9 +890,6 @@ const char kVideoImageTextureTarget[] = "video-image-texture-target";
 
 // Set when Chromium should use a mobile user agent.
 const char kUseMobileUserAgent[] = "use-mobile-user-agent";
-
-// Use remote compositor for the renderer.
-const char kUseRemoteCompositing[] = "use-remote-compositing";
 
 // The contents of this flag are prepended to the utility process command line.
 // Useful values might be "valgrind" or "xterm -e gdb --args".
@@ -899,19 +918,19 @@ const char kZygoteCmdPrefix[]               = "zygote-cmd-prefix";
 // Causes the process to run as a renderer zygote.
 const char kZygoteProcess[]                 = "zygote";
 
-#if defined(ENABLE_WEBRTC)
-// Disables HW decode acceleration for WebRTC.
-const char kDisableWebRtcHWDecoding[]       = "disable-webrtc-hw-decoding";
-
+#if BUILDFLAG(ENABLE_WEBRTC)
 // Disables encryption of RTP Media for WebRTC. When Chrome embeds Content, it
 // ignores this switch on its stable and beta channels.
 const char kDisableWebRtcEncryption[]      = "disable-webrtc-encryption";
 
+// Disables HW decode acceleration for WebRTC.
+const char kDisableWebRtcHWDecoding[]       = "disable-webrtc-hw-decoding";
+
 // Disables HW encode acceleration for WebRTC.
-const char kDisableWebRtcHWEncoding[]       = "disable-webrtc-hw-encoding";
-const char kDisableWebRtcHWEncodingVPx[] = "vpx";
-const char kDisableWebRtcHWEncodingH264[] = "h264";
-const char kDisableWebRtcHWEncodingNone[] = "none";
+const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
+
+// Disables HW VP8 encode acceleration for WebRTC.
+const char kDisableWebRtcHWVP8Encoding[]     = "disable-webrtc-hw-vp8-encoding";
 
 // Enables Origin header in Stun messages for WebRTC.
 const char kEnableWebRtcStunOrigin[]        = "enable-webrtc-stun-origin";
@@ -936,6 +955,9 @@ const char kWebRtcMaxCaptureFramerate[]     = "max-gum-fps";
 #endif
 
 #if defined(OS_ANDROID)
+// Disable Media Session API
+const char kDisableMediaSessionAPI[] = "disable-media-session-api";
+
 // Disable overscroll edge effects like those found in Android views.
 const char kDisableOverscrollEdgeEffect[]   = "disable-overscroll-edge-effect";
 

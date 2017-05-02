@@ -20,20 +20,35 @@
 
 namespace blink {
 
-// This class stores property tree related information associated with a
-// LayoutObject.
-// Currently there are two groups of information:
-// 1. The set of property nodes created locally by this LayoutObject.
-// 2. The set of property nodes (inherited, or created locally) and paint offset
-//    that can be used to paint the border box of this LayoutObject (see:
-//    localBorderBoxProperties).
+// This class stores the paint property nodes associated with a LayoutObject.
+// The object owns each of the property nodes directly set here (e.g, m_cssClip,
+// m_paintOffsetTranslation, etc.) and RefPtrs are only used to harden against
+// use-after-free bugs. These paint properties are built/updated by
+// PaintPropertyTreeBuilder during the PrePaint lifecycle step.
+//
+// There are two groups of information stored on ObjectPaintProperties:
+// 1. The set of property nodes created locally and owned by this LayoutObject.
+// 2. The set of property nodes (inherited, or created locally) that can be used
+//    along with LayoutObject::paintOffset to paint the border box of this
+//    LayoutObject (see: localBorderBoxProperties).
+//
+// [update & clear implementation note] This class has update[property](...) and
+// clear[property]() helper functions for efficiently creating and updating
+// properties. These functions return true if the property tree structure
+// changes (e.g., a node is added or removed), and false otherwise. Property
+// nodes store parent pointers but not child pointers and these return values
+// are important for catching property tree structure changes which require
+// updating descendant's parent pointers. The update functions use a
+// create-or-update pattern of re-using existing properties for efficiency:
+// 1. It avoids extra allocations.
+// 2. It preserves existing child->parent pointers.
 class CORE_EXPORT ObjectPaintProperties {
   WTF_MAKE_NONCOPYABLE(ObjectPaintProperties);
   USING_FAST_MALLOC(ObjectPaintProperties);
 
  public:
   static std::unique_ptr<ObjectPaintProperties> create() {
-    return wrapUnique(new ObjectPaintProperties());
+    return WTF::wrapUnique(new ObjectPaintProperties());
   }
 
   // The hierarchy of the transform subtree created by a LayoutObject is as
@@ -101,17 +116,6 @@ class CORE_EXPORT ObjectPaintProperties {
     return m_overflowClip.get();
   }
 
-  // The complete set of property tree nodes (inherited, or created locally) and
-  // paint offset that can be used to paint. |paintOffset| is relative to the
-  // propertyTreeState's transform space.
-  // See: localBorderBoxProperties and contentsProperties.
-  struct PropertyTreeStateWithOffset {
-    PropertyTreeStateWithOffset(LayoutPoint offset, PropertyTreeState treeState)
-        : paintOffset(offset), propertyTreeState(treeState) {}
-    LayoutPoint paintOffset;
-    PropertyTreeState propertyTreeState;
-  };
-
   // This is a complete set of property nodes and paint offset that should be
   // used as a starting point to paint this layout object. This is cached
   // because some properties inherit from the containing block chain instead of
@@ -121,12 +125,8 @@ class CORE_EXPORT ObjectPaintProperties {
   // would be an effect node with opacity of 0.3 which was created by the div
   // itself. Note that propertyTreeState.transform() would not be null but would
   // instead point to the transform space setup by div's ancestors.
-  const PropertyTreeStateWithOffset* localBorderBoxProperties() const {
+  const PropertyTreeState* localBorderBoxProperties() const {
     return m_localBorderBoxProperties.get();
-  }
-  void setLocalBorderBoxProperties(
-      std::unique_ptr<PropertyTreeStateWithOffset> properties) {
-    m_localBorderBoxProperties = std::move(properties);
   }
 
   // This is the complete set of property nodes and paint offset that can be
@@ -134,77 +134,121 @@ class CORE_EXPORT ObjectPaintProperties {
   // localBorderBoxProperties but includes properties (e.g., overflow clip,
   // scroll translation) that apply to contents. This is suitable for paint
   // invalidation.
-  ObjectPaintProperties::PropertyTreeStateWithOffset contentsProperties() const;
+  const PropertyTreeState* contentsProperties() const {
+    if (!m_contentsProperties) {
+      if (!m_localBorderBoxProperties)
+        return nullptr;
+      updateContentsProperties();
+    } else {
+#if DCHECK_IS_ON()
+      // Check if the cached m_contentsProperties is valid.
+      DCHECK(m_localBorderBoxProperties);
+      std::unique_ptr<PropertyTreeState> oldProperties =
+          std::move(m_contentsProperties);
+      updateContentsProperties();
+      DCHECK(*m_contentsProperties == *oldProperties);
+#endif
+    }
+    return m_contentsProperties.get();
+  };
 
-  void clearPaintOffsetTranslation() { m_paintOffsetTranslation = nullptr; }
-  void clearTransform() { m_transform = nullptr; }
-  void clearEffect() { m_effect = nullptr; }
-  void clearCssClip() { m_cssClip = nullptr; }
-  void clearCssClipFixedPosition() { m_cssClipFixedPosition = nullptr; }
-  void clearInnerBorderRadiusClip() { m_innerBorderRadiusClip = nullptr; }
-  void clearOverflowClip() { m_overflowClip = nullptr; }
-  void clearLocalBorderBoxProperties() { m_localBorderBoxProperties = nullptr; }
-  void clearPerspective() { m_perspective = nullptr; }
-  void clearSvgLocalToBorderBoxTransform() {
-    m_svgLocalToBorderBoxTransform = nullptr;
+  void updateLocalBorderBoxProperties(
+      const TransformPaintPropertyNode* transform,
+      const ClipPaintPropertyNode* clip,
+      const EffectPaintPropertyNode* effect,
+      const ScrollPaintPropertyNode* scroll) {
+    if (m_localBorderBoxProperties) {
+      m_localBorderBoxProperties->setTransform(transform);
+      m_localBorderBoxProperties->setClip(clip);
+      m_localBorderBoxProperties->setEffect(effect);
+      m_localBorderBoxProperties->setScroll(scroll);
+    } else {
+      m_localBorderBoxProperties = WTF::wrapUnique(new PropertyTreeState(
+          PropertyTreeState(transform, clip, effect, scroll)));
+    }
+    m_contentsProperties = nullptr;
   }
-  void clearScrollTranslation() { m_scrollTranslation = nullptr; }
-  void clearScrollbarPaintOffset() { m_scrollbarPaintOffset = nullptr; }
-  void clearScroll() { m_scroll = nullptr; }
+  void clearLocalBorderBoxProperties() {
+    m_localBorderBoxProperties = nullptr;
+    m_contentsProperties = nullptr;
+  }
 
+  // The following clear* functions return true if the property tree structure
+  // changes (an existing node was deleted), and false otherwise. See the
+  // class-level comment ("update & clear implementation note") for details
+  // about why this is needed for efficient updates.
+  bool clearPaintOffsetTranslation() { return clear(m_paintOffsetTranslation); }
+  bool clearTransform() { return clear(m_transform); }
+  bool clearEffect() { return clear(m_effect); }
+  bool clearCssClip() { return clear(m_cssClip); }
+  bool clearCssClipFixedPosition() { return clear(m_cssClipFixedPosition); }
+  bool clearInnerBorderRadiusClip() { return clear(m_innerBorderRadiusClip); }
+  bool clearOverflowClip() { return clear(m_overflowClip); }
+  bool clearPerspective() { return clear(m_perspective); }
+  bool clearSvgLocalToBorderBoxTransform() {
+    return clear(m_svgLocalToBorderBoxTransform);
+  }
+  bool clearScrollTranslation() { return clear(m_scrollTranslation); }
+  bool clearScrollbarPaintOffset() { return clear(m_scrollbarPaintOffset); }
+  bool clearScroll() { return clear(m_scroll); }
+
+  // The following update* functions return true if the property tree structure
+  // changes (a new node was created), and false otherwise. See the class-level
+  // comment ("update & clear implementation note") for details about why this
+  // is needed for efficient updates.
   template <typename... Args>
-  void updatePaintOffsetTranslation(Args&&... args) {
-    updateProperty(m_paintOffsetTranslation, std::forward<Args>(args)...);
+  bool updatePaintOffsetTranslation(Args&&... args) {
+    return update(m_paintOffsetTranslation, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateTransform(Args&&... args) {
-    updateProperty(m_transform, std::forward<Args>(args)...);
+  bool updateTransform(Args&&... args) {
+    return update(m_transform, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updatePerspective(Args&&... args) {
-    updateProperty(m_perspective, std::forward<Args>(args)...);
+  bool updatePerspective(Args&&... args) {
+    return update(m_perspective, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateSvgLocalToBorderBoxTransform(Args&&... args) {
+  bool updateSvgLocalToBorderBoxTransform(Args&&... args) {
     DCHECK(!scrollTranslation()) << "SVG elements cannot scroll so there "
                                     "should never be both a scroll translation "
                                     "and an SVG local to border box transform.";
-    updateProperty(m_svgLocalToBorderBoxTransform, std::forward<Args>(args)...);
+    return update(m_svgLocalToBorderBoxTransform, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateScrollTranslation(Args&&... args) {
+  bool updateScrollTranslation(Args&&... args) {
     DCHECK(!svgLocalToBorderBoxTransform())
         << "SVG elements cannot scroll so there should never be both a scroll "
            "translation and an SVG local to border box transform.";
-    updateProperty(m_scrollTranslation, std::forward<Args>(args)...);
+    return update(m_scrollTranslation, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateScrollbarPaintOffset(Args&&... args) {
-    updateProperty(m_scrollbarPaintOffset, std::forward<Args>(args)...);
+  bool updateScrollbarPaintOffset(Args&&... args) {
+    return update(m_scrollbarPaintOffset, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateScroll(Args&&... args) {
-    updateProperty(m_scroll, std::forward<Args>(args)...);
+  bool updateScroll(Args&&... args) {
+    return update(m_scroll, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateEffect(Args&&... args) {
-    updateProperty(m_effect, std::forward<Args>(args)...);
+  bool updateEffect(Args&&... args) {
+    return update(m_effect, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateCssClip(Args&&... args) {
-    updateProperty(m_cssClip, std::forward<Args>(args)...);
+  bool updateCssClip(Args&&... args) {
+    return update(m_cssClip, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateCssClipFixedPosition(Args&&... args) {
-    updateProperty(m_cssClipFixedPosition, std::forward<Args>(args)...);
+  bool updateCssClipFixedPosition(Args&&... args) {
+    return update(m_cssClipFixedPosition, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateInnerBorderRadiusClip(Args&&... args) {
-    updateProperty(m_innerBorderRadiusClip, std::forward<Args>(args)...);
+  bool updateInnerBorderRadiusClip(Args&&... args) {
+    return update(m_innerBorderRadiusClip, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void updateOverflowClip(Args&&... args) {
-    updateProperty(m_overflowClip, std::forward<Args>(args)...);
+  bool updateOverflowClip(Args&&... args) {
+    return update(m_overflowClip, std::forward<Args>(args)...);
   }
 
 #if DCHECK_IS_ON()
@@ -238,12 +282,8 @@ class CORE_EXPORT ObjectPaintProperties {
     if (m_scroll)
       cloned->m_scroll = m_scroll->clone();
     if (m_localBorderBoxProperties) {
-      auto& state = m_localBorderBoxProperties->propertyTreeState;
       cloned->m_localBorderBoxProperties =
-          wrapUnique(new PropertyTreeStateWithOffset(
-              m_localBorderBoxProperties->paintOffset,
-              PropertyTreeState(state.transform(), state.clip(), state.effect(),
-                                state.scroll())));
+          WTF::wrapUnique(new PropertyTreeState(*m_localBorderBoxProperties));
     }
     return cloned;
   }
@@ -252,13 +292,32 @@ class CORE_EXPORT ObjectPaintProperties {
  private:
   ObjectPaintProperties() {}
 
-  template <typename PaintPropertyNode, typename... Args>
-  void updateProperty(RefPtr<PaintPropertyNode>& field, Args&&... args) {
-    if (field)
-      field->update(std::forward<Args>(args)...);
-    else
-      field = PaintPropertyNode::create(std::forward<Args>(args)...);
+  // Return true if the property tree structure changes (an existing node was
+  // deleted), and false otherwise. See the class-level comment ("update & clear
+  // implementation note") for details about why this is needed for efficiency.
+  template <typename PaintPropertyNode>
+  bool clear(RefPtr<PaintPropertyNode>& field) {
+    if (field) {
+      field = nullptr;
+      return true;
+    }
+    return false;
   }
+
+  // Return true if the property tree structure changes (a new node was
+  // created), and false otherwise. See the class-level comment ("update & clear
+  // implementation note") for details about why this is needed for efficiency.
+  template <typename PaintPropertyNode, typename... Args>
+  bool update(RefPtr<PaintPropertyNode>& field, Args&&... args) {
+    if (field) {
+      field->update(std::forward<Args>(args)...);
+      return false;
+    }
+    field = PaintPropertyNode::create(std::forward<Args>(args)...);
+    return true;
+  }
+
+  void updateContentsProperties() const;
 
   RefPtr<TransformPaintPropertyNode> m_paintOffsetTranslation;
   RefPtr<TransformPaintPropertyNode> m_transform;
@@ -274,7 +333,8 @@ class CORE_EXPORT ObjectPaintProperties {
   RefPtr<TransformPaintPropertyNode> m_scrollbarPaintOffset;
   RefPtr<ScrollPaintPropertyNode> m_scroll;
 
-  std::unique_ptr<PropertyTreeStateWithOffset> m_localBorderBoxProperties;
+  std::unique_ptr<PropertyTreeState> m_localBorderBoxProperties;
+  mutable std::unique_ptr<PropertyTreeState> m_contentsProperties;
 };
 
 }  // namespace blink

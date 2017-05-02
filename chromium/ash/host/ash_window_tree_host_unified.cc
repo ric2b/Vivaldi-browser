@@ -78,9 +78,9 @@ void AshWindowTreeHostUnified::RegisterMirroringHost(
   mirroring_ash_host->AsWindowTreeHost()->window()->AddObserver(this);
 }
 
-void AshWindowTreeHostUnified::SetBounds(const gfx::Rect& bounds) {
-  AshWindowTreeHostPlatform::SetBounds(bounds);
-  OnHostResized(bounds.size());
+void AshWindowTreeHostUnified::SetBoundsInPixels(const gfx::Rect& bounds) {
+  AshWindowTreeHostPlatform::SetBoundsInPixels(bounds);
+  OnHostResizedInPixels(bounds.size());
 }
 
 void AshWindowTreeHostUnified::SetCursorNative(gfx::NativeCursor cursor) {
@@ -95,7 +95,7 @@ void AshWindowTreeHostUnified::OnCursorVisibilityChangedNative(bool show) {
 
 void AshWindowTreeHostUnified::OnBoundsChanged(const gfx::Rect& bounds) {
   if (platform_window())
-    OnHostResized(bounds.size());
+    OnHostResizedInPixels(bounds.size());
 }
 
 void AshWindowTreeHostUnified::OnWindowDestroying(aura::Window* window) {

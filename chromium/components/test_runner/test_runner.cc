@@ -181,6 +181,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                                         const std::string& destination_protocol,
                                         const std::string& destination_host,
                                         bool allow_destination_subdomains);
+  void RemoveSpellCheckResolvedCallback();
   void RemoveWebPageOverlay();
   void ResetDeviceLight();
   void ResetTestHelperControllers();
@@ -241,6 +242,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetPrinting();
   void SetScriptsAllowed(bool allowed);
   void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
+  void SetSpellCheckResolvedCallback(v8::Local<v8::Function> callback);
   void SetStorageAllowed(bool allowed);
   void SetTabKeyCyclesThroughElements(bool tab_key_cycles_through_elements);
   void SetTextDirection(const std::string& direction_name);
@@ -266,7 +268,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                                         const std::string& avatar,
                                         const std::string& password);
   void ClearMockCredentialManagerResponse();
-  bool AnimationScheduled();
   bool CallShouldCloseOnWebView();
   bool DisableAutoResizeMode(int new_width, int new_height);
   bool EnableAutoResizeMode(int min_width,
@@ -351,7 +352,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("addOriginAccessWhitelistEntry",
                  &TestRunnerBindings::AddOriginAccessWhitelistEntry)
       .SetMethod("addWebPageOverlay", &TestRunnerBindings::AddWebPageOverlay)
-      .SetMethod("animationScheduled", &TestRunnerBindings::AnimationScheduled)
       .SetMethod("callShouldCloseOnWebView",
                  &TestRunnerBindings::CallShouldCloseOnWebView)
       .SetMethod("capturePixelsAsyncThen",
@@ -471,6 +471,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("queueReload", &TestRunnerBindings::QueueReload)
       .SetMethod("removeOriginAccessWhitelistEntry",
                  &TestRunnerBindings::RemoveOriginAccessWhitelistEntry)
+      .SetMethod("removeSpellCheckResolvedCallback",
+                 &TestRunnerBindings::RemoveSpellCheckResolvedCallback)
       .SetMethod("removeWebPageOverlay",
                  &TestRunnerBindings::RemoveWebPageOverlay)
       .SetMethod("resetDeviceLight", &TestRunnerBindings::ResetDeviceLight)
@@ -562,6 +564,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod(
           "setShouldStayOnPageAfterHandlingBeforeUnload",
           &TestRunnerBindings::SetShouldStayOnPageAfterHandlingBeforeUnload)
+      .SetMethod("setSpellCheckResolvedCallback",
+                 &TestRunnerBindings::SetSpellCheckResolvedCallback)
       .SetMethod("setStorageAllowed", &TestRunnerBindings::SetStorageAllowed)
       .SetMethod("setTabKeyCyclesThroughElements",
                  &TestRunnerBindings::SetTabKeyCyclesThroughElements)
@@ -748,6 +752,17 @@ void TestRunnerBindings::SetEffectiveConnectionType(
 void TestRunnerBindings::SetMockSpellCheckerEnabled(bool enabled) {
   if (runner_)
     runner_->SetMockSpellCheckerEnabled(enabled);
+}
+
+void TestRunnerBindings::SetSpellCheckResolvedCallback(
+    v8::Local<v8::Function> callback) {
+  if (runner_)
+    runner_->spellcheck_->SetSpellCheckResolvedCallback(callback);
+}
+
+void TestRunnerBindings::RemoveSpellCheckResolvedCallback() {
+  if (runner_)
+    runner_->spellcheck_->RemoveSpellCheckResolvedCallback();
 }
 
 v8::Local<v8::Value>
@@ -1055,13 +1070,6 @@ void TestRunnerBindings::SetAcceptLanguages(
 void TestRunnerBindings::SetPluginsEnabled(bool enabled) {
   if (runner_)
     runner_->SetPluginsEnabled(enabled);
-}
-
-bool TestRunnerBindings::AnimationScheduled() {
-  if (runner_)
-    return runner_->GetAnimationScheduled();
-  else
-    return false;
 }
 
 void TestRunnerBindings::DumpEditingCallbacks() {
@@ -1635,6 +1643,8 @@ void TestRunner::SetDelegate(WebTestDelegate* delegate) {
 
 void TestRunner::SetMainView(WebView* web_view) {
   main_view_ = web_view;
+  if (disable_v8_cache_)
+    SetV8CacheDisabled(true);
 }
 
 void TestRunner::Reset() {
@@ -1644,7 +1654,6 @@ void TestRunner::Reset() {
   layout_test_runtime_flags_.Reset();
   mock_screen_orientation_client_->ResetData();
   drag_image_.reset();
-  widgets_with_scheduled_animations_.clear();
 
   WebSecurityPolicy::resetOriginAccessWhitelists();
 #if defined(__linux__) || defined(ANDROID)
@@ -1690,7 +1699,7 @@ void TestRunner::Reset() {
   else
     close_remaining_windows_ = true;
 
-  spellcheck_->SetEnabled(false);
+  spellcheck_->Reset();
 }
 
 void TestRunner::SetTestIsRunning(bool running) {
@@ -1932,6 +1941,10 @@ WebFrame* TestRunner::topLoadingFrame() const {
   return top_loading_frame_;
 }
 
+WebFrame* TestRunner::mainFrame() const {
+  return main_view_->mainFrame();
+}
+
 void TestRunner::policyDelegateDone() {
   DCHECK(layout_test_runtime_flags_.wait_until_done());
   delegate_->TestFinished();
@@ -1973,6 +1986,16 @@ midi::mojom::Result TestRunner::midiAccessorResult() {
 
 void TestRunner::ClearDevToolsLocalStorage() {
   delegate_->ClearDevToolsLocalStorage();
+}
+
+void TestRunner::SetV8CacheDisabled(bool disabled) {
+  if (!main_view_) {
+    disable_v8_cache_ = disabled;
+    return;
+  }
+  main_view_->settings()->setV8CacheOptions(disabled ?
+      blink::WebSettings::V8CacheOptionsNone :
+      blink::WebSettings::V8CacheOptionsDefault);
 }
 
 void TestRunner::ShowDevTools(const std::string& settings,
@@ -2405,19 +2428,6 @@ void TestRunner::SetAcceptLanguages(const std::string& accept_languages) {
 void TestRunner::SetPluginsEnabled(bool enabled) {
   delegate_->Preferences()->plugins_enabled = enabled;
   delegate_->ApplyPreferences();
-}
-
-bool TestRunner::GetAnimationScheduled() const {
-  bool is_animation_scheduled = !widgets_with_scheduled_animations_.empty();
-  return is_animation_scheduled;
-}
-
-void TestRunner::OnAnimationScheduled(blink::WebWidget* widget) {
-  widgets_with_scheduled_animations_.insert(widget);
-}
-
-void TestRunner::OnAnimationBegun(blink::WebWidget* widget) {
-  widgets_with_scheduled_animations_.erase(widget);
 }
 
 void TestRunner::DumpEditingCallbacks() {

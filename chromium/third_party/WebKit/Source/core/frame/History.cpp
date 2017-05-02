@@ -26,6 +26,7 @@
 #include "core/frame/History.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/DocumentLoader.h"
@@ -56,10 +57,10 @@ bool equalIgnoringQueryAndFragment(const KURL& a, const KURL& b) {
 }  // namespace
 
 History::History(LocalFrame* frame)
-    : DOMWindowProperty(frame), m_lastStateObjectRequested(nullptr) {}
+    : DOMWindowClient(frame), m_lastStateObjectRequested(nullptr) {}
 
 DEFINE_TRACE(History) {
-  DOMWindowProperty::trace(visitor);
+  DOMWindowClient::trace(visitor);
 }
 
 unsigned History::length() const {
@@ -84,7 +85,7 @@ SerializedScriptValue* History::stateInternal() const {
 }
 
 void History::setScrollRestoration(const String& value) {
-  ASSERT(value == "manual" || value == "auto");
+  DCHECK(value == "manual" || value == "auto");
   if (!frame() || !frame()->loader().client())
     return;
 
@@ -121,20 +122,20 @@ bool History::isSameAsCurrentState(SerializedScriptValue* state) const {
   return state == stateInternal();
 }
 
-void History::back(ExecutionContext* context) {
-  go(context, -1);
+void History::back(ScriptState* scriptState) {
+  go(scriptState, -1);
 }
 
-void History::forward(ExecutionContext* context) {
-  go(context, 1);
+void History::forward(ScriptState* scriptState) {
+  go(scriptState, 1);
 }
 
-void History::go(ExecutionContext* context, int delta) {
+void History::go(ScriptState* scriptState, int delta) {
   if (!frame() || !frame()->loader().client())
     return;
 
-  ASSERT(isMainThread());
-  Document* activeDocument = toDocument(context);
+  DCHECK(isMainThread());
+  Document* activeDocument = toDocument(scriptState->getExecutionContext());
   if (!activeDocument)
     return;
 
@@ -145,14 +146,19 @@ void History::go(ExecutionContext* context, int delta) {
     return;
   }
 
-  // We intentionally call reload() for the current frame if delta is zero.
-  // Otherwise, navigation happens on the root frame.
-  // This behavior is designed in the following spec.
-  // https://html.spec.whatwg.org/multipage/browsers.html#dom-history-go
-  if (delta)
+  if (delta) {
     frame()->loader().client()->navigateBackForward(delta);
-  else
-    frame()->reload(FrameLoadTypeReload, ClientRedirectPolicy::ClientRedirect);
+  } else {
+    // We intentionally call reload() for the current frame if delta is zero.
+    // Otherwise, navigation happens on the root frame.
+    // This behavior is designed in the following spec.
+    // https://html.spec.whatwg.org/multipage/browsers.html#dom-history-go
+    FrameLoadType reloadType =
+        RuntimeEnabledFeatures::fasterLocationReloadEnabled()
+            ? FrameLoadTypeReloadMainResource
+            : FrameLoadTypeReload;
+    frame()->reload(reloadType, ClientRedirectPolicy::ClientRedirect);
+  }
 }
 
 KURL History::urlForState(const String& urlString) {
@@ -186,8 +192,9 @@ bool History::canChangeToUrl(const KURL& url,
 
   RefPtr<SecurityOrigin> requestedOrigin = SecurityOrigin::create(url);
   if (requestedOrigin->isUnique() ||
-      !requestedOrigin->isSameSchemeHostPort(documentOrigin))
+      !requestedOrigin->isSameSchemeHostPort(documentOrigin)) {
     return false;
+  }
 
   return true;
 }

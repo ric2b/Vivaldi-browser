@@ -67,8 +67,7 @@ TEST(BookmarkLastVisitUpdaterTest, IsTrackingVisits) {
   tester->StartNavigation(url);
 
   EXPECT_THAT(ntp_snippets::GetRecentlyVisitedBookmarks(
-                  bookmark_model, 0, 2, base::Time::UnixEpoch(),
-                  /*creation_date_fallback=*/false,
+                  bookmark_model, 2, base::Time::UnixEpoch(),
                   /*consider_visits_from_desktop=*/true),
               Not(IsEmpty()));
 }
@@ -99,8 +98,7 @@ TEST(BookmarkLastVisitUpdaterTest, IsNotTrackingIncognitoVisits) {
 
   // The incognito visit should _not_ appear in recent bookmarks.
   EXPECT_THAT(ntp_snippets::GetRecentlyVisitedBookmarks(
-                  bookmark_model, 0, 2, base::Time::UnixEpoch(),
-                  /*creation_date_fallback=*/false,
+                  bookmark_model, 2, base::Time::UnixEpoch(),
                   /*consider_visits_from_desktop=*/true),
               IsEmpty());
 }

@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.compositor.scene_layer;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.graphics.Rect;
+import android.graphics.RectF;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.annotations.JNINamespace;
@@ -42,7 +42,7 @@ public class TabListSceneLayer extends SceneLayer {
      * @param resourceManager An object for accessing static and dynamic resources.
      * @param fullscreenManager The fullscreen manager for browser controls information.
      */
-    public void pushLayers(Context context, Rect viewport, Rect contentViewport, Layout layout,
+    public void pushLayers(Context context, RectF viewport, RectF contentViewport, Layout layout,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
             ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
         if (mNativePtr == 0) return;
@@ -97,9 +97,10 @@ public class TabListSceneLayer extends SceneLayer {
                     LayoutTab.CLOSE_BUTTON_WIDTH_DP * dpToPx, t.getStaticToViewBlend(),
                     t.getBorderScale(), t.getSaturation(), t.getBrightness(), t.showToolbar(),
                     defaultThemeColor, t.getToolbarBackgroundColor(), closeButtonColor,
-                    t.anonymizeToolbar(), R.drawable.textbox, t.getTextBoxBackgroundColor(),
-                    t.getTextBoxAlpha(), t.getToolbarAlpha(), t.getToolbarYOffset() * dpToPx,
-                    t.getSideBorderScale(), t.insetBorderVertical());
+                    t.anonymizeToolbar(), t.isTitleNeeded(), R.drawable.card_single,
+                    t.getTextBoxBackgroundColor(), t.getTextBoxAlpha(), t.getToolbarAlpha(),
+                    t.getToolbarYOffset() * dpToPx, t.getSideBorderScale(),
+                    t.insetBorderVertical());
         }
         nativeFinishBuildingFrame(mNativePtr);
     }
@@ -149,7 +150,7 @@ public class TabListSceneLayer extends SceneLayer {
             float closeBtnWidth, float staticToViewBlend, float borderScale, float saturation,
             float brightness, boolean showToolbar, int defaultThemeColor,
             int toolbarBackgroundColor, int closeButtonColor, boolean anonymizeToolbar,
-            int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
+            boolean showTabTitle, int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
             float toolbarTextBoxAlpha, float toolbarAlpha, float toolbarYOffset,
             float sideBorderScale, boolean insetVerticalBorder);
 }

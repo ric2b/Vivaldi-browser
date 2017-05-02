@@ -10,7 +10,6 @@
 #include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm/window_positioner.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/display/extended_mouse_warp_controller.h"
@@ -18,12 +17,14 @@
 #include "ash/display/unified_mouse_warp_controller.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/ime/input_method_event_handler.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_shell_delegate.h"
 #include "base/command_line.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/client/window_parenting_client.h"
@@ -38,6 +39,7 @@
 #include "ui/display/display_switches.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -169,7 +171,7 @@ void AshTestBase::TearDown() {
   event_generator_.reset();
   // Some tests set an internal display id,
   // reset it here, so other tests will continue in a clean environment.
-  display::Display::SetInternalDisplayId(display::Display::kInvalidDisplayID);
+  display::Display::SetInternalDisplayId(display::kInvalidDisplayId);
 }
 
 // static
@@ -289,8 +291,11 @@ aura::Window* AshTestBase::CreateTestWindowInShellWithDelegateAndType(
     window->SetBounds(gfx::Rect(origin, bounds.size()));
     aura::client::ParentWindowWithContext(window, root, bounds);
   }
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
-  window->SetProperty(aura::client::kCanMinimizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize |
+                          ui::mojom::kResizeBehaviorCanMinimize |
+                          ui::mojom::kResizeBehaviorCanResize);
+
   return window;
 }
 

@@ -33,6 +33,9 @@ function updateCrashList(
   $('disabledMode').hidden = enabled;
   $('crashUploadStatus').hidden = !enabled || !dynamicBackend;
 
+  // Make the height fixed while clearing the
+  // element in order to maintain scroll position.
+  crashSection.style.height = getComputedStyle(crashSection).height;
   // Clear any previous list.
   crashSection.textContent = '';
 
@@ -46,6 +49,7 @@ function updateCrashList(
     var crashBlock = document.createElement('div');
     if (crash.state != 'uploaded')
       crashBlock.className = 'notUploaded';
+
     var title = document.createElement('h3');
     var uploaded = crash.state == 'uploaded';
     if (uploaded) {
@@ -57,11 +61,20 @@ function updateCrashList(
                                                   crash.local_id);
     }
     crashBlock.appendChild(title);
+
     if (uploaded) {
       var date = document.createElement('p');
-      date.textContent = loadTimeData.getStringF('crashTimeFormat',
-                                                 crash.time);
+      date.textContent = ""
+      if (crash.capture_time) {
+        date.textContent += loadTimeData.getStringF(
+            'crashCaptureAndUploadTimeFormat', crash.capture_time,
+            crash.upload_time);
+      } else {
+        date.textContent += loadTimeData.getStringF('crashUploadTimeFormat',
+                                                    crash.upload_time);
+      }
       crashBlock.appendChild(date);
+
       var linkBlock = document.createElement('p');
       var link = document.createElement('a');
       var commentLines = [
@@ -113,7 +126,7 @@ function updateCrashList(
 
       var crashText = document.createElement('p');
       crashText.textContent = loadTimeData.getStringF(textContentKey,
-                                                      crash.time);
+                                                      crash.capture_time);
       crashBlock.appendChild(crashText);
 
       if (crash.file_size != '') {
@@ -140,6 +153,8 @@ function updateCrashList(
     crashSection.appendChild(crashBlock);
   }
 
+  // Reset the height, in order to accommodate for the new content.
+  crashSection.style.height = "";
   $('noCrashes').hidden = crashes.length != 0;
 }
 

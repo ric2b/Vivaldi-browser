@@ -15,9 +15,7 @@ cr.define('cr.ui', function() {
   /**
    * DOM Events that may be fired by the Repeating button.
    */
-  RepeatingButton.Event = {
-    BUTTON_HELD: 'buttonHeld'
-  };
+  RepeatingButton.Event = {BUTTON_HELD: 'buttonHeld'};
 
   RepeatingButton.prototype = {
     __proto__: HTMLButtonElement.prototype,
@@ -104,12 +102,12 @@ cr.define('cr.ui', function() {
         if (typeof self.armRepeaterCallbackId_ != 'undefined') {
           self.armRepeaterCallbackId_ = undefined;
           self.buttonHeld_();
-          self.intervalCallbackId_ = setInterval(self.buttonHeld_.bind(self),
-                                                 self.holdRepeatIntervalTime_);
+          self.intervalCallbackId_ = setInterval(
+              self.buttonHeld_.bind(self), self.holdRepeatIntervalTime_);
         }
       };
-      this.armRepeaterCallbackId_ = setTimeout(armRepeaterCallback,
-                                               this.holdDelayTime_);
+      this.armRepeaterCallbackId_ =
+          setTimeout(armRepeaterCallback, this.holdDelayTime_);
     },
 
     /**
@@ -172,13 +170,10 @@ cr.define('cr.ui', function() {
      * Setter for the repeat interval.
      * @type {number} The interval in milliseconds.
      */
-   set repeatInterval(delay) {
-     this.holdRepeatIntervalTime_ = delay;
-   }
+    set repeatInterval(delay) {
+      this.holdRepeatIntervalTime_ = delay;
+    }
   };
 
-  return {
-    RepeatingButton: RepeatingButton
-  };
+  return {RepeatingButton: RepeatingButton};
 });
-

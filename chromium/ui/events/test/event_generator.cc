@@ -88,7 +88,7 @@ EventGenerator::EventGenerator(gfx::NativeWindow root_window)
       flags_(0),
       grab_(false),
       async_(false),
-      targeting_application_(false) {
+      target_(Target::WIDGET) {
   Init(root_window, NULL);
 }
 
@@ -99,7 +99,7 @@ EventGenerator::EventGenerator(gfx::NativeWindow root_window,
       flags_(0),
       grab_(false),
       async_(false),
-      targeting_application_(false) {
+      target_(Target::WIDGET) {
   Init(root_window, NULL);
 }
 
@@ -109,7 +109,7 @@ EventGenerator::EventGenerator(gfx::NativeWindow root_window,
       flags_(0),
       grab_(false),
       async_(false),
-      targeting_application_(false) {
+      target_(Target::WIDGET) {
   Init(root_window, window);
 }
 
@@ -119,7 +119,7 @@ EventGenerator::EventGenerator(EventGeneratorDelegate* delegate)
       flags_(0),
       grab_(false),
       async_(false),
-      targeting_application_(false) {
+      target_(Target::WIDGET) {
   Init(NULL, NULL);
 }
 

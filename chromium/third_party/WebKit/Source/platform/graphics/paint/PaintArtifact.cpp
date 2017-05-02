@@ -7,7 +7,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/WebDisplayItemList.h"
 #include "third_party/skia/include/core/SkRegion.h"
 
@@ -87,6 +87,7 @@ void PaintArtifact::replay(GraphicsContext& graphicsContext) const {
     displayItem.replay(graphicsContext);
 }
 
+DISABLE_CFI_PERF
 void PaintArtifact::appendToWebDisplayItemList(WebDisplayItemList* list) const {
   TRACE_EVENT0("blink,benchmark", "PaintArtifact::appendToWebDisplayItemList");
   size_t visualRectIndex = 0;

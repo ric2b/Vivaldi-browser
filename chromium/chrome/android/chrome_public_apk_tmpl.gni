@@ -4,6 +4,7 @@
 
 import("//base/android/linker/config.gni")
 import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
 import("//chrome/common/features.gni")
 import("//third_party/leakcanary/config.gni")
 import("channel.gni")
@@ -40,6 +41,10 @@ template("chrome_public_apk_tmpl") {
     _native_lib_file =
         rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
     native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+    native_lib_version_rule = "//build/util:chrome_version_json"
+    if (!defined(aapt_locale_whitelist)) {
+      aapt_locale_whitelist = locales - android_chrome_omitted_locales
+    }
 
     if (is_java_debug) {
       enable_multidex = true
@@ -98,9 +103,14 @@ template("monochrome_public_apk_tmpl") {
     enable_relocation_packing = true
     extensions_to_not_compress = ".lpak,.pak,.bin,.dat"
 
+    # Webview supports all locales (has no omitted ones).
+    aapt_locale_whitelist = locales
+
+    # Incremental install doesn't work for monochrome. See crbug.com/663492.
+    never_incremental = true
+
     # Configrations to make android load shared library from APK.
     uncompress_shared_libraries = true
-    page_align_shared_libraries = true
 
     forward_variables_from(invoker, "*")
 

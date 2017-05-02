@@ -65,7 +65,6 @@ class CORE_EXPORT SVGImage final : public Image {
   LayoutReplaced* embeddedReplacedContent() const;
 
   bool isSVGImage() const override { return true; }
-  bool isTextureBacked() override { return false; }
   IntSize size() const override { return m_intrinsicSize; }
 
   bool currentFrameHasSingleSecurityOrigin() const override;
@@ -78,7 +77,7 @@ class CORE_EXPORT SVGImage final : public Image {
   void advanceAnimationForTesting() override;
   SVGImageChromeClient& chromeClientForTesting();
 
-  sk_sp<SkImage> imageForCurrentFrame() override;
+  sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override;
 
   // Does the SVG image/document contain any animations?
   bool hasAnimations() const;
@@ -125,7 +124,8 @@ class CORE_EXPORT SVGImage final : public Image {
             const FloatRect& fromRect,
             const FloatRect& toRect,
             RespectImageOrientationEnum,
-            ImageClampingMode) override;
+            ImageClampingMode,
+            const ColorBehavior&) override;
   void drawForContainer(SkCanvas*,
                         const SkPaint&,
                         const FloatSize,

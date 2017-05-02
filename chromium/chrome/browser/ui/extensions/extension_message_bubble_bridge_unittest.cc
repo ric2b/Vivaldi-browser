@@ -4,12 +4,14 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/extension_web_ui_override_registrar.h"
 #include "chrome/browser/extensions/ntp_overridden_bubble_delegate.h"
+#include "chrome/browser/extensions/suspicious_extension_bubble_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_message_bubble_bridge.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_actions_bar_bubble_delegate.h"
@@ -20,6 +22,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/crx_file/id_util.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -107,7 +110,7 @@ TEST_F(ExtensionMessageBubbleBridgeUnitTest,
 
   EXPECT_EQ(gfx::VectorIconId::VECTOR_ICON_NONE, extra_view_info->resource_id);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_LEARN_MORE), extra_view_info->text);
-  EXPECT_EQ(true, extra_view_info->is_text_linked);
+  EXPECT_TRUE(extra_view_info->is_text_linked);
 
   EXPECT_EQ(
       l10n_util::GetStringUTF16(IDS_EXTENSION_CONTROLLED_RESTORE_SETTINGS),
@@ -139,7 +142,59 @@ TEST_F(ExtensionMessageBubbleBridgeUnitTest,
   EXPECT_EQ(gfx::VectorIconId::BUSINESS, extra_view_info->resource_id);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_EXTENSIONS_INSTALLED_BY_ADMIN),
             extra_view_info->text);
-  EXPECT_EQ(false, extra_view_info->is_text_linked);
+  EXPECT_FALSE(extra_view_info->is_text_linked);
 
   EXPECT_EQ(base::string16(), bridge->GetActionButtonText());
+}
+
+// Tests the ExtensionMessageBubbleBridge in conjunction with the
+// SuspiciousExtensionBubbleDelegate.
+TEST_F(ExtensionMessageBubbleBridgeUnitTest, SuspiciousExtensionBubble) {
+  // Load up a simple extension.
+  extensions::DictionaryBuilder manifest;
+  manifest.Set("name", "foo")
+          .Set("description", "some extension")
+          .Set("version", "0.1")
+          .Set("manifest_version", 2);
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::ExtensionBuilder().SetID(crx_file::id_util::GenerateId("foo"))
+                                    .SetManifest(manifest.Build())
+                                    .Build();
+  ASSERT_TRUE(extension);
+  service()->AddExtension(extension.get());
+  const std::string id = extension->id();
+  ASSERT_TRUE(registry()->enabled_extensions().GetByID(id));
+
+  // Disable the extension for being from outside the webstore.
+  service()->DisableExtension(
+      extension->id(), extensions::Extension::DISABLE_NOT_VERIFIED);
+  EXPECT_TRUE(registry()->disabled_extensions().GetByID(id));
+
+  // Create a new message bubble; it should want to display for the disabled
+  // extension. (Note: The bubble logic itself is tested more thoroughly in
+  // extension_message_bubble_controller_unittest.cc.)
+  auto suspicious_bubble_controller =
+      base::MakeUnique<extensions::ExtensionMessageBubbleController>(
+          new extensions::SuspiciousExtensionBubbleDelegate(profile()),
+          browser());
+  EXPECT_TRUE(suspicious_bubble_controller->ShouldShow());
+  ASSERT_EQ(1u, suspicious_bubble_controller->GetExtensionIdList().size());
+  EXPECT_EQ(id, suspicious_bubble_controller->GetExtensionIdList()[0]);
+
+  // Create a new bridge and poke at a few of the methods to verify they are
+  // correct and that nothing crashes.
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate> bridge =
+      base::MakeUnique<ExtensionMessageBubbleBridge>(
+          std::move(suspicious_bubble_controller));
+  EXPECT_TRUE(bridge->ShouldShow());
+  EXPECT_FALSE(bridge->ShouldCloseOnDeactivate());
+
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
+      extra_view_info = bridge->GetExtraViewInfo();
+
+  ASSERT_TRUE(extra_view_info);
+  EXPECT_FALSE(extra_view_info->text.empty());
+  EXPECT_TRUE(extra_view_info->is_text_linked);
+  EXPECT_EQ(gfx::VectorIconId::VECTOR_ICON_NONE,
+            extra_view_info->resource_id);
 }

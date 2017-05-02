@@ -55,25 +55,26 @@
 #include "core/page/PopupOpeningObserver.h"
 #include "modules/accessibility/AXObject.h"
 #include "modules/audio_output_devices/AudioOutputDeviceClient.h"
-#include "modules/bluetooth/BluetoothSupplement.h"
 #include "modules/installedapp/InstalledAppController.h"
 #include "modules/mediastream/UserMediaController.h"
+#include "modules/navigatorcontentutils/NavigatorContentUtils.h"
 #include "modules/presentation/PresentationController.h"
 #include "modules/push_messaging/PushController.h"
-#include "modules/screen_orientation/ScreenOrientationController.h"
+#include "modules/screen_orientation/ScreenOrientationControllerImpl.h"
 #include "modules/vr/VRController.h"
 #include "platform/Cursor.h"
 #include "platform/FileChooser.h"
 #include "platform/Histogram.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/WebFrameScheduler.h"
+#include "platform/animation/CompositorAnimationHost.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebCursorInfo.h"
 #include "public/platform/WebFloatRect.h"
-#include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebURLRequest.h"
@@ -261,7 +262,7 @@ void ChromeClientImpl::startDragging(LocalFrame* frame,
                                      const WebImage& dragImage,
                                      const WebPoint& dragImageOffset) {
   WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(frame);
-  WebReferrerPolicy policy = webFrame->document().referrerPolicy();
+  WebReferrerPolicy policy = webFrame->document().getReferrerPolicy();
   webFrame->localRoot()->frameWidget()->startDragging(
       policy, dragData, mask, dragImage, dragImageOffset);
 }
@@ -278,7 +279,7 @@ void updatePolicyForEvent(const WebInputEvent* inputEvent,
     return;
 
   unsigned short buttonNumber = 0;
-  if (inputEvent->type == WebInputEvent::MouseUp) {
+  if (inputEvent->type() == WebInputEvent::MouseUp) {
     const WebMouseEvent* mouseEvent =
         static_cast<const WebMouseEvent*>(inputEvent);
 
@@ -295,20 +296,20 @@ void updatePolicyForEvent(const WebInputEvent* inputEvent,
       default:
         return;
     }
-  } else if ((WebInputEvent::isKeyboardEventType(inputEvent->type) &&
+  } else if ((WebInputEvent::isKeyboardEventType(inputEvent->type()) &&
               static_cast<const WebKeyboardEvent*>(inputEvent)
                       ->windowsKeyCode == VKEY_RETURN) ||
-             WebInputEvent::isGestureEventType(inputEvent->type)) {
+             WebInputEvent::isGestureEventType(inputEvent->type())) {
     // Keyboard and gesture events can simulate mouse events.
     buttonNumber = 0;
   } else {
     return;
   }
 
-  bool ctrl = inputEvent->modifiers & WebInputEvent::ControlKey;
-  bool shift = inputEvent->modifiers & WebInputEvent::ShiftKey;
-  bool alt = inputEvent->modifiers & WebInputEvent::AltKey;
-  bool meta = inputEvent->modifiers & WebInputEvent::MetaKey;
+  bool ctrl = inputEvent->modifiers() & WebInputEvent::ControlKey;
+  bool shift = inputEvent->modifiers() & WebInputEvent::ShiftKey;
+  bool alt = inputEvent->modifiers() & WebInputEvent::AltKey;
+  bool meta = inputEvent->modifiers() & WebInputEvent::MetaKey;
 
   NavigationPolicy userPolicy = *policy;
   navigationPolicyFromMouseEvent(buttonNumber, ctrl, shift, alt, meta,
@@ -828,8 +829,9 @@ void ChromeClientImpl::attachCompositorAnimationTimeline(
     LocalFrame* localFrame) {
   WebLocalFrameImpl* webFrame =
       WebLocalFrameImpl::fromFrame(localFrame)->localRoot();
-  webFrame->frameWidget()->attachCompositorAnimationTimeline(
-      compositorTimeline);
+  if (CompositorAnimationHost* animationHost =
+          webFrame->frameWidget()->animationHost())
+    animationHost->addTimeline(*compositorTimeline);
 }
 
 void ChromeClientImpl::detachCompositorAnimationTimeline(
@@ -840,28 +842,35 @@ void ChromeClientImpl::detachCompositorAnimationTimeline(
 
   // This method can be called when the frame is being detached, after the
   // widget is destroyed.
-  if (webFrame->frameWidget())
-    webFrame->frameWidget()->detachCompositorAnimationTimeline(
-        compositorTimeline);
+  if (webFrame->frameWidget()) {
+    if (CompositorAnimationHost* animationHost =
+            webFrame->frameWidget()->animationHost())
+      animationHost->removeTimeline(*compositorTimeline);
+  }
 }
 
-void ChromeClientImpl::enterFullscreenForElement(Element* element) {
-  m_webView->enterFullscreenForElement(element);
+void ChromeClientImpl::enterFullscreen(LocalFrame& frame) {
+  m_webView->enterFullscreen(frame);
 }
 
-void ChromeClientImpl::exitFullscreen(LocalFrame* frame) {
+void ChromeClientImpl::exitFullscreen(LocalFrame& frame) {
   m_webView->exitFullscreen(frame);
+}
+
+void ChromeClientImpl::fullscreenElementChanged(Element* fromElement,
+                                                Element* toElement) {
+  m_webView->fullscreenElementChanged(fromElement, toElement);
 }
 
 void ChromeClientImpl::clearCompositedSelection(LocalFrame* frame) {
   LocalFrame* localRoot = frame->localFrameRoot();
-  auto client =
-      WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->client();
+  WebFrameWidgetBase* widget =
+      WebLocalFrameImpl::fromFrame(localRoot)->frameWidget();
+  WebWidgetClient* client = widget->client();
   if (!client)
     return;
 
-  auto layerTreeView = client->layerTreeView();
-  if (layerTreeView)
+  if (WebLayerTreeView* layerTreeView = widget->getLayerTreeView())
     layerTreeView->clearSelection();
 }
 
@@ -869,13 +878,13 @@ void ChromeClientImpl::updateCompositedSelection(
     LocalFrame* frame,
     const CompositedSelection& selection) {
   LocalFrame* localRoot = frame->localFrameRoot();
-  WebWidgetClient* client =
-      WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->client();
+  WebFrameWidgetBase* widget =
+      WebLocalFrameImpl::fromFrame(localRoot)->frameWidget();
+  WebWidgetClient* client = widget->client();
   if (!client)
     return;
 
-  WebLayerTreeView* layerTreeView = client->layerTreeView();
-  if (layerTreeView)
+  if (WebLayerTreeView* layerTreeView = widget->getLayerTreeView())
     layerTreeView->registerSelection(WebSelection(selection));
 }
 
@@ -906,13 +915,14 @@ DOMWindow* ChromeClientImpl::pagePopupWindowForTesting() const {
 }
 
 bool ChromeClientImpl::shouldOpenModalDialogDuringPageDismissal(
-    const DialogType& dialogType,
+    LocalFrame& frame,
+    DialogType dialogType,
     const String& dialogMessage,
     Document::PageDismissalType dismissalType) const {
   String message = String("Blocked ") + dialogTypeToString(dialogType) + "('" +
                    dialogMessage + "') during " +
                    dismissalTypeToString(dismissalType) + ".";
-  m_webView->mainFrame()->addMessageToConsole(
+  WebLocalFrameImpl::fromFrame(frame)->addMessageToConsole(
       WebConsoleMessage(WebConsoleMessage::LevelError, message));
 
   return false;
@@ -1008,23 +1018,14 @@ void ChromeClientImpl::didCancelCompositionOnSelectionChange() {
     m_webView->client()->didCancelCompositionOnSelectionChange();
 }
 
-void ChromeClientImpl::willSetInputMethodState() {
+void ChromeClientImpl::resetInputMethod() {
   if (m_webView->client())
     m_webView->client()->resetInputMethod();
 }
 
-void ChromeClientImpl::didUpdateTextOfFocusedElementByNonUserInput(
-    LocalFrame& frame) {
-  WebLocalFrameImpl* webFrame =
-      WebLocalFrameImpl::fromFrame(frame.localFrameRoot());
-  webFrame->frameWidget()
-      ->client()
-      ->didUpdateTextOfFocusedElementByNonUserInput();
-}
-
-void ChromeClientImpl::showImeIfNeeded() {
+void ChromeClientImpl::showVirtualKeyboard() {
   if (m_webView->client())
-    m_webView->client()->showImeIfNeeded();
+    m_webView->client()->showVirtualKeyboard();
 }
 
 void ChromeClientImpl::showUnhandledTapUIIfNeeded(
@@ -1111,7 +1112,7 @@ CompositorProxyClient* ChromeClientImpl::createCompositorProxyClient(
 void ChromeClientImpl::registerPopupOpeningObserver(
     PopupOpeningObserver* observer) {
   DCHECK(observer);
-  m_popupOpeningObservers.append(observer);
+  m_popupOpeningObservers.push_back(observer);
 }
 
 void ChromeClientImpl::unregisterPopupOpeningObserver(
@@ -1138,7 +1139,7 @@ void ChromeClientImpl::didObserveNonGetFetchFromScript() const {
 
 std::unique_ptr<WebFrameScheduler> ChromeClientImpl::createFrameScheduler(
     BlameContext* blameContext) {
-  return wrapUnique(
+  return WTF::wrapUnique(
       m_webView->scheduler()->createFrameScheduler(blameContext).release());
 }
 
@@ -1153,21 +1154,20 @@ void ChromeClientImpl::installSupplements(LocalFrame& frame) {
   providePushControllerTo(frame, client->pushClient());
   provideUserMediaTo(frame,
                      UserMediaClientImpl::create(client->userMediaClient()));
-  provideIndexedDBClientTo(frame, IndexedDBClientImpl::create());
+  provideIndexedDBClientTo(frame, IndexedDBClientImpl::create(frame));
   provideLocalFileSystemTo(frame, LocalFileSystemClient::create());
-  provideNavigatorContentUtilsTo(
-      frame, NavigatorContentUtilsClientImpl::create(webFrame));
+  NavigatorContentUtils::provideTo(
+      *frame.domWindow()->navigator(),
+      NavigatorContentUtilsClientImpl::create(webFrame));
 
-  if (RuntimeEnabledFeatures::webBluetoothEnabled())
-    BluetoothSupplement::provideTo(frame, client->bluetooth());
-
-  ScreenOrientationController::provideTo(frame,
-                                         client->webScreenOrientationClient());
+  ScreenOrientationControllerImpl::provideTo(
+      frame, client->webScreenOrientationClient());
   if (RuntimeEnabledFeatures::presentationEnabled())
     PresentationController::provideTo(frame, client->presentationClient());
-  if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
+  if (RuntimeEnabledFeatures::audioOutputDevicesEnabled()) {
     provideAudioOutputDeviceClientTo(frame,
-                                     AudioOutputDeviceClientImpl::create());
+                                     new AudioOutputDeviceClientImpl(frame));
+  }
   if (RuntimeEnabledFeatures::installedAppEnabled())
     InstalledAppController::provideTo(frame, client->installedAppClient());
 }

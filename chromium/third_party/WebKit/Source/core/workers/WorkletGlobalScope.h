@@ -74,12 +74,6 @@ class CORE_EXPORT WorkletGlobalScope
     NOTREACHED();
     return nullptr;
   }  // WorkletGlobalScopes don't have timers.
-  void postTask(const WebTraceLocation&,
-                std::unique_ptr<ExecutionContextTask>,
-                const String&) override {
-    // TODO(ikilpatrick): implement.
-    NOTREACHED();
-  }
 
   DECLARE_VIRTUAL_TRACE();
 

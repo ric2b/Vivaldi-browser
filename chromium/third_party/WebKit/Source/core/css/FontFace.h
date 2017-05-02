@@ -37,7 +37,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSValue.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
 #include "platform/fonts/FontTraits.h"
 #include "wtf/text/WTFString.h"
@@ -54,11 +54,12 @@ class FontFaceDescriptors;
 class StringOrArrayBufferOrArrayBufferView;
 class StylePropertySet;
 class StyleRuleFontFace;
+class WebTaskRunner;
 
 class FontFace : public GarbageCollectedFinalized<FontFace>,
                  public ScriptWrappable,
-                 public ActiveScriptWrappable,
-                 public ActiveDOMObject {
+                 public ActiveScriptWrappable<FontFace>,
+                 public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(FontFace);
   WTF_MAKE_NONCOPYABLE(FontFace);
@@ -72,7 +73,7 @@ class FontFace : public GarbageCollectedFinalized<FontFace>,
                           const FontFaceDescriptors&);
   static FontFace* create(Document*, const StyleRuleFontFace*);
 
-  ~FontFace();
+  virtual ~FontFace();
 
   const AtomicString& family() const { return m_family; }
   String style() const;
@@ -81,6 +82,7 @@ class FontFace : public GarbageCollectedFinalized<FontFace>,
   String unicodeRange() const;
   String variant() const;
   String featureSettings() const;
+  String display() const;
 
   // FIXME: Changing these attributes should affect font matching.
   void setFamily(ExecutionContext*, const AtomicString& s, ExceptionState&) {
@@ -92,6 +94,7 @@ class FontFace : public GarbageCollectedFinalized<FontFace>,
   void setUnicodeRange(ExecutionContext*, const String&, ExceptionState&);
   void setVariant(ExecutionContext*, const String&, ExceptionState&);
   void setFeatureSettings(ExecutionContext*, const String&, ExceptionState&);
+  void setDisplay(ExecutionContext*, const String&, ExceptionState&);
 
   String status() const;
   ScriptPromise loaded(ScriptState* scriptState) {
@@ -119,7 +122,7 @@ class FontFace : public GarbageCollectedFinalized<FontFace>,
     virtual void notifyError(FontFace*) = 0;
     DEFINE_INLINE_VIRTUAL_TRACE() {}
   };
-  void loadWithCallback(LoadFontCallback*, ExecutionContext*);
+  void loadWithCallback(LoadFontCallback*);
   void addCallback(LoadFontCallback*);
 
   // ScriptWrappable:
@@ -153,8 +156,9 @@ class FontFace : public GarbageCollectedFinalized<FontFace>,
   bool setPropertyFromStyle(const StylePropertySet&, CSSPropertyID);
   bool setPropertyValue(const CSSValue*, CSSPropertyID);
   bool setFamilyValue(const CSSValue&);
-  void loadInternal(ExecutionContext*);
   ScriptPromise fontStatusPromise(ScriptState*);
+  WebTaskRunner* getTaskRunner();
+  void runCallbacks();
 
   using LoadedProperty = ScriptPromiseProperty<Member<FontFace>,
                                                Member<FontFace>,

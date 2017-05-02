@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 
@@ -21,8 +21,9 @@ class ChromeLauncherControllerImpl;
 // ArcAppDeferredLauncherController displays visual feedback that the ARC
 // application the user has just activated is waiting for ARC to be ready, and
 // will be asynchronously launched as soon as it can.
-class ArcAppDeferredLauncherController : public ArcAppListPrefs::Observer,
-                                         public arc::ArcAuthService::Observer {
+class ArcAppDeferredLauncherController
+    : public ArcAppListPrefs::Observer,
+      public arc::ArcSessionManager::Observer {
  public:
   explicit ArcAppDeferredLauncherController(
       ChromeLauncherControllerImpl* owner);
@@ -45,8 +46,8 @@ class ArcAppDeferredLauncherController : public ArcAppListPrefs::Observer,
   void OnAppReadyChanged(const std::string& app_id, bool ready) override;
   void OnAppRemoved(const std::string& app_id) override;
 
-  // arc::ArcAuthService::Observer:
-  void OnOptInEnabled(bool enabled) override;
+  // arc::ArcSessionManager::Observer:
+  void OnArcOptInChanged(bool enabled) override;
 
   // Removes entry from the list of tracking items.
   void Remove(const std::string& app_id);

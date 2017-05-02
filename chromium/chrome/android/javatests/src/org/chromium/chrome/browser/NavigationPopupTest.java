@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser;
 
 import android.graphics.Bitmap;
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.MediumTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
@@ -124,10 +124,6 @@ public class NavigationPopupTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void reloadToRefreshContent(boolean checkForRepost) {
-        }
-
-        @Override
         public void reloadBypassingCache(boolean checkForRepost) {
         }
 
@@ -229,7 +225,7 @@ public class NavigationPopupTest extends ChromeActivityTestCaseBase<ChromeActivi
 
     @MediumTest
     @Feature({"Navigation"})
-    public void testFaviconFetching() throws InterruptedException {
+    public void testFaviconFetching() {
         final TestNavigationController controller = new TestNavigationController();
         final NavigationPopup popup = new NavigationPopup(
                 mProfile, getActivity(), controller, true);

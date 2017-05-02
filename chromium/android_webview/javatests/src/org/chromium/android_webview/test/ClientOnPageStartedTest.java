@@ -4,7 +4,7 @@
 
 package org.chromium.android_webview.test;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.base.test.util.Feature;
@@ -49,9 +49,9 @@ public class ClientOnPageStartedTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     public void testOnPageStartedCalledOnceOnError() throws Throwable {
         class LocalTestClient extends TestAwContentsClient {
-            private boolean mIsOnReceivedErrorCalled = false;
-            private boolean mIsOnPageStartedCalled = false;
-            private boolean mAllowAboutBlank = false;
+            private boolean mIsOnReceivedErrorCalled;
+            private boolean mIsOnPageStartedCalled;
+            private boolean mAllowAboutBlank;
 
             @Override
             public void onReceivedError(int errorCode, String description, String failingUrl) {

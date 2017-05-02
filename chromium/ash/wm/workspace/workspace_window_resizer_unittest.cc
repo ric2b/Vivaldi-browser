@@ -4,7 +4,7 @@
 
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
 
-#include "ash/aura/wm_window_aura.h"
+#include "ash/common/ash_switches.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wm/window_positioning_utils.h"
@@ -12,6 +12,7 @@
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/workspace/phantom_window_controller.h"
 #include "ash/common/wm/workspace_controller.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -21,11 +22,12 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/hit_test.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -77,11 +79,6 @@ class WorkspaceWindowResizerTest : public test::AshMDTestBase {
 
     aura::Window* root = Shell::GetPrimaryRootWindow();
     gfx::Rect root_bounds(root->bounds());
-#if defined(OS_WIN)
-    // RootWindow and Display can't resize on Windows Ash.
-    // http://crbug.com/165962
-    EXPECT_EQ(kRootHeight, root_bounds.height());
-#endif
     EXPECT_EQ(800, root_bounds.width());
     Shell::GetInstance()->SetDisplayWorkAreaInsets(root, gfx::Insets());
     window_.reset(new aura::Window(&delegate_));
@@ -140,7 +137,7 @@ class WorkspaceWindowResizerTest : public test::AshMDTestBase {
                                       const gfx::Point& point_in_parent,
                                       int window_component) {
     WindowResizer* resizer =
-        CreateWindowResizer(WmWindowAura::Get(window), point_in_parent,
+        CreateWindowResizer(WmWindow::Get(window), point_in_parent,
                             window_component,
                             aura::client::WINDOW_MOVE_SOURCE_MOUSE)
             .release();
@@ -156,7 +153,7 @@ class WorkspaceWindowResizerTest : public test::AshMDTestBase {
     wm::WindowState* window_state = wm::GetWindowState(window);
     window_state->CreateDragDetails(point_in_parent, window_component, source);
     return WorkspaceWindowResizer::Create(
-        window_state, WmWindowAura::FromAuraWindows(attached_windows));
+        window_state, WmWindow::FromAuraWindows(attached_windows));
   }
 
   PhantomWindowController* snap_phantom_window_controller() const {
@@ -423,7 +420,6 @@ TEST_P(WorkspaceWindowResizerTest, AttachedResize_BOTTOM_2) {
   EXPECT_EQ("0,250 200x100", window2_->bounds().ToString());
 }
 
-#if defined(OS_CHROMEOS)
 // Assertions around attached window resize dragging from the bottom with 3
 // windows.
 TEST_P(WorkspaceWindowResizerTest, AttachedResize_BOTTOM_3) {
@@ -468,7 +464,6 @@ TEST_P(WorkspaceWindowResizerTest, AttachedResize_BOTTOM_3) {
   EXPECT_EQ("300,300 200x150", window2_->bounds().ToString());
   EXPECT_EQ("300,450 200x100", window3_->bounds().ToString());
 }
-#endif  // defined(OS_CHROMEOS)
 
 // Assertions around attached window resizing (collapsing and expanding) with
 // 3 windows.
@@ -551,13 +546,15 @@ TEST_P(WorkspaceWindowResizerTest, Edge) {
   // http://crbug.com/292238.
   // Window is wide enough not to get docked right away.
   window_->SetBounds(gfx::Rect(20, 30, 400, 60));
-  window_->SetProperty(aura::client::kCanMaximizeKey, true);
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       ui::mojom::kResizeBehaviorCanResize |
+                           ui::mojom::kResizeBehaviorCanMaximize);
   wm::WindowState* window_state = wm::GetWindowState(window_.get());
 
   {
     gfx::Rect expected_bounds_in_parent(
         wm::GetDefaultLeftSnappedWindowBoundsInParent(
-            WmWindowAura::Get(window_.get())));
+            WmWindow::Get(window_.get())));
 
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
@@ -575,7 +572,7 @@ TEST_P(WorkspaceWindowResizerTest, Edge) {
   {
     gfx::Rect expected_bounds_in_parent(
         wm::GetDefaultRightSnappedWindowBoundsInParent(
-            WmWindowAura::Get(window_.get())));
+            WmWindow::Get(window_.get())));
 
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
@@ -626,7 +623,8 @@ TEST_P(WorkspaceWindowResizerTest, Edge) {
 // Check that non resizable windows will not get resized.
 TEST_P(WorkspaceWindowResizerTest, NonResizableWindows) {
   window_->SetBounds(gfx::Rect(20, 30, 50, 60));
-  window_->SetProperty(aura::client::kCanResizeKey, false);
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       ui::mojom::kResizeBehaviorNone);
 
   std::unique_ptr<WindowResizer> resizer(
       CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
@@ -646,6 +644,11 @@ TEST_P(WorkspaceWindowResizerTest, CancelSnapPhantom) {
 
   window_->SetBoundsInScreen(gfx::Rect(0, 0, 50, 60),
                              display::Screen::GetScreen()->GetPrimaryDisplay());
+
+  // Make the window snappable by making it resizable and maximizable.
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       ui::mojom::kResizeBehaviorCanResize |
+                           ui::mojom::kResizeBehaviorCanMaximize);
   EXPECT_EQ(root_windows[0], window_->GetRootWindow());
   EXPECT_FLOAT_EQ(1.0f, window_->layer()->opacity());
   {
@@ -1439,10 +1442,11 @@ TEST_P(WorkspaceWindowResizerTest, MagneticallyResize_LEFT) {
   EXPECT_EQ("99,200 21x30", window_->bounds().ToString());
 }
 
-// Test that the user user moved window flag is getting properly set.
+// Test that the user moved window flag is getting properly set.
 TEST_P(WorkspaceWindowResizerTest, CheckUserWindowManagedFlags) {
   window_->SetBounds(gfx::Rect(0, 50, 400, 200));
-  window_->SetProperty(aura::client::kCanMaximizeKey, true);
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       ui::mojom::kResizeBehaviorCanMaximize);
 
   std::vector<aura::Window*> no_attached_windows;
   // Check that an abort doesn't change anything.
@@ -1497,6 +1501,15 @@ TEST_P(WorkspaceWindowResizerTest, TestPartialMaxSizeEnforced) {
 
 // Test that a window with a specified max size can't be snapped.
 TEST_P(WorkspaceWindowResizerTest, PhantomSnapMaxSize) {
+  // Make the window snappable by making it resizable and maximizable.
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       ui::mojom::kResizeBehaviorCanResize |
+                           ui::mojom::kResizeBehaviorCanMaximize);
+
+  // Enable docking for this test.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ash::switches::kAshEnableDockedWindows);
+
   {
     // With max size not set we get a phantom window controller for dragging off
     // the right hand side.

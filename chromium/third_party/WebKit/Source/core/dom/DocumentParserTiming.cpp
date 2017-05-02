@@ -6,7 +6,7 @@
 
 #include "core/dom/Document.h"
 #include "core/loader/DocumentLoader.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -65,16 +65,15 @@ void DocumentParserTiming::recordParserBlockedOnScriptExecutionDuration(
 }
 
 DEFINE_TRACE(DocumentParserTiming) {
-  visitor->trace(m_document);
   Supplement<Document>::trace(visitor);
 }
 
 DocumentParserTiming::DocumentParserTiming(Document& document)
-    : m_document(document) {}
+    : Supplement<Document>(document) {}
 
 void DocumentParserTiming::notifyDocumentParserTimingChanged() {
-  if (m_document->loader())
-    m_document->loader()->didChangePerformanceTiming();
+  if (supplementable()->loader())
+    supplementable()->loader()->didChangePerformanceTiming();
 }
 
 }  // namespace blink

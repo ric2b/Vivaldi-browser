@@ -29,7 +29,6 @@
 """Chromium Mac implementation of the Port interface."""
 
 import logging
-import signal
 
 from webkitpy.layout_tests.port import base
 
@@ -93,9 +92,6 @@ class MacPort(base.Port):
     # PROTECTED METHODS
     #
 
-    def _wdiff_missing_message(self):
-        return 'wdiff is not installed; please install from MacPorts or elsewhere'
-
     def path_to_apache(self):
         return '/usr/sbin/httpd'
 
@@ -105,6 +101,3 @@ class MacPort(base.Port):
 
     def _path_to_driver(self, target=None):
         return self._build_path_with_target(target, self.driver_name() + '.app', 'Contents', 'MacOS', self.driver_name())
-
-    def _path_to_wdiff(self):
-        return 'wdiff'

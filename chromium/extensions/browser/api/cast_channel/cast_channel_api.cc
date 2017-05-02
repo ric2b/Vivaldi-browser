@@ -225,7 +225,7 @@ void CastChannelAsyncApiFunction::SetResultFromError(int channel_id,
   channel_info.error_state = error;
   channel_info.connect_info.ip_address = "";
   channel_info.connect_info.port = 0;
-  channel_info.connect_info.auth = cast_channel::CHANNEL_AUTH_TYPE_SSL;
+  channel_info.connect_info.auth = cast_channel::CHANNEL_AUTH_TYPE_SSL_VERIFIED;
   SetResultFromChannelInfo(channel_info);
   SetError("Channel error = " + base::IntToString(error));
 }
@@ -379,8 +379,8 @@ bool CastChannelSendFunction::Prepare() {
     return false;
   }
   switch (params_->message.data->GetType()) {
-    case base::Value::TYPE_STRING:
-    case base::Value::TYPE_BINARY:
+    case base::Value::Type::STRING:
+    case base::Value::Type::BINARY:
       break;
     default:
       SetError("Invalid type of message_info.data");

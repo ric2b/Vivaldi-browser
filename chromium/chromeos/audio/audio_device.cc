@@ -34,7 +34,11 @@ uint8_t GetDevicePriority(AudioDeviceType type, bool is_input) {
       return 2;
     case AUDIO_TYPE_INTERNAL_SPEAKER:
     case AUDIO_TYPE_INTERNAL_MIC:
+    case AUDIO_TYPE_FRONT_MIC:
       return 1;
+    // Rear mic should have priority lower than front mic to prevent poor
+    // quality input caused by accidental selecting to rear side mic.
+    case AUDIO_TYPE_REAR_MIC:
     case AUDIO_TYPE_KEYBOARD_MIC:
     case AUDIO_TYPE_HOTWORD:
     case AUDIO_TYPE_POST_MIX_LOOPBACK:
@@ -64,6 +68,10 @@ std::string AudioDevice::GetTypeString(AudioDeviceType type) {
       return "INTERNAL_SPEAKER";
     case AUDIO_TYPE_INTERNAL_MIC:
       return "INTERNAL_MIC";
+    case AUDIO_TYPE_FRONT_MIC:
+      return "FRONT_MIC";
+    case AUDIO_TYPE_REAR_MIC:
+      return "REAR_MIC";
     case AUDIO_TYPE_KEYBOARD_MIC:
       return "KEYBOARD_MIC";
     case AUDIO_TYPE_HOTWORD:
@@ -87,6 +95,10 @@ AudioDeviceType AudioDevice::GetAudioType(
     return AUDIO_TYPE_HEADPHONE;
   else if (node_type.find("INTERNAL_MIC") != std::string::npos)
     return AUDIO_TYPE_INTERNAL_MIC;
+  else if (node_type.find("FRONT_MIC") != std::string::npos)
+    return AUDIO_TYPE_FRONT_MIC;
+  else if (node_type.find("REAR_MIC") != std::string::npos)
+    return AUDIO_TYPE_REAR_MIC;
   else if (node_type.find("KEYBOARD_MIC") != std::string::npos)
     return AUDIO_TYPE_KEYBOARD_MIC;
   else if (node_type.find("MIC") != std::string::npos)
@@ -115,20 +127,15 @@ AudioDeviceType AudioDevice::GetAudioType(
     return AUDIO_TYPE_OTHER;
 }
 
-AudioDevice::AudioDevice()
-    : is_input(false),
-      id(0),
-      stable_device_id(0),
-      display_name(""),
-      type(AUDIO_TYPE_OTHER),
-      priority(0),
-      active(false),
-      plugged_time(0) {}
+AudioDevice::AudioDevice() {}
 
 AudioDevice::AudioDevice(const AudioNode& node) {
   is_input = node.is_input;
   id = node.id;
-  stable_device_id = node.stable_device_id;
+  stable_device_id_version = node.StableDeviceIdVersion();
+  stable_device_id = node.StableDeviceId();
+  if (stable_device_id_version == 2)
+    deprecated_stable_device_id = node.stable_device_id_v1;
   type = GetAudioType(node.type);
   if (!node.name.empty() && node.name != "(default)")
     display_name = node.name;
@@ -144,6 +151,10 @@ AudioDevice::AudioDevice(const AudioNode& node) {
 AudioDevice::AudioDevice(const AudioDevice& other) = default;
 
 std::string AudioDevice::ToString() const {
+  if (stable_device_id_version == 0) {
+    return "Null device";
+  }
+
   std::string result;
   base::StringAppendF(&result,
                       "is_input = %s ",
@@ -151,12 +162,13 @@ std::string AudioDevice::ToString() const {
   base::StringAppendF(&result,
                       "id = 0x%" PRIx64 " ",
                       id);
-  base::StringAppendF(&result,
-                      "stable_device_id = 0x%" PRIx64 " ",
+  base::StringAppendF(&result, "stable_device_id_version = %d",
+                      stable_device_id_version);
+  base::StringAppendF(&result, "stable_device_id = 0x%" PRIx64 " ",
                       stable_device_id);
-  base::StringAppendF(&result,
-                      "display_name = %s ",
-                      display_name.c_str());
+  base::StringAppendF(&result, "deprecated_stable_device_id = 0x%" PRIx64 " ",
+                      deprecated_stable_device_id);
+  base::StringAppendF(&result, "display_name = %s ", display_name.c_str());
   base::StringAppendF(&result,
                       "device_name = %s ",
                       device_name.c_str());

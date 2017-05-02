@@ -35,6 +35,7 @@ Polymer({
   is: 'settings-change-picture',
 
   behaviors: [
+    settings.RouteObserverBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
   ],
@@ -132,8 +133,22 @@ Polymer({
                           this.receiveProfileImage_.bind(this));
     this.addWebUIListener('camera-presence-changed',
                           this.receiveCameraPresence_.bind(this));
+  },
 
-    this.browserProxy_.initialize();
+
+  /** @protected */
+  currentRouteChanged: function(newRoute) {
+    if (newRoute == settings.Route.CHANGE_PICTURE) {
+      this.browserProxy_.initialize();
+
+      // This in needed because we manually clear the selectedItem_ property
+      // when navigating away. The selector element doesn't fire its upward
+      // data binding unless its selected item has changed.
+      this.selectedItem_ = this.$.selector.selectedItem;
+    } else {
+      // Ensure we deactivate the camera when we navigate away.
+      this.selectedItem_ = null;
+    }
   },
 
   /**
@@ -188,7 +203,7 @@ Polymer({
    */
   receiveProfileImage_: function(imageUrl, selected) {
     this.profileImageUrl_ = imageUrl;
-    this.$.profileImage.alt = this.i18n('profilePhoto');
+    this.$.profileImage.title = this.i18n('profilePhoto');
 
     if (!selected)
       return;
@@ -240,7 +255,7 @@ Polymer({
 
   /**
    * Handler for when accessibility-specific keys are pressed.
-   * @param {!{detail: !{key: string}}} e
+   * @param {!{detail: !{key: string, keyboardEvent: Object}}} e
    */
   onKeysPress_: function(e) {
     if (!this.selectedItem_)
@@ -267,7 +282,11 @@ Polymer({
           selector.selectPrevious();
         } while (this.selectedItem_.hidden);
 
+        if (this.selectedItem_.dataset.type != ChangePictureSelectionTypes.FILE)
+          this.selectImage_(this.selectedItem_);
+
         this.lastSelectedImageType_ = this.selectedItem_.dataset.type;
+        e.detail.keyboardEvent.preventDefault();
         break;
 
       case 'down':
@@ -278,7 +297,11 @@ Polymer({
           selector.selectNext();
         } while (this.selectedItem_.hidden);
 
+        if (this.selectedItem_.dataset.type != ChangePictureSelectionTypes.FILE)
+          this.selectImage_(this.selectedItem_);
+
         this.lastSelectedImageType_ = this.selectedItem_.dataset.type;
+        e.detail.keyboardEvent.preventDefault();
         break;
 
       case 'enter':
@@ -372,7 +395,7 @@ Polymer({
    * @private
    */
   isCameraActive_: function(cameraPresent, selectedItem) {
-    return cameraPresent && selectedItem &&
+    return cameraPresent && !!selectedItem &&
         selectedItem.dataset.type == ChangePictureSelectionTypes.CAMERA;
   },
 
@@ -392,7 +415,7 @@ Polymer({
    * @private
    */
   isAuthorCreditShown_: function(selectedItem) {
-    return selectedItem &&
+    return !!selectedItem &&
         selectedItem.dataset.type == ChangePictureSelectionTypes.DEFAULT;
   },
 

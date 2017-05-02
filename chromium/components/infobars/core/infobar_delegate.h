@@ -34,8 +34,6 @@ namespace translate {
 class TranslateInfoBarDelegate;
 }
 
-class SearchGeolocationDisclosureInfoBarDelegate;
-
 namespace gfx {
 class Image;
 enum class VectorIconId;
@@ -146,6 +144,7 @@ class InfoBarDelegate {
     GROUPED_PERMISSION_INFOBAR_DELEGATE_ANDROID = 70,
     OFFLINE_PAGE_INFOBAR_DELEGATE = 71,
     SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_DELEGATE = 72,
+    AUTOMATION_INFOBAR_DELEGATE = 73,
   };
 
   // Describes navigation events, used to decide whether infobars should be

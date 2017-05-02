@@ -12,6 +12,7 @@
 #include "core/layout/api/LayoutItem.h"
 #include "core/layout/api/LayoutPartItem.h"
 #include "platform/exported/WrappedResourceRequest.h"
+#include "platform/geometry/IntRect.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/web/WebRemoteFrameClient.h"
@@ -155,16 +156,16 @@ void RemoteFrameClientImpl::forwardInputEvent(Event* event) {
   // FIXME: Add a check for out-of-process iframes enabled.
   std::unique_ptr<WebInputEvent> webEvent;
   if (event->isKeyboardEvent())
-    webEvent = wrapUnique(
+    webEvent = WTF::wrapUnique(
         new WebKeyboardEventBuilder(*static_cast<KeyboardEvent*>(event)));
   else if (event->isMouseEvent())
-    webEvent = wrapUnique(new WebMouseEventBuilder(
+    webEvent = WTF::wrapUnique(new WebMouseEventBuilder(
         m_webFrame->frame()->view(),
         m_webFrame->toImplBase()->frame()->ownerLayoutItem(),
         *static_cast<MouseEvent*>(event)));
 
   // Other or internal Blink events should not be forwarded.
-  if (!webEvent || webEvent->type == WebInputEvent::Undefined)
+  if (!webEvent || webEvent->type() == WebInputEvent::Undefined)
     return;
 
   m_webFrame->client()->forwardInputEvent(webEvent.get());
@@ -172,6 +173,11 @@ void RemoteFrameClientImpl::forwardInputEvent(Event* event) {
 
 void RemoteFrameClientImpl::frameRectsChanged(const IntRect& frameRect) {
   m_webFrame->client()->frameRectsChanged(frameRect);
+}
+
+void RemoteFrameClientImpl::updateRemoteViewportIntersection(
+    const IntRect& viewportIntersection) {
+  m_webFrame->client()->updateRemoteViewportIntersection(viewportIntersection);
 }
 
 void RemoteFrameClientImpl::advanceFocus(WebFocusType type,
@@ -182,10 +188,6 @@ void RemoteFrameClientImpl::advanceFocus(WebFocusType type,
 
 void RemoteFrameClientImpl::visibilityChanged(bool visible) {
   m_webFrame->client()->visibilityChanged(visible);
-}
-
-void RemoteFrameClientImpl::setHasReceivedUserGesture() {
-  m_webFrame->client()->setHasReceivedUserGesture();
 }
 
 }  // namespace blink

@@ -25,29 +25,27 @@ using EventWithLatencyInfoTest = testing::Test;
 TouchEventWithLatencyInfo CreateTouchEvent(WebInputEvent::Type type,
                                            double timestamp,
                                            unsigned touch_count = 1) {
-  TouchEventWithLatencyInfo touch;
+  TouchEventWithLatencyInfo touch(type, WebInputEvent::NoModifiers, timestamp,
+                                  ui::LatencyInfo());
   touch.event.touchesLength = touch_count;
-  touch.event.type = type;
-  touch.event.timeStampSeconds = timestamp;
   return touch;
 }
 
 MouseEventWithLatencyInfo CreateMouseEvent(WebInputEvent::Type type,
                                            double timestamp) {
-  MouseEventWithLatencyInfo mouse;
-  mouse.event.type = type;
-  mouse.event.timeStampSeconds = timestamp;
-  return mouse;
+  return MouseEventWithLatencyInfo(type, WebInputEvent::NoModifiers, timestamp,
+                                   ui::LatencyInfo());
 }
 
-MouseWheelEventWithLatencyInfo CreateMouseWheelEvent(double timestamp,
-                                                     float deltaX = 0.0f,
-                                                     float deltaY = 0.0f) {
-  MouseWheelEventWithLatencyInfo mouse_wheel;
-  mouse_wheel.event.type = WebInputEvent::MouseWheel;
+MouseWheelEventWithLatencyInfo CreateMouseWheelEvent(
+    double timestamp,
+    float deltaX = 0.0f,
+    float deltaY = 0.0f,
+    int modifiers = WebInputEvent::NoModifiers) {
+  MouseWheelEventWithLatencyInfo mouse_wheel(
+      WebInputEvent::MouseWheel, modifiers, timestamp, ui::LatencyInfo());
   mouse_wheel.event.deltaX = deltaX;
   mouse_wheel.event.deltaY = deltaY;
-  mouse_wheel.event.timeStampSeconds = timestamp;
   return mouse_wheel;
 }
 
@@ -55,11 +53,10 @@ GestureEventWithLatencyInfo CreateGestureEvent(WebInputEvent::Type type,
                                                double timestamp,
                                                float x = 0.0f,
                                                float y = 0.0f) {
-  GestureEventWithLatencyInfo gesture;
-  gesture.event.type = type;
+  GestureEventWithLatencyInfo gesture(type, WebInputEvent::NoModifiers,
+                                      timestamp, ui::LatencyInfo());
   gesture.event.x = x;
   gesture.event.y = y;
-  gesture.event.timeStampSeconds = timestamp;
   return gesture;
 }
 
@@ -72,7 +69,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForMouseEvent) {
   ASSERT_TRUE(mouse_0.CanCoalesceWith(mouse_1));
   mouse_0.CoalesceWith(mouse_1);
   // Coalescing WebMouseEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, mouse_0.event.timeStampSeconds);
+  EXPECT_EQ(10.0, mouse_0.event.timeStampSeconds());
 }
 
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForMouseWheelEvent) {
@@ -82,7 +79,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForMouseWheelEvent) {
   ASSERT_TRUE(mouse_wheel_0.CanCoalesceWith(mouse_wheel_1));
   mouse_wheel_0.CoalesceWith(mouse_wheel_1);
   // Coalescing WebMouseWheelEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, mouse_wheel_0.event.timeStampSeconds);
+  EXPECT_EQ(10.0, mouse_wheel_0.event.timeStampSeconds());
 }
 
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForTouchEvent) {
@@ -94,7 +91,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForTouchEvent) {
   ASSERT_TRUE(touch_0.CanCoalesceWith(touch_1));
   touch_0.CoalesceWith(touch_1);
   // Coalescing WebTouchEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, touch_0.event.timeStampSeconds);
+  EXPECT_EQ(10.0, touch_0.event.timeStampSeconds());
 }
 
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForGestureEvent) {
@@ -106,7 +103,7 @@ TEST_F(EventWithLatencyInfoTest, TimestampCoalescingForGestureEvent) {
   ASSERT_TRUE(scroll_0.CanCoalesceWith(scroll_1));
   scroll_0.CoalesceWith(scroll_1);
   // Coalescing WebGestureEvent preserves newer timestamp.
-  EXPECT_EQ(10.0, scroll_0.event.timeStampSeconds);
+  EXPECT_EQ(10.0, scroll_0.event.timeStampSeconds());
 }
 
 TEST_F(EventWithLatencyInfoTest, LatencyInfoCoalescing) {
@@ -307,10 +304,8 @@ TEST_F(EventWithLatencyInfoTest, WebMouseWheelEventCoalescing) {
   EXPECT_TRUE(CanCoalesce(mouse_wheel_0, mouse_wheel_1));
 
   // WebMouseWheelEvent objects with different modifiers should not coalesce.
-  mouse_wheel_0 = CreateMouseWheel(1, 1);
-  mouse_wheel_1 = CreateMouseWheel(1, 1);
-  mouse_wheel_0.event.modifiers = WebInputEvent::ControlKey;
-  mouse_wheel_1.event.modifiers = WebInputEvent::ShiftKey;
+  mouse_wheel_0 = CreateMouseWheelEvent(2.0, 1, 1, WebInputEvent::ControlKey);
+  mouse_wheel_1 = CreateMouseWheelEvent(2.0, 1, 1, WebInputEvent::ShiftKey);
   EXPECT_FALSE(CanCoalesce(mouse_wheel_0, mouse_wheel_1));
 
   // Coalesce old and new events.
@@ -322,7 +317,7 @@ TEST_F(EventWithLatencyInfoTest, WebMouseWheelEventCoalescing) {
   mouse_wheel_1.event.y = 2;
   MouseWheelEventWithLatencyInfo mouse_wheel_1_copy = mouse_wheel_1;
   EXPECT_TRUE(CanCoalesce(mouse_wheel_0, mouse_wheel_1));
-  EXPECT_EQ(mouse_wheel_0.event.modifiers, mouse_wheel_1.event.modifiers);
+  EXPECT_EQ(mouse_wheel_0.event.modifiers(), mouse_wheel_1.event.modifiers());
   EXPECT_EQ(mouse_wheel_0.event.scrollByPage, mouse_wheel_1.event.scrollByPage);
   EXPECT_EQ(mouse_wheel_0.event.phase, mouse_wheel_1.event.phase);
   EXPECT_EQ(mouse_wheel_0.event.momentumPhase,
@@ -355,14 +350,14 @@ TEST_F(EventWithLatencyInfoTest, WebMouseWheelEventCoalescing) {
 
 // Coalescing preserves the newer timestamp.
 TEST_F(EventWithLatencyInfoTest, TimestampCoalescing) {
-  MouseWheelEventWithLatencyInfo mouse_wheel_0 = CreateMouseWheel(1, 1);
-  mouse_wheel_0.event.timeStampSeconds = 5.0;
-  MouseWheelEventWithLatencyInfo mouse_wheel_1 = CreateMouseWheel(2, 2);
-  mouse_wheel_1.event.timeStampSeconds = 10.0;
+  MouseWheelEventWithLatencyInfo mouse_wheel_0 =
+      CreateMouseWheelEvent(5.0, 1, 1);
+  MouseWheelEventWithLatencyInfo mouse_wheel_1 =
+      CreateMouseWheelEvent(10.0, 2, 2);
 
   EXPECT_TRUE(CanCoalesce(mouse_wheel_0, mouse_wheel_1));
   Coalesce(mouse_wheel_1, &mouse_wheel_0);
-  EXPECT_EQ(10.0, mouse_wheel_0.event.timeStampSeconds);
+  EXPECT_EQ(10.0, mouse_wheel_0.event.timeStampSeconds());
 }
 
 }  // namespace

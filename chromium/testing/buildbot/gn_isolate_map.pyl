@@ -2,6 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# This is a .pyl, or "Python Literal", file. You can treat it just like a
+# .json file, with the following exceptions:
+# * all keys must be quoted (use single quotes, please);
+# * comments are allowed, using '#' syntax; and
+# * trailing commas are allowed.
+
 # gn_isolate_map.pyl - A mapping of Ninja build target names to GN labels and
 # test type classifications for the tests that are run on the bots.
 #
@@ -20,7 +26,7 @@
 #  "windowed_test_launcher"
 #  : the test is a gtest-based test that uses the "brave-new-test-launcher"
 #    from //base/test:test_support and needs to run under Xvfb if run on
-#    an X11-based platform (use_x11=true).
+#    some platforms (eg. Linux Desktop, X11 CrOS and Ozone CrOS).
 #  "console_test_launcher"
 #  : the test is a gtest-based test that uses the "brave-new-test-launcher"
 #    from //base/test:test_support but does not need Xvfb.
@@ -102,6 +108,11 @@
     "type": "raw",
     "args": [],
   },
+  "angle_deqp_gles31_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles31_tests",
+    "type": "raw",
+    "args": [],
+  },
   "angle_end2end_tests": {
     "label": "//third_party/angle/src/tests:angle_end2end_tests",
     "type": "raw",
@@ -155,18 +166,6 @@
   },
   "battor_agent_unittests": {
     "label": "//tools/battor_agent:battor_agent_unittests",
-    "type": "console_test_launcher",
-  },
-  "blimp_browsertests": {
-    "label": "//blimp:blimp_browsertests",
-    "type": "console_test_launcher",
-  },
-  "blimp_test_apk": {
-    "label": "//blimp/client/app:blimp_test_apk",
-    "type": "console_test_launcher",
-  },
-  "blimp_unittests": {
-    "label": "//blimp:blimp_unittests",
     "type": "console_test_launcher",
   },
   "blink_heap_unittests": {
@@ -376,6 +375,22 @@
     "label": "//device:device_unittests",
     "type": "console_test_launcher",
   },
+  "devtools_closure_compile": {
+    "label": "//third_party/WebKit/Source/devtools:devtools_closure_compile",
+    "type": "script",
+    "script": "//testing/scripts/run_devtools_check.py",
+    "args": [
+        "../../third_party/WebKit/Source/devtools/scripts/compile_frontend.py",
+    ],
+  },
+  "devtools_eslint": {
+    "label": "//third_party/WebKit/Source/devtools:devtools_eslint",
+    "type": "script",
+    "script": "//testing/scripts/run_devtools_check.py",
+    "args": [
+        "../../third_party/WebKit/Source/devtools/scripts/buildbot/run_eslint.py",
+    ],
+  },
   "display_unittests": {
     "label": "//ui/display:display_unittests",
     "type": "console_test_launcher",
@@ -431,9 +446,11 @@
     "type": "raw",
     "args": [],
   },
-  "gn_all": {
-    "label": "//:gn_all",
-    "type": "additional_compile_target",
+  "gl_unittests_ozone": {
+    "label": "//ui/gl:gl_unittests_ozone",
+    "label_type": "group",
+    "type": "windowed_test_launcher",
+    "executable": "gl_unittests",
   },
   "gn_unittests": {
     "label": "//tools/gn:gn_unittests",
@@ -489,7 +506,7 @@
     "type": "windowed_test_launcher",
   },
   "ios_chrome_unittests": {
-    "label": "//ios/chrome:ios_chrome_unittests",
+    "label": "//ios/chrome/test:ios_chrome_unittests",
     "type": "raw",
     "args": [],
   },
@@ -550,13 +567,37 @@
     "label": "//media:media_unittests",
     "type": "windowed_test_launcher",
   },
-  "media_mojo_shell_unittests": {
-    "label": "//media/mojo/services:media_mojo_shell_unittests",
+  "media_service_unittests": {
+    "label": "//media/mojo/services:media_service_unittests",
     "type": "console_test_launcher",
   },
   "media_blink_unittests": {
     "label": "//media/blink:media_blink_unittests",
     "type": "windowed_test_launcher",
+  },
+  "media_router_perf_tests": {
+    "label": "//chrome/test/media_router:media_router_perf_tests",
+    "type": "script",
+    "script": "//chrome/test/media_router/telemetry/run_benchmark.py",
+    "args": [
+      "--browser=release",
+      "--also-run-disabled-tests",
+      "-v",
+      "--use-live-sites",
+      "--output-format=chartjson",
+      "--output-dir=${ISOLATED_OUTDIR}",
+    ],
+  },
+  "media_router_tests": {
+    "label": "//chrome/test/media_router:media_router_tests",
+    "type": "script",
+    "script": "//chrome/test/media_router/internal/media_router_tests.py",
+    "args": [
+      "--extension",
+      "mr_extension/",
+      "--test_binary",
+      "./browser_tests",
+    ],
   },
   "midi_unittests": {
     "label": "//media/midi:midi_unittests",
@@ -588,10 +629,6 @@
   },
   "mojo_public_system_unittests": {
     "label": "//mojo/edk/test:mojo_public_system_unittests",
-    "type": "console_test_launcher",
-  },
-  "mojo_runner_host_unittests": {
-    "label": "//services/service_manager/runner/host:mojo_runner_host_unittests",
     "type": "console_test_launcher",
   },
   "mojo_system_unittests": {
@@ -729,6 +766,11 @@
     "label": "//storage/browser:storage_unittests",
     "type": "console_test_launcher",
   },
+  "swiftshader_unittests": {
+    "label": "//third_party/swiftshader/tests/unittests:swiftshader_unittests",
+    "type": "raw",
+    "args": [],
+  },
   "sync_integration_tests": {
     "label": "//chrome/test:sync_integration_tests",
     "type": "windowed_test_launcher",
@@ -748,14 +790,6 @@
     "script": "//testing/scripts/run_gpu_integration_test_as_googletest.py",
     "args": [
       "../../content/test/gpu/run_gpu_integration_test.py",
-    ],
-  },
-  "telemetry_gpu_test": {
-    "label": "//chrome/test:telemetry_gpu_test",
-    "type": "script",
-    "script": "//testing/scripts/run_telemetry_benchmark_as_googletest.py",
-    "args": [
-      "../../content/test/gpu/run_gpu_test.py",
     ],
   },
   "telemetry_gpu_unittests": {
@@ -792,6 +826,9 @@
       "--xvfb",
       "../../tools/perf/run_telemetry_tests",
       "-v",
+      # TODO(nedn, eyaich): Remove this flag once crbug.com/549140 is fixed &
+      # Telemetry no longer downloads files in parallel. (crbug.com/661434#c24)
+      "--jobs=1",
       "--chrome-root",
       "../../",
     ],
@@ -802,6 +839,14 @@
     "script": "//testing/scripts/run_gtest_perf_test.py",
     "args": [
       "cc_perftests",
+    ],
+  },
+  "media_perftests": {
+    "label": "//media:media_perftests",
+    "type": "script",
+    "script": "//testing/scripts/run_gtest_perf_test.py",
+    "args": [
+      "media_perftests",
     ],
   },
   "load_library_perf_tests": {
@@ -858,6 +903,10 @@
     "label": "//services/ui/ime:mus_ime_unittests",
     "type": "windowed_test_launcher",
   },
+  "native_theme_unittests": {
+    "label": "//ui/native_theme:native_theme_unittests",
+    "type": "windowed_test_launcher",
+  },
   "ui_android_unittests": {
     "label": "//ui/android:ui_android_unittests",
     "type": "console_test_launcher",
@@ -895,9 +944,10 @@
     "label": "//url:url_unittests",
     "type": "console_test_launcher",
   },
-  "views_aura_mus_unittests": {
-    "label": "//ui/views/mus:views_aura_mus_unittests",
-    "type": "windowed_test_launcher",
+  "video_decode_accelerator_unittest": {
+    "label": "//media/gpu:video_decode_accelerator_unittest",
+    "type": "raw",
+    "args": [],
   },
   "views_mus_interactive_ui_tests": {
     "label": "//ui/views/mus:views_mus_interactive_ui_tests",

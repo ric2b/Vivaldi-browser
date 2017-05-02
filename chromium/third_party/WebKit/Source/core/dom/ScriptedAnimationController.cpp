@@ -81,6 +81,13 @@ void ScriptedAnimationController::cancelCallback(CallbackId id) {
   m_callbackCollection.cancelCallback(id);
 }
 
+void ScriptedAnimationController::runTasks() {
+  Vector<std::unique_ptr<WTF::Closure>> tasks;
+  tasks.swap(m_taskQueue);
+  for (auto& task : tasks)
+    (*task)();
+}
+
 void ScriptedAnimationController::dispatchEvents(
     const AtomicString& eventInterfaceFilter) {
   HeapVector<Member<Event>> events;
@@ -92,26 +99,26 @@ void ScriptedAnimationController::dispatchEvents(
     for (auto& event : m_eventQueue) {
       if (event && event->interfaceName() == eventInterfaceFilter) {
         m_perFrameEvents.remove(eventTargetKey(event.get()));
-        events.append(event.release());
+        events.push_back(event.release());
       } else {
-        remaining.append(event.release());
+        remaining.push_back(event.release());
       }
     }
     remaining.swap(m_eventQueue);
   }
 
-  for (size_t i = 0; i < events.size(); ++i) {
-    EventTarget* eventTarget = events[i]->target();
+  for (const auto& event : events) {
+    EventTarget* eventTarget = event->target();
     // FIXME: we should figure out how to make dispatchEvent properly virtual to
     // avoid special casting window.
     // FIXME: We should not fire events for nodes that are no longer in the
     // tree.
     InspectorInstrumentation::AsyncTask asyncTask(
-        eventTarget->getExecutionContext(), events[i]);
+        eventTarget->getExecutionContext(), event);
     if (LocalDOMWindow* window = eventTarget->toLocalDOMWindow())
-      window->dispatchEvent(events[i], nullptr);
+      window->dispatchEvent(event, nullptr);
     else
-      eventTarget->dispatchEvent(events[i]);
+      eventTarget->dispatchEvent(event);
   }
 }
 
@@ -144,8 +151,8 @@ bool ScriptedAnimationController::hasScheduledItems() const {
   if (m_suspendCount)
     return false;
 
-  return !m_callbackCollection.isEmpty() || !m_eventQueue.isEmpty() ||
-         !m_mediaQueryListListeners.isEmpty();
+  return !m_callbackCollection.isEmpty() || !m_taskQueue.isEmpty() ||
+         !m_eventQueue.isEmpty() || !m_mediaQueryListListeners.isEmpty();
 }
 
 void ScriptedAnimationController::serviceScriptedAnimations(
@@ -155,15 +162,22 @@ void ScriptedAnimationController::serviceScriptedAnimations(
 
   callMediaQueryListListeners();
   dispatchEvents();
+  runTasks();
   executeCallbacks(monotonicTimeNow);
 
+  scheduleAnimationIfNeeded();
+}
+
+void ScriptedAnimationController::enqueueTask(
+    std::unique_ptr<WTF::Closure> task) {
+  m_taskQueue.push_back(std::move(task));
   scheduleAnimationIfNeeded();
 }
 
 void ScriptedAnimationController::enqueueEvent(Event* event) {
   InspectorInstrumentation::asyncTaskScheduled(
       event->target()->getExecutionContext(), event->type(), event);
-  m_eventQueue.append(event);
+  m_eventQueue.push_back(event);
   scheduleAnimationIfNeeded();
 }
 
@@ -175,8 +189,8 @@ void ScriptedAnimationController::enqueuePerFrameEvent(Event* event) {
 
 void ScriptedAnimationController::enqueueMediaQueryChangeListeners(
     HeapVector<Member<MediaQueryListListener>>& listeners) {
-  for (size_t i = 0; i < listeners.size(); ++i) {
-    m_mediaQueryListListeners.add(listeners[i]);
+  for (const auto& listener : listeners) {
+    m_mediaQueryListListeners.add(listener);
   }
   scheduleAnimationIfNeeded();
 }

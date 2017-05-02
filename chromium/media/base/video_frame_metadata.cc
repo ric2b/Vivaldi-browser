@@ -151,9 +151,9 @@ bool VideoFrameMetadata::IsTrue(Key key) const {
   return GetBoolean(key, &value) && value;
 }
 
-void VideoFrameMetadata::MergeInternalValuesInto(
-    base::DictionaryValue* out) const {
-  out->MergeDictionary(&dictionary_);
+std::unique_ptr<base::DictionaryValue> VideoFrameMetadata::CopyInternalValues()
+    const {
+  return dictionary_.CreateDeepCopy();
 }
 
 void VideoFrameMetadata::MergeInternalValuesFrom(
@@ -170,7 +170,7 @@ const base::BinaryValue* VideoFrameMetadata::GetBinaryValue(Key key) const {
   const base::Value* internal_value = nullptr;
   if (dictionary_.GetWithoutPathExpansion(ToInternalKey(key),
                                           &internal_value) &&
-      internal_value->GetType() == base::Value::TYPE_BINARY) {
+      internal_value->GetType() == base::Value::Type::BINARY) {
     return static_cast<const base::BinaryValue*>(internal_value);
   }
   return nullptr;

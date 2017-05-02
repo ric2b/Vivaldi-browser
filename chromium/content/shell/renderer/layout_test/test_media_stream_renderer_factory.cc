@@ -5,6 +5,7 @@
 #include "content/shell/renderer/layout_test/test_media_stream_renderer_factory.h"
 
 #include "content/shell/renderer/layout_test/test_media_stream_video_renderer.h"
+#include "media/media_features.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/WebKit/public/web/WebMediaStreamRegistry.h"
@@ -19,7 +20,7 @@ static const int kVideoCaptureHeight = 288;
 static const int kVideoCaptureFrameDurationMs = 33;
 
 bool IsMockMediaStreamWithVideo(const WebMediaStream& web_stream) {
-#if ENABLE_WEBRTC
+#if BUILDFLAG(ENABLE_WEBRTC)
   if (web_stream.isNull())
     return false;
   WebVector<WebMediaStreamTrack> video_tracks;
@@ -43,6 +44,7 @@ TestMediaStreamRendererFactory::GetVideoRenderer(
     const blink::WebMediaStream& web_stream,
     const base::Closure& error_cb,
     const MediaStreamVideoRenderer::RepaintCB& repaint_cb,
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
     media::GpuVideoAcceleratorFactories* gpu_factories) {
@@ -50,9 +52,8 @@ TestMediaStreamRendererFactory::GetVideoRenderer(
     return NULL;
 
   return new TestMediaStreamVideoRenderer(
-      gfx::Size(kVideoCaptureWidth, kVideoCaptureHeight),
-      base::TimeDelta::FromMilliseconds(kVideoCaptureFrameDurationMs),
-      error_cb,
+      io_task_runner, gfx::Size(kVideoCaptureWidth, kVideoCaptureHeight),
+      base::TimeDelta::FromMilliseconds(kVideoCaptureFrameDurationMs), error_cb,
       repaint_cb);
 }
 

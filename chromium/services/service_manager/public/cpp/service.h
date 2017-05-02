@@ -5,6 +5,11 @@
 #ifndef SERVICES_SERVICE_MANAGER_PUBLIC_CPP_SERVICE_H_
 #define SERVICES_SERVICE_MANAGER_PUBLIC_CPP_SERVICE_H_
 
+#include <string>
+
+#include "base/macros.h"
+#include "mojo/public/cpp/system/message_pipe.h"
+
 namespace service_manager {
 
 class InterfaceRegistry;
@@ -32,6 +37,15 @@ class Service {
   // The default implementation returns false.
   virtual bool OnConnect(const ServiceInfo& remote_info,
                          InterfaceRegistry* registry);
+
+  // Called when the service identified by |source_info| requests this service
+  // bind a request for |interface_name|. If this method has been called, the
+  // service manager has already determined that policy permits this interface
+  // to be bound, so the implementation of this method can trust that it should
+  // just blindly bind it under most conditions.
+  virtual void OnBindInterface(const ServiceInfo& source_info,
+                               const std::string& interface_name,
+                               mojo::ScopedMessagePipeHandle interface_pipe);
 
   // Called when the Service Manager has stopped tracking this instance. The
   // service should use this as a signal to shut down, and in fact its process
@@ -65,6 +79,8 @@ class Service {
   void set_context(ServiceContext* context) { service_context_ = context; }
 
   ServiceContext* service_context_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(Service);
 };
 
 // TODO(rockot): Remove this. It's here to satisfy a few remaining use cases
@@ -75,14 +91,16 @@ class ForwardingService : public Service {
   explicit ForwardingService(Service* target);
   ~ForwardingService() override;
 
- private:
   // Service:
   void OnStart() override;
   bool OnConnect(const ServiceInfo& remote_info,
                  InterfaceRegistry* registry) override;
   bool OnStop() override;
 
+ private:
   Service* const target_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(ForwardingService);
 };
 
 }  // namespace service_manager

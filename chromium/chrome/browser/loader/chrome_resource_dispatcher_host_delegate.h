@@ -8,15 +8,16 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
+#include "content/public/common/previews_state.h"
 #include "extensions/features/features.h"
 
-class DelayedResourceQueue;
 class DownloadRequestLimiter;
 
 namespace content {
@@ -48,19 +49,19 @@ class ChromeResourceDispatcherHostDelegate
                           const GURL& url,
                           content::ResourceType resource_type,
                           content::ResourceContext* resource_context) override;
-  void RequestBeginning(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      content::AppCacheService* appcache_service,
-      content::ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) override;
-  void DownloadStarting(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      bool is_content_initiated,
-      bool must_download,
-      bool is_new_request,
-      ScopedVector<content::ResourceThrottle>* throttles) override;
+  void RequestBeginning(net::URLRequest* request,
+                        content::ResourceContext* resource_context,
+                        content::AppCacheService* appcache_service,
+                        content::ResourceType resource_type,
+                        std::vector<std::unique_ptr<content::ResourceThrottle>>*
+                            throttles) override;
+  void DownloadStarting(net::URLRequest* request,
+                        content::ResourceContext* resource_context,
+                        bool is_content_initiated,
+                        bool must_download,
+                        bool is_new_request,
+                        std::vector<std::unique_ptr<content::ResourceThrottle>>*
+                            throttles) override;
   content::ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       net::AuthChallengeInfo* auth_info,
       net::URLRequest* request) override;
@@ -83,7 +84,8 @@ class ChromeResourceDispatcherHostDelegate
                            content::ResourceContext* resource_context,
                            content::ResourceResponse* response) override;
   void RequestComplete(net::URLRequest* url_request) override;
-  bool ShouldEnableLoFiMode(
+  // Returns a bitmask of potentially several Previews optimizations.
+  content::PreviewsState GetPreviewsState(
       const net::URLRequest& url_request,
       content::ResourceContext* resource_context) override;
   content::NavigationData* GetNavigationData(
@@ -104,7 +106,7 @@ class ChromeResourceDispatcherHostDelegate
       net::URLRequest* request,
       content::ResourceContext* resource_context,
       content::ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles);
+      std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles);
 
  private:
 #if BUILDFLAG(ENABLE_EXTENSIONS)

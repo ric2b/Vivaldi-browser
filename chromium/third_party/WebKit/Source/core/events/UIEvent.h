@@ -29,9 +29,10 @@
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/UIEventInit.h"
 #include "core/frame/DOMWindow.h"
-#include "core/input/InputDeviceCapabilities.h"
 
 namespace blink {
+
+class InputDeviceCapabilities;
 
 // FIXME: Get rid of this type alias.
 using AbstractView = DOMWindow;
@@ -79,7 +80,7 @@ class CORE_EXPORT UIEvent : public Event {
           bool canBubble,
           bool cancelable,
           ComposedMode,
-          double platformTimeStamp,
+          TimeTicks platformTimeStamp,
           AbstractView*,
           int detail,
           InputDeviceCapabilities* sourceCapabilities);

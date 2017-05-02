@@ -44,10 +44,8 @@ class ControllerPairingScreen
   bool ExpectStageIs(Stage stage) const;
 
   // Overridden from BaseScreen:
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
-  std::string GetName() const override;
 
   // Overridden from pairing_chromeos::ControllerPairingController::Observer:
   void PairingStageChanged(Stage new_stage) override;

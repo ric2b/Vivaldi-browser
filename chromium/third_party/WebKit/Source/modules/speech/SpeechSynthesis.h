@@ -41,8 +41,8 @@ class PlatformSpeechSynthesizerClient;
 
 class MODULES_EXPORT SpeechSynthesis final
     : public EventTargetWithInlineData,
-      public PlatformSpeechSynthesizerClient,
-      public ContextLifecycleObserver {
+      public ContextClient,
+      public PlatformSpeechSynthesizerClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesis);
 
@@ -65,7 +65,9 @@ class MODULES_EXPORT SpeechSynthesis final
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(voiceschanged);
 
-  ExecutionContext* getExecutionContext() const override;
+  ExecutionContext* getExecutionContext() const override {
+    return ContextClient::getExecutionContext();
+  }
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -104,4 +106,4 @@ class MODULES_EXPORT SpeechSynthesis final
 
 }  // namespace blink
 
-#endif  // SpeechSynthesisEvent_h
+#endif  // SpeechSynthesis_h

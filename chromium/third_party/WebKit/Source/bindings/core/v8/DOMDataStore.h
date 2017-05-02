@@ -54,7 +54,7 @@ class DOMDataStore {
   DOMDataStore(v8::Isolate* isolate, bool isMainWorld)
       : m_isMainWorld(isMainWorld),
         // We never use |m_wrapperMap| when it's the main world.
-        m_wrapperMap(wrapUnique(
+        m_wrapperMap(WTF::wrapUnique(
             isMainWorld ? nullptr
                         : new DOMWrapperMap<ScriptWrappable>(isolate))) {}
 
@@ -139,17 +139,19 @@ class DOMDataStore {
   // is associated with the object, or false if the object is already
   // associated with a wrapper.  In the latter case, |wrapper| will be updated
   // to the existing wrapper.
-  static bool setWrapper(v8::Isolate* isolate,
-                         ScriptWrappable* object,
-                         const WrapperTypeInfo* wrapperTypeInfo,
-                         v8::Local<v8::Object>& wrapper) WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT static bool setWrapper(
+      v8::Isolate* isolate,
+      ScriptWrappable* object,
+      const WrapperTypeInfo* wrapperTypeInfo,
+      v8::Local<v8::Object>& wrapper) {
     return current(isolate).set(isolate, object, wrapperTypeInfo, wrapper);
   }
 
-  static bool setWrapper(v8::Isolate* isolate,
-                         Node* node,
-                         const WrapperTypeInfo* wrapperTypeInfo,
-                         v8::Local<v8::Object>& wrapper) WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT static bool setWrapper(
+      v8::Isolate* isolate,
+      Node* node,
+      const WrapperTypeInfo* wrapperTypeInfo,
+      v8::Local<v8::Object>& wrapper) {
     if (canUseScriptWrappable(node))
       return ScriptWrappable::fromNode(node)->setWrapper(
           isolate, wrapperTypeInfo, wrapper);
@@ -195,10 +197,10 @@ class DOMDataStore {
   }
 
  private:
-  bool set(v8::Isolate* isolate,
-           ScriptWrappable* object,
-           const WrapperTypeInfo* wrapperTypeInfo,
-           v8::Local<v8::Object>& wrapper) WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT bool set(v8::Isolate* isolate,
+                              ScriptWrappable* object,
+                              const WrapperTypeInfo* wrapperTypeInfo,
+                              v8::Local<v8::Object>& wrapper) {
     ASSERT(object);
     ASSERT(!wrapper.IsEmpty());
     if (m_isMainWorld)

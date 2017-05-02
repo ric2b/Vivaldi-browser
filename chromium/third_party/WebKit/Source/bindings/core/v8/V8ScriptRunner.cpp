@@ -40,7 +40,7 @@
 #include "core/loader/resource/ScriptResource.h"
 #include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
 
@@ -472,8 +472,7 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::compileScript(
       v8::Integer::New(isolate, scriptStartPosition.m_line.zeroBasedInt()),
       v8::Integer::New(isolate, scriptStartPosition.m_column.zeroBasedInt()),
       v8Boolean(accessControlStatus == SharableCrossOrigin, isolate),
-      v8::Local<v8::Integer>(), v8Boolean(false, isolate),
-      v8String(isolate, sourceMapUrl),
+      v8::Local<v8::Integer>(), v8String(isolate, sourceMapUrl),
       v8Boolean(accessControlStatus == OpaqueResource, isolate));
 
   V8CompileHistogram::Cacheability cacheabilityIfNoHandler =
@@ -492,6 +491,18 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::compileScript(
                                        code, cacheabilityIfNoHandler);
 
   return (*compileFn)(isolate, code, origin);
+}
+
+v8::MaybeLocal<v8::Module> V8ScriptRunner::compileModule(
+    v8::Isolate* isolate,
+    const String& source,
+    const String& fileName) {
+  TRACE_EVENT1("v8", "v8.compileModule", "fileName", fileName.utf8());
+  // TODO(adamk): Add Inspector integration?
+  // TODO(adamk): Pass more info into ScriptOrigin.
+  v8::ScriptOrigin origin(v8String(isolate, fileName));
+  v8::ScriptCompiler::Source scriptSource(v8String(isolate, source), origin);
+  return v8::ScriptCompiler::CompileModule(isolate, &scriptSource);
 }
 
 v8::MaybeLocal<v8::Value> V8ScriptRunner::runCompiledScript(
@@ -630,15 +641,16 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::callFunction(
     TRACE_EVENT_BEGIN1("devtools.timeline", "FunctionCall", "data",
                        InspectorFunctionCallEvent::data(context, function));
 
+  CHECK(!ThreadState::current()->isWrapperTracingForbidden());
   v8::MicrotasksScope microtasksScope(isolate,
                                       v8::MicrotasksScope::kRunMicrotasks);
-  PerformanceMonitor::willExecuteScript(context);
+  PerformanceMonitor::willCallFunction(context);
   ThreadDebugger::willExecuteScript(isolate, function->ScriptId());
   v8::MaybeLocal<v8::Value> result =
       function->Call(isolate->GetCurrentContext(), receiver, argc, args);
   crashIfIsolateIsDead(isolate);
   ThreadDebugger::didExecuteScript(isolate);
-  PerformanceMonitor::didExecuteScript(context);
+  PerformanceMonitor::didCallFunction(context, function);
   if (!depth)
     TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
   return result;
@@ -651,12 +663,23 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::callInternalFunction(
     v8::Local<v8::Value> args[],
     v8::Isolate* isolate) {
   TRACE_EVENT0("v8", "v8.callFunction");
+  CHECK(!ThreadState::current()->isWrapperTracingForbidden());
   v8::MicrotasksScope microtasksScope(isolate,
                                       v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::MaybeLocal<v8::Value> result =
       function->Call(isolate->GetCurrentContext(), receiver, argc, args);
   crashIfIsolateIsDead(isolate);
   return result;
+}
+
+v8::MaybeLocal<v8::Value> V8ScriptRunner::evaluateModule(
+    v8::Local<v8::Module> module,
+    v8::Local<v8::Context> context,
+    v8::Isolate* isolate) {
+  TRACE_EVENT0("v8", "v8.evaluateModule");
+  v8::MicrotasksScope microtasksScope(isolate,
+                                      v8::MicrotasksScope::kRunMicrotasks);
+  return module->Evaluate(context);
 }
 
 v8::MaybeLocal<v8::Object> V8ScriptRunner::instantiateObject(

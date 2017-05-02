@@ -123,14 +123,6 @@ void AutocompleteMatchToAssistedQuery(
       *subtype = 65;
       return;
     }
-    case AutocompleteMatchType::BOOKMARK_NICK: {
-      *subtype = 66;
-      return;
-    }
-    case AutocompleteMatchType::BOOKMARK_DESCRIPTION: {
-      *subtype = 67;
-      return;
-    }
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED: {
       *type = 5;
       *subtype = 39;

@@ -22,6 +22,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/threading/thread_checker.h"
@@ -43,7 +44,6 @@
 class GURL;
 class HistoryQuickProviderTest;
 class HistoryURLProvider;
-class HistoryURLProviderTest;
 class InMemoryURLIndexTest;
 class SkBitmap;
 class SyncBookmarkDataTypeControllerTest;
@@ -65,13 +65,11 @@ struct HistoryAddPageArgs;
 class HistoryBackend;
 class HistoryClient;
 class HistoryDBTask;
-class HistoryDatabase;
 struct HistoryDatabaseParams;
 class HistoryQueryTest;
 class HistoryServiceObserver;
 class HistoryServiceTest;
 class InMemoryHistoryBackend;
-struct KeywordSearchTermVisit;
 class URLDatabase;
 class VisitDelegate;
 class WebHistoryService;
@@ -442,7 +440,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Called to update the history service about the current state of a download.
   // This is a 'fire and forget' query, so just pass the relevant state info to
   // the database with no need for a callback.
-  void UpdateDownload(const DownloadRow& data);
+  void UpdateDownload(const DownloadRow& data, bool should_commit_immediately);
 
   // Permanently remove some downloads from the history system. This is a 'fire
   // and forget' operation.
@@ -816,9 +814,15 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   base::ThreadChecker thread_checker_;
 
-  // The thread used by the history service to run complicated operations.
-  // |thread_| is null once Cleanup() is called.
-  base::Thread* thread_;
+  // The thread used by the history service to run HistoryBackend operations.
+  // Intentionally not a BrowserThread because the sync integration unit tests
+  // need to create multiple HistoryServices which each have their own thread.
+  // Nullptr if TaskScheduler is used for HistoryBackend operations.
+  std::unique_ptr<base::Thread> thread_;
+
+  // The TaskRunner to which HistoryBackend tasks are posted. Nullptr once
+  // Cleanup() is called.
+  scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
 
   // This class has most of the implementation and runs on the 'thread_'.
   // You MUST communicate with this class ONLY through the thread_'s

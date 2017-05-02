@@ -25,16 +25,17 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/gpu/shared_memory_region.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_binders.h"
 
-#define LOGF(level) LOG(level) << __FUNCTION__ << "(): "
-#define DLOGF(level) DLOG(level) << __FUNCTION__ << "(): "
-#define DVLOGF(level) DVLOG(level) << __FUNCTION__ << "(): "
-#define PLOGF(level) PLOG(level) << __FUNCTION__ << "(): "
+#define LOGF(level) LOG(level) << __func__ << "(): "
+#define DLOGF(level) DLOG(level) << __func__ << "(): "
+#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
+#define PLOGF(level) PLOG(level) << __func__ << "(): "
 
 #define NOTIFY_ERROR(x)                         \
   do {                                          \
@@ -518,7 +519,7 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kUninitialized);
 
-  if (config.is_encrypted) {
+  if (config.is_encrypted()) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
     return false;
   }

@@ -115,7 +115,7 @@ class PLATFORM_EXPORT FontCache {
   void invalidate();
 
   SkFontMgr* fontManager() { return m_fontManager.get(); }
-  static void setFontManager(const sk_sp<SkFontMgr>&);
+  static void setFontManager(sk_sp<SkFontMgr>);
 
 #if !OS(MACOSX)
   static const AtomicString& systemFontFamily();
@@ -247,6 +247,7 @@ class PLATFORM_EXPORT FontCache {
 
   sk_sp<SkFontMgr> m_fontManager;
 
+  // A leaky owning bare pointer.
   static SkFontMgr* s_staticFontManager;
 
 #if OS(WIN)

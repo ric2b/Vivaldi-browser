@@ -441,7 +441,7 @@ TEST_P(WindowTest, MoveCursorToWithTransformRootWindow) {
   transform.Rotate(90.0);
   transform.Scale(2.0, 5.0);
   host()->SetRootTransform(transform);
-  host()->MoveCursorTo(gfx::Point(10, 10));
+  host()->MoveCursorToLocationInDIP(gfx::Point(10, 10));
 #if !defined(OS_WIN)
   // TODO(yoshiki): fix this to build on Windows. See crbug.com/133413.OD
   EXPECT_EQ("50,120", QueryLatestMousePositionRequestInHost(host()).ToString());
@@ -1610,7 +1610,7 @@ TEST_P(WindowTest, IgnoreEventsTest) {
 
 // Tests transformation on the root window.
 TEST_P(WindowTest, Transform) {
-  gfx::Size size = host()->GetBounds().size();
+  gfx::Size size = host()->GetBoundsInPixels().size();
   EXPECT_EQ(gfx::Rect(size), display::Screen::GetScreen()
                                  ->GetDisplayNearestPoint(gfx::Point())
                                  .bounds());
@@ -1632,11 +1632,11 @@ TEST_P(WindowTest, Transform) {
                 .ToString());
 
   // Host size shouldn't change.
-  EXPECT_EQ(size.ToString(), host()->GetBounds().size().ToString());
+  EXPECT_EQ(size.ToString(), host()->GetBoundsInPixels().size().ToString());
 }
 
 TEST_P(WindowTest, TransformGesture) {
-  gfx::Size size = host()->GetBounds().size();
+  gfx::Size size = host()->GetBoundsInPixels().size();
 
   std::unique_ptr<GestureTrackPositionDelegate> delegate(
       new GestureTrackPositionDelegate);

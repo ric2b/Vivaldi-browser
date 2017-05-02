@@ -160,8 +160,8 @@ FilterEffect* SVGFEDiffuseLightingElement::build(
 
   FilterEffect* effect = FEDiffuseLighting::create(
       filter, color, m_surfaceScale->currentValue()->value(),
-      m_diffuseConstant->currentValue()->value(), lightSource.release());
-  effect->inputEffects().append(input1);
+      m_diffuseConstant->currentValue()->value(), std::move(lightSource));
+  effect->inputEffects().push_back(input1);
   return effect;
 }
 

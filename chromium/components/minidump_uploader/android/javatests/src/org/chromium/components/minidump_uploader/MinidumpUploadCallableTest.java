@@ -4,7 +4,7 @@
 
 package org.chromium.components.minidump_uploader;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
@@ -92,7 +92,11 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
         }
     }
 
-    private static class TestHttpURLConnectionFactory implements HttpURLConnectionFactory {
+    /**
+     * A HttpURLConnectionFactory that performs some basic checks to ensure we are uploading
+     * minidumps correctly.
+     */
+    public static class TestHttpURLConnectionFactory implements HttpURLConnectionFactory {
         @Override
         public HttpURLConnection createHttpURLConnection(String url) {
             try {
@@ -108,48 +112,6 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
         public HttpURLConnection createHttpURLConnection(String url) {
             fail();
             return null;
-        }
-    }
-
-    private static class MockCrashReportingPermissionManager
-            implements CrashReportingPermissionManager {
-        protected boolean mIsInSample;
-        protected boolean mIsPermitted;
-        protected boolean mIsUserPermitted;
-        protected boolean mIsCommandLineDisabled;
-        protected boolean mIsNetworkAvailable;
-        protected boolean mIsEnabledForTests;
-
-        MockCrashReportingPermissionManager() {}
-
-        @Override
-        public boolean isClientInMetricsSample() {
-            return mIsInSample;
-        }
-
-        @Override
-        public boolean isNetworkAvailableForCrashUploads() {
-            return mIsNetworkAvailable;
-        }
-
-        @Override
-        public boolean isMetricsUploadPermitted() {
-            return mIsPermitted;
-        }
-
-        @Override
-        public boolean isUsageAndCrashReportingPermittedByUser() {
-            return mIsUserPermitted;
-        }
-
-        @Override
-        public boolean isCrashUploadDisabledByCommandLine() {
-            return mIsCommandLineDisabled;
-        }
-
-        @Override
-        public boolean isUploadEnabledForTests() {
-            return mIsEnabledForTests;
         }
     }
 

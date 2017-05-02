@@ -25,7 +25,7 @@
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
 #include "net/proxy/proxy_server.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/ssl/ssl_info.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request_context.h"
@@ -402,7 +402,11 @@ void CronetURLRequestAdapter::ReportError(net::URLRequest* request,
 }
 
 void CronetURLRequestAdapter::MaybeReportMetrics(JNIEnv* env) const {
-  if (!enable_metrics_) {
+  // If there was an exception while starting the CronetUrlRequest, there won't
+  // be a native URLRequest. In this case, the caller gets the exception
+  // immediately, and the onFailed callback isn't called, so don't report
+  // metrics either.
+  if (!enable_metrics_ || !url_request_) {
     return;
   }
   net::LoadTimingInfo metrics;
@@ -434,10 +438,6 @@ void CronetURLRequestAdapter::MaybeReportMetrics(JNIEnv* env) const {
                                 start_time),
       metrics.socket_reused, url_request_->GetTotalSentBytes(),
       url_request_->GetTotalReceivedBytes());
-}
-
-net::URLRequest* CronetURLRequestAdapter::GetURLRequestForTesting() {
-  return url_request_.get();
 }
 
 }  // namespace cronet

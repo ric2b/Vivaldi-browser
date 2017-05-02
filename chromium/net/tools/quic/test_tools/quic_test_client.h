@@ -13,12 +13,10 @@
 #include <string>
 
 #include "base/macros.h"
-#include "net/base/ip_address.h"
-#include "net/base/ip_endpoint.h"
 #include "net/quic/core/proto/cached_network_parameters.pb.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_packet_creator.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -34,24 +32,23 @@ class QuicPacketWriterWrapper;
 
 namespace test {
 
-class HTTPMessage;
 class MockableQuicClient;
 
 // A quic client which allows mocking out reads and writes.
 class MockableQuicClient : public QuicClient {
  public:
-  MockableQuicClient(IPEndPoint server_address,
+  MockableQuicClient(QuicSocketAddress server_address,
                      const QuicServerId& server_id,
                      const QuicVersionVector& supported_versions,
                      EpollServer* epoll_server);
 
-  MockableQuicClient(IPEndPoint server_address,
+  MockableQuicClient(QuicSocketAddress server_address,
                      const QuicServerId& server_id,
                      const QuicConfig& config,
                      const QuicVersionVector& supported_versions,
                      EpollServer* epoll_server);
 
-  MockableQuicClient(IPEndPoint server_address,
+  MockableQuicClient(QuicSocketAddress server_address,
                      const QuicServerId& server_id,
                      const QuicConfig& config,
                      const QuicVersionVector& supported_versions,
@@ -60,8 +57,8 @@ class MockableQuicClient : public QuicClient {
 
   ~MockableQuicClient() override;
 
-  void ProcessPacket(const IPEndPoint& self_address,
-                     const IPEndPoint& peer_address,
+  void ProcessPacket(const QuicSocketAddress& self_address,
+                     const QuicSocketAddress& peer_address,
                      const QuicReceivedPacket& packet) override;
 
   QuicPacketWriter* CreateQuicPacketWriter() override;
@@ -95,14 +92,14 @@ class MockableQuicClient : public QuicClient {
 class QuicTestClient : public QuicSpdyStream::Visitor,
                        public QuicClientPushPromiseIndex::Delegate {
  public:
-  QuicTestClient(IPEndPoint server_address,
+  QuicTestClient(QuicSocketAddress server_address,
                  const std::string& server_hostname,
                  const QuicVersionVector& supported_versions);
-  QuicTestClient(IPEndPoint server_address,
+  QuicTestClient(QuicSocketAddress server_address,
                  const std::string& server_hostname,
                  const QuicConfig& config,
                  const QuicVersionVector& supported_versions);
-  QuicTestClient(IPEndPoint server_address,
+  QuicTestClient(QuicSocketAddress server_address,
                  const std::string& server_hostname,
                  const QuicConfig& config,
                  const QuicVersionVector& supported_versions,
@@ -116,9 +113,10 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   // Wraps data in a quic packet and sends it.
   ssize_t SendData(const std::string& data, bool last_data);
   // As above, but |delegate| will be notified when |data| is ACKed.
-  ssize_t SendData(const std::string& data,
-                   bool last_data,
-                   QuicAckListenerInterface* delegate);
+  ssize_t SendData(
+      const std::string& data,
+      bool last_data,
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   // Clears any outstanding state and sends a simple GET of 'uri' to the
   // server.  Returns 0 if the request failed and no bytes were written.
@@ -147,13 +145,14 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   void Connect();
   void ResetConnection();
   void Disconnect();
-  IPEndPoint local_address() const;
+  QuicSocketAddress local_address() const;
   void ClearPerRequestState();
   bool WaitUntil(int timeout_ms, std::function<bool()> trigger);
   ssize_t Send(const void* buffer, size_t size);
   bool response_complete() const;
   bool response_headers_complete() const;
   const SpdyHeaderBlock* response_headers() const;
+  const SpdyHeaderBlock* preliminary_headers() const;
   int64_t response_size() const;
   int64_t response_body_size() const;
   size_t bytes_read() const;
@@ -186,10 +185,10 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
     WaitUntil(timeout_ms, [this]() { return response_size() != 0; });
   }
 
-  void MigrateSocket(const IPAddress& new_host);
-  IPAddress bind_to_address() const;
-  void set_bind_to_address(IPAddress address);
-  const IPEndPoint& address() const;
+  void MigrateSocket(const QuicIpAddress& new_host);
+  QuicIpAddress bind_to_address() const;
+  void set_bind_to_address(QuicIpAddress address);
+  const QuicSocketAddress& address() const;
 
   // Returns the response trailers as received by the |stream_|.
   const SpdyHeaderBlock& response_trailers() const;
@@ -218,10 +217,11 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   // Calls GetOrCreateStream(), sends the request on the stream, and
   // stores the request in case it needs to be resent.  If |headers| is
   // null, only the body will be sent on the stream.
-  ssize_t GetOrCreateStreamAndSendRequest(const SpdyHeaderBlock* headers,
-                                          base::StringPiece body,
-                                          bool fin,
-                                          QuicAckListenerInterface* delegate);
+  ssize_t GetOrCreateStreamAndSendRequest(
+      const SpdyHeaderBlock* headers,
+      base::StringPiece body,
+      bool fin,
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   QuicRstStreamErrorCode stream_error() { return stream_error_; }
   QuicErrorCode connection_error();
@@ -257,7 +257,7 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
 
   size_t num_responses() const { return num_responses_; }
 
-  void set_server_address(const IPEndPoint& server_address) {
+  void set_server_address(const QuicSocketAddress& server_address) {
     client_->set_server_address(server_address);
   }
 
@@ -278,22 +278,20 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
  private:
   class TestClientDataToResend : public QuicClient::QuicDataToResend {
    public:
-    TestClientDataToResend(std::unique_ptr<SpdyHeaderBlock> headers,
-                           base::StringPiece body,
-                           bool fin,
-                           QuicTestClient* test_client,
-                           QuicAckListenerInterface* delegate)
-        : QuicClient::QuicDataToResend(std::move(headers), body, fin),
-          test_client_(test_client),
-          delegate_(delegate) {}
+    TestClientDataToResend(
+        std::unique_ptr<SpdyHeaderBlock> headers,
+        base::StringPiece body,
+        bool fin,
+        QuicTestClient* test_client,
+        QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
-    ~TestClientDataToResend() override {}
+    ~TestClientDataToResend() override;
 
     void Resend() override;
 
    protected:
     QuicTestClient* test_client_;
-    QuicAckListenerInterface* delegate_;
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener_;
   };
 
   // Given |uri|, populates the fields in |headers| for a simple GET
@@ -313,6 +311,7 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   bool response_complete_;
   bool response_headers_complete_;
   mutable SpdyHeaderBlock response_headers_;
+  mutable SpdyHeaderBlock preliminary_headers_;
 
   // Parsed response trailers (if present), copied from the stream in OnClose.
   SpdyHeaderBlock response_trailers_;

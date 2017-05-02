@@ -24,7 +24,7 @@ TEST(CreateAccessControlPreflightRequestTest, LexicographicalOrder) {
 
   ResourceRequest preflight = createAccessControlPreflightRequest(request);
 
-  EXPECT_EQ("apple, content-type, kiwifruit, orange, strawberry",
+  EXPECT_EQ("apple,content-type,kiwifruit,orange,strawberry",
             preflight.httpHeaderField("Access-Control-Request-Headers"));
 }
 
@@ -37,7 +37,11 @@ TEST(CreateAccessControlPreflightRequestTest, ExcludeSimpleHeaders) {
 
   ResourceRequest preflight = createAccessControlPreflightRequest(request);
 
-  EXPECT_EQ("", preflight.httpHeaderField("Access-Control-Request-Headers"));
+  // Do not emit empty-valued headers; an empty list of non-"CORS safelisted"
+  // request headers should cause "Access-Control-Request-Headers:" to be
+  // left out in the preflight request.
+  EXPECT_EQ(nullAtom,
+            preflight.httpHeaderField("Access-Control-Request-Headers"));
 }
 
 TEST(CreateAccessControlPreflightRequestTest, ExcludeSimpleContentTypeHeader) {
@@ -46,7 +50,9 @@ TEST(CreateAccessControlPreflightRequestTest, ExcludeSimpleContentTypeHeader) {
 
   ResourceRequest preflight = createAccessControlPreflightRequest(request);
 
-  EXPECT_EQ("", preflight.httpHeaderField("Access-Control-Request-Headers"));
+  // Empty list also; see comment in test above.
+  EXPECT_EQ(nullAtom,
+            preflight.httpHeaderField("Access-Control-Request-Headers"));
 }
 
 TEST(CreateAccessControlPreflightRequestTest, IncludeNonSimpleHeader) {

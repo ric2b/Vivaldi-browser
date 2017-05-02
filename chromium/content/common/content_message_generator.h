@@ -21,9 +21,7 @@
 #include "content/common/fileapi/file_system_messages.h"
 #include "content/common/fileapi/webblob_messages.h"
 #include "content/common/frame_messages.h"
-#include "content/common/gamepad_messages.h"
 #include "content/common/gpu_host_messages.h"
-#include "content/common/indexed_db/indexed_db_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/manifest_manager_messages.h"
 #include "content/common/media/aec_dump_messages.h"
@@ -49,8 +47,9 @@
 #include "content/common/utility_messages.h"
 #include "content/common/view_messages.h"
 #include "content/common/worker_messages.h"
+#include "media/media_features.h"
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "content/common/p2p_messages.h"
 #endif
 

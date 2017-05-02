@@ -2,16 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef IOS_INTERNAL_CHROME_BROWSER_WEB_WEB_JS_TEST_H_
-#define IOS_INTERNAL_CHROME_BROWSER_WEB_WEB_JS_TEST_H_
+#ifndef IOS_WEB_PUBLIC_TEST_WEB_JS_TEST_H_
+#define IOS_WEB_PUBLIC_TEST_WEB_JS_TEST_H_
 
 #import <Foundation/Foundation.h>
 
 #import "base/mac/bundle_locations.h"
 #import "base/mac/scoped_nsobject.h"
-#include "testing/gtest_mac.h"
-
-class GURL;
+#import "testing/gtest_mac.h"
 
 namespace web {
 
@@ -114,4 +112,4 @@ void WebJsTest<WebTestT>::ExecuteBooleanJavaScriptOnElementsAndCheck(
 
 }  // namespace web
 
-#endif  // IOS_INTERNAL_CHROME_BROWSER_WEB_WEB_JS_TEST_H_
+#endif  // IOS_WEB_PUBLIC_TEST_WEB_JS_TEST_H_

@@ -12,7 +12,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_host.h"
-#include "cc/animation/element_animations.h"
+#include "cc/animation/animation_player.h"
 #include "cc/animation/timing_function.h"
 #include "cc/base/switches.h"
 #include "cc/blimp/remote_compositor_bridge.h"
@@ -36,7 +36,6 @@
 #include "cc/trees/proxy_impl.h"
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/single_thread_proxy.h"
-#include "cc/trees/threaded_channel.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
@@ -118,7 +117,8 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
                           stats_instrumentation,
                           task_graph_runner,
                           AnimationHost::CreateForTesting(ThreadInstance::IMPL),
-                          0),
+                          0,
+                          nullptr),
         test_hooks_(test_hooks),
         block_notify_ready_to_activate_for_testing_(false),
         notify_ready_to_activate_was_blocked_(false) {}
@@ -240,9 +240,8 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
   void UpdateAnimationState(bool start_ready_animations) override {
     LayerTreeHostImpl::UpdateAnimationState(start_ready_animations);
     bool has_unfinished_animation = false;
-    for (const auto& it :
-         animation_host()->active_element_animations_for_testing()) {
-      if (it.second->HasActiveAnimation()) {
+    for (const auto& it : animation_host()->ticking_players_for_testing()) {
+      if (it->HasTickingAnimation()) {
         has_unfinished_animation = true;
         break;
       }
@@ -367,8 +366,8 @@ class LayerTreeHostForTesting : public LayerTreeHostInProcess {
         break;
       case CompositorMode::THREADED:
         DCHECK(impl_task_runner.get());
-        proxy = ProxyMain::CreateThreaded(layer_tree_host.get(),
-                                          task_runner_provider.get());
+        proxy = base::MakeUnique<ProxyMain>(layer_tree_host.get(),
+                                            task_runner_provider.get());
         break;
       case CompositorMode::REMOTE:
         NOTREACHED();

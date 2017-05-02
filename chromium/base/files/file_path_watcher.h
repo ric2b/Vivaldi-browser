@@ -7,13 +7,15 @@
 #ifndef BASE_FILES_FILE_PATH_WATCHER_H_
 #define BASE_FILES_FILE_PATH_WATCHER_H_
 
+#include <memory>
+
 #include "base/base_export.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 
 namespace base {
 
@@ -36,9 +38,10 @@ class BASE_EXPORT FilePathWatcher {
   typedef base::Callback<void(const FilePath& path, bool error)> Callback;
 
   // Used internally to encapsulate different members on different platforms.
-  class PlatformDelegate : public base::RefCountedThreadSafe<PlatformDelegate> {
+  class PlatformDelegate {
    public:
     PlatformDelegate();
+    virtual ~PlatformDelegate();
 
     // Start watching for the given |path| and notify |delegate| about changes.
     virtual bool Watch(const FilePath& path,
@@ -47,20 +50,16 @@ class BASE_EXPORT FilePathWatcher {
 
     // Stop watching. This is called from FilePathWatcher's dtor in order to
     // allow to shut down properly while the object is still alive.
-    // It can be called from any thread.
     virtual void Cancel() = 0;
 
    protected:
-    friend class base::RefCountedThreadSafe<PlatformDelegate>;
     friend class FilePathWatcher;
 
-    virtual ~PlatformDelegate();
-
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner() const {
+    scoped_refptr<SequencedTaskRunner> task_runner() const {
       return task_runner_;
     }
 
-    void set_task_runner(scoped_refptr<base::SingleThreadTaskRunner> runner) {
+    void set_task_runner(scoped_refptr<SequencedTaskRunner> runner) {
       task_runner_ = std::move(runner);
     }
 
@@ -74,32 +73,32 @@ class BASE_EXPORT FilePathWatcher {
     }
 
    private:
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+    scoped_refptr<SequencedTaskRunner> task_runner_;
     bool cancelled_;
+
+    DISALLOW_COPY_AND_ASSIGN(PlatformDelegate);
   };
 
   FilePathWatcher();
   ~FilePathWatcher();
 
-  // A callback that always cleans up the PlatformDelegate, either when executed
-  // or when deleted without having been executed at all, as can happen during
-  // shutdown.
-  static void CancelWatch(const scoped_refptr<PlatformDelegate>& delegate);
-
   // Returns true if the platform and OS version support recursive watches.
   static bool RecursiveWatchAvailable();
 
   // Invokes |callback| whenever updates to |path| are detected. This should be
-  // called at most once, and from a MessageLoop of TYPE_IO. Set |recursive| to
-  // true, to watch |path| and its children. The callback will be invoked on
-  // the same loop. Returns true on success.
+  // called at most once. Set |recursive| to true to watch |path| and its
+  // children. The callback will be invoked on the same sequence. Returns true
+  // on success.
+  //
+  // On POSIX, this must be called from a thread that supports
+  // FileDescriptorWatcher.
   //
   // Recursive watch is not supported on all platforms and file systems.
   // Watch() will return false in the case of failure.
   bool Watch(const FilePath& path, bool recursive, const Callback& callback);
 
  private:
-  scoped_refptr<PlatformDelegate> impl_;
+  std::unique_ptr<PlatformDelegate> impl_;
 
   SequenceChecker sequence_checker_;
 

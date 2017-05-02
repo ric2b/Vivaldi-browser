@@ -59,7 +59,7 @@ class MODULES_EXPORT Request final : public Body {
   Headers* getHeaders() const { return m_headers; }
   String context() const;
   String referrer() const;
-  String referrerPolicy() const;
+  String getReferrerPolicy() const;
   String mode() const;
   String credentials() const;
   String redirect() const;
@@ -85,9 +85,8 @@ class MODULES_EXPORT Request final : public Body {
  private:
   Request(ScriptState*, FetchRequestData*, Headers*);
   Request(ScriptState*, FetchRequestData*);
-  Request(ScriptState*, const WebServiceWorkerRequest&);
 
-  const FetchRequestData* request() const { return m_request; }
+  const FetchRequestData* getRequest() const { return m_request; }
   static Request* createRequestWithRequestOrString(ScriptState*,
                                                    Request*,
                                                    const String&,

@@ -25,14 +25,14 @@ namespace net {
 
 class ExternalEstimateProvider;
 
-namespace test_server {
-struct HttpRequest;
-class HttpResponse;
-}
-
 // Helps in setting the current network type and id.
 class TestNetworkQualityEstimator : public NetworkQualityEstimator {
  public:
+  TestNetworkQualityEstimator();
+
+  explicit TestNetworkQualityEstimator(
+      const std::map<std::string, std::string>& variation_params);
+
   TestNetworkQualityEstimator(
       const std::map<std::string, std::string>& variation_params,
       std::unique_ptr<net::ExternalEstimateProvider>
@@ -42,10 +42,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
       std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider,
       const std::map<std::string, std::string>& variation_params,
       bool allow_local_host_requests_for_tests,
-      bool allow_smaller_responses_for_tests);
-
-  explicit TestNetworkQualityEstimator(
-      const std::map<std::string, std::string>& variation_params);
+      bool allow_smaller_responses_for_tests,
+      bool add_default_platform_observations);
 
   ~TestNetworkQualityEstimator() override;
 

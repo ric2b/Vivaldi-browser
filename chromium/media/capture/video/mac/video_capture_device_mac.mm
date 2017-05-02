@@ -23,7 +23,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#import "media/base/mac/avfoundation_glue.h"
 #include "media/base/timestamp_constants.h"
 #import "media/capture/video/mac/video_capture_device_avfoundation_mac.h"
 #include "ui/gfx/geometry/size.h"
@@ -435,7 +434,7 @@ void VideoCaptureDeviceMac::OnPhotoTaken(const uint8_t* image_data,
 }
 
 void VideoCaptureDeviceMac::OnPhotoError() {
-  DLOG(ERROR) << __FUNCTION__ << " error taking picture";
+  DLOG(ERROR) << __func__ << " error taking picture";
   photo_callback_.reset();
 }
 

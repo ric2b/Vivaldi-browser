@@ -5,7 +5,6 @@
 #ifndef NavigatorCredentials_h
 #define NavigatorCredentials_h
 
-#include "core/frame/DOMWindowProperty.h"
 #include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
@@ -17,8 +16,7 @@ class Navigator;
 
 class NavigatorCredentials final
     : public GarbageCollected<NavigatorCredentials>,
-      public Supplement<Navigator>,
-      public DOMWindowProperty {
+      public Supplement<Navigator> {
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorCredentials);
 
  public:

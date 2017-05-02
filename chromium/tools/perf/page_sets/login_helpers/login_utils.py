@@ -46,8 +46,8 @@ def InputWithSelector(action_runner, input_text, input_selector):
   """
   action_runner.WaitForElement(selector=input_selector)
   action_runner.ExecuteJavaScript(
-      'document.querySelector("%s").value = "%s";' %
-      (input_selector, input_text))
+      'document.querySelector({{ selector }}).value = {{ value }};',
+      selector=input_selector, value=input_text)
 
 def InputForm(action_runner, input_text, input_id, form_id=None):
   """Sets the text value of an input field in a form on the page.
@@ -73,4 +73,3 @@ def InputForm(action_runner, input_text, input_id, form_id=None):
   else:
     raise ValueError("Input ID can not be None or empty.")
   InputWithSelector(action_runner, input_text, element_selector)
-

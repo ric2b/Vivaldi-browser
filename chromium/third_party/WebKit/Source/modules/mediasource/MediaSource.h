@@ -32,7 +32,7 @@
 #define MediaSource_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/html/HTMLMediaSource.h"
 #include "core/html/TimeRanges.h"
 #include "core/html/URLRegistry.h"
@@ -51,8 +51,8 @@ class WebSourceBuffer;
 
 class MediaSource final : public EventTargetWithInlineData,
                           public HTMLMediaSource,
-                          public ActiveScriptWrappable,
-                          public ActiveDOMObject {
+                          public ActiveScriptWrappable<MediaSource>,
+                          public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MediaSource);
 
@@ -65,7 +65,7 @@ class MediaSource final : public EventTargetWithInlineData,
   ~MediaSource() override;
 
   static void logAndThrowDOMException(ExceptionState&,
-                                      const ExceptionCode& error,
+                                      ExceptionCode error,
                                       const String& message);
   static void logAndThrowTypeError(ExceptionState&, const String&);
 
@@ -107,8 +107,8 @@ class MediaSource final : public EventTargetWithInlineData,
   // ScriptWrappable
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject interface
-  void contextDestroyed() override;
+  // ContextLifecycleObserver interface
+  void contextDestroyed(ExecutionContext*) override;
 
   // URLRegistrable interface
   URLRegistry& registry() const override;

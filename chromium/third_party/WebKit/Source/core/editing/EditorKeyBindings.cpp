@@ -43,7 +43,7 @@ bool Editor::handleEditingKeyboardEvent(KeyboardEvent* evt) {
   String commandName = behavior().interpretKeyEvent(*evt);
   Command command = this->createCommand(commandName);
 
-  if (keyEvent->type == WebInputEvent::RawKeyDown) {
+  if (keyEvent->type() == WebInputEvent::RawKeyDown) {
     // WebKit doesn't have enough information about mode to decide how
     // commands that just insert text if executed via Editor should be treated,
     // so we leave it upon WebCore to either handle them immediately
@@ -59,6 +59,18 @@ bool Editor::handleEditingKeyboardEvent(KeyboardEvent* evt) {
 
   if (!behavior().shouldInsertCharacter(*evt) || !canEdit())
     return false;
+
+  const Element* const focusedElement = m_frame->document()->focusedElement();
+  if (!focusedElement) {
+    // We may lose focused element by |command.execute(evt)|.
+    return false;
+  }
+  if (!focusedElement->containsIncludingHostElements(
+          *m_frame->selection().start().computeContainerNode())) {
+    // We should not insert text at selection start if selection doesn't have
+    // focus. See http://crbug.com/89026
+    return false;
+  }
 
   // Return true to prevent default action. e.g. Space key scroll.
   if (dispatchBeforeInputInsertText(evt->target(), keyEvent->text) !=

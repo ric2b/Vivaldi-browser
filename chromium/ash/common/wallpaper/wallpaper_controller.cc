@@ -4,20 +4,18 @@
 
 #include "ash/common/wallpaper/wallpaper_controller.h"
 
-#include "ash/common/shell_delegate.h"
 #include "ash/common/wallpaper/wallpaper_controller_observer.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wallpaper/wallpaper_view.h"
 #include "ash/common/wallpaper/wallpaper_widget_controller.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/task_runner.h"
 #include "components/wallpaper/wallpaper_resizer.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -71,7 +69,7 @@ wallpaper::WallpaperLayout WallpaperController::GetWallpaperLayout() const {
   return wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
 }
 
-bool WallpaperController::SetWallpaperImage(const gfx::ImageSkia& image,
+void WallpaperController::SetWallpaperImage(const gfx::ImageSkia& image,
                                             wallpaper::WallpaperLayout layout) {
   VLOG(1) << "SetWallpaper: image_id="
           << wallpaper::WallpaperResizer::GetImageId(image)
@@ -79,7 +77,7 @@ bool WallpaperController::SetWallpaperImage(const gfx::ImageSkia& image,
 
   if (WallpaperIsAlreadyLoaded(image, true /* compare_layouts */, layout)) {
     VLOG(1) << "Wallpaper is already loaded";
-    return false;
+    return;
   }
 
   current_wallpaper_.reset(new wallpaper::WallpaperResizer(
@@ -90,7 +88,6 @@ bool WallpaperController::SetWallpaperImage(const gfx::ImageSkia& image,
     observer.OnWallpaperDataChanged();
   wallpaper_mode_ = WALLPAPER_IMAGE;
   InstallDesktopControllerForAllWindows();
-  return true;
 }
 
 void WallpaperController::CreateEmptyWallpaper() {
@@ -190,15 +187,14 @@ bool WallpaperController::WallpaperIsAlreadyLoaded(
 }
 
 void WallpaperController::OpenSetWallpaperPage() {
-  WmShell* shell = WmShell::Get();
-  service_manager::Connector* connector =
-      shell->delegate()->GetShellConnector();
-  if (!connector || !shell->wallpaper_delegate()->CanOpenSetWallpaperPage())
-    return;
+  if (wallpaper_picker_ &&
+      WmShell::Get()->wallpaper_delegate()->CanOpenSetWallpaperPage()) {
+    wallpaper_picker_->Open();
+  }
+}
 
-  mojom::WallpaperManagerPtr wallpaper_manager;
-  connector->ConnectToInterface("content_browser", &wallpaper_manager);
-  wallpaper_manager->Open();
+void WallpaperController::SetWallpaperPicker(mojom::WallpaperPickerPtr picker) {
+  wallpaper_picker_ = std::move(picker);
 }
 
 void WallpaperController::SetWallpaper(const SkBitmap& wallpaper,
@@ -224,7 +220,7 @@ void WallpaperController::InstallDesktopController(WmWindow* root_window) {
       return;
   }
 
-  WmRootWindowController* controller = root_window->GetRootWindowController();
+  RootWindowController* controller = root_window->GetRootWindowController();
   controller->SetAnimatingWallpaperWidgetController(
       new AnimatingWallpaperWidgetController(component));
   component->StartAnimating(controller);
@@ -239,7 +235,7 @@ void WallpaperController::InstallDesktopControllerForAllWindows() {
 bool WallpaperController::ReparentWallpaper(int container) {
   bool moved = false;
   for (WmWindow* root_window : WmShell::Get()->GetAllRootWindows()) {
-    WmRootWindowController* root_window_controller =
+    RootWindowController* root_window_controller =
         root_window->GetRootWindowController();
     // In the steady state (no animation playing) the wallpaper widget
     // controller exists in the RootWindowController.

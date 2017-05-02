@@ -278,7 +278,7 @@ std::vector<WorkerService::WorkerInfo> SharedWorkerServiceImpl::GetWorkers() {
       info.name = instance->name();
       info.route_id = host->worker_route_id();
       info.process_id = host->process_id();
-      info.handle = host->container_render_filter()->PeerHandle();
+      info.handle = host->worker_render_filter()->PeerHandle();
       results.push_back(info);
     }
   }
@@ -311,8 +311,6 @@ blink::WebWorkerCreationError SharedWorkerServiceImpl::CreateWorker(
           filter, route_id, params.document_id, filter->render_process_id(),
           params.render_frame_route_id));
   if (SharedWorkerPendingInstance* pending = FindPendingInstance(*instance)) {
-    if (params.url != pending->instance()->url())
-      return blink::WebWorkerCreationErrorURLMismatch;
     pending->AddRequest(std::move(request));
     if (params.creation_context_type !=
         pending->instance()->creation_context_type())
@@ -326,13 +324,15 @@ blink::WebWorkerCreationError SharedWorkerServiceImpl::CreateWorker(
   return ReserveRenderProcessToCreateWorker(std::move(pending_instance));
 }
 
-void SharedWorkerServiceImpl::ForwardToWorker(
-    const IPC::Message& message,
+void SharedWorkerServiceImpl::ConnectToWorker(
+    int route_id,
+    int sent_message_port_id,
     SharedWorkerMessageFilter* filter) {
   for (WorkerHostMap::const_iterator iter = worker_hosts_.begin();
        iter != worker_hosts_.end();
        ++iter) {
-    if (iter->second->FilterMessage(message, filter))
+    if (iter->second->FilterConnectionMessage(route_id, sent_message_port_id,
+                                              filter))
       return;
   }
 }
@@ -362,11 +362,7 @@ void SharedWorkerServiceImpl::WorkerContextDestroyed(
     SharedWorkerMessageFilter* filter) {
   ScopedWorkerDependencyChecker checker(this);
   ProcessRouteIdPair key(filter->render_process_id(), worker_route_id);
-  if (!base::ContainsKey(worker_hosts_, key))
-    return;
-  std::unique_ptr<SharedWorkerHost> host(worker_hosts_[key].release());
   worker_hosts_.erase(key);
-  host->WorkerContextDestroyed();
 }
 
 void SharedWorkerServiceImpl::WorkerReadyForInspection(
@@ -493,8 +489,6 @@ SharedWorkerServiceImpl::ReserveRenderProcessToCreateWorker(
       blink::WebWorkerCreationErrorNone;
   SharedWorkerHost* host = FindSharedWorkerHost(*pending_instance->instance());
   if (host) {
-    if (pending_instance->instance()->url() != host->instance()->url())
-      return blink::WebWorkerCreationErrorURLMismatch;
     if (pending_instance->instance()->creation_context_type() !=
         host->instance()->creation_context_type()) {
       creation_error = blink::WebWorkerCreationErrorSecureContextMismatch;

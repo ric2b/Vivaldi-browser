@@ -89,7 +89,7 @@ class CallStackProfileCollectorTestImpl
 
 class CallStackProfileStructTraitsTest : public testing::Test {
  public:
-  CallStackProfileStructTraitsTest() : impl_(GetProxy(&proxy_)) {}
+  CallStackProfileStructTraitsTest() : impl_(MakeRequest(&proxy_)) {}
 
  protected:
   base::MessageLoop message_loop_;
@@ -129,18 +129,6 @@ TEST_F(CallStackProfileStructTraitsTest, Module) {
     {
       Module(0x10, "", base::FilePath(base::FilePath::kCurrentDirectory)),
       true
-    },
-    // Module id at the length limit.
-    {
-      Module(0x10, std::string(40, ' '),
-             base::FilePath(base::FilePath::kCurrentDirectory)),
-      true
-    },
-    // Module id beyond the length limit.
-    {
-      Module(0x10, std::string(41, ' '),
-             base::FilePath(base::FilePath::kCurrentDirectory)),
-      false
     },
   };
 
@@ -224,11 +212,11 @@ TEST_F(CallStackProfileStructTraitsTest, Profile) {
                       Module(0x4100, "b", base::FilePath()),
                     },
                     {
-                      {
-                        Frame(0x4010, 0),
-                        Frame(0x4110, 1),
-                        Frame(0x4110, Frame::kUnknownModuleIndex),
-                      }
+                      Sample({
+                          Frame(0x4010, 0),
+                          Frame(0x4110, 1),
+                          Frame(0x4110, Frame::kUnknownModuleIndex),
+                      }),
                     },
                     base::TimeDelta::FromSeconds(1),
                     base::TimeDelta::FromSeconds(2)),
@@ -242,15 +230,15 @@ TEST_F(CallStackProfileStructTraitsTest, Profile) {
                       Module(0x4100, "b", base::FilePath()),
                     },
                     {
-                      {
-                        Frame(0x4010, 0),
-                        Frame(0x4110, 1),
-                        Frame(0x4110, Frame::kUnknownModuleIndex),
-                      },
-                      {
-                        Frame(0x4010, 0),
-                        Frame(0x4110, 2),
-                      },
+                      Sample({
+                          Frame(0x4010, 0),
+                          Frame(0x4110, 1),
+                          Frame(0x4110, Frame::kUnknownModuleIndex),
+                      }),
+                      Sample({
+                          Frame(0x4010, 0),
+                          Frame(0x4110, 2),
+                      }),
                     },
                     base::TimeDelta::FromSeconds(1),
                     base::TimeDelta::FromSeconds(2)),

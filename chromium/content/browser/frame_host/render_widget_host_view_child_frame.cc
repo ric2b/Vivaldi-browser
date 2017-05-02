@@ -69,9 +69,7 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
 }
 
 RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
-  if (local_frame_id_.is_valid())
-    surface_factory_->Destroy(local_frame_id_);
-
+  surface_factory_->EvictSurface();
   if (GetSurfaceManager())
     GetSurfaceManager()->InvalidateFrameSinkId(frame_sink_id_);
 }
@@ -343,6 +341,13 @@ void RenderWidgetHostViewChildFrame::UnregisterFrameSinkId() {
   }
 }
 
+void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
+    const gfx::Rect& viewport_intersection) {
+  if (host_)
+    host_->Send(new ViewMsg_SetViewportIntersection(host_->GetRoutingID(),
+                                                    viewport_intersection));
+}
+
 void RenderWidgetHostViewChildFrame::GestureEventAck(
     const blink::WebGestureEvent& event,
     InputEventAckState ack_result) {
@@ -356,9 +361,9 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   // RenderWidgetHostInputEventRouter.
   if (!frame_connector_)
     return;
-  if ((event.type == blink::WebInputEvent::GestureScrollUpdate &&
+  if ((event.type() == blink::WebInputEvent::GestureScrollUpdate &&
        not_consumed) ||
-      event.type == blink::WebInputEvent::GestureScrollEnd)
+      event.type() == blink::WebInputEvent::GestureScrollEnd)
     frame_connector_->BubbleScrollEvent(event);
 }
 
@@ -385,8 +390,7 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
   if (!frame_connector_)
     return;
 
-  cc::RenderPass* root_pass =
-      frame.delegated_frame_data->render_pass_list.back().get();
+  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
 
   gfx::Size frame_size = root_pass->output_rect.size();
   float scale_factor = frame.metadata.device_scale_factor;
@@ -406,20 +410,10 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
     current_surface_scale_factor_ = scale_factor;
   }
 
+  bool allocated_new_local_frame_id = false;
   if (!local_frame_id_.is_valid()) {
     local_frame_id_ = id_allocator_->GenerateId();
-    surface_factory_->Create(local_frame_id_);
-
-    cc::SurfaceSequence sequence =
-        cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
-    // The renderer process will satisfy this dependency when it creates a
-    // SurfaceLayer.
-    cc::SurfaceManager* manager = GetSurfaceManager();
-    manager->GetSurfaceForId(cc::SurfaceId(frame_sink_id_, local_frame_id_))
-        ->AddDestructionDependency(sequence);
-    frame_connector_->SetChildFrameSurface(
-        cc::SurfaceId(frame_sink_id_, local_frame_id_), frame_size,
-        scale_factor, sequence);
+    allocated_new_local_frame_id = true;
   }
 
   cc::SurfaceFactory::DrawCallback ack_callback =
@@ -431,6 +425,18 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
   surface_factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
                                           ack_callback);
 
+  if (allocated_new_local_frame_id) {
+    cc::SurfaceSequence sequence =
+        cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
+    // The renderer process will satisfy this dependency when it creates a
+    // SurfaceLayer.
+    cc::SurfaceManager* manager = GetSurfaceManager();
+    manager->GetSurfaceForId(cc::SurfaceId(frame_sink_id_, local_frame_id_))
+        ->AddDestructionDependency(sequence);
+    frame_connector_->SetChildFrameSurface(
+        cc::SurfaceId(frame_sink_id_, local_frame_id_), frame_size,
+        scale_factor, sequence);
+  }
   ProcessFrameSwappedCallbacks();
 }
 
@@ -509,8 +515,8 @@ void RenderWidgetHostViewChildFrame::ProcessMouseWheelEvent(
 void RenderWidgetHostViewChildFrame::ProcessTouchEvent(
     const blink::WebTouchEvent& event,
     const ui::LatencyInfo& latency) {
-  if (event.type == blink::WebInputEvent::TouchStart &&
-   frame_connector_ && !frame_connector_->HasFocus()) {
+  if (event.type() == blink::WebInputEvent::TouchStart && frame_connector_ &&
+      !frame_connector_->HasFocus()) {
     frame_connector_->FocusRootView();
   }
 
@@ -525,7 +531,7 @@ void RenderWidgetHostViewChildFrame::ProcessGestureEvent(
 
 gfx::Point RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
     const gfx::Point& point) {
-  if (!frame_connector_)
+  if (!frame_connector_ || !local_frame_id_.is_valid())
     return point;
 
   return frame_connector_->TransformPointToRootCoordSpace(
@@ -630,7 +636,7 @@ void RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest(
   if (!src_subrect.IsEmpty())
     request->set_area(src_subrect);
 
-  surface_factory_->RequestCopyOfSurface(local_frame_id_, std::move(request));
+  surface_factory_->RequestCopyOfSurface(std::move(request));
 }
 
 void RenderWidgetHostViewChildFrame::CopyFromCompositingSurfaceToVideoFrame(
@@ -706,7 +712,7 @@ void RenderWidgetHostViewChildFrame::SetNeedsBeginFrames(
 
 InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
-  if (input_event.type == blink::WebInputEvent::GestureFlingStart) {
+  if (input_event.type() == blink::WebInputEvent::GestureFlingStart) {
     const blink::WebGestureEvent& gesture_event =
         static_cast<const blink::WebGestureEvent&>(input_event);
     // Zero-velocity touchpad flings are an Aura-specific signal that the
@@ -737,8 +743,7 @@ RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
 }
 
 void RenderWidgetHostViewChildFrame::ClearCompositorSurfaceIfNecessary() {
-  if (local_frame_id_.is_valid())
-    surface_factory_->Destroy(local_frame_id_);
+  surface_factory_->EvictSurface();
   local_frame_id_ = cc::LocalFrameId();
 }
 

@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.firstrun;
 
 import android.annotation.TargetApi;
 import android.os.Build;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.view.KeyEvent;
 
 import org.chromium.base.test.util.CommandLineFlags;
@@ -32,8 +32,8 @@ public class FirstRunIntegrationTest extends ChromeTabbedActivityTestBase {
     @Feature({"FirstRunExperience"})
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     @RetryOnFailure
-    public void testExitFirstRunExperience() throws InterruptedException {
-        if (FirstRunStatus.getFirstRunFlowComplete(getActivity())) {
+    public void testExitFirstRunExperience() {
+        if (FirstRunStatus.getFirstRunFlowComplete()) {
             return;
         }
 

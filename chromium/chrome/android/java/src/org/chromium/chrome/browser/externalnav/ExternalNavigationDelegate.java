@@ -55,12 +55,6 @@ interface ExternalNavigationDelegate {
     String findWebApkPackageName(List<ResolveInfo> infos);
 
     /**
-     * Get the name of the package of the currently running activity so that incoming intents
-     * can be identified as originating from this activity.
-     */
-    String getPackageName();
-
-    /**
      * Start an activity for the intent. Used for intents that must be handled externally.
      * @param intent The intent we want to send.
      * @param proxy Whether we need to proxy the intent through AuthenticatedProxyActivity (this is
@@ -157,9 +151,8 @@ interface ExternalNavigationDelegate {
             boolean isIncomingRedirect);
 
     /**
-     * @param referrerUrl The referrer URL.
      * @param tab The current tab.
      * @return whether this navigation is from the search results page.
      */
-    boolean isSerpReferrer(String referrerUrl, Tab tab);
+    boolean isSerpReferrer(Tab tab);
 }

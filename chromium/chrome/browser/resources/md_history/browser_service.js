@@ -24,13 +24,15 @@ cr.define('md_history', function() {
     deleteItems: function(items) {
       if (this.pendingDeleteItems_ != null) {
         // There's already a deletion in progress, reject immediately.
-        return new Promise(function(resolve, reject) { reject(items); });
+        return new Promise(function(resolve, reject) {
+          reject(items);
+        });
       }
 
       var removalList = items.map(function(item) {
         return {
           url: item.url,
-          timestamps: item.allTimestamps
+          timestamps: item.allTimestamps,
         };
       });
 
@@ -141,4 +143,3 @@ function deleteComplete() {
 function deleteFailed() {
   md_history.BrowserService.getInstance().resolveDelete_(false);
 }
-

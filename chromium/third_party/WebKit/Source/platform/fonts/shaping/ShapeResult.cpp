@@ -155,7 +155,7 @@ ShapeResult::ShapeResult(const Font* font,
       m_primaryFont(const_cast<SimpleFontData*>(font->primaryFont())),
       m_numCharacters(numCharacters),
       m_numGlyphs(0),
-      m_direction(direction),
+      m_direction(static_cast<unsigned>(direction)),
       m_hasVerticalOffsets(0) {}
 
 ShapeResult::ShapeResult(const ShapeResult& other)
@@ -168,7 +168,7 @@ ShapeResult::ShapeResult(const ShapeResult& other)
       m_hasVerticalOffsets(other.m_hasVerticalOffsets) {
   m_runs.reserveCapacity(other.m_runs.size());
   for (const auto& run : other.m_runs)
-    m_runs.append(wrapUnique(new ShapeResult::RunInfo(*run)));
+    m_runs.push_back(WTF::wrapUnique(new ShapeResult::RunInfo(*run)));
 }
 
 ShapeResult::~ShapeResult() {}
@@ -186,7 +186,7 @@ int ShapeResult::offsetForPosition(float targetX,
   int charactersSoFar = 0;
   float currentX = 0;
 
-  if (m_direction == RTL) {
+  if (rtl()) {
     charactersSoFar = m_numCharacters;
     for (unsigned i = 0; i < m_runs.size(); ++i) {
       if (!m_runs[i])
@@ -371,7 +371,7 @@ void ShapeResult::insertRun(std::unique_ptr<ShapeResult::RunInfo> runToInsert,
   }
   // If we didn't find an existing slot to place it, append.
   if (run)
-    m_runs.append(std::move(run));
+    m_runs.push_back(std::move(run));
 }
 
 PassRefPtr<ShapeResult> ShapeResult::createForTabulationCharacters(
@@ -383,7 +383,7 @@ PassRefPtr<ShapeResult> ShapeResult::createForTabulationCharacters(
   // Tab characters are always LTR or RTL, not TTB, even when
   // isVerticalAnyUpright().
   std::unique_ptr<ShapeResult::RunInfo> run =
-      wrapUnique(new ShapeResult::RunInfo(
+      WTF::wrapUnique(new ShapeResult::RunInfo(
           fontData, textRun.rtl() ? HB_DIRECTION_RTL : HB_DIRECTION_LTR,
           HB_SCRIPT_COMMON, 0, count, count));
   float position = textRun.xPos() + positionOffset;
@@ -403,7 +403,7 @@ PassRefPtr<ShapeResult> ShapeResult::createForTabulationCharacters(
   DCHECK_EQ(result->m_numGlyphs, count);  // no overflow
   result->m_hasVerticalOffsets =
       fontData->platformData().isVerticalAnyUpright();
-  result->m_runs.append(std::move(run));
+  result->m_runs.push_back(std::move(run));
   return result.release();
 }
 

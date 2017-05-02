@@ -46,8 +46,10 @@ bool DOMWindowCSS::supports(const String& property, const String& value) {
     MutableStylePropertySet* dummyStyle =
         MutableStylePropertySet::create(HTMLStandardMode);
     bool isAnimationTainted = false;
-    return CSSParser::parseValueForCustomProperty(
-        dummyStyle, "--valid", value, false, nullptr, isAnimationTainted);
+    return CSSParser::parseValueForCustomProperty(dummyStyle, "--valid",
+                                                  nullptr, value, false,
+                                                  nullptr, isAnimationTainted)
+        .didParse;
   }
 
   ASSERT(CSSPropertyMetadata::isEnabledProperty(unresolvedProperty));
@@ -55,7 +57,8 @@ bool DOMWindowCSS::supports(const String& property, const String& value) {
   // This will return false when !important is present
   MutableStylePropertySet* dummyStyle =
       MutableStylePropertySet::create(HTMLStandardMode);
-  return CSSParser::parseValue(dummyStyle, unresolvedProperty, value, false, 0);
+  return CSSParser::parseValue(dummyStyle, unresolvedProperty, value, false)
+      .didParse;
 }
 
 bool DOMWindowCSS::supports(const String& conditionText) {

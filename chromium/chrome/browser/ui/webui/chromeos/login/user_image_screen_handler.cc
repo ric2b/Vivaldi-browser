@@ -12,10 +12,10 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/user_image_model.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -87,9 +87,6 @@ void UserImageScreenHandler::Show() {
 }
 
 void UserImageScreenHandler::Hide() {
-}
-
-void UserImageScreenHandler::PrepareToShow() {
 }
 
 void UserImageScreenHandler::DeclareLocalizedValues(

@@ -35,10 +35,11 @@
 
 namespace blink {
 
-Resource* RawResource::fetchSynchronously(FetchRequest& request,
-                                          ResourceFetcher* fetcher) {
+RawResource* RawResource::fetchSynchronously(FetchRequest& request,
+                                             ResourceFetcher* fetcher) {
   request.makeSynchronous();
-  return fetcher->requestResource(request, RawResourceFactory(Resource::Raw));
+  return toRawResource(
+      fetcher->requestResource(request, RawResourceFactory(Resource::Raw)));
 }
 
 RawResource* RawResource::fetchImport(FetchRequest& request,
@@ -130,28 +131,27 @@ void RawResource::appendData(const char* data, size_t length) {
 }
 
 void RawResource::didAddClient(ResourceClient* c) {
-  // CHECK()s for isCacheValidator() are for https://crbug.com/640960#c24.
+  // CHECK()/RevalidationStartForbiddenScope are for
+  // https://crbug.com/640960#c24.
   CHECK(!isCacheValidator());
   if (!hasClient(c))
     return;
   DCHECK(RawResourceClient::isExpectedType(c));
+  RevalidationStartForbiddenScope revalidationStartForbiddenScope(this);
   RawResourceClient* client = static_cast<RawResourceClient*>(c);
   for (const auto& redirect : redirectChain()) {
     ResourceRequest request(redirect.m_request);
     client->redirectReceived(this, request, redirect.m_redirectResponse);
-    CHECK(!isCacheValidator());
     if (!hasClient(c))
       return;
   }
 
   if (!response().isNull())
     client->responseReceived(this, response(), nullptr);
-  CHECK(!isCacheValidator());
   if (!hasClient(c))
     return;
   if (data())
     client->dataReceived(this, data()->data(), data()->size());
-  CHECK(!isCacheValidator());
   if (!hasClient(c))
     return;
   Resource::didAddClient(client);
@@ -160,9 +160,9 @@ void RawResource::didAddClient(ResourceClient* c) {
 bool RawResource::willFollowRedirect(const ResourceRequest& newRequest,
                                      const ResourceResponse& redirectResponse) {
   bool follow = Resource::willFollowRedirect(newRequest, redirectResponse);
-  // The base class method takes a non const reference of a ResourceRequest
-  // and returns bool just for allowing RawResource to reject redirect. It
-  // must always return true.
+  // The base class method takes a const reference of a ResourceRequest and
+  // returns bool just for allowing RawResource to reject redirect. It must
+  // always return true.
   DCHECK(follow);
 
   DCHECK(!redirectResponse.isNull());
@@ -258,7 +258,7 @@ static bool isCacheableHTTPMethod(const AtomicString& method) {
 }
 
 bool RawResource::canReuse(const ResourceRequest& newRequest) const {
-  if (dataBufferingPolicy() == DoNotBufferData)
+  if (getDataBufferingPolicy() == DoNotBufferData)
     return false;
 
   if (!isCacheableHTTPMethod(resourceRequest().httpMethod()))

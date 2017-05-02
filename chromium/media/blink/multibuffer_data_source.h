@@ -130,6 +130,8 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource : public DataSource {
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
 
+  const std::string& mime_type() const { return mime_type_; }
+
  protected:
   void OnRedirect(const scoped_refptr<UrlData>& destination);
 
@@ -184,6 +186,8 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource : public DataSource {
   // known, otherwise it will remain kPositionNotSpecified until the size is
   // determined by reaching EOF.
   int64_t total_bytes_;
+
+  std::string mime_type_;
 
   // This value will be true if this data source can only support streaming.
   // i.e. range request is not supported.

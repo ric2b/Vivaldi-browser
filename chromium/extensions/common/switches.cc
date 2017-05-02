@@ -20,14 +20,6 @@ const char kAllowLegacyExtensionManifests[] =
 // a new tab.
 const char kEmbeddedExtensionOptions[] = "embedded-extension-options";
 
-// Show apps windows after the first paint. Windows will be shown significantly
-// later for heavy apps loading resources synchronously but it will be
-// insignificant for apps that load most of their resources asynchronously.
-const char kEnableAppsShowOnFirstPaint[] = "enable-apps-show-on-first-paint";
-
-// Enables the <window-controls> tag in platform apps.
-const char kEnableAppWindowControls[] = "enable-app-window-controls";
-
 // Enable BLE Advertisiing in apps.
 const char kEnableBLEAdvertising[] = "enable-ble-advertising-in-apps";
 
@@ -53,10 +45,6 @@ const char kEnableOverrideBookmarksUI[] = "enable-override-bookmarks-ui";
 
 // Enables tab for desktop sharing.
 const char kDisableTabForDesktopShare[] = "disable-tab-for-desktop-share";
-
-// Disable new UI for desktop capture picker window.
-const char kDisableDesktopCapturePickerNewUI[] =
-    "disable-desktop-capture-picker-new-ui";
 
 // Allows the ErrorConsole to collect runtime and manifest errors, and display
 // them in the chrome:extensions page.
@@ -109,6 +97,9 @@ const char kWhitelistedExtensionID[] = "whitelisted-extension-id";
 
 // Pass launch source to platform apps.
 const char kTraceAppSource[] = "enable-trace-app-source";
+
+// Enables the use of C++-based extension bindings (instead of JS generation).
+const char kNativeCrxBindings[] = "native-crx-bindings";
 
 // Enable package hash check: the .crx file sha256 hash sum should be equal to
 // the one received from update manifest.

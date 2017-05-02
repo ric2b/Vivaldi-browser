@@ -11,6 +11,7 @@
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
@@ -75,7 +76,7 @@ class RendererFactory {
   DISALLOW_COPY_AND_ASSIGN(RendererFactory);
 };
 
-class WindowManager : public ui::NativeDisplayObserver {
+class WindowManager : public display::NativeDisplayObserver {
  public:
   WindowManager(const base::Closure& quit_closure);
   ~WindowManager() override;
@@ -86,14 +87,15 @@ class WindowManager : public ui::NativeDisplayObserver {
   void RemoveWindow(DemoWindow* window);
 
  private:
-  void OnDisplaysAquired(const std::vector<ui::DisplaySnapshot*>& displays);
+  void OnDisplaysAquired(
+      const std::vector<display::DisplaySnapshot*>& displays);
   void OnDisplayConfigured(const gfx::Rect& bounds, bool success);
 
-  // ui::NativeDisplayDelegate:
+  // display::NativeDisplayDelegate:
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override;
 
-  std::unique_ptr<ui::NativeDisplayDelegate> delegate_;
+  std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   base::Closure quit_closure_;
   RendererFactory renderer_factory_;
   std::vector<std::unique_ptr<DemoWindow>> windows_;
@@ -286,7 +288,7 @@ void WindowManager::OnConfigurationChanged() {
 void WindowManager::OnDisplaySnapshotsInvalidated() {}
 
 void WindowManager::OnDisplaysAquired(
-    const std::vector<ui::DisplaySnapshot*>& displays) {
+    const std::vector<display::DisplaySnapshot*>& displays) {
   windows_.clear();
 
   gfx::Point origin;
@@ -336,6 +338,9 @@ int main(int argc, char** argv) {
   // Build UI thread message loop. This is used by platform
   // implementations for event polling & running background tasks.
   base::MessageLoopForUI message_loop;
+  constexpr int kMaxTaskSchedulerThreads = 3;
+  base::TaskScheduler::CreateAndSetSimpleTaskScheduler(
+      kMaxTaskSchedulerThreads);
 
   ui::OzonePlatform::InitializeForUI();
   ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()

@@ -32,7 +32,7 @@
 #define FileWriter_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/FileError.h"
 #include "modules/EventTargetModules.h"
@@ -48,8 +48,8 @@ class ExecutionContext;
 
 class FileWriter final : public EventTargetWithInlineData,
                          public FileWriterBase,
-                         public ActiveScriptWrappable,
-                         public ActiveDOMObject,
+                         public ActiveScriptWrappable<FileWriter>,
+                         public ContextLifecycleObserver,
                          public WebFileWriterClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(FileWriter);
@@ -73,8 +73,8 @@ class FileWriter final : public EventTargetWithInlineData,
   void didTruncate() override;
   void didFail(WebFileError) override;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // ContextLifecycleObserver
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable
   bool hasPendingActivity() const final;
@@ -82,7 +82,7 @@ class FileWriter final : public EventTargetWithInlineData,
   // EventTarget
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override {
-    return ActiveDOMObject::getExecutionContext();
+    return ContextLifecycleObserver::getExecutionContext();
   }
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(writestart);

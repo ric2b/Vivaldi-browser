@@ -8,7 +8,6 @@ from page_sets.system_health.loading_stories import LoadGmailMobileStory
 
 from telemetry import decorators
 
-
 _WAIT_FOR_VIDEO_SECONDS = 5
 
 class _BackgroundStory(system_health_story.SystemHealthStory):
@@ -42,7 +41,6 @@ class BackgroundFacebookMobileStory(_BackgroundStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
-@decorators.Disabled('android')  # crbug.com/664521
 class BackgroundNytimesMobileStory(_BackgroundStory):
   """The third top website in http://www.alexa.com/topsites/category/News"""
   NAME = 'background:news:nytimes'
@@ -64,6 +62,12 @@ class BackgroundNytimesMobileStory(_BackgroundStory):
     # Scroll to video, start it and then wait for a few seconds.
     action_runner.WaitForElement(selector='.nytd-player-poster')
     action_runner.ScrollPageToElement(selector='.nytd-player-poster')
+    # For some reason on some devices (e.g. Nexus7) we don't scroll all the way
+    # to the element. I think this might be caused by the page reflowing (due to
+    # vidoes loading) during the scroll. To be sure we get to the element
+    # wait a moment and then try to scroll again.
+    action_runner.Wait(1)
+    action_runner.ScrollPageToElement(selector='.nytd-player-poster')
     action_runner.TapElement(selector='.nytd-player-poster')
     action_runner.Wait(_WAIT_FOR_VIDEO_SECONDS)
 
@@ -74,6 +78,7 @@ class BackgroundImgurMobileStory(_BackgroundStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
+@decorators.Disabled('android')  # crbug.com/676336
 class BackgroundGmailMobileStory(LoadGmailMobileStory):
   NAME = 'background:tools:gmail'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY

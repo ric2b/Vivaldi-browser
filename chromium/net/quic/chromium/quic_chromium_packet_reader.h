@@ -3,15 +3,15 @@
 // found in the LICENSE file.
 //
 
-#ifndef NET_QUIC_QUIC_CHROMIUM_PACKET_READER_H_
-#define NET_QUIC_QUIC_CHROMIUM_PACKET_READER_H_
+#ifndef NET_QUIC_CHROMIUM_QUIC_CHROMIUM_PACKET_READER_H_
+#define NET_QUIC_CHROMIUM_QUIC_CHROMIUM_PACKET_READER_H_
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_export.h"
 #include "net/log/net_log_with_source.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_time.h"
 #include "net/socket/datagram_client_socket.h"
 
@@ -71,4 +71,4 @@ class NET_EXPORT_PRIVATE QuicChromiumPacketReader {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_CHROMIUM_PACKET_READER_H_
+#endif  // NET_QUIC_CHROMIUM_QUIC_CHROMIUM_PACKET_READER_H_

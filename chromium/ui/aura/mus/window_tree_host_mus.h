@@ -30,19 +30,29 @@ class WindowTreeHostMusDelegate;
 
 class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
  public:
+  // |properties| are applied to the window created by this class (using
+  // PropertyConverter).
+  // TODO: this should take an unordered_map, see http://crbug.com/670515.
   WindowTreeHostMus(
       std::unique_ptr<WindowPortMus> window_port,
-      WindowTreeHostMusDelegate* delegate,
+      WindowTreeClient* window_tree_client,
       int64_t display_id,
       const std::map<std::string, std::vector<uint8_t>>* properties = nullptr);
-  WindowTreeHostMus(
+
+  // This constructor is intended for creating top level windows in
+  // non-window-manager code. |properties| are properties passed verbatim to
+  // the server, that is, no conversion is done before sending |properties| to
+  // the server. Additionally |properties| are passed to PropertyConverter and
+  // any known properties are set on the Window created by this class.
+  // TODO: this should take an unordered_map, see http://crbug.com/670515.
+  explicit WindowTreeHostMus(
       WindowTreeClient* window_tree_client,
       const std::map<std::string, std::vector<uint8_t>>* properties = nullptr);
 
   ~WindowTreeHostMus() override;
 
-  // Sets the bounds in dips.
-  void SetBoundsFromServer(const gfx::Rect& bounds);
+  // Sets the bounds in pixels.
+  void SetBoundsFromServer(const gfx::Rect& bounds_in_pixels);
 
   ui::EventDispatchDetails SendEventToProcessor(ui::Event* event) {
     return aura::WindowTreeHostPlatform::SendEventToProcessor(event);
@@ -50,15 +60,25 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
 
   InputMethodMus* input_method() { return input_method_.get(); }
 
+  // Sets the client area on the underlying mus window.
+  void SetClientArea(const gfx::Insets& insets,
+                     const std::vector<gfx::Rect>& additional_client_area);
+
+  // Sets the hit test mask on the underlying mus window. Pass base::nullopt to
+  // clear.
+  void SetHitTestMask(const base::Optional<gfx::Rect>& rect);
+
+  // Requests that the window manager change the activation to the next window.
+  void DeactivateWindow();
+
   // Intended only for WindowTreeClient to call.
   void set_display_id(int64_t id) { display_id_ = id; }
   int64_t display_id() const { return display_id_; }
   display::Display GetDisplay() const;
 
   // aura::WindowTreeHostPlatform:
-  void ShowImpl() override;
   void HideImpl() override;
-  void SetBounds(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds) override;
   void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
   void OnActivationChanged(bool active) override;

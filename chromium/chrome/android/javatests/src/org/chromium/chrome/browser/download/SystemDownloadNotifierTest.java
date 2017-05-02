@@ -5,13 +5,15 @@
 package org.chromium.chrome.browser.download;
 
 import android.content.Context;
+import android.support.test.filters.SmallTest;
 import android.test.InstrumentationTestCase;
-import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.content.browser.test.util.Criteria;
+import org.chromium.content.browser.test.util.CriteriaHelper;
 
 import java.util.UUID;
 
@@ -43,6 +45,16 @@ public class SystemDownloadNotifierTest extends InstrumentationTestCase {
         void onSuccessNotificationShown(
                 final SystemDownloadNotifier.PendingNotificationInfo notificationInfo,
                 final int notificationId) {
+        }
+
+        @Override
+        void updateDownloadNotification(final PendingNotificationInfo notificationInfo) {
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    MockSystemDownloadNotifier.super.updateDownloadNotification(notificationInfo);
+                }
+            });
         }
     }
 
@@ -79,7 +91,12 @@ public class SystemDownloadNotifierTest extends InstrumentationTestCase {
         DownloadInfo info = new DownloadInfo.Builder()
                 .setDownloadGuid(UUID.randomUUID().toString()).build();
         mDownloadNotifier.notifyDownloadProgress(info, 1L, true);
-        assertTrue(mDownloadNotifier.mStarted);
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return mDownloadNotifier.mStarted;
+            }
+        });
 
         onServiceConnected();
         assertEquals(1, mService.getNotificationIds().size());
@@ -95,14 +112,23 @@ public class SystemDownloadNotifierTest extends InstrumentationTestCase {
         DownloadInfo info = new DownloadInfo.Builder()
                 .setDownloadGuid(UUID.randomUUID().toString()).build();
         mDownloadNotifier.notifyDownloadProgress(info, 1L, true);
-        assertTrue(mDownloadNotifier.mStarted);
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return mDownloadNotifier.mStarted;
+            }
+        });
         DownloadInfo info2 = new DownloadInfo.Builder()
                 .setDownloadGuid(UUID.randomUUID().toString()).build();
         mDownloadNotifier.notifyDownloadProgress(info2, 1L, true);
 
         mDownloadNotifier.notifyDownloadFailed(info);
-        assertTrue(mDownloadNotifier.mStarted);
         mDownloadNotifier.notifyDownloadSuccessful(info2, 100L, true, false);
-        assertFalse(mDownloadNotifier.mStarted);
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return !mDownloadNotifier.mStarted;
+            }
+        });
     }
 }

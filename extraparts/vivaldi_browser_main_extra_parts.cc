@@ -26,6 +26,7 @@
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/settings/settings_api.h"
+#include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/zoom/zoom_api.h"
@@ -67,9 +68,9 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
     // NOTE(jarle): Enable the HTTP_SHOW_WARNING security level for
     // the URL field security badge. See VB-23666.
     if (!command_line->HasSwitch(security_state::switches::kMarkHttpAs)) {
-      command_line->AppendSwitchASCII(security_state::switches::kMarkHttpAs,
-          security_state::switches::
-              kMarkHttpWithPasswordsOrCcWithChipAndFormWarning);
+      command_line->AppendSwitchASCII(
+          security_state::switches::kMarkHttpAs,
+          security_state::switches::kMarkHttpWithPasswordsOrCcWithChip);
     }
   }
 
@@ -92,6 +93,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::NotesAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::ShowMenuAPI::GetFactoryInstance();
+  extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
   extensions::VivaldiSettingsApiNotificationFactory::GetInstance();
@@ -109,17 +111,17 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit() {
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  vivaldi::Notes_Model* notes_model =
+      vivaldi::NotesModelFactory::GetForProfile(profile);
+  notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
+
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  Profile* profile = ProfileManager::GetActiveUserProfile();
   if (profile->GetPrefs()->GetBoolean(vivaldiprefs::kSmoothScrollingEnabled) ==
       false) {
     base::CommandLine::ForCurrentProcess()->AppendSwitchNoDup(
         switches::kDisableSmoothScrolling);
   }
-
-  vivaldi::Notes_Model* notes_model =
-      vivaldi::NotesModelFactory::GetForProfile(profile);
-  notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
 }

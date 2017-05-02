@@ -17,7 +17,7 @@ namespace ppapi {
 // TODO(brettw) when we remove the non-IPC-based gamepad implementation, this
 // code should all move into the GamepadResource.
 
-#pragma pack(push, 1)
+#pragma pack(push, 4)
 
 struct WebKitGamepadButton {
   bool pressed;
@@ -101,15 +101,12 @@ struct WebKitGamepad {
 struct WebKitGamepads {
   static const size_t kItemsLengthCap = 4;
 
-  // Number of valid entries in the items array.
-  unsigned length;
-
   // Gamepad data for N separate gamepad devices.
   WebKitGamepad items[kItemsLengthCap];
 };
 
 // This is the structure store in shared memory. It must match
-// content/common/gamepad_hardware_buffer.h. The GamepadHost unit test has
+// device::GamepadHardwareBuffer. The GamepadHost unit test has
 // some compile asserts to validate this.
 struct ContentGamepadHardwareBuffer {
   base::subtle::Atomic32 sequence;

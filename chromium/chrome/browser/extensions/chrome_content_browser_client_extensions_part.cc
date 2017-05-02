@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -306,16 +307,10 @@ bool ChromeContentBrowserClientExtensionsPart::DoesSiteRequireDedicatedProcess(
       if (extension->id() == kWebStoreAppId)
         return true;
 
-      // --isolate-extensions should isolate extensions, except for a) hosted
-      // apps, b) platform apps.
-      // a) Isolating hosted apps is a good idea, but ought to be a separate
-      //    knob.
-      // b) Sandbox pages in platform app can load web content in iframes;
-      //    isolating the app and the iframe leads to StoragePartition mismatch
-      //    in the two processes.
-      //    TODO(lazyboy): We should deprecate this behaviour and not let web
-      //    content load in platform app's process; see http://crbug.com/615585.
-      if (extension->is_hosted_app() || extension->is_platform_app())
+      // --isolate-extensions should isolate extensions, except for hosted
+      // apps. Isolating hosted apps is a good idea, but ought to be a separate
+      // knob.
+      if (extension->is_hosted_app())
         return false;
 
       // Isolate all extensions.
@@ -503,11 +498,8 @@ bool ChromeContentBrowserClientExtensionsPart::ShouldSwapProcessesForRedirect(
 bool ChromeContentBrowserClientExtensionsPart::AllowServiceWorker(
     const GURL& scope,
     const GURL& first_party_url,
-    content::ResourceContext* context,
-    int render_process_id,
-    int render_frame_id) {
+    content::ResourceContext* context) {
   // We only care about extension urls.
-  // TODO(devlin): Also address chrome-extension-resource.
   if (!first_party_url.SchemeIs(kExtensionScheme))
     return true;
 
@@ -780,16 +772,18 @@ void ChromeContentBrowserClientExtensionsPart::GetURLRequestAutoMountHandlers(
 void ChromeContentBrowserClientExtensionsPart::GetAdditionalFileSystemBackends(
     content::BrowserContext* browser_context,
     const base::FilePath& storage_partition_path,
-    ScopedVector<storage::FileSystemBackend>* additional_backends) {
+    std::vector<std::unique_ptr<storage::FileSystemBackend>>*
+        additional_backends) {
   base::SequencedWorkerPool* pool = content::BrowserThread::GetBlockingPool();
-  additional_backends->push_back(new MediaFileSystemBackend(
+  auto sequence_token =
+      pool->GetNamedSequenceToken(MediaFileSystemBackend::kMediaTaskRunnerName);
+  additional_backends->push_back(base::MakeUnique<MediaFileSystemBackend>(
       storage_partition_path,
-      pool->GetSequencedTaskRunner(
-                pool->GetNamedSequenceToken(
-                    MediaFileSystemBackend::kMediaTaskRunnerName)).get()));
+      pool->GetSequencedTaskRunner(sequence_token).get()));
 
-  additional_backends->push_back(new sync_file_system::SyncFileSystemBackend(
-      Profile::FromBrowserContext(browser_context)));
+  additional_backends->push_back(
+      base::MakeUnique<sync_file_system::SyncFileSystemBackend>(
+          Profile::FromBrowserContext(browser_context)));
 }
 
 void ChromeContentBrowserClientExtensionsPart::

@@ -4,7 +4,9 @@
 
 #include "remoting/signaling/xmpp_signal_strategy.h"
 
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/memory/ptr_util.h"
@@ -13,7 +15,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
+#include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 
 namespace remoting {
 
@@ -160,7 +162,7 @@ class XmppSignalStrategyTest : public testing::Test,
   std::unique_ptr<XmppSignalStrategy> signal_strategy_;
 
   std::vector<SignalStrategy::State> state_history_;
-  ScopedVector<buzz::XmlElement> received_messages_;
+  std::vector<std::unique_ptr<buzz::XmlElement>> received_messages_;
 };
 
 void XmppSignalStrategyTest::Connect(bool success) {

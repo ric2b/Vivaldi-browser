@@ -248,8 +248,7 @@ void InterstitialPageImpl::Show() {
   GURL data_url = GURL("data:text/html;charset=utf-8," +
                        net::EscapePath(delegate_->GetHTMLContents()));
   frame_tree_.root()->current_frame_host()->NavigateToInterstitialURL(data_url);
-  frame_tree_.root()->current_frame_host()->SetAccessibilityMode(
-      GetAccessibilityMode());
+  frame_tree_.root()->current_frame_host()->UpdateAccessibilityMode();
 
   notification_registrar_.Add(this, NOTIFICATION_NAV_ENTRY_PENDING,
       Source<NavigationController>(controller_));
@@ -354,8 +353,9 @@ void InterstitialPageImpl::Observe(
   }
 }
 
-bool InterstitialPageImpl::OnMessageReceived(RenderFrameHost* render_frame_host,
-                                             const IPC::Message& message) {
+bool InterstitialPageImpl::OnMessageReceived(
+    RenderFrameHostImpl* render_frame_host,
+    const IPC::Message& message) {
   if (render_frame_host->GetRenderViewHost() != render_view_host_) {
     DCHECK(!render_view_host_)
         << "We expect an interstitial page to have only a single RVH";
@@ -363,7 +363,8 @@ bool InterstitialPageImpl::OnMessageReceived(RenderFrameHost* render_frame_host,
   }
 
   bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(InterstitialPageImpl, message)
+  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(InterstitialPageImpl, message,
+                                   render_frame_host)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DomOperationResponse,
                         OnDomOperationResponse)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -380,8 +381,9 @@ bool InterstitialPageImpl::OnMessageReceived(RenderFrameHost* render_frame_host,
   return handled;
 }
 
-bool InterstitialPageImpl::OnMessageReceived(RenderViewHost* render_view_host,
-                                             const IPC::Message& message) {
+bool InterstitialPageImpl::OnMessageReceived(
+    RenderViewHostImpl* render_view_host,
+    const IPC::Message& message) {
   return false;
 }
 
@@ -744,18 +746,18 @@ void InterstitialPageImpl::DontCreateViewForTesting() {
 
 void InterstitialPageImpl::CreateNewWindow(
     SiteInstance* source_site_instance,
-    int32_t route_id,
+    int32_t render_view_route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
     const mojom::CreateNewWindowParams& params,
     SessionStorageNamespace* session_storage_namespace) {
-  NOTREACHED() << "InterstitialPage does not support showing popups yet.";
+  NOTREACHED() << "InterstitialPage does not support showing popups.";
 }
 
 void InterstitialPageImpl::CreateNewWidget(int32_t render_process_id,
                                            int32_t route_id,
                                            blink::WebPopupType popup_type) {
-  NOTREACHED() << "InterstitialPage does not support showing drop-downs yet.";
+  NOTREACHED() << "InterstitialPage does not support showing drop-downs.";
 }
 
 void InterstitialPageImpl::CreateNewFullscreenWidget(int32_t render_process_id,
@@ -765,17 +767,17 @@ void InterstitialPageImpl::CreateNewFullscreenWidget(int32_t render_process_id,
 }
 
 void InterstitialPageImpl::ShowCreatedWindow(int process_id,
-                                             int route_id,
+                                             int main_frame_widget_route_id,
                                              WindowOpenDisposition disposition,
                                              const gfx::Rect& initial_rect,
                                              bool user_gesture) {
-  NOTREACHED() << "InterstitialPage does not support showing popups yet.";
+  NOTREACHED() << "InterstitialPage does not support showing popups.";
 }
 
 void InterstitialPageImpl::ShowCreatedWidget(int process_id,
                                              int route_id,
                                              const gfx::Rect& initial_rect) {
-  NOTREACHED() << "InterstitialPage does not support showing drop-downs yet.";
+  NOTREACHED() << "InterstitialPage does not support showing drop-downs.";
 }
 
 void InterstitialPageImpl::ShowCreatedFullscreenWidget(int process_id,
@@ -856,6 +858,7 @@ void InterstitialPageImpl::TakeActionOnResourceDispatcher(
 }
 
 void InterstitialPageImpl::OnDomOperationResponse(
+    RenderFrameHostImpl* source,
     const std::string& json_string) {
   std::string json = json_string;
   // Needed by test code.

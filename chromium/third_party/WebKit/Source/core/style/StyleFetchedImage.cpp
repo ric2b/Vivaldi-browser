@@ -24,26 +24,28 @@
 #include "core/style/StyleFetchedImage.h"
 
 #include "core/css/CSSImageValue.h"
-#include "core/fetch/ImageResource.h"
 #include "core/layout/LayoutObject.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "core/svg/graphics/SVGImageForContainer.h"
 
 namespace blink {
 
-StyleFetchedImage::StyleFetchedImage(ImageResource* image,
+StyleFetchedImage::StyleFetchedImage(ImageResourceContent* image,
                                      const Document& document,
                                      const KURL& url)
     : m_image(image), m_document(&document), m_url(url) {
   m_isImageResource = true;
-  m_image->addClient(this);
-  ThreadState::current()->registerPreFinalizer(this);
+  m_image->addObserver(this);
+  // ResourceFetcher is not determined from StyleFetchedImage and it is
+  // impossible to send a request for refetching.
+  m_image->setNotRefetchableDataFromDiskCache();
 }
 
 StyleFetchedImage::~StyleFetchedImage() {}
 
 void StyleFetchedImage::dispose() {
-  m_image->removeClient(this);
+  m_image->removeObserver(this);
   m_image = nullptr;
 }
 
@@ -51,7 +53,7 @@ WrappedImagePtr StyleFetchedImage::data() const {
   return m_image.get();
 }
 
-ImageResource* StyleFetchedImage::cachedImage() const {
+ImageResourceContent* StyleFetchedImage::cachedImage() const {
   return m_image.get();
 }
 
@@ -107,7 +109,7 @@ void StyleFetchedImage::removeClient(LayoutObject* layoutObject) {
   m_image->removeObserver(layoutObject);
 }
 
-void StyleFetchedImage::notifyFinished(Resource* resource) {
+void StyleFetchedImage::imageNotifyFinished(ImageResourceContent*) {
   if (m_document && m_image && m_image->getImage() &&
       m_image->getImage()->isSVGImage())
     toSVGImage(m_image->getImage())->updateUseCounters(*m_document);
@@ -138,7 +140,6 @@ DEFINE_TRACE(StyleFetchedImage) {
   visitor->trace(m_image);
   visitor->trace(m_document);
   StyleImage::trace(visitor);
-  ResourceClient::trace(visitor);
 }
 
 }  // namespace blink

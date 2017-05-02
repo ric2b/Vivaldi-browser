@@ -61,7 +61,7 @@ class InheritedAutosChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedAutosChecker> create(
       const ClipAutos& inheritedAutos) {
-    return wrapUnique(new InheritedAutosChecker(inheritedAutos));
+    return WTF::wrapUnique(new InheritedAutosChecker(inheritedAutos));
   }
 
  private:
@@ -107,7 +107,7 @@ class UnderlyingAutosChecker : public InterpolationType::ConversionChecker {
 
   static std::unique_ptr<UnderlyingAutosChecker> create(
       const ClipAutos& underlyingAutos) {
-    return wrapUnique(new UnderlyingAutosChecker(underlyingAutos));
+    return WTF::wrapUnique(new UnderlyingAutosChecker(underlyingAutos));
   }
 
   static ClipAutos getUnderlyingAutos(const InterpolationValue& underlying) {
@@ -162,7 +162,7 @@ InterpolationValue CSSClipInterpolationType::maybeConvertNeutral(
     ConversionCheckers& conversionCheckers) const {
   ClipAutos underlyingAutos =
       UnderlyingAutosChecker::getUnderlyingAutos(underlying);
-  conversionCheckers.append(UnderlyingAutosChecker::create(underlyingAutos));
+  conversionCheckers.push_back(UnderlyingAutosChecker::create(underlyingAutos));
   if (underlyingAutos.isAuto)
     return nullptr;
   LengthBox neutralBox(
@@ -183,7 +183,7 @@ InterpolationValue CSSClipInterpolationType::maybeConvertInherit(
     const StyleResolverState& state,
     ConversionCheckers& conversionCheckers) const {
   ClipAutos inheritedAutos = getClipAutos(*state.parentStyle());
-  conversionCheckers.append(InheritedAutosChecker::create(inheritedAutos));
+  conversionCheckers.push_back(InheritedAutosChecker::create(inheritedAutos));
   if (inheritedAutos.isAuto)
     return nullptr;
   return createClipValue(state.parentStyle()->clip(),
@@ -222,12 +222,12 @@ InterpolationValue CSSClipInterpolationType::maybeConvertValue(
                             CSSClipNonInterpolableValue::create(autos));
 }
 
-InterpolationValue CSSClipInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  if (environment.state().style()->hasAutoClip())
+InterpolationValue
+CSSClipInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  if (state.style()->hasAutoClip())
     return nullptr;
-  return createClipValue(environment.state().style()->clip(),
-                         environment.state().style()->effectiveZoom());
+  return createClipValue(state.style()->clip(), state.style()->effectiveZoom());
 }
 
 PairwiseInterpolationValue CSSClipInterpolationType::maybeMergeSingles(
@@ -241,7 +241,7 @@ PairwiseInterpolationValue CSSClipInterpolationType::maybeMergeSingles(
     return nullptr;
   return PairwiseInterpolationValue(std::move(start.interpolableValue),
                                     std::move(end.interpolableValue),
-                                    start.nonInterpolableValue.release());
+                                    std::move(start.nonInterpolableValue));
 }
 
 void CSSClipInterpolationType::composite(
@@ -262,25 +262,24 @@ void CSSClipInterpolationType::composite(
     underlyingValueOwner.set(*this, value);
 }
 
-void CSSClipInterpolationType::apply(
+void CSSClipInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   const ClipAutos& autos =
       toCSSClipNonInterpolableValue(nonInterpolableValue)->clipAutos();
   const InterpolableList& list = toInterpolableList(interpolableValue);
-  const auto& convertIndex = [&list, &environment](bool isAuto, size_t index) {
+  const auto& convertIndex = [&list, &state](bool isAuto, size_t index) {
     if (isAuto)
       return Length(Auto);
     return LengthInterpolationFunctions::createLength(
-        *list.get(index), nullptr,
-        environment.state().cssToLengthConversionData(), ValueRangeAll);
+        *list.get(index), nullptr, state.cssToLengthConversionData(),
+        ValueRangeAll);
   };
-  environment.state().style()->setClip(
-      LengthBox(convertIndex(autos.isTopAuto, ClipTop),
-                convertIndex(autos.isRightAuto, ClipRight),
-                convertIndex(autos.isBottomAuto, ClipBottom),
-                convertIndex(autos.isLeftAuto, ClipLeft)));
+  state.style()->setClip(LengthBox(convertIndex(autos.isTopAuto, ClipTop),
+                                   convertIndex(autos.isRightAuto, ClipRight),
+                                   convertIndex(autos.isBottomAuto, ClipBottom),
+                                   convertIndex(autos.isLeftAuto, ClipLeft)));
 }
 
 }  // namespace blink

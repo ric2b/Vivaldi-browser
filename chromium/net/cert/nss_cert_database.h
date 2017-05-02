@@ -145,18 +145,6 @@ class NET_EXPORT NSSCertDatabase {
   // Can return NULL.
   crypto::ScopedPK11Slot GetPrivateSlot() const;
 
-  // Get the default module for public key data.
-  // The returned pointer must be stored in a scoped_refptr<CryptoModule>.
-  // DEPRECATED: use GetPublicSlot instead.
-  // TODO(mattm): remove usage of this method and remove it.
-  CryptoModule* GetPublicModule() const;
-
-  // Get the default module for private key or mixed private/public key data.
-  // The returned pointer must be stored in a scoped_refptr<CryptoModule>.
-  // DEPRECATED: use GetPrivateSlot instead.
-  // TODO(mattm): remove usage of this method and remove it.
-  CryptoModule* GetPrivateModule() const;
-
   // Get all modules.
   // If |need_rw| is true, only writable modules will be returned.
   // TODO(mattm): come up with better alternative to CryptoModuleList.
@@ -168,7 +156,7 @@ class NET_EXPORT NSSCertDatabase {
   // Returns OK or a network error code such as ERR_PKCS12_IMPORT_BAD_PASSWORD
   // or ERR_PKCS12_IMPORT_ERROR. |imported_certs|, if non-NULL, returns a list
   // of certs that were imported.
-  int ImportFromPKCS12(CryptoModule* module,
+  int ImportFromPKCS12(PK11SlotInfo* slot_info,
                        const std::string& data,
                        const base::string16& password,
                        bool is_extractable,

@@ -79,6 +79,9 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   const gfx::Insets& margins() const { return margins_; }
   void set_margins(const gfx::Insets& margins) { margins_ = margins; }
+  void set_title_margins(const gfx::Insets& title_margins) {
+    title_margins_ = title_margins;
+  }
 
   const gfx::Insets& anchor_view_insets() const { return anchor_view_insets_; }
   void set_anchor_view_insets(const gfx::Insets& i) { anchor_view_insets_ = i; }
@@ -88,9 +91,6 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   bool accept_events() const { return accept_events_; }
   void set_accept_events(bool accept_events) { accept_events_ = accept_events; }
-
-  bool border_accepts_events() const { return border_accepts_events_; }
-  void set_border_accepts_events(bool event) { border_accepts_events_ = event; }
 
   bool adjust_if_offscreen() const { return adjust_if_offscreen_; }
   void set_adjust_if_offscreen(bool adjust) { adjust_if_offscreen_ = adjust; }
@@ -191,12 +191,15 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
   // The margins between the content and the inside of the border.
   gfx::Insets margins_;
 
+  // The margins around the title.
+  // TODO(tapted): Investigate deleting this when MD is default.
+  gfx::Insets title_margins_;
+
   // Insets applied to the |anchor_view_| bounds.
   gfx::Insets anchor_view_insets_;
 
   // Specifies whether the bubble (or its border) handles mouse events, etc.
   bool accept_events_;
-  bool border_accepts_events_;
 
   // If true (defaults to true), the arrow may be mirrored and moved to fit the
   // bubble on screen better. It would be a no-op if the bubble has no arrow.

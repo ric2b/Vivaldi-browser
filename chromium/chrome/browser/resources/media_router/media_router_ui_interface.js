@@ -97,12 +97,14 @@ cr.define('media_router.ui', function() {
    *            showDomain: boolean
    *          },
    *          routes: !Array<!media_router.Route>,
-   *          castModes: !Array<!media_router.CastMode>}} data
+   *          castModes: !Array<!media_router.CastMode>,
+   *          useTabMirroring: boolean}} data
    * Parameters in data:
    *   deviceMissingUrl - url to be opened on "Device missing?" clicked.
    *   sinksAndIdentity - list of sinks to be displayed and user identity.
    *   routes - list of routes that are associated with the sinks.
    *   castModes - list of available cast modes.
+   *   useTabMirroring - whether the cast mode should be set to TAB_MIRROR.
    */
   function setInitialData(data) {
     container.deviceMissingUrl = data['deviceMissingUrl'];
@@ -110,6 +112,8 @@ cr.define('media_router.ui', function() {
     this.setSinkListAndIdentity(data['sinksAndIdentity']);
     container.routeList = data['routes'];
     container.maybeShowRouteDetailsOnOpen();
+    if (data['useTabMirroring'])
+      container.selectCastMode(media_router.CastModeType.TAB_MIRROR);
     media_router.browserApi.onInitialDataReceived();
   }
 
@@ -193,7 +197,7 @@ cr.define('media_router.browserApi', function() {
   /**
    * Acts on the given issue.
    *
-   * @param {string} issueId
+   * @param {number} issueId
    * @param {number} actionType Type of action that the user clicked.
    * @param {?number} helpPageId The numeric help center ID.
    */

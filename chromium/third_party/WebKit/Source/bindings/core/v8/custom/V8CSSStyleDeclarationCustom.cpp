@@ -61,7 +61,7 @@ namespace blink {
 // The prefix within the property name must be followed by a capital letter.
 static bool hasCSSPropertyNamePrefix(const String& propertyName,
                                      const char* prefix) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ASSERT(*prefix);
   for (const char* p = prefix; *p; ++p)
     ASSERT(isASCIILower(*p));
@@ -158,7 +158,7 @@ void V8CSSStyleDeclaration::namedPropertyEnumeratorCustom(
     for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
       CSSPropertyID propertyId = static_cast<CSSPropertyID>(id);
       if (CSSPropertyMetadata::isEnabledProperty(propertyId))
-        propertyNames.append(getJSPropertyName(propertyId));
+        propertyNames.push_back(getJSPropertyName(propertyId));
     }
     std::sort(propertyNames.begin(), propertyNames.end(),
               codePointCompareLessThan);
@@ -226,9 +226,8 @@ void V8CSSStyleDeclaration::namedPropertySetterCustom(
 
   TOSTRING_VOID(V8StringResource<TreatNullAsNullString>, propertyValue, value);
   ExceptionState exceptionState(
-      ExceptionState::SetterContext,
-      getPropertyName(resolveCSSPropertyID(unresolvedProperty)),
-      "CSSStyleDeclaration", info.Holder(), info.GetIsolate());
+      info.GetIsolate(), ExceptionState::SetterContext, "CSSStyleDeclaration",
+      getPropertyName(resolveCSSPropertyID(unresolvedProperty)));
   impl->setPropertyInternal(unresolvedProperty, String(), propertyValue, false,
                             exceptionState);
 

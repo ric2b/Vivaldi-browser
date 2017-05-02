@@ -8,8 +8,8 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
-#include "core/frame/DOMWindowProperty.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
@@ -20,14 +20,13 @@ namespace blink {
 class PresentationConnection;
 class PresentationConnectionList;
 class WebPresentationClient;
-class WebPresentationConnectionClient;
 
 // Implements the PresentationReceiver interface from the Presentation API from
 // which websites can implement the receiving side of a presentation session.
 class MODULES_EXPORT PresentationReceiver final
     : public GarbageCollectedFinalized<PresentationReceiver>,
       public ScriptWrappable,
-      public DOMWindowProperty,
+      public ContextClient,
       public WebPresentationReceiver {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationReceiver);
   DEFINE_WRAPPERTYPEINFO();
@@ -44,7 +43,8 @@ class MODULES_EXPORT PresentationReceiver final
   ScriptPromise connectionList(ScriptState*);
 
   // Implementation of WebPresentationController.
-  void onReceiverConnectionAvailable(WebPresentationConnectionClient*) override;
+  void onReceiverConnectionAvailable(
+      const WebPresentationSessionInfo&) override;
   void registerConnection(PresentationConnection*);
 
   DECLARE_VIRTUAL_TRACE();

@@ -23,6 +23,7 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_constants.h"
+#include "ppapi/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -65,7 +66,7 @@ void VersionHandler::RegisterMessages() {
 }
 
 void VersionHandler::HandleRequestVersionInfo(const base::ListValue* args) {
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // The Flash version information is needed in the response, so make sure
   // the plugins are loaded.
   content::PluginService::GetInstance()->GetPlugins(
@@ -102,7 +103,7 @@ void VersionHandler::OnGotFilePaths(base::string16* executable_path_data,
                                          exec_path, profile_path);
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 void VersionHandler::OnGotPlugins(
     const std::vector<content::WebPluginInfo>& plugins) {
   // Obtain the version of the first enabled Flash plugin.
@@ -128,4 +129,4 @@ void VersionHandler::OnGotPlugins(
 
   web_ui()->CallJavascriptFunctionUnsafe(version_ui::kReturnFlashVersion, arg);
 }
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)

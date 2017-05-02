@@ -22,11 +22,22 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "components/search_engines/util.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
+#import "ui/base/cocoa/a11y_util.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/image/image.h"
 
 namespace {
+
 const CGFloat kParagraphSpacing = 6;
+
+ToolbarController* ToolbarControllerForBrowser(Browser* browser) {
+  NSWindow* parent_window = browser->window()->GetNativeWindow();
+  BrowserWindowController* bwc =
+      [BrowserWindowController browserWindowControllerForWindow:parent_window];
+  return [bwc toolbarController];
+}
+
 } // namespace
 
 namespace GlobalErrorBubbleControllerInternal {
@@ -49,10 +60,7 @@ class Bridge : public GlobalErrorBubbleViewBase {
 
 + (GlobalErrorBubbleViewBase*)showForBrowser:(Browser*)browser
     error:(const base::WeakPtr<GlobalErrorWithStandardBubble>&)error {
-  NSWindow* parentWindow = browser->window()->GetNativeWindow();
-  BrowserWindowController* bwc = [BrowserWindowController
-      browserWindowControllerForWindow:parentWindow];
-  NSView* appMenuButton = [[bwc toolbarController] appMenuButton];
+  NSView* appMenuButton = [ToolbarControllerForBrowser(browser) appMenuButton];
   NSPoint offset = NSMakePoint(
       NSMidX([appMenuButton bounds]),
       app_menu_controller::kAppMenuBubblePointOffsetY);
@@ -79,6 +87,11 @@ class Bridge : public GlobalErrorBubbleViewBase {
   gfx::Image image = error_->GetBubbleViewIcon();
   DCHECK(!image.IsEmpty());
   [iconView_ setImage:image.ToNSImage()];
+  // So far, none of these icons have useful descriptions (they only specify
+  // "image"). Hide them from the accessibility order for voice over. If any
+  // new bubbles use this for an informational icon, we can add a new method
+  // to the GlobalErrorWithStandardBubble class.
+  ui::a11y_util::HideImageFromAccessibilityOrder(iconView_);
 
   [title_ setStringValue:SysUTF16ToNSString(error_->GetBubbleViewTitle())];
   std::vector<base::string16> messages = error_->GetBubbleViewMessages();
@@ -158,5 +171,9 @@ class Bridge : public GlobalErrorBubbleViewBase {
 GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
     Browser* browser,
     const base::WeakPtr<GlobalErrorWithStandardBubble>& error) {
-  return [GlobalErrorBubbleController showForBrowser:browser error:error];
+  if (!ui::MaterialDesignController::IsSecondaryUiMaterial())
+    return [GlobalErrorBubbleController showForBrowser:browser error:error];
+
+  NSPoint ns_point = [ToolbarControllerForBrowser(browser) appMenuBubblePoint];
+  return ShowViewsGlobalErrorBubbleOnCocoaBrowser(ns_point, browser, error);
 }

@@ -231,7 +231,6 @@ LayerViewer.Layers3DView = class extends UI.VBox {
   _updateTransformAndConstraints() {
     var paddingFraction = 0.1;
     var viewport = this._layerTree.viewportSize();
-    var root = this._layerTree.root();
     var baseWidth = viewport ? viewport.width : this._dimensionsForAutoscale.width;
     var baseHeight = viewport ? viewport.height : this._dimensionsForAutoscale.height;
     var canvasWidth = this._canvasElement.width;
@@ -266,7 +265,7 @@ LayerViewer.Layers3DView = class extends UI.VBox {
 
     var bounds;
     for (var i = 0; i < this._rects.length; ++i)
-      bounds = Common.Geometry.boundsForTransformedPoints(scaleAndRotationMatrix, this._rects[i].vertices, bounds);
+      bounds = UI.Geometry.boundsForTransformedPoints(scaleAndRotationMatrix, this._rects[i].vertices, bounds);
 
     this._transformController.clampOffsets(
         (paddingX - bounds.maxX) / window.devicePixelRatio,
@@ -697,8 +696,7 @@ LayerViewer.Layers3DView = class extends UI.VBox {
     if (selection && selection.type() === LayerViewer.LayerView.Selection.Type.Snapshot) {
       contextMenu.appendItem(
           Common.UIString('Show Paint Profiler'),
-          this.dispatchEventToListeners.bind(
-              this, LayerViewer.Layers3DView.Events.PaintProfilerRequested, selection.snapshot()),
+          this.dispatchEventToListeners.bind(this, LayerViewer.Layers3DView.Events.PaintProfilerRequested, selection),
           false);
     }
     this._layerViewHost.showContextMenu(contextMenu, selection);
@@ -1108,12 +1106,12 @@ LayerViewer.Layers3DView.Rectangle = class {
     // Vertices of the quad with transform matrix applied
     var points = [];
     for (i = 0; i < 4; ++i) {
-      points[i] = Common.Geometry.multiplyVectorByMatrixAndNormalize(
-          new Common.Geometry.Vector(this.vertices[i * 3], this.vertices[i * 3 + 1], this.vertices[i * 3 + 2]), matrix);
+      points[i] = UI.Geometry.multiplyVectorByMatrixAndNormalize(
+          new UI.Geometry.Vector(this.vertices[i * 3], this.vertices[i * 3 + 1], this.vertices[i * 3 + 2]), matrix);
     }
     // Calculating quad plane normal
-    var normal = Common.Geometry.crossProduct(
-        Common.Geometry.subtract(points[1], points[0]), Common.Geometry.subtract(points[2], points[1]));
+    var normal = UI.Geometry.crossProduct(
+        UI.Geometry.subtract(points[1], points[0]), UI.Geometry.subtract(points[2], points[1]));
     // General form of the equation of the quad plane: A * x + B * y + C * z + D = 0
     var A = normal.x;
     var B = normal.y;
@@ -1122,14 +1120,14 @@ LayerViewer.Layers3DView.Rectangle = class {
     // Finding t from the equation
     var t = -(D + A * x0 + B * y0) / C;
     // Point of the intersection
-    var pt = new Common.Geometry.Vector(x0, y0, t);
+    var pt = new UI.Geometry.Vector(x0, y0, t);
     // Vectors from the intersection point to vertices of the quad
-    var tVects = points.map(Common.Geometry.subtract.bind(null, pt));
+    var tVects = points.map(UI.Geometry.subtract.bind(null, pt));
     // Intersection point lies inside of the polygon if scalar products of normal of the plane and
     // cross products of successive tVects are all nonstrictly above or all nonstrictly below zero
     for (i = 0; i < tVects.length; ++i) {
-      var product = Common.Geometry.scalarProduct(
-          normal, Common.Geometry.crossProduct(tVects[i], tVects[(i + 1) % tVects.length]));
+      var product =
+          UI.Geometry.scalarProduct(normal, UI.Geometry.crossProduct(tVects[i], tVects[(i + 1) % tVects.length]));
       if (product < 0)
         return undefined;
     }

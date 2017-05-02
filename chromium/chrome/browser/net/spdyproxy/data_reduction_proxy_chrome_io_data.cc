@@ -17,6 +17,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/content/browser/content_lofi_decider.h"
 #include "components/data_reduction_proxy/content/browser/content_lofi_ui_service.h"
+#include "components/data_reduction_proxy/content/browser/content_resource_type_provider.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/prefs/pref_service.h"
@@ -42,6 +43,7 @@ void OnLoFiResponseReceivedOnUI(content::WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   PreviewsInfoBarDelegate::Create(
       web_contents, PreviewsInfoBarDelegate::LOFI,
+      true /* is_data_saver_user */,
       PreviewsInfoBarDelegate::OnDismissPreviewsInfobarCallback());
 }
 
@@ -56,8 +58,7 @@ CreateDataReductionProxyChromeIOData(
   DCHECK(net_log);
   DCHECK(prefs);
 
-  int flags = DataReductionProxyParams::kAllowed |
-              DataReductionProxyParams::kFallbackAllowed;
+  int flags = 0;
   if (data_reduction_proxy::params::IsIncludedInPromoFieldTrial())
     flags |= DataReductionProxyParams::kPromoAllowed;
   if (data_reduction_proxy::params::IsIncludedInHoldbackFieldTrial())
@@ -81,6 +82,8 @@ CreateDataReductionProxyChromeIOData(
 
   data_reduction_proxy_io_data->set_lofi_decider(
       base::MakeUnique<data_reduction_proxy::ContentLoFiDecider>());
+  data_reduction_proxy_io_data->set_resource_type_provider(
+      base::MakeUnique<data_reduction_proxy::ContentResourceTypeProvider>());
   data_reduction_proxy_io_data->set_lofi_ui_service(
       base::MakeUnique<data_reduction_proxy::ContentLoFiUIService>(
           ui_task_runner, base::Bind(&OnLoFiResponseReceivedOnUI)));

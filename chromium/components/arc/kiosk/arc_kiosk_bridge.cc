@@ -5,12 +5,13 @@
 #include "components/arc/kiosk/arc_kiosk_bridge.h"
 
 #include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_service_manager.h"
 
 namespace arc {
 
-ArcKioskBridge::ArcKioskBridge(ArcBridgeService* bridge_service)
-    : ArcService(bridge_service), binding_(this) {
+ArcKioskBridge::ArcKioskBridge(ArcBridgeService* bridge_service,
+                               Delegate* delegate)
+    : ArcService(bridge_service), binding_(this), delegate_(delegate) {
+  DCHECK(delegate_);
   arc_bridge_service()->kiosk()->AddObserver(this);
 }
 
@@ -20,18 +21,19 @@ ArcKioskBridge::~ArcKioskBridge() {
 
 void ArcKioskBridge::OnInstanceReady() {
   mojom::KioskInstance* kiosk_instance =
-      arc_bridge_service()->kiosk()->GetInstanceForMethod("Init");
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->kiosk(), Init);
   DCHECK(kiosk_instance);
   kiosk_instance->Init(binding_.CreateInterfacePtrAndBind());
 }
 
 void ArcKioskBridge::OnMaintenanceSessionCreated(int32_t session_id) {
+  delegate_->OnMaintenanceSessionCreated();
   // TODO(poromov@) Show appropriate splash screen.
 }
 
 void ArcKioskBridge::OnMaintenanceSessionFinished(int32_t session_id,
                                                   bool success) {
-  // TODO(poromov@) Start kiosk app.
+  delegate_->OnMaintenanceSessionFinished();
 }
 
 }  // namespace arc

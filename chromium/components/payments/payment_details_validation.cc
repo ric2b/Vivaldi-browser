@@ -44,15 +44,15 @@ bool validateShippingOptionOrPaymentItem(
     return false;
   }
 
-  if (item->amount->currencySystem.has_value() &&
-      item->amount->currencySystem.value().empty()) {
+  if (item->amount->currency_system.has_value() &&
+      item->amount->currency_system.value().empty()) {
     *error_message = "Currency system can't be empty";
     return false;
   }
 
   if (!payments::PaymentsValidators::isValidCurrencyCodeFormat(
-          item->amount->currency, item->amount->currencySystem.has_value()
-                                      ? item->amount->currencySystem.value()
+          item->amount->currency, item->amount->currency_system.has_value()
+                                      ? item->amount->currency_system.value()
                                       : "",
           error_message)) {
     return false;
@@ -108,19 +108,15 @@ bool validatePaymentDetailsModifiers(
     return false;
   }
 
-  std::set<mojo::String> uniqueMethods;
   for (const auto& modifier : modifiers) {
-    if (modifier->supported_methods.empty()) {
-      *error_message = "Must specify at least one payment method identifier";
+    if (!modifier->method_data) {
+      *error_message = "Method data required";
       return false;
     }
 
-    for (const auto& method : modifier->supported_methods) {
-      if (uniqueMethods.find(method) != uniqueMethods.end()) {
-        *error_message = "Duplicate payment method identifiers are not allowed";
-        return false;
-      }
-      uniqueMethods.insert(method);
+    if (modifier->method_data->supported_methods.empty()) {
+      *error_message = "Must specify at least one payment method identifier";
+      return false;
     }
 
     if (modifier->total) {

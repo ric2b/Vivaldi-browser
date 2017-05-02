@@ -8,6 +8,8 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchBlacklist.BlacklistReason;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchHeuristics;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchRankerLogger;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchRankerLoggerImpl;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchUma;
 import org.chromium.chrome.browser.contextualsearch.QuickActionCategory;
 
@@ -18,6 +20,9 @@ import java.util.Locale;
  */
 public class ContextualSearchPanelMetrics {
     private static final int MILLISECONDS_TO_NANOSECONDS = 1000000;
+
+    // The Ranker logger to use to write Tap Suppression Ranker logs to UMA.
+    private final ContextualSearchRankerLogger mTapSuppressionRankerLogger;
 
     // Flags for logging.
     private BlacklistReason mBlacklistReason;
@@ -41,11 +46,13 @@ public class ContextualSearchPanelMetrics {
     private boolean mWasQuickActionClicked;
     private boolean mWasSelectionAllCaps;
     private boolean mDidSelectionStartWithCapital;
+    private char mSelectionFirstChar;
+    private int mSelectionLength;
     // Whether any Tap suppression heuristic was satisfied when the panel was shown.
     private boolean mWasAnyHeuristicSatisfiedOnPanelShow;
     // Time when the panel was triggered (not reset by a chained search).
     // Panel transitions are animated so mPanelTriggerTimeNs will be less than mFirstPeekTimeNs.
-    private long mPanelTriggerTimeNs;
+    private long mPanelTriggerTimeFromTapNs;
     // Time when the panel peeks into view (not reset by a chained search).
     // Used to log total time the panel is showing (not closed).
     private long mFirstPeekTimeNs;
@@ -61,6 +68,16 @@ public class ContextualSearchPanelMetrics {
     private long mPanelOpenedBeyondPeekTimeNs;
     // The current set of heuristics that should be logged with results seen when the panel closes.
     private ContextualSearchHeuristics mResultsSeenExperiments;
+    // The current set of heuristics to be logged through ranker with results seen when the panel
+    // closes.
+    private ContextualSearchHeuristics mRankerLogExperiments;
+
+    /**
+     * Constructs an object to track metrics for the Contextual Search Overlay Panel.
+     */
+    ContextualSearchPanelMetrics() {
+        mTapSuppressionRankerLogger = new ContextualSearchRankerLoggerImpl();
+    }
 
     /**
      * Log information when the panel's state has changed.
@@ -90,12 +107,14 @@ public class ContextualSearchPanelMetrics {
         // so a local copy is created before the reset.
         boolean isSearchPanelFullyPreloaded = mIsSearchPanelFullyPreloaded;
 
-        if (toState == PanelState.CLOSED && mPanelTriggerTimeNs != 0
+        if (toState == PanelState.CLOSED && mPanelTriggerTimeFromTapNs != 0
                 && reason == StateChangeReason.BASE_PAGE_SCROLL) {
             long durationMs =
-                    (System.nanoTime() - mPanelTriggerTimeNs) / MILLISECONDS_TO_NANOSECONDS;
+                    (System.nanoTime() - mPanelTriggerTimeFromTapNs) / MILLISECONDS_TO_NANOSECONDS;
             ContextualSearchUma.logDurationBetweenTriggerAndScroll(
                     durationMs, mWasSearchContentViewSeen);
+            mTapSuppressionRankerLogger.log(
+                    ContextualSearchRankerLogger.Feature.DURATION_BEFORE_SCROLL_MS, durationMs);
         }
 
         if (isEndingSearch) {
@@ -125,6 +144,9 @@ public class ContextualSearchPanelMetrics {
                         mQuickActionCategory);
                 ContextualSearchUma.logQuickActionClicked(mWasQuickActionClicked,
                         mQuickActionCategory);
+                mTapSuppressionRankerLogger.log(
+                        ContextualSearchRankerLogger.Feature.OUTCOME_WAS_QUICK_ACTION_CLICKED,
+                        mWasQuickActionClicked);
             }
 
             if (mWasSelectionAllCaps && mWasActivatedByTap) {
@@ -150,6 +172,14 @@ public class ContextualSearchPanelMetrics {
                         || mWasSelectionAllCaps;
                 ContextualSearchUma.logAnyTapSuppressionHeuristicSatisfied(
                         mWasSearchContentViewSeen, wasAnySuppressionHeuristicSatisfied);
+                // Log all the experiments to the Ranker logger.
+                if (mRankerLogExperiments != null) {
+                    writeSelectionFeaturesToRanker();
+                    mTapSuppressionRankerLogger.logOutcome(mWasSearchContentViewSeen);
+                    mRankerLogExperiments.logRankerTapSuppression(mTapSuppressionRankerLogger);
+                    mTapSuppressionRankerLogger.writeLogAndReset();
+                    mRankerLogExperiments = null;
+                }
             }
         }
 
@@ -239,7 +269,7 @@ public class ContextualSearchPanelMetrics {
             mWasSelectionAllCaps = false;
             mDidSelectionStartWithCapital = false;
             mWasAnyHeuristicSatisfiedOnPanelShow = false;
-            mPanelTriggerTimeNs = 0;
+            mPanelTriggerTimeFromTapNs = 0;
         }
     }
 
@@ -313,24 +343,38 @@ public class ContextualSearchPanelMetrics {
     }
 
     /**
-     * Should be called when the panel first starts showing.
+     * Should be called when the panel first starts showing due to a tap.
      */
-    public void onPanelTriggered() {
-        mPanelTriggerTimeNs = System.nanoTime();
+    public void onPanelTriggeredFromTap() {
+        mPanelTriggerTimeFromTapNs = System.nanoTime();
     }
 
     /**
      * @param selection The text that is selected when a selection is established.
      */
     public void onSelectionEstablished(String selection) {
+        mSelectionLength = selection.length();
         // In some locales, there is no concept of an upper or lower case letter. Account for this
-        // by checking that the selected text is not equalivalet to selection#toLowerCase().
+        // by checking that the selected text is not equivalent to selection#toLowerCase().
         mWasSelectionAllCaps = selection.equals(selection.toUpperCase(Locale.getDefault()))
                 && !selection.equals(selection.toLowerCase(Locale.getDefault()));
-        String firstChar = String.valueOf(selection.charAt(0));
+        mSelectionFirstChar = selection.charAt(0);
+        String firstChar = String.valueOf(mSelectionFirstChar);
         mDidSelectionStartWithCapital = firstChar.equals(
                 firstChar.toUpperCase(Locale.getDefault()))
                 && !firstChar.equals(firstChar.toLowerCase(Locale.getDefault()));
+    }
+
+    /**
+     * Writes the set of selection features that we've collected for Ranker to its log.
+     */
+    private void writeSelectionFeaturesToRanker() {
+        mTapSuppressionRankerLogger.log(
+                ContextualSearchRankerLogger.Feature.SELECTION_LENGTH, mSelectionLength);
+        mTapSuppressionRankerLogger.log(
+                ContextualSearchRankerLogger.Feature.SELECTION_FIRST_CHAR, mSelectionFirstChar);
+        mTapSuppressionRankerLogger.log(
+                ContextualSearchRankerLogger.Feature.SELECTION_WAS_ALL_CAPS, mWasSelectionAllCaps);
     }
 
     /**
@@ -382,6 +426,15 @@ public class ContextualSearchPanelMetrics {
      */
     public void setResultsSeenExperiments(ContextualSearchHeuristics resultsSeenExperiments) {
         mResultsSeenExperiments = resultsSeenExperiments;
+    }
+
+    /**
+     * Sets the experiments to log through Ranker with results seen.
+     * @param rankerLogExperiments The experiments to log through ranker when the panel results
+     *        are known.
+     */
+    public void setRankerLogExperiments(ContextualSearchHeuristics rankerLogExperiments) {
+        mRankerLogExperiments = rankerLogExperiments;
     }
 
     /**

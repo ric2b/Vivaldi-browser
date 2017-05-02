@@ -7,12 +7,12 @@
 
 #include <string>
 
-#include "base/callback.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "url/gurl.h"
 
 namespace content {
 class WebContents;
+class BrowserContext;
 }
 
 namespace background_loader {
@@ -28,9 +28,9 @@ class BackgroundLoaderContents : public content::WebContentsDelegate {
 
   // Loads the URL in a WebContents. Will call observe on all current observers
   // with the created WebContents.
-  void LoadPage(const GURL& url);
+  virtual void LoadPage(const GURL& url);
   // Cancels loading of the current page. Calls Close() on internal WebContents.
-  void Cancel();
+  virtual void Cancel();
   // Returns the inner web contents.
   content::WebContents* web_contents() { return web_contents_.get(); }
 
@@ -44,11 +44,13 @@ class BackgroundLoaderContents : public content::WebContentsDelegate {
                    const base::Callback<void(bool)>& callback) override;
 
   bool ShouldCreateWebContents(
-      content::WebContents* contents,
+      content::WebContents* web_contents,
+      content::SiteInstance* source_site_instance,
       int32_t route_id,
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
       WindowContainerType window_container_type,
+      const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
       const std::string& partition_id,
@@ -74,6 +76,11 @@ class BackgroundLoaderContents : public content::WebContentsDelegate {
                                   content::MediaStreamType type) override;
 
  private:
+  friend class BackgroundLoaderContentsTest;
+  friend class BackgroundLoaderContentsStub;
+
+  BackgroundLoaderContents();
+
   std::unique_ptr<content::WebContents> web_contents_;
   content::BrowserContext* browser_context_;
 

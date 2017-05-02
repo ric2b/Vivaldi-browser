@@ -24,6 +24,7 @@
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
 #include <memory>
+#include <utility>
 
 namespace blink {
 namespace {
@@ -40,7 +41,7 @@ class NotificationArray {
     HeapVector<Member<Notification>> notifications;
     for (const WebPersistentNotificationInfo& notificationInfo :
          notificationInfos)
-      notifications.append(Notification::create(
+      notifications.push_back(Notification::create(
           resolver->getExecutionContext(), notificationInfo.notificationId,
           notificationInfo.data, true /* showing */));
 
@@ -78,7 +79,8 @@ ScriptPromise ServiceWorkerRegistrationNotifications::showNotification(
 
   // If permission for notification's origin is not "granted", reject the
   // promise with a TypeError exception, and terminate these substeps.
-  if (NotificationManager::from(executionContext)->permissionStatus() !=
+  if (NotificationManager::from(executionContext)
+          ->permissionStatus(executionContext) !=
       mojom::blink::PermissionStatus::GRANTED)
     return ScriptPromise::reject(
         scriptState,
@@ -106,7 +108,7 @@ ScriptPromise ServiceWorkerRegistrationNotifications::showNotification(
   ScriptPromise promise = resolver->promise();
 
   std::unique_ptr<WebNotificationShowCallbacks> callbacks =
-      wrapUnique(new CallbackPromiseAdapter<void, void>(resolver));
+      WTF::wrapUnique(new CallbackPromiseAdapter<void, void>(resolver));
   ServiceWorkerRegistrationNotifications::from(executionContext, registration)
       .prepareShow(data, std::move(callbacks));
 
@@ -120,19 +122,21 @@ ScriptPromise ServiceWorkerRegistrationNotifications::getNotifications(
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
 
-  WebNotificationGetCallbacks* callbacks =
-      new CallbackPromiseAdapter<NotificationArray, void>(resolver);
+  auto callbacks =
+      WTF::makeUnique<CallbackPromiseAdapter<NotificationArray, void>>(
+          resolver);
 
   WebNotificationManager* notificationManager =
       Platform::current()->notificationManager();
   DCHECK(notificationManager);
 
   notificationManager->getNotifications(
-      options.tag(), registration.webRegistration(), callbacks);
+      options.tag(), registration.webRegistration(), std::move(callbacks));
   return promise;
 }
 
-void ServiceWorkerRegistrationNotifications::contextDestroyed() {
+void ServiceWorkerRegistrationNotifications::contextDestroyed(
+    ExecutionContext*) {
   for (auto loader : m_loaders)
     loader->stop();
 }
@@ -171,7 +175,7 @@ void ServiceWorkerRegistrationNotifications::prepareShow(
   NotificationResourcesLoader* loader = new NotificationResourcesLoader(
       WTF::bind(&ServiceWorkerRegistrationNotifications::didLoadResources,
                 wrapWeakPersistent(this), origin.release(), data,
-                passed(std::move(callbacks))));
+                WTF::passed(std::move(callbacks))));
   m_loaders.add(loader);
   loader->start(getExecutionContext(), data);
 }
@@ -189,7 +193,7 @@ void ServiceWorkerRegistrationNotifications::didLoadResources(
 
   notificationManager->showPersistent(
       WebSecurityOrigin(origin.get()), data, loader->getResources(),
-      m_registration->webRegistration(), callbacks.release());
+      m_registration->webRegistration(), std::move(callbacks));
   m_loaders.remove(loader);
 }
 

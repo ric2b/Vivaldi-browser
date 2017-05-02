@@ -21,6 +21,7 @@
 #       //content/public/app:both_sources (source set)
 
 import("//build/config/chrome_build.gni")
+import("//build/config/ui.gni")
 import("//services/service_manager/public/service_manifest.gni")
 
 public_app_shared_sources = [
@@ -37,10 +38,11 @@ public_app_shared_deps = [
   "//base:i18n",
   "//content:export",
   "//content/public/common:common_sources",
-  "//content/public/gpu:gpu_sources",
-  "//content/public/renderer:renderer_sources",
-  "//content/public/utility:utility_sources",
 ]
+
+if (use_aura) {
+  public_app_shared_deps += [ "//ui/aura" ]
+}
 
 if (is_component_build) {
   source_set("both_sources") {
@@ -54,6 +56,9 @@ if (is_component_build) {
     deps = public_app_shared_deps + [
              "//content/app:both",
              "//content/public/browser:browser_sources",
+             "//content/public/gpu:gpu_sources",
+             "//content/public/renderer:renderer_sources",
+             "//content/public/utility:utility_sources",
            ]
 
     allow_circular_includes_from = [
@@ -100,6 +105,9 @@ if (is_component_build) {
              "//content/app:both",
              "//content/public/browser",
              "//content/public/common",
+             "//content/public/gpu:gpu_sources",
+             "//content/public/renderer:renderer_sources",
+             "//content/public/utility:utility_sources",
            ]
 
     allow_circular_includes_from = [

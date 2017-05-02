@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -83,7 +84,7 @@ using BindingTest = BindingTestBase;
 TEST_F(BindingTest, Close) {
   bool called = false;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   base::RunLoop run_loop;
   ptr.set_connection_error_handler(
       SetFlagAndRunClosure(&called, run_loop.QuitClosure()));
@@ -101,7 +102,7 @@ TEST_F(BindingTest, DestroyClosesMessagePipe) {
   bool encountered_error = false;
   ServiceImpl impl;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   base::RunLoop run_loop;
   ptr.set_connection_error_handler(
       SetFlagAndRunClosure(&encountered_error, run_loop.QuitClosure()));
@@ -137,7 +138,7 @@ TEST_F(BindingTest, ConnectionError) {
   {
     ServiceImpl impl;
     sample::ServicePtr ptr;
-    Binding<sample::Service> binding(&impl, GetProxy(&ptr));
+    Binding<sample::Service> binding(&impl, MakeRequest(&ptr));
     base::RunLoop run_loop;
     binding.set_connection_error_handler(
         SetFlagAndRunClosure(&called, run_loop.QuitClosure()));
@@ -156,7 +157,7 @@ TEST_F(BindingTest, ConnectionError) {
 TEST_F(BindingTest, CloseDoesntCallConnectionErrorHandler) {
   ServiceImpl impl;
   sample::ServicePtr ptr;
-  Binding<sample::Service> binding(&impl, GetProxy(&ptr));
+  Binding<sample::Service> binding(&impl, MakeRequest(&ptr));
   bool called = false;
   binding.set_connection_error_handler(SetFlagAndRunClosure(&called));
   binding.Close();
@@ -203,7 +204,7 @@ TEST_F(BindingTest, SelfDeleteOnConnectionError) {
   // This should delete itself on connection error.
   base::RunLoop run_loop;
   new ServiceImplWithBinding(&was_deleted, run_loop.QuitClosure(),
-                             GetProxy(&ptr));
+                             MakeRequest(&ptr));
   ptr.reset();
   EXPECT_FALSE(was_deleted);
   run_loop.Run();
@@ -214,7 +215,7 @@ TEST_F(BindingTest, SelfDeleteOnConnectionError) {
 TEST_F(BindingTest, Unbind) {
   ServiceImpl impl;
   sample::ServicePtr ptr;
-  Binding<sample::Service> binding(&impl, GetProxy(&ptr));
+  Binding<sample::Service> binding(&impl, MakeRequest(&ptr));
 
   bool called = false;
   base::RunLoop run_loop;
@@ -272,7 +273,7 @@ TEST_F(BindingTest, PauseResume) {
   bool called = false;
   base::RunLoop run_loop;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   ServiceImpl impl;
   Binding<sample::Service> binding(&impl, std::move(request));
   binding.PauseIncomingMethodCallProcessing();
@@ -295,7 +296,7 @@ TEST_F(BindingTest, ErrorHandleNotRunWhilePaused) {
   bool called = false;
   base::RunLoop run_loop;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   ServiceImpl impl;
   Binding<sample::Service> binding(&impl, std::move(request));
   binding.set_connection_error_handler(
@@ -360,7 +361,7 @@ class CallbackFilter : public MessageReceiver {
 TEST_F(BindingTest, MessageFilter) {
   test::PingServicePtr ptr;
   PingServiceImpl impl;
-  mojo::Binding<test::PingService> binding(&impl, GetProxy(&ptr));
+  mojo::Binding<test::PingService> binding(&impl, MakeRequest(&ptr));
 
   int status = 0;
   auto handler_helper = [] (int* status, int expected_status, int new_status) {
@@ -391,7 +392,7 @@ void Fail() {
 TEST_F(BindingTest, FlushForTesting) {
   bool called = false;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   ServiceImpl impl;
   Binding<sample::Service> binding(&impl, std::move(request));
   binding.set_connection_error_handler(base::Bind(&Fail));
@@ -410,7 +411,7 @@ TEST_F(BindingTest, FlushForTesting) {
 TEST_F(BindingTest, FlushForTestingWithClosedPeer) {
   bool called = false;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   ServiceImpl impl;
   Binding<sample::Service> binding(&impl, std::move(request));
   binding.set_connection_error_handler(SetFlagAndRunClosure(&called));
@@ -424,7 +425,7 @@ TEST_F(BindingTest, FlushForTestingWithClosedPeer) {
 
 TEST_F(BindingTest, ConnectionErrorWithReason) {
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   ServiceImpl impl;
   Binding<sample::Service> binding(&impl, std::move(request));
 
@@ -460,7 +461,7 @@ TEST_F(BindingTest, CustomImplPointerType) {
 
   test::PingServicePtr proxy;
   WeakBinding<test::PingService> binding(weak_factory.GetWeakPtr(),
-                                         GetProxy(&proxy));
+                                         MakeRequest(&proxy));
 
   {
     // Ensure the binding is functioning.
@@ -495,7 +496,7 @@ TEST_F(StrongBindingTest, DestroyClosesMessagePipe) {
   bool encountered_error = false;
   bool was_deleted = false;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   ptr.set_connection_error_handler(
       SetFlagAndRunClosure(&encountered_error, run_loop.QuitClosure()));
   bool called = false;
@@ -528,7 +529,7 @@ TEST_F(StrongBindingTest, ConnectionErrorDestroysImpl) {
   // Will delete itself.
   base::RunLoop run_loop;
   new ServiceImplWithBinding(&was_deleted, run_loop.QuitClosure(),
-                             GetProxy(&ptr));
+                             MakeRequest(&ptr));
 
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(was_deleted);
@@ -543,7 +544,7 @@ TEST_F(StrongBindingTest, FlushForTesting) {
   bool called = false;
   bool was_deleted = false;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   auto binding = MakeStrongBinding(base::MakeUnique<ServiceImpl>(&was_deleted),
                                    std::move(request));
   binding->set_connection_error_handler(base::Bind(&Fail));
@@ -571,7 +572,7 @@ TEST_F(StrongBindingTest, FlushForTestingWithClosedPeer) {
   bool called = false;
   bool was_deleted = false;
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   auto binding = MakeStrongBinding(base::MakeUnique<ServiceImpl>(&was_deleted),
                                    std::move(request));
   binding->set_connection_error_handler(SetFlagAndRunClosure(&called));
@@ -588,7 +589,7 @@ TEST_F(StrongBindingTest, FlushForTestingWithClosedPeer) {
 
 TEST_F(StrongBindingTest, ConnectionErrorWithReason) {
   sample::ServicePtr ptr;
-  auto request = GetProxy(&ptr);
+  auto request = MakeRequest(&ptr);
   auto binding =
       MakeStrongBinding(base::MakeUnique<ServiceImpl>(), std::move(request));
   base::RunLoop run_loop;

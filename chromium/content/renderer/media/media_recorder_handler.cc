@@ -40,8 +40,12 @@ media::VideoCodec CodecIdToMediaVideoCodec(VideoTrackRecorder::CodecId id) {
       return media::kCodecVP8;
     case VideoTrackRecorder::CodecId::VP9:
       return media::kCodecVP9;
+#if BUILDFLAG(RTC_USE_H264)
     case VideoTrackRecorder::CodecId::H264:
       return media::kCodecH264;
+#endif
+    case VideoTrackRecorder::CodecId::LAST:
+      return media::kUnknownVideoCodec;
   }
   NOTREACHED() << "Unsupported codec";
   return media::kUnknownVideoCodec;
@@ -61,7 +65,9 @@ MediaRecorderHandler::~MediaRecorderHandler() {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   // Send a |last_in_slice| to our |client_|.
   if (client_)
-    client_->writeData(nullptr, 0u, true);
+    client_->writeData(
+        nullptr, 0u, true,
+        (TimeTicks::Now() - TimeTicks::UnixEpoch()).InMillisecondsF());
 }
 
 bool MediaRecorderHandler::canSupportMimeType(
@@ -74,16 +80,18 @@ bool MediaRecorderHandler::canSupportMimeType(
     return true;
 
   const std::string type(web_type.utf8());
-  const bool video = base::EqualsCaseInsensitiveASCII(type, "video/webm");
+  const bool video = base::EqualsCaseInsensitiveASCII(type, "video/webm") ||
+                     base::EqualsCaseInsensitiveASCII(type, "video/x-matroska");
   const bool audio =
       video ? false : base::EqualsCaseInsensitiveASCII(type, "audio/webm");
   if (!video && !audio)
     return false;
 
   // Both |video| and |audio| support empty |codecs|; |type| == "video" supports
-  // vp8, vp9 or opus; |type| = "audio", supports only opus.
+  // vp8, vp9, h264 and avc1 or opus; |type| = "audio", supports only opus.
   // http://www.webmproject.org/docs/container Sec:"HTML5 Video Type Parameters"
-  static const char* const kVideoCodecs[] = { "vp8", "vp9", "h264", "opus" };
+  static const char* const kVideoCodecs[] = {"vp8", "vp9", "h264", "avc1",
+                                             "opus"};
   static const char* const kAudioCodecs[] = { "opus" };
   const char* const* codecs = video ? &kVideoCodecs[0] : &kAudioCodecs[0];
   const int codecs_count =
@@ -115,8 +123,7 @@ bool MediaRecorderHandler::initialize(
   UpdateWebRTCMethodCount(WEBKIT_MEDIA_STREAM_RECORDER);
 
   if (!canSupportMimeType(type, codecs)) {
-    DLOG(ERROR) << "Can't support " << type.utf8()
-                << ";codecs=" << codecs.utf8();
+    DLOG(ERROR) << "Unsupported " << type.utf8() << ";codecs=" << codecs.utf8();
     return false;
   }
 
@@ -129,7 +136,14 @@ bool MediaRecorderHandler::initialize(
 #if BUILDFLAG(RTC_USE_H264)
   else if (codecs_str.find("h264") != std::string::npos)
     codec_id_ = VideoTrackRecorder::CodecId::H264;
+  else if (codecs_str.find("avc1") != std::string::npos)
+    codec_id_ = VideoTrackRecorder::CodecId::H264;
 #endif
+  else
+    codec_id_ = VideoTrackRecorder::GetPreferredCodecId();
+
+  DVLOG_IF(1, codecs_str.empty()) << "Falling back to preferred codec id "
+                                  << static_cast<int>(codec_id_);
 
   media_stream_ = media_stream;
   DCHECK(client);
@@ -253,15 +267,18 @@ void MediaRecorderHandler::resume() {
 }
 
 void MediaRecorderHandler::OnEncodedVideo(
-    const scoped_refptr<media::VideoFrame>& video_frame,
+    const media::WebmMuxer::VideoParameters& params,
     std::unique_ptr<std::string> encoded_data,
     TimeTicks timestamp,
     bool is_key_frame) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   if (!webm_muxer_)
     return;
-  webm_muxer_->OnEncodedVideo(video_frame, std::move(encoded_data), timestamp,
-                              is_key_frame);
+  if (!webm_muxer_->OnEncodedVideo(params, std::move(encoded_data), timestamp,
+                                   is_key_frame)) {
+    DLOG(ERROR) << "Error muxing video data";
+    client_->onError("Error muxing video data");
+  }
 }
 
 void MediaRecorderHandler::OnEncodedAudio(
@@ -269,24 +286,31 @@ void MediaRecorderHandler::OnEncodedAudio(
     std::unique_ptr<std::string> encoded_data,
     base::TimeTicks timestamp) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  if (webm_muxer_)
-    webm_muxer_->OnEncodedAudio(params, std::move(encoded_data), timestamp);
+  if (!webm_muxer_)
+    return;
+  if (!webm_muxer_->OnEncodedAudio(params, std::move(encoded_data),
+                                   timestamp)) {
+    DLOG(ERROR) << "Error muxing audio data";
+    client_->onError("Error muxing audio data");
+  }
 }
 
 void MediaRecorderHandler::WriteData(base::StringPiece data) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  const TimeTicks now = TimeTicks::Now();
   // Non-buffered mode does not need to check timestamps.
   if (timeslice_.is_zero()) {
-    client_->writeData(data.data(), data.length(), true  /* lastInSlice */);
+    client_->writeData(data.data(), data.length(), true /* lastInSlice */,
+                       (now - TimeTicks::UnixEpoch()).InMillisecondsF());
     return;
   }
 
-  const TimeTicks now = TimeTicks::Now();
   const bool last_in_slice = now > slice_origin_timestamp_ + timeslice_;
   DVLOG_IF(1, last_in_slice) << "Slice finished @ " << now;
   if (last_in_slice)
     slice_origin_timestamp_ = now;
-  client_->writeData(data.data(), data.length(), last_in_slice);
+  client_->writeData(data.data(), data.length(), last_in_slice,
+                     (now - TimeTicks::UnixEpoch()).InMillisecondsF());
 }
 
 void MediaRecorderHandler::OnVideoFrameForTesting(

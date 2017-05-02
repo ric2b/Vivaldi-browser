@@ -134,6 +134,9 @@ enum ModelType {
   // Reading list items.
   READING_LIST,
 
+  // Notes items
+  NOTES,
+
   // ---- Proxy types ----
   // Proxy types are excluded from the sync protocol, but are still considered
   // real user types. By convention, we prefix them with 'PROXY_' to distinguish

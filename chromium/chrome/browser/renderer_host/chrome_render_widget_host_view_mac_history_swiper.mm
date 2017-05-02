@@ -11,8 +11,10 @@
 #import "chrome/browser/ui/cocoa/history_overlay_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 
 #include "app/vivaldi_apptools.h"
+#include "base/mac/mac_util.h"
 
 namespace {
 // The horizontal distance required to cause the browser to perform a history
@@ -35,6 +37,14 @@ const CGFloat kCancelEventVerticalLowerThreshold = 0.01;
 // expect NSTouch callbacks. We set this variable to YES and ignore NSTouch
 // callbacks.
 BOOL forceMagicMouse = NO;
+
+// NOTE(espen@vivaldi.com) Guard to ensure that the magic mouse can not start
+// a history swipe if the document has been scrolled a certain amount after a
+// GestureScrollBegin.
+CGFloat vivaldiFullScrollingDeltaX = 0;
+CGFloat vivaldiFullScrollingDeltaY = 0;
+const CGFloat kVivaldiScrollDeltaLimit = 5;
+
 }  // namespace
 
 @interface HistorySwiper ()
@@ -125,7 +135,7 @@ BOOL forceMagicMouse = NO;
 
 - (void)rendererHandledGestureScrollEvent:(const blink::WebGestureEvent&)event
                                  consumed:(BOOL)consumed {
-  switch (event.type) {
+  switch (event.type()) {
     case blink::WebInputEvent::GestureScrollBegin:
       if (event.data.scrollBegin.synthetic ||
           event.data.scrollBegin.inertialPhase ==
@@ -146,6 +156,11 @@ BOOL forceMagicMouse = NO;
 
 - (void)beginGestureWithEvent:(NSEvent*)event {
   inGesture_ = YES;
+  if (vivaldi::IsVivaldiRunning()) {
+    firstScrollUnconsumed_ = NO;
+    recognitionState_ = history_swiper::kPending;
+    vivaldiFullScrollingDeltaX = vivaldiFullScrollingDeltaY = 0;
+  }
 
   // Reset state pertaining to Magic Mouse swipe gestures.
   mouseScrollDelta_ = NSZeroSize;
@@ -411,6 +426,15 @@ BOOL forceMagicMouse = NO;
   if ([theEvent phase] == NSEventPhaseNone)
     return NO;
 
+  if (vivaldi::IsVivaldiRunning() && !forceMagicMouse) {
+    // Prevent navigation if we have already scrolled the page in this event
+    // sequence.
+    if (vivaldiFullScrollingDeltaX > kVivaldiScrollDeltaLimit ||
+        vivaldiFullScrollingDeltaY > kVivaldiScrollDeltaLimit) {
+      return NO;
+    }
+  }
+
   mouseScrollDelta_.width += [theEvent scrollingDeltaX];
   mouseScrollDelta_.height += [theEvent scrollingDeltaY];
 
@@ -500,6 +524,10 @@ BOOL forceMagicMouse = NO;
             [historyOverlay dismiss];
             [historyOverlay release];
             historyOverlay = nil;
+            if (vivaldi::IsVivaldiRunning()) {
+              forceMagicMouse = NO;
+              firstScrollUnconsumed_ = NO;
+            }
           }
       }];
 }
@@ -508,12 +536,34 @@ BOOL forceMagicMouse = NO;
   if (![theEvent respondsToSelector:@selector(phase)])
     return NO;
 
+  // NOTE(espen@vivaldi.com). NSEventTypeBeginGesture and NSEventTypeEndGesture
+  // are not automatically called by cocoa after 10.11 but the history swiping
+  // relies on these events. The workaround is to test for the phase in
+  // scrollwheel events. Only magic mouse will set NSEventPhaseBegan and
+  // NSEventPhaseEnd.
+  if (vivaldi::IsVivaldiRunning() && base::mac::IsAtLeastOS10_11()) {
+    if (theEvent.type == NSScrollWheel) {
+      if (theEvent.phase == NSEventPhaseBegan) {
+        [self beginGestureWithEvent:theEvent];
+      }
+      else if (theEvent.phase == NSEventPhaseEnded) {
+        [self beginGestureWithEvent:theEvent];
+      }
+    }
+  }
+
   // The only events that this class consumes have type NSEventPhaseChanged.
   // This simultaneously weeds our regular mouse wheel scroll events, and
   // gesture events with incorrect phase.
   if ([theEvent phase] != NSEventPhaseChanged &&
       [theEvent momentumPhase] != NSEventPhaseChanged) {
     return NO;
+  }
+
+  if (vivaldi::IsVivaldiRunning() && !firstScrollUnconsumed_) {
+    // Collect full scrolling distance as long as the render consumes it.
+    vivaldiFullScrollingDeltaX += fabs([theEvent scrollingDeltaX]);
+    vivaldiFullScrollingDeltaY += fabs([theEvent scrollingDeltaY]);
   }
 
   // We've already processed this gesture.

@@ -15,7 +15,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/audio/fake_audio_input_stream.h"
 #include "media/base/video_frame.h"
-#include "mojo/public/cpp/bindings/string.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkMatrix.h"
@@ -319,16 +318,20 @@ void FakeVideoCaptureDevice::CaptureUsingClientBuffers(
     base::TimeTicks expected_execution_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::unique_ptr<VideoCaptureDevice::Client::Buffer> capture_buffer(
-      client_->ReserveOutputBuffer(capture_format_.frame_size,
-                                   capture_format_.pixel_format,
-                                   capture_format_.pixel_storage));
-  DLOG_IF(ERROR, !capture_buffer) << "Couldn't allocate Capture Buffer";
-  DCHECK(capture_buffer->data()) << "Buffer has NO backing memory";
+  const int arbitrary_frame_feedback_id = 0;
+  VideoCaptureDevice::Client::Buffer capture_buffer =
+      client_->ReserveOutputBuffer(
+          capture_format_.frame_size, capture_format_.pixel_format,
+          capture_format_.pixel_storage, arbitrary_frame_feedback_id);
+  DLOG_IF(ERROR, !capture_buffer.is_valid())
+      << "Couldn't allocate Capture Buffer";
+  auto buffer_access =
+      capture_buffer.handle_provider()->GetHandleForInProcessAccess();
+  DCHECK(buffer_access->data()) << "Buffer has NO backing memory";
 
   DCHECK_EQ(PIXEL_STORAGE_CPU, capture_format_.pixel_storage);
-  uint8_t* data_ptr = static_cast<uint8_t*>(capture_buffer->data());
-  memset(data_ptr, 0, capture_buffer->mapped_size());
+  uint8_t* data_ptr = buffer_access->data();
+  memset(data_ptr, 0, buffer_access->mapped_size());
   DrawPacman(capture_format_.pixel_format, data_ptr, elapsed_time_,
              fake_capture_rate_, capture_format_.frame_size, current_zoom_);
 

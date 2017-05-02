@@ -14,10 +14,9 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
-#include "ui/display/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 
 namespace aura {
-class RootWindow;
 class Window;
 }  // namespace aura
 
@@ -28,11 +27,11 @@ class Layer;
 namespace ash {
 
 // DisplayAnimatorChromeOS provides the visual effects for
-// ui::DisplayConfigurator, such like fade-out/in during changing
+// display::DisplayConfigurator, such like fade-out/in during changing
 // the display mode.
 class ASH_EXPORT DisplayAnimatorChromeOS
     : public DisplayAnimator,
-      public ui::DisplayConfigurator::Observer {
+      public display::DisplayConfigurator::Observer {
  public:
   DisplayAnimatorChromeOS();
   ~DisplayAnimatorChromeOS() override;
@@ -42,12 +41,12 @@ class ASH_EXPORT DisplayAnimatorChromeOS
   void StartFadeInAnimation() override;
 
  protected:
-  // ui::DisplayConfigurator::Observer overrides:
+  // display::DisplayConfigurator::Observer overrides:
   void OnDisplayModeChanged(
-      const ui::DisplayConfigurator::DisplayStateList& outputs) override;
+      const display::DisplayConfigurator::DisplayStateList& outputs) override;
   void OnDisplayModeChangeFailed(
-      const ui::DisplayConfigurator::DisplayStateList& displays,
-      ui::MultipleDisplayState failed_new_state) override;
+      const display::DisplayConfigurator::DisplayStateList& displays,
+      display::MultipleDisplayState failed_new_state) override;
 
  private:
   // Clears all hiding layers.  Note that in case that this method is called

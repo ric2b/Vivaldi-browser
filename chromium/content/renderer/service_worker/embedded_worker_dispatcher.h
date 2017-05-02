@@ -13,7 +13,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "content/child/scoped_child_process_reference.h"
-#include "content/public/common/console_message_level.h"
 #include "ipc/ipc_listener.h"
 
 namespace blink {
@@ -51,33 +50,32 @@ class EmbeddedWorkerDispatcher : public IPC::Listener {
     ~WorkerWrapper();
 
     blink::WebEmbeddedWorker* worker() { return worker_.get(); }
+    EmbeddedWorkerDevToolsAgent* devtools_agent() {
+      return devtools_agent_.get();
+    }
 
    private:
     ScopedChildProcessReference process_ref_;
     std::unique_ptr<blink::WebEmbeddedWorker> worker_;
-    std::unique_ptr<EmbeddedWorkerDevToolsAgent> dev_tools_agent_;
+    std::unique_ptr<EmbeddedWorkerDevToolsAgent> devtools_agent_;
   };
 
-  void OnStartWorker(const EmbeddedWorkerStartParams& params);
   void OnStopWorker(int embedded_worker_id);
-  void OnResumeAfterDownload(int embedded_worker_id);
-  void OnAddMessageToConsole(int embedded_worker_id,
-                             ConsoleMessageLevel level,
-                             const std::string& message);
+
+  std::unique_ptr<WorkerWrapper> StartWorkerContext(
+      const EmbeddedWorkerStartParams& params,
+      std::unique_ptr<ServiceWorkerContextClient> context_client);
 
   // These methods are used by EmbeddedWorkerInstanceClientImpl to keep
   // consistency between chromium IPC and mojo IPC.
   // TODO(shimazu): Remove them after all messages for EmbeddedWorker are
   // replaced by mojo IPC. (Tracking issue: https://crbug.com/629701)
-  std::unique_ptr<WorkerWrapper> StartWorkerContext(
-      const EmbeddedWorkerStartParams& params,
-      std::unique_ptr<ServiceWorkerContextClient> context_client);
   void RegisterWorker(int embedded_worker_id,
                       std::unique_ptr<WorkerWrapper> wrapper);
   void UnregisterWorker(int embedded_worker_id);
   void RecordStopWorkerTimer(int embedded_worker_id);
 
-  IDMap<WorkerWrapper, IDMapOwnPointer> workers_;
+  IDMap<std::unique_ptr<WorkerWrapper>> workers_;
   std::map<int /* embedded_worker_id */, base::TimeTicks> stop_worker_times_;
   base::WeakPtrFactory<EmbeddedWorkerDispatcher> weak_factory_;
 

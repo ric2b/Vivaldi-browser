@@ -300,15 +300,15 @@ class STORAGE_EXPORT FileSystemOperationRunner
   void PrepareForRead(OperationID id, const FileSystemURL& url);
 
   // These must be called at the beginning and end of any async operations.
-  OperationHandle BeginOperation(FileSystemOperation* operation,
+  OperationHandle BeginOperation(std::unique_ptr<FileSystemOperation> operation,
                                  base::WeakPtr<BeginOperationScoper> scope);
   void FinishOperation(OperationID id);
 
   // Not owned; file_system_context owns this.
   FileSystemContext* file_system_context_;
 
-  // IDMap<FileSystemOperation, IDMapOwnPointer> operations_;
-  IDMap<FileSystemOperation, IDMapOwnPointer> operations_;
+  // IDMap<std::unique_ptr<FileSystemOperation>> operations_;
+  IDMap<std::unique_ptr<FileSystemOperation>> operations_;
 
   // We keep track of the file to be modified by each operation so that
   // we can notify observers when we're done.

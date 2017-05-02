@@ -60,6 +60,15 @@ source_set("app_shell_lib") {
     "//v8",
   ]
 
+  # TODO(michaelpg): remove Mac support and always use aura.
+  if (use_aura) {
+    deps += [ "//ui/aura" ]
+
+    if (use_x11) {
+      deps += [ "//ui/events" ]
+    }
+  }
+
   sources = [
     "app/paths_mac.h",
     "app/paths_mac.mm",
@@ -155,6 +164,8 @@ source_set("app_shell_lib") {
 
   if (use_aura) {
     sources += [
+      "browser/input_method_event_handler.cc",
+      "browser/input_method_event_handler.h",
       "browser/shell_app_window_client_aura.cc",
       "browser/shell_desktop_controller_aura.cc",
       "browser/shell_desktop_controller_aura.h",
@@ -171,7 +182,7 @@ source_set("app_shell_lib") {
     deps += [
       "//chromeos",
       "//ui/chromeos",
-      "//ui/display",
+      "//ui/display/manager",
     ]
   }
 

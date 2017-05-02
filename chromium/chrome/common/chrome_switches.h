@@ -9,6 +9,7 @@
 #define CHROME_COMMON_CHROME_SWITCHES_H_
 
 #include "build/build_config.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
 // Don't add more switch files here. This is linked into some places like the
@@ -33,7 +34,6 @@ namespace switches {
 extern const char kAllowCrossOriginAuthPrompt[];
 extern const char kAllowFileAccess[];
 extern const char kAllowHttpScreenCapture[];
-extern const char kAllowInsecureLocalhost[];
 extern const char kAllowOutdatedPlugins[];
 extern const char kAllowRunningInsecureContent[];
 extern const char kAllowSilentPush[];
@@ -87,19 +87,14 @@ extern const char kDisableMinimizeOnSecondLauncherItemClick[];
 extern const char kDisableNewBookmarkApps[];
 extern const char kDisableOfflineAutoReload[];
 extern const char kDisableOfflineAutoReloadVisibleOnly[];
-extern const char kDisableOutOfProcessPac[];
 extern const char kDisablePermissionActionReporting[];
-extern const char kDisablePermissionsBlacklist[];
 extern const char kDisablePopupBlocking[];
 extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
 extern const char kDisableQuic[];
-extern const char kDisableQuicPortSelection[];
 extern const char kDisableSettingsWindow[];
-extern const char kDisableSiteEngagementService[];
 extern const char kDisableWebNotificationCustomLayouts[];
-extern const char kDisableWebUsbSecurity[];
 extern const char kDisableZeroBrowsersOpenForTests[];
 extern const char kDiskCacheDir[];
 extern const char kDiskCacheSize[];
@@ -107,8 +102,8 @@ extern const char kDnsLogDetails[];
 extern const char kDumpBrowserHistograms[];
 extern const char kEasyUnlockAppPath[];
 extern const char kEnableAddToShelf[];
-extern const char kEnableAppsFileAssociations[];
 extern const char kEnableAudioDebugRecordingsFromExtension[];
+extern const char kEnableAutomation[];
 extern const char kEnableBenchmarking[];
 extern const char kEnableBookmarkUndo[];
 extern const char kEnableClearBrowsingDataCounters[];
@@ -129,25 +124,20 @@ extern const char kEnableNewBookmarkApps[];
 extern const char kEnableOfflineAutoReload[];
 extern const char kEnableOfflineAutoReloadVisibleOnly[];
 extern const char kEnablePermissionActionReporting[];
-extern const char kEnablePermissionsBlacklist[];
 extern const char kEnablePotentiallyAnnoyingSecurityFeatures[];
 extern const char kEnablePowerOverlay[];
 extern const char kEnablePrintPreviewRegisterPromos[];
 extern const char kEnableProfiling[];
 extern const char kEnablePushApiBackgroundMode[];
 extern const char kEnableQuic[];
-extern const char kEnableQuicPortSelection[];
 extern const char kEnableSaveAsMenuLabelExperiment[];
 extern const char kEnableSettingsWindow[];
-extern const char kEnableSiteEngagementAppBanner[];
 extern const char kEnableSiteEngagementEvictionPolicy[];
-extern const char kEnableSiteEngagementService[];
 extern const char kEnableSiteSettings[];
 extern const char kEnableSupervisedUserManagedBookmarksFolder[];
 extern const char kEnableTabAudioMuting[];
 extern const char kEnableThumbnailRetargeting[];
 extern const char kEnableUserAlternateProtocolPorts[];
-extern const char kEnableWebAppFrame[];
 extern const char kEnableWebNotificationCustomLayouts[];
 extern const char kEnableWebRtcEventLoggingFromExtension[];
 extern const char kExtensionContentVerification[];
@@ -176,17 +166,9 @@ extern const char kInterestsURL[];
 extern const char kKeepAliveForTest[];
 extern const char kKioskMode[];
 extern const char kKioskModePrinting[];
-extern const char kLoadComponentExtension[];
 extern const char kLoadExtension[];
 extern const char kLoadMediaRouterComponentExtension[];
 extern const char kMakeDefaultBrowser[];
-extern const char kSecurityChip[];
-extern const char kSecurityChipShowNonSecureOnly[];
-extern const char kSecurityChipShowAll[];
-extern const char kSecurityChipAnimation[];
-extern const char kSecurityChipAnimationNone[];
-extern const char kSecurityChipAnimationNonSecureOnly[];
-extern const char kSecurityChipAnimationAll[];
 extern const char kMediaCacheSize[];
 extern const char kMetricsRecordingOnly[];
 extern const char kMonitoringDestinationID[];
@@ -216,10 +198,6 @@ extern const char kPrerenderFromOmnibox[];
 extern const char kPrerenderFromOmniboxSwitchValueAuto[];
 extern const char kPrerenderFromOmniboxSwitchValueDisabled[];
 extern const char kPrerenderFromOmniboxSwitchValueEnabled[];
-extern const char kPrerenderMode[];
-extern const char kPrerenderModeSwitchValueDisabled[];
-extern const char kPrerenderModeSwitchValueEnabled[];
-extern const char kPrerenderModeSwitchValuePrefetch[];
 extern const char kPrivetIPv6Only[];
 extern const char kProductVersion[];
 extern const char kProfileDirectory[];
@@ -229,7 +207,6 @@ extern const char kProxyAutoDetect[];
 extern const char kProxyBypassList[];
 extern const char kProxyPacUrl[];
 extern const char kProxyServer[];
-extern const char kPurgeAndSuspendTime[];
 extern const char kQuicConnectionOptions[];
 extern const char kQuicHostWhitelist[];
 extern const char kQuicMaxPacketLength[];
@@ -237,10 +214,6 @@ extern const char kQuicVersion[];
 extern const char kRemoteDebuggingTargets[];
 extern const char kRestoreLastSession[];
 extern const char kSavePageAsMHTML[];
-extern const char kSbDisableAutoUpdate[];
-extern const char kSbDisableDownloadProtection[];
-extern const char kSbDisableExtensionBlacklist[];
-extern const char kSbManualDownloadBlacklist[];
 extern const char kServiceProcess[];
 extern const char kShowAppList[];
 extern const char kSilentDebuggerExtensionAPI[];
@@ -253,12 +226,12 @@ extern const char kSimulateUpgrade[];
 extern const char kSpeculativeResourcePrefetching[];
 extern const char kSpeculativeResourcePrefetchingDisabled[];
 extern const char kSpeculativeResourcePrefetchingEnabled[];
+extern const char kSpeculativeResourcePrefetchingEnabledExternal[];
 extern const char kSpeculativeResourcePrefetchingLearning[];
 extern const char kSSLKeyLogFile[];
 extern const char kStartMaximized[];
 extern const char kStartStackProfiler[];
 extern const char kSupervisedUserId[];
-extern const char kSupervisedUserSafeSites[];
 extern const char kSupervisedUserSyncToken[];
 extern const char kSystemLogUploadFrequency[];
 extern const char kTestName[];
@@ -269,8 +242,6 @@ extern const char kUnsafePacUrl[];
 extern const char kUserAgent[];
 extern const char kUserDataDir[];
 extern const char kUseSimpleCacheBackend[];
-extern const char kV8PacMojoInProcess[];
-extern const char kV8PacMojoOutOfProcess[];
 extern const char kValidateCrx[];
 extern const char kVersion[];
 extern const char kWindowPosition[];
@@ -291,15 +262,12 @@ extern const char kLocalNtpReload[];
 extern const char kAuthAndroidNegotiateAccountType[];
 extern const char kDisableAppLink[];
 extern const char kDisableContextualSearch[];
-extern const char kDisableVrShell[];
 extern const char kEnableAccessibilityTabSwitcher[];
 extern const char kEnableAppLink[];
 extern const char kEnableContextualSearch[];
 extern const char kEnableContextualSearchContextualCardsBarIntegration[];
 extern const char kEnableHostedMode[];
 extern const char kEnableHungRendererInfoBar[];
-extern const char kEnableVrShell[];
-extern const char kEnableWebApk[];
 extern const char kForceShowUpdateMenuBadge[];
 extern const char kForceShowUpdateMenuItem[];
 extern const char kForceShowUpdateMenuItemCustomSummary[];
@@ -310,10 +278,12 @@ extern const char kNtpSwitchToExistingTab[];
 extern const char kProgressBarAnimation[];
 extern const char kTabManagementExperimentTypeDisabled[];
 extern const char kTabManagementExperimentTypeElderberry[];
+extern const char kWebApkServerUrl[];
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 extern const char kEnableNativeCups[];
+extern const char kCroshCommand[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_ASH)
@@ -375,7 +345,7 @@ extern const char kWindows8Search[];
 extern const char kDebugPrint[];
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 extern const char kAllowNaClCrxFsAPI[];
 extern const char kAllowNaClFileHandleAPI[];
 extern const char kAllowNaClSocketAPI[];

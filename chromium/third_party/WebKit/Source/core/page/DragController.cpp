@@ -26,7 +26,7 @@
 
 #include "core/page/DragController.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/clipboard/DataObject.h"
@@ -46,7 +46,6 @@
 #include "core/editing/commands/DragAndDropCommand.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/TextEvent.h"
-#include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
@@ -64,11 +63,13 @@
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/DragData.h"
 #include "core/page/DragSession.h"
 #include "core/page/DragState.h"
 #include "core/page/Page.h"
+#include "core/svg/graphics/SVGImageForContainer.h"
 #include "platform/DragImage.h"
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/IntRect.h"
@@ -122,8 +123,7 @@ static PlatformMouseEvent createMouseEvent(DragData* dragData) {
       dragData->clientPosition(), dragData->globalPosition(),
       WebPointerProperties::Button::Left, PlatformEvent::MouseMoved, 0,
       static_cast<PlatformEvent::Modifiers>(dragData->modifiers()),
-      PlatformMouseEvent::RealOrIndistinguishable,
-      monotonicallyIncreasingTime());
+      PlatformMouseEvent::RealOrIndistinguishable, TimeTicks::Now());
 }
 
 static DataTransfer* createDraggingDataTransfer(DataTransferAccessPolicy policy,
@@ -213,11 +213,7 @@ void DragController::dragExited(DragData* dragData, LocalFrame& localRoot) {
 
   FrameView* frameView(localRoot.view());
   if (frameView) {
-    DataTransferAccessPolicy policy =
-        (!m_documentUnderMouse ||
-         m_documentUnderMouse->getSecurityOrigin()->isLocal())
-            ? DataTransferReadable
-            : DataTransferTypesReadable;
+    DataTransferAccessPolicy policy = DataTransferTypesReadable;
     DataTransfer* dataTransfer = createDraggingDataTransfer(policy, dragData);
     dataTransfer->setSourceOperation(dragData->draggingSourceOperationMask());
     localRoot.eventHandler().cancelDragAndDrop(createMouseEvent(dragData),
@@ -280,7 +276,7 @@ bool DragController::performDrag(DragData* dragData, LocalFrame& localRoot) {
   if (operationForLoad(dragData, localRoot) == DragOperationNone)
     return false;
 
-  if (m_page->settings().navigateOnDragDrop()) {
+  if (m_page->settings().getNavigateOnDragDrop()) {
     m_page->mainFrame()->navigate(
         FrameLoadRequest(nullptr, ResourceRequest(dragData->asURL())));
   }
@@ -718,10 +714,7 @@ bool DragController::tryDHTMLDrag(DragData* dragData,
   if (!localRoot.view())
     return false;
 
-  DataTransferAccessPolicy policy =
-      m_documentUnderMouse->getSecurityOrigin()->isLocal()
-          ? DataTransferReadable
-          : DataTransferTypesReadable;
+  DataTransferAccessPolicy policy = DataTransferTypesReadable;
   DataTransfer* dataTransfer = createDraggingDataTransfer(policy, dragData);
   DragOperation srcOpMask = dragData->draggingSourceOperationMask();
   dataTransfer->setSourceOperation(srcOpMask);
@@ -784,7 +777,7 @@ Node* DragController::draggableNode(const LocalFrame* src,
       // Even if the image is part of a selection, we always only drag the image
       // in this case.
       if (layoutObject->isImage() && src->settings() &&
-          src->settings()->loadsImagesAutomatically()) {
+          src->settings()->getLoadsImagesAutomatically()) {
         dragType = DragSourceActionImage;
         return node;
       }
@@ -828,7 +821,7 @@ Node* DragController::draggableNode(const LocalFrame* src,
   return node;
 }
 
-static ImageResource* getImageResource(Element* element) {
+static ImageResourceContent* getImageResource(Element* element) {
   DCHECK(element);
   LayoutObject* layoutObject = element->layoutObject();
   if (!layoutObject || !layoutObject->isImage())
@@ -839,7 +832,7 @@ static ImageResource* getImageResource(Element* element) {
 
 static Image* getImage(Element* element) {
   DCHECK(element);
-  ImageResource* cachedImage = getImageResource(element);
+  ImageResourceContent* cachedImage = getImageResource(element);
   return (cachedImage && !cachedImage->errorOccurred())
              ? cachedImage->getImage()
              : nullptr;
@@ -981,6 +974,16 @@ static std::unique_ptr<DragImage> dragImageForImage(
     IntPoint& dragLocation) {
   std::unique_ptr<DragImage> dragImage;
   IntPoint origin;
+
+  // Substitute an appropriately-sized SVGImageForContainer, to ensure dragged
+  // SVG images scale seamlessly.
+  RefPtr<SVGImageForContainer> svgImage;
+  if (image->isSVGImage()) {
+    KURL url = element->document().completeURL(element->imageSourceURL());
+    svgImage = SVGImageForContainer::create(toSVGImage(image),
+                                            imageElementSizeInPixels, 1, url);
+    image = svgImage.get();
+  }
 
   InterpolationQuality interpolationQuality =
       element->ensureComputedStyle()->imageRendering() ==

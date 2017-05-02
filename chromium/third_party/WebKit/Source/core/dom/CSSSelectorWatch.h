@@ -66,9 +66,6 @@ class CORE_EXPORT CSSSelectorWatch final
  private:
   explicit CSSSelectorWatch(Document&);
   void callbackSelectorChangeTimerFired(TimerBase*);
-  Document& document() const { return *m_document; }
-
-  Member<Document> m_document;
 
   HeapVector<Member<StyleRule>> m_watchedCallbackSelectors;
 
@@ -80,7 +77,7 @@ class CORE_EXPORT CSSSelectorWatch final
   HashSet<String> m_addedSelectors;
   HashSet<String> m_removedSelectors;
 
-  Timer<CSSSelectorWatch> m_callbackSelectorChangeTimer;
+  TaskRunnerTimer<CSSSelectorWatch> m_callbackSelectorChangeTimer;
 
   // When an element is reparented, the new location's style is evaluated after
   // the expriation of the relayout timer.  We don't want to send redundant

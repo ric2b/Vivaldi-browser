@@ -18,6 +18,7 @@
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "base/memory/ptr_util.h"
 #include "grit/ash_resources.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/nine_image_painter_factory.h"
@@ -113,15 +114,6 @@ class TrayBackgroundView::TrayWidgetObserver : public views::WidgetObserver {
 
 class TrayBackground : public views::Background {
  public:
-  const static int kImageTypeDefault = 0;
-  const static int kImageTypeOnBlack = 1;
-  const static int kImageTypePressed = 2;
-  const static int kNumStates = 3;
-
-  const static int kImageHorizontal = 0;
-  const static int kImageVertical = 1;
-  const static int kNumOrientations = 2;
-
   TrayBackground(TrayBackgroundView* tray_background_view, bool draws_active)
       : tray_background_view_(tray_background_view),
         draws_active_(draws_active),
@@ -153,7 +145,19 @@ class TrayBackground : public views::Background {
   }
 
   void PaintNonMaterial(gfx::Canvas* canvas, views::View* view) const {
+    const static int kImageTypeDefault = 0;
+    // TODO(estade): leftover type which should be removed along with the rest
+    // of pre-MD code.
+    // const static int kImageTypeOnBlack = 1;
+    const static int kImageTypePressed = 2;
+    const static int kNumStates = 3;
+
+    const static int kImageHorizontal = 0;
+    const static int kImageVertical = 1;
+    const static int kNumOrientations = 2;
+
     const int kGridSizeForPainter = 9;
+
     const int kImages[kNumOrientations][kNumStates][kGridSizeForPainter] = {
         {
             // Horizontal
@@ -176,8 +180,6 @@ class TrayBackground : public views::Background {
     int state = kImageTypeDefault;
     if (draws_active_ && tray_background_view_->is_active())
       state = kImageTypePressed;
-    else if (shelf->IsDimmed())
-      state = kImageTypeOnBlack;
     else
       state = kImageTypeDefault;
 
@@ -526,20 +528,12 @@ views::View* TrayBackgroundView::GetBubbleAnchor() const {
 gfx::Insets TrayBackgroundView::GetBubbleAnchorInsets() const {
   gfx::Insets anchor_insets = GetBubbleAnchor()->GetInsets();
   gfx::Insets tray_bg_insets = GetInsets();
-  // TODO(estade): for reasons I don't understand, BubbleBorder distances the
-  // bubble by the arrow's "interior" thickness even when the paint type is
-  // PAINT_NONE.
-  const int kBigShadowArrowInteriorThickness = 9;
   if (GetAnchorAlignment() == TrayBubbleView::ANCHOR_ALIGNMENT_BOTTOM) {
-    return gfx::Insets(kBigShadowArrowInteriorThickness - tray_bg_insets.top(),
-                       anchor_insets.left(), -tray_bg_insets.bottom(),
-                       anchor_insets.right());
+    return gfx::Insets(-tray_bg_insets.top(), anchor_insets.left(),
+                       -tray_bg_insets.bottom(), anchor_insets.right());
   } else {
-    return gfx::Insets(
-        anchor_insets.top(),
-        kBigShadowArrowInteriorThickness - tray_bg_insets.left(),
-        anchor_insets.bottom(),
-        kBigShadowArrowInteriorThickness - tray_bg_insets.right());
+    return gfx::Insets(anchor_insets.top(), -tray_bg_insets.left(),
+                       anchor_insets.bottom(), -tray_bg_insets.right());
   }
 }
 
@@ -568,17 +562,20 @@ void TrayBackgroundView::HandlePerformActionResult(bool action_performed,
   ActionableView::HandlePerformActionResult(action_performed, event);
 }
 
-gfx::Rect TrayBackgroundView::GetFocusBounds() {
+void TrayBackgroundView::OnPaintFocus(gfx::Canvas* canvas) {
   // The tray itself expands to the right and bottom edge of the screen to make
   // sure clicking on the edges brings up the popup. However, the focus border
   // should be only around the container.
-  return GetContentsBounds();
-}
-
-void TrayBackgroundView::OnPaintFocus(gfx::Canvas* canvas) {
-  gfx::Rect paint_bounds(GetFocusBounds());
-  paint_bounds.Inset(2, -2, 3, -2);
-  canvas->DrawSolidFocusRect(paint_bounds, kFocusBorderColor);
+  gfx::RectF paint_bounds;
+  if (MaterialDesignController::IsShelfMaterial()) {
+    paint_bounds = gfx::RectF(GetBackgroundBounds());
+    paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
+  } else {
+    paint_bounds = gfx::RectF(GetContentsBounds());
+    paint_bounds.Inset(gfx::Insets(1));
+  }
+  canvas->DrawSolidFocusRect(paint_bounds, kFocusBorderColor,
+                             kFocusBorderThickness);
 }
 
 void TrayBackgroundView::OnPaint(gfx::Canvas* canvas) {

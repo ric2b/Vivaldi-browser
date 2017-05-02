@@ -49,9 +49,20 @@ config("mojo_media_config") {
 component("services") {
   output_name = "media_mojo_services"
 
+  public_deps = [
+    ":lib",
+  ]
+}
+
+# TODO(xhwang): Add this intermediate target because ServiceTest doesn't support
+# services that depend on shared libraries in component build.
+# See http://crbug.com/670094
+source_set("lib") {
   sources = [
     "demuxer_stream_provider_shim.cc",
     "demuxer_stream_provider_shim.h",
+    "gpu_mojo_media_client.cc",
+    "gpu_mojo_media_client.h",
     "interface_factory_impl.cc",
     "interface_factory_impl.h",
     "media_mojo_export.h",
@@ -81,6 +92,7 @@ component("services") {
     "mojo_renderer_service.h",
     "mojo_video_decoder_service.cc",
     "mojo_video_decoder_service.h",
+    "strong_binding_set.h",
     "test_mojo_media_client.cc",
     "test_mojo_media_client.h",
   ]
@@ -120,46 +132,60 @@ component("services") {
 service("media") {
   testonly = true
 
+  # crbug.com/676418: Suppress symbol import warnings.
+  if (is_win && is_component_build) {
+    ldflags = [ "/ignore:4217" ]
+  }
+
   sources = [
     "main.cc",
   ]
 
   public_deps = [
-    ":services",
     "//base",
     "//media",
   ]
 
   deps = [
+    ":lib",
     "//mojo/public/c/system",
     "//services/service_manager/public/cpp",
   ]
-}
-
-test("media_mojo_shell_unittests") {
-  testonly = true
-
-  sources = [
-    "media_mojo_unittest.cc",
-  ]
-
-  deps = [
-    "//media",
-    "//media/base:test_support",
-    "//media/mojo/clients",
-    "//media/mojo/common",
-    "//media/mojo/interfaces",
-    "//services/service_manager/public/cpp:service_test_support",
-    "//services/service_manager/public/cpp/test:run_all_service_tests",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
 
   data_deps = [
-    "//media/mojo/services:test_manifest",
-    "//media/mojo/services:media",
+    ":media_manifest",
   ]
 }
+
+# crbug.com/676055: media_service_unittests currently fails to link in Windows
+# component builds, so don't declare it, otherwise the "all" target will still
+# try to build it.
+if (!(is_win && is_component_build)) {
+  test("media_service_unittests") {
+    testonly = true
+
+    sources = [
+      "media_service_unittest.cc",
+    ]
+
+    deps = [
+      "//media",
+      "//media/base:test_support",
+      "//media/mojo/clients",
+      "//media/mojo/common",
+      "//media/mojo/interfaces",
+      "//services/service_manager/public/cpp:service_test_support",
+      "//services/service_manager/public/cpp/test:run_all_service_tests",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+
+    data_deps = [
+      ":media",
+      ":test_manifest",
+    ]
+  }
+}  # !(is_win && is_component_build)
 
 service_manifest("media_manifest") {
   name = "media"
@@ -167,7 +193,7 @@ service_manifest("media_manifest") {
 }
 
 service_manifest("test_manifest") {
-  name = "media_mojo_shell_unittests"
+  name = "media_service_unittests"
   source = "test_manifest.json"
 }
 

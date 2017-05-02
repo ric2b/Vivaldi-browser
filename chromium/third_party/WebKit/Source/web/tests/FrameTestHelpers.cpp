@@ -138,11 +138,11 @@ void loadHistoryItem(WebFrame* frame,
 }
 
 void reloadFrame(WebFrame* frame) {
-  frame->reload(WebFrameLoadType::Reload);
+  frame->reload(WebFrameLoadType::ReloadMainResource);
   pumpPendingRequestsForFrameToLoad(frame);
 }
 
-void reloadFrameIgnoringCache(WebFrame* frame) {
+void reloadFrameBypassingCache(WebFrame* frame) {
   frame->reload(WebFrameLoadType::ReloadBypassingCache);
   pumpPendingRequestsForFrameToLoad(frame);
 }
@@ -158,11 +158,9 @@ WebMouseEvent createMouseEvent(WebInputEvent::Type type,
                                WebMouseEvent::Button button,
                                const IntPoint& point,
                                int modifiers) {
-  WebMouseEvent result;
-  result.type = type;
+  WebMouseEvent result(type, modifiers, WebInputEvent::TimeStampForTesting);
   result.x = result.windowX = result.globalX = point.x();
   result.y = result.windowX = result.globalX = point.y();
-  result.modifiers = modifiers;
   result.button = button;
   result.clickCount = 1;
   return result;
@@ -229,8 +227,6 @@ WebViewImpl* WebViewHelper::initializeWithOpener(
   m_webView->settings()->setLoadsImagesAutomatically(true);
   if (updateSettingsFunc)
     updateSettingsFunc(m_webView->settings());
-  else
-    m_webView->settings()->setDeviceSupportsMouse(false);
   if (m_settingOverrider)
     m_settingOverrider->overrideSettings(m_webView->settings());
   m_webView->setDeviceScaleFactor(
@@ -293,6 +289,26 @@ void WebViewHelper::resize(WebSize size) {
 
 TestWebFrameClient::TestWebFrameClient() {}
 
+// TODO(dcheng): https://crbug.com/578349 tracks the removal of this code. This
+// override exists only to handle the confusing provisional frame case.
+void TestWebFrameClient::frameDetached(WebLocalFrame* frame, DetachType type) {
+  if (type == DetachType::Remove && frame->parent()) {
+    // Since this may be detaching a provisional frame, make sure |child| is
+    // actually linked into the frame tree (i.e. it is present in its parent
+    // node's children list) before trying to remove it as a child.
+    for (WebFrame* child = frame->parent()->firstChild(); child;
+         child = child->nextSibling()) {
+      if (child == frame)
+        frame->parent()->removeChild(frame);
+    }
+  }
+
+  if (frame->frameWidget())
+    frame->frameWidget()->close();
+
+  frame->close();
+}
+
 WebLocalFrame* TestWebFrameClient::createChildFrame(
     WebLocalFrame* parent,
     WebTreeScopeType scope,
@@ -325,16 +341,13 @@ void TestWebRemoteFrameClient::frameDetached(DetachType type) {
   m_frame->close();
 }
 
-void TestWebViewClient::initializeLayerTreeView() {
-  m_layerTreeView = wrapUnique(new WebLayerTreeViewImplForTesting);
+WebLayerTreeView* TestWebViewClient::initializeLayerTreeView() {
+  m_layerTreeView = WTF::wrapUnique(new WebLayerTreeViewImplForTesting);
+  return m_layerTreeView.get();
 }
 
-void TestWebViewWidgetClient::initializeLayerTreeView() {
-  m_testWebViewClient->initializeLayerTreeView();
-}
-
-WebLayerTreeView* TestWebViewWidgetClient::layerTreeView() {
-  return m_testWebViewClient->layerTreeView();
+WebLayerTreeView* TestWebViewWidgetClient::initializeLayerTreeView() {
+  return m_testWebViewClient->initializeLayerTreeView();
 }
 
 void TestWebViewWidgetClient::scheduleAnimation() {

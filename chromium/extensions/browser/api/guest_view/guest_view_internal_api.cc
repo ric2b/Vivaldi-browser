@@ -17,6 +17,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
@@ -65,35 +66,56 @@ bool GuestViewInternalCreateGuestFunction::RunAsync() {
   // in logical units.
   create_params->SetBoolean(guest_view::kElementSizeIsLogical, true);
 
-  GuestViewBase* guest = nullptr;
+  if (GetExternalWebContents(create_params)) {
+    return true;
+  }
+
+  guest_view_manager->CreateGuest(view_type,
+                                  sender_web_contents,
+                                  *create_params,
+                                  callback);
+  return true;
+}
+
+bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
+    base::DictionaryValue* create_params) {
+  GuestViewManager::WebContentsCreatedCallback callback = base::Bind(
+      &GuestViewInternalCreateGuestFunction::CreateGuestCallback, this);
+  content::WebContents* contents = nullptr;
+
   std::string tab_id_as_string;
+  std::string guest_id_str;
   if (create_params->GetString("tab_id", &tab_id_as_string)) {
     int tab_id = atoi(tab_id_as_string.c_str());
-    content::WebContents* contents = NULL;
     int tab_index = 0;
     bool include_incognito = true;
     Profile* profile = Profile::FromBrowserContext(context_);
     Browser* browser;
     TabStripModel* tab_strip;
     extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
-      &browser, &tab_strip, &contents, &tab_index);
-    guest = GuestViewBase::FromWebContents(contents);
-    if(guest) {
-      // If there is a guest with the WebContents already in the tabstrip then
-      // use this. This is done through the WebContentsImpl::CreateNewWindow
-      // code-path. Ie. clicking a link in a webpage with target set. The guest
-      // has been created with
-      // GuestViewManager::CreateGuestWithWebContentsParams.
-      callback.Run(guest->web_contents());
-    }
+                                             &browser, &tab_strip, &contents,
+                                             &tab_index);
+  } else if (create_params->GetString("guestcontent_id", &guest_id_str)) {
+    int guest_id = atoi(guest_id_str.c_str());
+    int ownerprocessid = render_frame_host()->GetProcess()->GetID();
+    contents = GuestViewManager::FromBrowserContext(browser_context())
+                   ->GetGuestByInstanceIDSafely(guest_id, ownerprocessid);
+    TabSpecificContentSettings::CreateForWebContents(contents);
   }
-  if (!guest) {
-  guest_view_manager->CreateGuest(view_type,
-                                  sender_web_contents,
-                                  *create_params,
-                                  callback);
+
+  GuestViewBase* guest = nullptr;
+  guest = GuestViewBase::FromWebContents(contents);
+
+  if (guest) {
+    // If there is a guest with the WebContents already in the tabstrip then
+    // use this. This is done through the WebContentsImpl::CreateNewWindow
+    // code-path. Ie. clicking a link in a webpage with target set. The guest
+    // has been created with
+    // GuestViewManager::CreateGuestWithWebContentsParams.
+    callback.Run(guest->web_contents());
+    return true;
   }
-  return true;
+  return false;
 }
 
 void GuestViewInternalCreateGuestFunction::CreateGuestCallback(

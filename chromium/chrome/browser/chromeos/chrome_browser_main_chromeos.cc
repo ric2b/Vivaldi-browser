@@ -51,6 +51,7 @@
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/language_preferences.h"
+#include "chrome/browser/chromeos/libc_close_tracking.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
@@ -65,6 +66,7 @@
 #include "chrome/browser/chromeos/net/network_pref_state_observer.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
+#include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/options/cert_library.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -103,6 +105,7 @@
 #include "chromeos/cert_loader.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/components/tether/initializer.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/homedir_methods.h"
@@ -134,6 +137,7 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
+#include "components/version_info/version_info.h"
 #include "components/wallpaper/wallpaper_manager_base.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -146,12 +150,13 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "printing/backend/print_backend.h"
+#include "rlz/features/features.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/events/event_utils.h"
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"
 #endif
 
@@ -354,6 +359,18 @@ void ChromeBrowserMainPartsChromeos::PreEarlyInitialization() {
     chrome::SetChannel(channel);
 #endif
 
+  // Start monitoring OOM kills.
+  memory_kills_monitor_ = base::MakeUnique<memory::MemoryKillsMonitor::Handle>(
+      memory::MemoryKillsMonitor::StartMonitoring());
+
+  // Enable libc close tracking in browser process on unknown/canary channel for
+  // http://crbug.com/660960.
+  // TODO(xiyuan): Remove this.
+  if (chrome::GetChannel() == version_info::Channel::CANARY ||
+      chrome::GetChannel() == version_info::Channel::UNKNOWN) {
+    chromeos::InitCloseTracking();
+  }
+
   ChromeBrowserMainPartsLinux::PreEarlyInitialization();
 }
 
@@ -481,6 +498,9 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   }
 
   media::SoundsManager::Create();
+
+  // |arc_service_launcher_| must be initialized before NoteTakingHelper.
+  NoteTakingHelper::Initialize();
 
   AccessibilityManager::Initialize();
 
@@ -702,6 +722,10 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   if (!user_manager::UserManager::Get()->IsLoggedInAsGuest())
     low_disk_notification_ = base::MakeUnique<LowDiskNotification>();
 
+  if (parsed_command_line().HasSwitch(chromeos::switches::kEnableTether)) {
+    chromeos::tether::Initializer::Initialize();
+  }
+
   ChromeBrowserMainPartsLinux::PostProfileInit();
 }
 
@@ -749,6 +773,8 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   if (!chrome::IsRunningInMash()) {
+    system::InputDeviceSettings::Get()->UpdateTouchDevicesStatusFromPrefs();
+
     // These are dependent on the ash::Shell singleton already having been
     // initialized. Consequently, these cannot be used when running as a mus
     // client.
@@ -781,6 +807,9 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   chromeos::ResourceReporter::GetInstance()->StopMonitoring();
 
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
+
+  // This must be shut down before |arc_service_launcher_|.
+  NoteTakingHelper::Shutdown();
 
   arc_service_launcher_->Shutdown();
 
@@ -913,6 +942,8 @@ void ChromeBrowserMainPartsChromeos::PostDestroyThreads() {
 
   // Destroy DeviceSettingsService after g_browser_process.
   DeviceSettingsService::Shutdown();
+
+  chromeos::ShutdownCloseTracking();
 }
 
 }  //  namespace chromeos

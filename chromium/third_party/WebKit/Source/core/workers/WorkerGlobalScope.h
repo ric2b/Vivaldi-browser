@@ -37,7 +37,6 @@
 #include "core/fetch/CachedMetadataHandler.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/DOMWindowBase64.h"
-#include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerEventQueue.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -56,12 +55,13 @@ class WorkerLocation;
 class WorkerNavigator;
 class WorkerThread;
 
-class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
-                                      public ActiveScriptWrappable,
-                                      public SecurityContext,
-                                      public WorkerOrWorkletGlobalScope,
-                                      public Supplementable<WorkerGlobalScope>,
-                                      public DOMWindowBase64 {
+class CORE_EXPORT WorkerGlobalScope
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<WorkerGlobalScope>,
+      public SecurityContext,
+      public WorkerOrWorkletGlobalScope,
+      public Supplementable<WorkerGlobalScope>,
+      public DOMWindowBase64 {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(WorkerGlobalScope);
 
@@ -70,9 +70,6 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
   using SecurityContext::contentSecurityPolicy;
 
   ~WorkerGlobalScope() override;
-
-  virtual void countFeature(UseCounter::Feature) const;
-  virtual void countDeprecation(UseCounter::Feature) const;
 
   // Returns null if caching is not supported.
   virtual CachedMetadataHandler* createWorkerScriptCachedMetadataHandler(
@@ -86,6 +83,8 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
   // WorkerOrWorkletGlobalScope
   bool isClosing() const final { return m_closing; }
   virtual void dispose();
+  void countFeature(UseCounter::Feature) final;
+  void countDeprecation(UseCounter::Feature) final;
   WorkerThread* thread() const final { return m_thread; }
 
   void exceptionUnhandled(int exceptionId);
@@ -126,9 +125,7 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
   bool isContextThread() const final;
   void disableEval(const String& errorMessage) final;
   String userAgent() const final { return m_userAgent; }
-  void postTask(const WebTraceLocation&,
-                std::unique_ptr<ExecutionContextTask>,
-                const String& taskNameForInstrumentation) final;
+
   DOMTimerCoordinator* timers() final { return &m_timers; }
   SecurityContext& securityContext() final { return *this; }
   void addConsoleMessage(ConsoleMessage*) final;
@@ -191,8 +188,6 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
   mutable Member<WorkerLocation> m_location;
   mutable Member<WorkerNavigator> m_navigator;
 
-  mutable BitVector m_deprecationWarningBits;
-
   Member<WorkerOrWorkletScriptController> m_scriptController;
   WorkerThread* m_thread;
 
@@ -206,7 +201,7 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
 
   const double m_timeOrigin;
 
-  HeapListHashSet<Member<V8AbstractEventListener>> m_eventListeners;
+  HeapHashSet<Member<V8AbstractEventListener>> m_eventListeners;
 
   HeapHashMap<int, Member<ErrorEvent>> m_pendingErrorEvents;
   int m_lastPendingErrorEventId;

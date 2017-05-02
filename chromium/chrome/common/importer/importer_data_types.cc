@@ -17,13 +17,17 @@ SourceProfile::SourceProfile(const SourceProfile& other) = default;
 SourceProfile::~SourceProfile() {
 }
 
-#if defined(OS_WIN)
 ImporterIE7PasswordInfo::ImporterIE7PasswordInfo() {
 }
 
+ImporterIE7PasswordInfo::ImporterIE7PasswordInfo(
+    const ImporterIE7PasswordInfo& other) = default;
+
 ImporterIE7PasswordInfo::~ImporterIE7PasswordInfo() {
 }
-#endif
+
+ImporterIE7PasswordInfo& ImporterIE7PasswordInfo::operator=(
+    const ImporterIE7PasswordInfo& other) = default;
 
 ImportConfig::ImportConfig()
     : imported_items(0) {

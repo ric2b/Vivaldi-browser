@@ -33,6 +33,7 @@ namespace blink {
 
 class HitTestRequest;
 class HitTestResult;
+class InlineFlowBox;
 class LayoutObject;
 class RootInlineBox;
 
@@ -50,10 +51,6 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
         m_parent(nullptr),
         m_lineLayoutItem(obj),
         m_logicalWidth()
-#if ENABLE(ASSERT)
-        ,
-        m_hasBadParent(false)
-#endif
   {
   }
 
@@ -73,12 +70,8 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
         m_prev(prev),
         m_parent(parent),
         m_lineLayoutItem(item),
-        m_topLeft(topLeft),
+        m_location(topLeft),
         m_logicalWidth(logicalWidth)
-#if ENABLE(ASSERT)
-        ,
-        m_hasBadParent(false)
-#endif
   {
   }
 
@@ -169,11 +162,6 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
     m_bitfields.setIsHorizontal(isHorizontal);
   }
 
-  virtual LayoutRect calculateBoundaries() const {
-    ASSERT_NOT_REACHED();
-    return LayoutRect();
-  }
-
   bool isConstructed() { return m_bitfields.constructed(); }
   virtual void setConstructed() { m_bitfields.setConstructed(true); }
 
@@ -223,18 +211,22 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   const RootInlineBox& root() const;
   RootInlineBox& root();
 
-  // x() is the left side of the box in the containing block's coordinate
-  // system.
-  void setX(LayoutUnit x) { m_topLeft.setX(x); }
-  LayoutUnit x() const { return m_topLeft.x(); }
-  LayoutUnit left() const { return m_topLeft.x(); }
+  // x() is the location of the box in the containing block's "physical
+  // coordinates with flipped block-flow direction".
+  // See ../README.md#Coordinate-Spaces for the definition.
+  void setX(LayoutUnit x) { m_location.setX(x); }
+  LayoutUnit x() const { return m_location.x(); }
 
-  // y() is the top side of the box in the containing block's coordinate system.
-  void setY(LayoutUnit y) { m_topLeft.setY(y); }
-  LayoutUnit y() const { return m_topLeft.y(); }
-  LayoutUnit top() const { return m_topLeft.y(); }
+  // y() is the top side of the box in the containing block's physical
+  // coordinates. It's actually in the same coordinate space as x() but for y()
+  // physical coordinates and "physical coordinates with flipped block-flow
+  // direction" are the same.
+  void setY(LayoutUnit y) { m_location.setY(y); }
+  LayoutUnit y() const { return m_location.y(); }
 
-  const LayoutPoint& topLeft() const { return m_topLeft; }
+  // x() and y() in one LayoutPoint, in the containing block's "physical
+  // coordinates with flipped block-flow direction".
+  const LayoutPoint& location() const { return m_location; }
 
   LayoutUnit width() const {
     return isHorizontal() ? logicalWidth() : logicalHeight();
@@ -243,13 +235,11 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
     return isHorizontal() ? logicalHeight() : logicalWidth();
   }
   LayoutSize size() const { return LayoutSize(width(), height()); }
-  LayoutUnit right() const { return left() + width(); }
-  LayoutUnit bottom() const { return top() + height(); }
 
   // The logicalLeft position is the left edge of the line box in a horizontal
   // line and the top edge in a vertical line.
   LayoutUnit logicalLeft() const {
-    return isHorizontal() ? m_topLeft.x() : m_topLeft.y();
+    return isHorizontal() ? m_location.x() : m_location.y();
   }
   LayoutUnit logicalRight() const { return logicalLeft() + logicalWidth(); }
   void setLogicalLeft(LayoutUnit left) {
@@ -266,7 +256,7 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   // The logicalTop[ position is the top edge of the line box in a horizontal
   // line and the left edge in a vertical line.
   LayoutUnit logicalTop() const {
-    return isHorizontal() ? m_topLeft.y() : m_topLeft.x();
+    return isHorizontal() ? m_location.y() : m_location.x();
   }
   LayoutUnit logicalBottom() const { return logicalTop() + logicalHeight(); }
   void setLogicalTop(LayoutUnit top) {
@@ -286,9 +276,9 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   LayoutUnit logicalHeight() const;
 
   LayoutRect logicalFrameRect() const {
-    return isHorizontal() ? LayoutRect(m_topLeft.x(), m_topLeft.y(),
+    return isHorizontal() ? LayoutRect(m_location.x(), m_location.y(),
                                        m_logicalWidth, logicalHeight())
-                          : LayoutRect(m_topLeft.y(), m_topLeft.x(),
+                          : LayoutRect(m_location.y(), m_location.x(),
                                        m_logicalWidth, logicalHeight());
   }
 
@@ -302,8 +292,12 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   void setBidiLevel(unsigned char level) {
     m_bitfields.setBidiEmbeddingLevel(level);
   }
-  TextDirection direction() const { return bidiLevel() % 2 ? RTL : LTR; }
-  bool isLeftToRightDirection() const { return direction() == LTR; }
+  TextDirection direction() const {
+    return bidiLevel() % 2 ? TextDirection::kRtl : TextDirection::kLtr;
+  }
+  bool isLeftToRightDirection() const {
+    return direction() == TextDirection::kLtr;
+  }
   int caretLeftmostOffset() const {
     return isLeftToRightDirection() ? caretMinOffset() : caretMaxOffset();
   }
@@ -331,7 +325,7 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
                                       LayoutUnit& truncatedWidth,
                                       bool&);
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void setHasBadParent();
 #endif
 
@@ -360,7 +354,9 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
     return LineLayoutBoxModel(nullptr);
   }
 
-  LayoutPoint locationIncludingFlipping() const;
+  // Physical location of the top-left corner of the box in the containing
+  // block.
+  LayoutPoint physicalLocation() const;
 
   // Converts from a rect in the logical space of the InlineBox to one in the
   // physical space of the containing block. The logical space of an InlineBox
@@ -495,12 +491,6 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
 #undef ADD_BOOLEAN_BITFIELD
 
  private:
-  // Converts the given (top-left) position from the logical space of the
-  // InlineBox to the physical space of the containing block. The size indicates
-  // the size of the box whose point is being flipped.
-  LayoutPoint logicalPositionToPhysicalPoint(const LayoutPoint&,
-                                             const LayoutSize&) const;
-
   void setLineLayoutItemShouldDoFullPaintInvalidationIfNeeded();
 
   InlineBoxBitfields m_bitfields;
@@ -547,20 +537,20 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
   // For InlineFlowBox and InlineTextBox
   bool extracted() const { return m_bitfields.extracted(); }
 
-  LayoutPoint m_topLeft;
+  LayoutPoint m_location;
   LayoutUnit m_logicalWidth;
 
  private:
-#if ENABLE(ASSERT)
-  bool m_hasBadParent;
+#if DCHECK_IS_ON()
+  bool m_hasBadParent = false;
 #endif
 };
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
 inline InlineBox::~InlineBox() {}
 #endif
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 inline void InlineBox::setHasBadParent() {
   m_hasBadParent = true;
 }

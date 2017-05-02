@@ -77,7 +77,7 @@ void UpdateCommandsForVivaldi(CommandUpdater &command_updater_) {
   command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD, true);
   command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_DISK, true);
   command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD, true);
-
+  command_updater_.UpdateCommandEnabled(IDC_VIV_HISTORY_PANEL, true);
 }
 
 bool ExecuteVivaldiCommands(Browser *browser, int id) {
@@ -132,8 +132,10 @@ bool ExecuteVivaldiCommands(Browser *browser, int id) {
     case IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD:
     case IDC_VIV_CAPTURE_AREA_TO_DISK:
     case IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD:
+    case IDC_VIV_HISTORY_PANEL:
+      // The API is registered with a regular profile.
       extensions::ShowMenuAPI::GetFactoryInstance()
-        ->Get(browser->profile())->CommandExecuted(id);
+        ->Get(browser->profile()->GetOriginalProfile())->CommandExecuted(id);
       break;
 
     default:

@@ -736,7 +736,7 @@ static bool DecodeBlobData(const std::string& data,
     } else {
       if (!DecodeVarInt(&slice, &size) || size < 0)
         return false;
-      ret.push_back(IndexedDBBlobInfo(type, static_cast<uint64_t>(size), key));
+      ret.push_back(IndexedDBBlobInfo(type, size, key));
     }
   }
   output->swap(ret);
@@ -1339,7 +1339,7 @@ leveldb::Status IndexedDBBackingStore::CreateIDBDatabaseMetaData(
   return s;
 }
 
-bool IndexedDBBackingStore::UpdateIDBDatabaseIntVersion(
+void IndexedDBBackingStore::UpdateIDBDatabaseIntVersion(
     IndexedDBBackingStore::Transaction* transaction,
     int64_t row_id,
     int64_t version) {
@@ -1350,7 +1350,6 @@ bool IndexedDBBackingStore::UpdateIDBDatabaseIntVersion(
       transaction->transaction(),
       DatabaseMetaDataKey::Encode(row_id, DatabaseMetaDataKey::USER_VERSION),
       version);
-  return true;
 }
 
 // If you're deleting a range that contains user keys that have blob info, this
@@ -2269,7 +2268,7 @@ class IndexedDBBackingStore::Transaction::ChainedBlobWriterImpl
       ++iter_;
       WriteNextFile();
     } else {
-      callback_->Run(false);
+      callback_->Run(BlobWriteResult::FAILURE_ASYNC);
     }
   }
 
@@ -2291,11 +2290,11 @@ class IndexedDBBackingStore::Transaction::ChainedBlobWriterImpl
     }
     if (iter_ == blobs_.end()) {
       DCHECK(!self_ref_.get());
-      callback_->Run(true);
+      callback_->Run(BlobWriteResult::SUCCESS_ASYNC);
       return;
     } else {
       if (!backing_store_->WriteBlobFile(database_id_, *iter_, this)) {
-        callback_->Run(false);
+        callback_->Run(BlobWriteResult::FAILURE_ASYNC);
         return;
       }
       waiting_for_callback_ = true;
@@ -2308,6 +2307,9 @@ class IndexedDBBackingStore::Transaction::ChainedBlobWriterImpl
   WriteDescriptorVec::const_iterator iter_;
   int64_t database_id_;
   IndexedDBBackingStore* backing_store_;
+  // Callback result is useless as call stack is no longer transaction's
+  // operations queue. Errors are instead handled in
+  // IndexedDBTransaction::BlobWriteComplete.
   scoped_refptr<IndexedDBBackingStore::BlobWriteCallback> callback_;
   std::unique_ptr<FileWriterDelegate> delegate_;
   bool aborted_;
@@ -3201,16 +3203,18 @@ bool IndexedDBBackingStore::Cursor::Continue(const IndexedDBKey* key,
   DCHECK(!key || next_state == SEEK);
 
   if (cursor_options_.forward)
-    return ContinueNext(key, primary_key, next_state, s);
+    return ContinueNext(key, primary_key, next_state, s) ==
+           ContinueResult::DONE;
   else
-    return ContinuePrevious(key, primary_key, next_state, s);
+    return ContinuePrevious(key, primary_key, next_state, s) ==
+           ContinueResult::DONE;
 }
 
-bool IndexedDBBackingStore::Cursor::ContinueNext(
-    const IndexedDBKey* key,
-    const IndexedDBKey* primary_key,
-    IteratorState next_state,
-    leveldb::Status* s) {
+IndexedDBBackingStore::Cursor::ContinueResult
+IndexedDBBackingStore::Cursor::ContinueNext(const IndexedDBKey* key,
+                                            const IndexedDBKey* primary_key,
+                                            IteratorState next_state,
+                                            leveldb::Status* s) {
   DCHECK(cursor_options_.forward);
   DCHECK(!key || key->IsValid());
   DCHECK(!primary_key || primary_key->IsValid());
@@ -3226,7 +3230,7 @@ bool IndexedDBBackingStore::Cursor::ContinueNext(
         primary_key ? EncodeKey(*key, *primary_key) : EncodeKey(*key);
     *s = iterator_->Seek(leveldb_key);
     if (!s->ok())
-      return false;
+      return ContinueResult::LEVELDB_ERROR;
     // Cursor is at the next value already; don't advance it again below.
     next_state = READY;
   }
@@ -3238,14 +3242,14 @@ bool IndexedDBBackingStore::Cursor::ContinueNext(
     if (next_state == SEEK) {
       *s = iterator_->Next();
       if (!s->ok())
-        return false;
+        return ContinueResult::LEVELDB_ERROR;
     } else {
       next_state = SEEK;
     }
 
     // Fail if we've run out of data or gone past the cursor's bounds.
     if (!iterator_->IsValid() || IsPastBounds())
-      return false;
+      return ContinueResult::OUT_OF_BOUNDS;
 
     // TODO(jsbell): Document why this might be false. When do we ever not
     // seek into the range before starting cursor iteration?
@@ -3256,7 +3260,7 @@ bool IndexedDBBackingStore::Cursor::ContinueNext(
     // error then not fatal.
     if (!LoadCurrentRow(s)) {
       if (!s->ok())
-        return false;
+        return ContinueResult::LEVELDB_ERROR;
       continue;
     }
 
@@ -3271,14 +3275,14 @@ bool IndexedDBBackingStore::Cursor::ContinueNext(
     break;
   }
 
-  return true;
+  return ContinueResult::DONE;
 }
 
-bool IndexedDBBackingStore::Cursor::ContinuePrevious(
-    const IndexedDBKey* key,
-    const IndexedDBKey* primary_key,
-    IteratorState next_state,
-    leveldb::Status* s) {
+IndexedDBBackingStore::Cursor::ContinueResult
+IndexedDBBackingStore::Cursor::ContinuePrevious(const IndexedDBKey* key,
+                                                const IndexedDBKey* primary_key,
+                                                IteratorState next_state,
+                                                leveldb::Status* s) {
   DCHECK(!cursor_options_.forward);
   DCHECK(!key || key->IsValid());
   DCHECK(!primary_key || primary_key->IsValid());
@@ -3304,7 +3308,7 @@ bool IndexedDBBackingStore::Cursor::ContinuePrevious(
     if (next_state == SEEK) {
       *s = iterator_->Prev();
       if (!s->ok())
-        return false;
+        return ContinueResult::LEVELDB_ERROR;
     } else {
       next_state = SEEK;  // for subsequent iterations
     }
@@ -3313,7 +3317,7 @@ bool IndexedDBBackingStore::Cursor::ContinuePrevious(
     if (!iterator_->IsValid() || IsPastBounds()) {
       if (duplicate_key.IsValid())
         break;
-      return false;
+      return ContinueResult::OUT_OF_BOUNDS;
     }
 
     // TODO(jsbell): Document why this might be false. When do we ever not
@@ -3325,7 +3329,7 @@ bool IndexedDBBackingStore::Cursor::ContinuePrevious(
     // error then not fatal.
     if (!LoadCurrentRow(s)) {
       if (!s->ok())
-        return false;
+        return ContinueResult::LEVELDB_ERROR;
       continue;
     }
 
@@ -3372,14 +3376,14 @@ bool IndexedDBBackingStore::Cursor::ContinuePrevious(
 
     *s = iterator_->Seek(earliest_duplicate);
     if (!s->ok())
-      return false;
+      return ContinueResult::LEVELDB_ERROR;
     if (!LoadCurrentRow(s)) {
       DCHECK(!s->ok());
-      return false;
+      return ContinueResult::LEVELDB_ERROR;
     }
   }
 
-  return true;
+  return ContinueResult::DONE;
 }
 
 bool IndexedDBBackingStore::Cursor::HaveEnteredRange() const {
@@ -3809,7 +3813,8 @@ bool ObjectStoreCursorOptions(
     int64_t object_store_id,
     const IndexedDBKeyRange& range,
     blink::WebIDBCursorDirection direction,
-    IndexedDBBackingStore::Cursor::CursorOptions* cursor_options) {
+    IndexedDBBackingStore::Cursor::CursorOptions* cursor_options,
+    leveldb::Status* status) {
   cursor_options->database_id = database_id;
   cursor_options->object_store_id = object_store_id;
 
@@ -3832,8 +3837,6 @@ bool ObjectStoreCursorOptions(
     cursor_options->low_open = range.lower_open();
   }
 
-  leveldb::Status s;
-
   if (!upper_bound) {
     cursor_options->high_key =
         ObjectStoreDataKey::Encode(database_id, object_store_id, MaxIDBKey());
@@ -3842,11 +3845,8 @@ bool ObjectStoreCursorOptions(
       cursor_options->high_open = true;  // Not included.
     } else {
       // We need a key that exists.
-      // TODO(cmumford): Handle this error (crbug.com/363397)
-      if (!FindGreatestKeyLessThanOrEqual(transaction,
-                                          cursor_options->high_key,
-                                          &cursor_options->high_key,
-                                          &s))
+      if (!FindGreatestKeyLessThanOrEqual(transaction, cursor_options->high_key,
+                                          &cursor_options->high_key, status))
         return false;
       cursor_options->high_open = false;
     }
@@ -3858,9 +3858,8 @@ bool ObjectStoreCursorOptions(
     if (!cursor_options->forward) {
       // For reverse cursors, we need a key that exists.
       std::string found_high_key;
-      // TODO(cmumford): Handle this error (crbug.com/363397)
-      if (!FindGreatestKeyLessThanOrEqual(
-              transaction, cursor_options->high_key, &found_high_key, &s))
+      if (!FindGreatestKeyLessThanOrEqual(transaction, cursor_options->high_key,
+                                          &found_high_key, status))
         return false;
 
       // If the target key should not be included, but we end up with a smaller
@@ -3883,7 +3882,8 @@ bool IndexCursorOptions(
     int64_t index_id,
     const IndexedDBKeyRange& range,
     blink::WebIDBCursorDirection direction,
-    IndexedDBBackingStore::Cursor::CursorOptions* cursor_options) {
+    IndexedDBBackingStore::Cursor::CursorOptions* cursor_options,
+    leveldb::Status* status) {
   DCHECK(transaction);
   if (!KeyPrefix::ValidIds(database_id, object_store_id, index_id))
     return false;
@@ -3911,18 +3911,15 @@ bool IndexCursorOptions(
     cursor_options->low_open = range.lower_open();
   }
 
-  leveldb::Status s;
-
   if (!upper_bound) {
     cursor_options->high_key =
         IndexDataKey::EncodeMaxKey(database_id, object_store_id, index_id);
     cursor_options->high_open = false;  // Included.
 
-    if (!cursor_options->forward) {  // We need a key that exists.
-      if (!FindGreatestKeyLessThanOrEqual(transaction,
-                                          cursor_options->high_key,
-                                          &cursor_options->high_key,
-                                          &s))
+    if (!cursor_options->forward) {
+      // We need a key that exists.
+      if (!FindGreatestKeyLessThanOrEqual(transaction, cursor_options->high_key,
+                                          &cursor_options->high_key, status))
         return false;
       cursor_options->high_open = false;
     }
@@ -3933,9 +3930,8 @@ bool IndexCursorOptions(
 
     std::string found_high_key;
     // Seek to the *last* key in the set of non-unique keys
-    // TODO(cmumford): Handle this error (crbug.com/363397)
-    if (!FindGreatestKeyLessThanOrEqual(
-            transaction, cursor_options->high_key, &found_high_key, &s))
+    if (!FindGreatestKeyLessThanOrEqual(transaction, cursor_options->high_key,
+                                        &found_high_key, status))
       return false;
 
     // If the target key should not be included, but we end up with a smaller
@@ -3959,16 +3955,14 @@ IndexedDBBackingStore::OpenObjectStoreCursor(
     blink::WebIDBCursorDirection direction,
     leveldb::Status* s) {
   IDB_TRACE("IndexedDBBackingStore::OpenObjectStoreCursor");
-  *s = leveldb::Status::OK();
   LevelDBTransaction* leveldb_transaction = transaction->transaction();
   IndexedDBBackingStore::Cursor::CursorOptions cursor_options;
-  if (!ObjectStoreCursorOptions(leveldb_transaction,
-                                database_id,
-                                object_store_id,
-                                range,
-                                direction,
-                                &cursor_options))
+  // TODO(cmumford): Handle this error (crbug.com/363397)
+  if (!ObjectStoreCursorOptions(leveldb_transaction, database_id,
+                                object_store_id, range, direction,
+                                &cursor_options, s)) {
     return std::unique_ptr<IndexedDBBackingStore::Cursor>();
+  }
   std::unique_ptr<ObjectStoreCursorImpl> cursor(
       base::MakeUnique<ObjectStoreCursorImpl>(this, transaction, database_id,
                                               cursor_options));
@@ -3987,16 +3981,14 @@ IndexedDBBackingStore::OpenObjectStoreKeyCursor(
     blink::WebIDBCursorDirection direction,
     leveldb::Status* s) {
   IDB_TRACE("IndexedDBBackingStore::OpenObjectStoreKeyCursor");
-  *s = leveldb::Status::OK();
   LevelDBTransaction* leveldb_transaction = transaction->transaction();
   IndexedDBBackingStore::Cursor::CursorOptions cursor_options;
-  if (!ObjectStoreCursorOptions(leveldb_transaction,
-                                database_id,
-                                object_store_id,
-                                range,
-                                direction,
-                                &cursor_options))
+  // TODO(cmumford): Handle this error (crbug.com/363397)
+  if (!ObjectStoreCursorOptions(leveldb_transaction, database_id,
+                                object_store_id, range, direction,
+                                &cursor_options, s)) {
     return std::unique_ptr<IndexedDBBackingStore::Cursor>();
+  }
   std::unique_ptr<ObjectStoreKeyCursorImpl> cursor(
       base::MakeUnique<ObjectStoreKeyCursorImpl>(this, transaction, database_id,
                                                  cursor_options));
@@ -4019,13 +4011,8 @@ IndexedDBBackingStore::OpenIndexKeyCursor(
   *s = leveldb::Status::OK();
   LevelDBTransaction* leveldb_transaction = transaction->transaction();
   IndexedDBBackingStore::Cursor::CursorOptions cursor_options;
-  if (!IndexCursorOptions(leveldb_transaction,
-                          database_id,
-                          object_store_id,
-                          index_id,
-                          range,
-                          direction,
-                          &cursor_options))
+  if (!IndexCursorOptions(leveldb_transaction, database_id, object_store_id,
+                          index_id, range, direction, &cursor_options, s))
     return std::unique_ptr<IndexedDBBackingStore::Cursor>();
   std::unique_ptr<IndexKeyCursorImpl> cursor(
       base::MakeUnique<IndexKeyCursorImpl>(this, transaction, database_id,
@@ -4048,13 +4035,8 @@ IndexedDBBackingStore::OpenIndexCursor(
   IDB_TRACE("IndexedDBBackingStore::OpenIndexCursor");
   LevelDBTransaction* leveldb_transaction = transaction->transaction();
   IndexedDBBackingStore::Cursor::CursorOptions cursor_options;
-  if (!IndexCursorOptions(leveldb_transaction,
-                          database_id,
-                          object_store_id,
-                          index_id,
-                          range,
-                          direction,
-                          &cursor_options))
+  if (!IndexCursorOptions(leveldb_transaction, database_id, object_store_id,
+                          index_id, range, direction, &cursor_options, s))
     return std::unique_ptr<IndexedDBBackingStore::Cursor>();
   std::unique_ptr<IndexCursorImpl> cursor(
       new IndexCursorImpl(this, transaction, database_id, cursor_options));
@@ -4066,8 +4048,10 @@ IndexedDBBackingStore::OpenIndexCursor(
 
 IndexedDBBackingStore::Transaction::Transaction(
     IndexedDBBackingStore* backing_store)
-    : backing_store_(backing_store), database_id_(-1), committing_(false) {
-}
+    : backing_store_(backing_store),
+      database_id_(-1),
+      committing_(false),
+      ptr_factory_(this) {}
 
 IndexedDBBackingStore::Transaction::~Transaction() {
   DCHECK(!committing_);
@@ -4236,7 +4220,7 @@ leveldb::Status IndexedDBBackingStore::Transaction::CommitPhaseOne(
     // This call will zero out new_blob_entries and new_files_to_write.
     WriteNewBlobs(&new_blob_entries, &new_files_to_write, callback);
   } else {
-    callback->Run(true);
+    return callback->Run(BlobWriteResult::SUCCESS_SYNC);
   }
 
   return leveldb::Status::OK();
@@ -4341,22 +4325,36 @@ leveldb::Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
 class IndexedDBBackingStore::Transaction::BlobWriteCallbackWrapper
     : public IndexedDBBackingStore::BlobWriteCallback {
  public:
-  BlobWriteCallbackWrapper(IndexedDBBackingStore::Transaction* transaction,
-                           scoped_refptr<BlobWriteCallback> callback)
-      : transaction_(transaction), callback_(callback) {}
-  void Run(bool succeeded) override {
+  BlobWriteCallbackWrapper(
+      base::WeakPtr<IndexedDBBackingStore::Transaction> transaction,
+      void* tracing_end_ptr,
+      scoped_refptr<BlobWriteCallback> callback)
+      : transaction_(std::move(transaction)),
+        tracing_end_ptr_(tracing_end_ptr),
+        callback_(callback) {}
+  leveldb::Status Run(BlobWriteResult result) override {
+    DCHECK_NE(result, BlobWriteResult::SUCCESS_SYNC);
     IDB_ASYNC_TRACE_END("IndexedDBBackingStore::Transaction::WriteNewBlobs",
-                        transaction_);
-    callback_->Run(succeeded);
-    if (succeeded)  // Else it's already been deleted during rollback.
-      transaction_->chained_blob_writer_ = NULL;
+                        tracing_end_ptr_);
+    leveldb::Status leveldb_result = callback_->Run(result);
+    switch (result) {
+      case BlobWriteResult::FAILURE_ASYNC:
+        break;
+      case BlobWriteResult::SUCCESS_ASYNC:
+      case BlobWriteResult::SUCCESS_SYNC:
+        if (transaction_)
+          transaction_->chained_blob_writer_ = nullptr;
+        break;
+    }
+    return leveldb_result;
   }
 
  private:
   ~BlobWriteCallbackWrapper() override {}
   friend class base::RefCounted<IndexedDBBackingStore::BlobWriteCallback>;
 
-  IndexedDBBackingStore::Transaction* transaction_;
+  base::WeakPtr<IndexedDBBackingStore::Transaction> transaction_;
+  const void* const tracing_end_ptr_;
   scoped_refptr<BlobWriteCallback> callback_;
 
   DISALLOW_COPY_AND_ASSIGN(BlobWriteCallbackWrapper);
@@ -4379,12 +4377,11 @@ void IndexedDBBackingStore::Transaction::WriteNewBlobs(
       transaction_->Put(blob_entry_iter.first.Encode(),
                         &blob_entry_iter.second);
   }
-  // Creating the writer will start it going asynchronously.
-  chained_blob_writer_ =
-      new ChainedBlobWriterImpl(database_id_,
-                                backing_store_,
-                                new_files_to_write,
-                                new BlobWriteCallbackWrapper(this, callback));
+  // Creating the writer will start it going asynchronously. The transaction
+  // can be destructed before the callback is triggered.
+  chained_blob_writer_ = new ChainedBlobWriterImpl(
+      database_id_, backing_store_, new_files_to_write,
+      new BlobWriteCallbackWrapper(ptr_factory_.GetWeakPtr(), this, callback));
 }
 
 void IndexedDBBackingStore::Transaction::Rollback() {
@@ -4399,7 +4396,7 @@ void IndexedDBBackingStore::Transaction::Rollback() {
     chained_blob_writer_->Abort();
     chained_blob_writer_ = NULL;
   }
-  if (transaction_.get() == NULL)
+  if (!transaction_)
     return;
   transaction_->Rollback();
   transaction_ = NULL;

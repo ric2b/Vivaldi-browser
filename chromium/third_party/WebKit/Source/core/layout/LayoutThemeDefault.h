@@ -82,8 +82,6 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
 
   Color platformFocusRingColor() const override;
 
-  double caretBlinkInterval() const final;
-
   // System fonts.
   virtual void systemFont(CSSValueID systemFontID,
                           FontStyle&,
@@ -113,9 +111,17 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
 
   // These methods define the padding for the MenuList's inner block.
   int popupInternalPaddingStart(const ComputedStyle&) const override;
-  int popupInternalPaddingEnd(const ComputedStyle&) const override;
+  int popupInternalPaddingEnd(const HostWindow*,
+                              const ComputedStyle&) const override;
   int popupInternalPaddingTop(const ComputedStyle&) const override;
   int popupInternalPaddingBottom(const ComputedStyle&) const override;
+  // This returns a value based on scrollbar thickness.  It's not 0 even in
+  // overlay scrollbar mode.  On Android, this doesn't match to scrollbar
+  // thickness, which is 3px or 4px, and we use the value from the default Aura
+  // theme.
+  int menuListArrowWidthInDIP() const;
+  float clampedMenuListArrowPaddingSize(const HostWindow*,
+                                        const ComputedStyle&) const;
 
   // Provide a way to pass the default font size from the Settings object
   // to the layout theme. FIXME: http://b/1129186 A cleaner way would be
@@ -141,6 +147,7 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
 
  private:
   ThemePainter& painter() override { return m_painter; }
+  void didChangeThemeEngine() override;
 
   int menuListInternalPadding(const ComputedStyle&, int padding) const;
 
@@ -153,6 +160,9 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
   static unsigned m_inactiveSelectionForegroundColor;
 
   ThemePainterDefault m_painter;
+  // Cached values for crbug.com/673754.
+  mutable float m_cachedMenuListArrowZoomLevel = 0;
+  mutable float m_cachedMenuListArrowPaddingSize = 0;
 };
 
 }  // namespace blink

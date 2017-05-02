@@ -16,25 +16,23 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_export.h"
+#include "device/bluetooth/bluetooth_remote_gatt_service.h"
 #include "device/bluetooth/bluetooth_uuid.h"
-
-namespace base {
-class BinaryValue;
-}
 
 namespace device {
 
 class BluetoothAdapter;
 class BluetoothGattConnection;
-class BluetoothRemoteGattService;
+class BluetoothRemoteGattCharacteristic;
+class BluetoothRemoteGattDescriptor;
 class BluetoothSocket;
 class BluetoothUUID;
 
@@ -110,8 +108,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
 
   // Mapping from the platform-specific GATT service identifiers to
   // BluetoothRemoteGattService objects.
-  typedef base::ScopedPtrHashMap<std::string,
-                                 std::unique_ptr<BluetoothRemoteGattService>>
+  typedef std::unordered_map<std::string,
+                             std::unique_ptr<BluetoothRemoteGattService>>
       GattServiceMap;
 
   // Interface for negotiating pairing of bluetooth devices.
@@ -261,10 +259,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   bool IsPairable() const;
 
   // Indicates whether the device is paired with the adapter.
-  // On Chrome OS this function also returns true if the user has connected
-  // to the device in the past.
-  // TODO(crbug.com/649651): Change Chrome OS to only return true if the
-  // device is actually paired.
   virtual bool IsPaired() const = 0;
 
   // Indicates whether the device is currently connected to the adapter.
@@ -286,10 +280,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // we consider a call is ongoing if none of the callbacks passed to Connect()
   // were called after the corresponding call to Connect().
   virtual bool IsConnecting() const = 0;
-
-  // Indicates whether the device can be trusted, based on device properties,
-  // such as vendor and product id.
-  bool IsTrustable() const;
 
   // Returns the set of UUIDs that this device supports.
   //  * For classic Bluetooth devices this data is collected from both the EIR
@@ -559,6 +549,19 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Return associated BluetoothAdapter.
   BluetoothAdapter* GetAdapter() { return adapter_; }
 
+  std::vector<BluetoothRemoteGattService*> GetPrimaryServices();
+
+  std::vector<BluetoothRemoteGattService*> GetPrimaryServicesByUUID(
+      const BluetoothUUID& service_uuid);
+
+  std::vector<BluetoothRemoteGattCharacteristic*> GetCharacteristicsByUUID(
+      const std::string& service_instance_id,
+      const BluetoothUUID& characteristic_uuid);
+
+  std::vector<device::BluetoothRemoteGattDescriptor*> GetDescriptorsByUUID(
+      device::BluetoothRemoteGattCharacteristic* characteristic,
+      const BluetoothUUID& descriptor_uuid);
+
  protected:
   // BluetoothGattConnection is a friend to call Add/RemoveGattConnection.
   friend BluetoothGattConnection;
@@ -583,6 +586,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
     DeviceUUIDs();
     ~DeviceUUIDs();
 
+    DeviceUUIDs(const DeviceUUIDs& other);
+    DeviceUUIDs& operator=(const DeviceUUIDs& other);
+
     // Advertised Service UUIDs functions
     void ReplaceAdvertisedUUIDs(UUIDList new_advertised_uuids);
 
@@ -605,7 +611,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
     BluetoothDevice::UUIDSet device_uuids_;
   };
 
-  BluetoothDevice(BluetoothAdapter* adapter);
+  explicit BluetoothDevice(BluetoothAdapter* adapter);
 
   // Implements platform specific operations to initiate a GATT connection.
   // Subclasses must also call DidConnectGatt, DidFailToConnectGatt, or
@@ -627,7 +633,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // DidDisconnectGatt.
   void DidConnectGatt();
   void DidFailToConnectGatt(ConnectErrorCode);
-  void DidDisconnectGatt();
+  void DidDisconnectGatt(bool notifyDeviceChanged);
 
   // Tracks BluetoothGattConnection instances that act as a reference count
   // keeping the GATT connection open. Instances call Add/RemoveGattConnection
@@ -677,6 +683,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns a localized string containing the device's bluetooth address and
   // a device type for display when |name_| is empty.
   base::string16 GetAddressWithLocalizedDeviceTypeName() const;
+
+  DISALLOW_COPY_AND_ASSIGN(BluetoothDevice);
 };
 
 }  // namespace device

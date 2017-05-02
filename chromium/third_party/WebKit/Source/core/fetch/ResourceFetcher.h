@@ -47,8 +47,6 @@
 namespace blink {
 
 class ArchiveResource;
-class DocumentResource;
-class ImageResource;
 class MHTMLArchive;
 class KURL;
 class ResourceTimingInfo;
@@ -119,41 +117,19 @@ class CORE_EXPORT ResourceFetcher
   void stopFetching();
   bool isFetching() const;
 
-  bool willFollowRedirect(Resource*, ResourceRequest&, const ResourceResponse&);
-  enum DidFinishLoadingReason {
-    DidFinishLoading,
-    DidFinishFirstPartInMultipart
-  };
-  void didFinishLoading(Resource*,
-                        double finishTime,
-                        int64_t encodedDataLength,
-                        DidFinishLoadingReason);
-  void didFailLoading(Resource*, const ResourceError&);
-  void didReceiveResponse(Resource*,
-                          const ResourceResponse&,
-                          WebDataConsumerHandle*);
-  void didReceiveData(const Resource*,
-                      const char* data,
-                      int dataLength,
-                      int encodedDataLength);
-  void didDownloadData(const Resource*, int dataLength, int encodedDataLength);
-  bool defersLoading() const;
-  bool isControlledByServiceWorker() const;
+  bool shouldDeferImageLoad(const KURL&) const;
 
-  void acceptDataFromThreadedReceiver(unsigned long identifier,
-                                      const char* data,
-                                      int dataLength,
-                                      int encodedDataLength);
+  void recordResourceTimingOnRedirect(Resource*, const ResourceResponse&, bool);
+
+  enum LoaderFinishType { DidFinishLoading, DidFinishFirstPartInMultipart };
+  void handleLoaderFinish(Resource*, double finishTime, LoaderFinishType);
+  void handleLoaderError(Resource*, const ResourceError&);
+  bool isControlledByServiceWorker() const;
 
   enum ResourceLoadStartType {
     ResourceLoadingFromNetwork,
     ResourceLoadingFromCache
   };
-  void requestLoadStarted(unsigned long identifier,
-                          Resource*,
-                          const FetchRequest&,
-                          ResourceLoadStartType,
-                          bool isStaticData = false);
   static const ResourceLoaderOptions& defaultResourceOptions();
 
   String getCacheIdentifier() const;
@@ -167,8 +143,18 @@ class CORE_EXPORT ResourceFetcher
 
   void reloadLoFiImages();
 
+  // Calling this method before main document resource is fetched is invalid.
+  ResourceTimingInfo* getNavigationTimingInfo();
+
   // This is only exposed for testing purposes.
   HeapListHashSet<Member<Resource>>* preloads() { return m_preloads.get(); }
+
+  // Workaround for https://crbug.com/666214.
+  // TODO(hiroshige): Remove this hack.
+  void emulateLoadStartedForInspector(Resource*,
+                                      const KURL&,
+                                      WebURLRequest::RequestContext,
+                                      const AtomicString& initiatorName);
 
  private:
   friend class ResourceCacheValidationSuppressor;
@@ -179,7 +165,7 @@ class CORE_EXPORT ResourceFetcher
   Resource* createResourceForLoading(FetchRequest&,
                                      const String& charset,
                                      const ResourceFactory&);
-  void storeResourceTimingInitiatorInformation(Resource*);
+  void storePerformanceTimingInitiatorInformation(Resource*);
   ResourceLoadPriority computeLoadPriority(Resource::Type,
                                            const FetchRequest&,
                                            ResourcePriority::VisibilityStatus);
@@ -188,7 +174,8 @@ class CORE_EXPORT ResourceFetcher
                                   const ResourceFactory&,
                                   const SubstituteData&);
   Resource* resourceForBlockedRequest(const FetchRequest&,
-                                      const ResourceFactory&);
+                                      const ResourceFactory&,
+                                      ResourceRequestBlockedReason);
 
   // RevalidationPolicy enum values are used in UMAs https://crbug.com/579496.
   enum RevalidationPolicy { Use, Revalidate, Reload, Load };
@@ -200,18 +187,18 @@ class CORE_EXPORT ResourceFetcher
   void moveCachedNonBlockingResourceToBlocking(Resource*, const FetchRequest&);
   void moveResourceLoaderToNonBlocking(ResourceLoader*);
   void removeResourceLoader(ResourceLoader*);
+  void handleLoadCompletion(Resource*);
 
   void initializeResourceRequest(ResourceRequest&,
                                  Resource::Type,
                                  FetchRequest::DeferOption);
-  void willSendRequest(unsigned long identifier,
-                       ResourceRequest&,
-                       const ResourceResponse&,
-                       const ResourceLoaderOptions&);
-  bool canAccessResponse(Resource*, const ResourceResponse&) const;
+  void requestLoadStarted(unsigned long identifier,
+                          Resource*,
+                          const FetchRequest&,
+                          ResourceLoadStartType,
+                          bool isStaticData = false);
 
   bool resourceNeedsLoad(Resource*, const FetchRequest&, RevalidationPolicy);
-  bool shouldDeferImageLoad(const KURL&) const;
 
   void resourceTimingReportTimerFired(TimerBase*);
 
@@ -231,11 +218,13 @@ class CORE_EXPORT ResourceFetcher
   Member<HeapListHashSet<Member<Resource>>> m_preloads;
   Member<MHTMLArchive> m_archive;
 
-  Timer<ResourceFetcher> m_resourceTimingReportTimer;
+  TaskRunnerTimer<ResourceFetcher> m_resourceTimingReportTimer;
 
   using ResourceTimingInfoMap =
       HeapHashMap<Member<Resource>, std::unique_ptr<ResourceTimingInfo>>;
   ResourceTimingInfoMap m_resourceTimingInfoMap;
+
+  std::unique_ptr<ResourceTimingInfo> m_navigationTimingInfo;
 
   Vector<std::unique_ptr<ResourceTimingInfo>> m_scheduledResourceTimingReports;
 

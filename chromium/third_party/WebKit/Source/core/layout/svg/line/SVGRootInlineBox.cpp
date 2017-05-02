@@ -69,67 +69,43 @@ void SVGRootInlineBox::computePerCharacterLayoutInformation() {
   // Perform SVG text layout phase four
   // Position & resize all SVGInlineText/FlowBoxes in the inline box tree,
   // resize the root box as well as the LayoutSVGText parent block.
-  LayoutRect childRect;
-  layoutChildBoxes(this, &childRect);
-  layoutRootBox(childRect);
-}
+  layoutInlineBoxes(*this);
 
-void SVGRootInlineBox::layoutChildBoxes(InlineFlowBox* start,
-                                        LayoutRect* childRect) {
-  for (InlineBox* child = start->firstChild(); child;
-       child = child->nextOnLine()) {
-    LayoutRect boxRect;
-    if (child->isSVGInlineTextBox()) {
-      ASSERT(child->getLineLayoutItem().isSVGInlineText());
-
-      SVGInlineTextBox* textBox = toSVGInlineTextBox(child);
-      boxRect = textBox->calculateBoundaries();
-      textBox->setX(boxRect.x());
-      textBox->setY(boxRect.y());
-      textBox->setLogicalWidth(boxRect.width());
-      textBox->setLogicalHeight(boxRect.height());
-    } else {
-      // Skip generated content.
-      if (!child->getLineLayoutItem().node())
-        continue;
-
-      SVGInlineFlowBox* flowBox = toSVGInlineFlowBox(child);
-      layoutChildBoxes(flowBox);
-
-      boxRect = flowBox->calculateBoundaries();
-      flowBox->setX(boxRect.x());
-      flowBox->setY(boxRect.y());
-      flowBox->setLogicalWidth(boxRect.width());
-      flowBox->setLogicalHeight(boxRect.height());
-    }
-    if (childRect)
-      childRect->unite(boxRect);
-  }
-}
-
-void SVGRootInlineBox::layoutRootBox(const LayoutRect& childRect) {
+  // Let the HTML block space originate from the local SVG coordinate space.
   LineLayoutBlockFlow parentBlock = block();
+  parentBlock.setLocation(LayoutPoint());
+  // The width could be any value, but set it so that a line box will mirror
+  // within the childRect when its coordinates are converted between physical
+  // block direction and flipped block direction, for ease of understanding of
+  // flipped coordinates. The height doesn't matter.
+  parentBlock.setSize(LayoutSize(x() * 2 + width(), LayoutUnit()));
 
-  // Finally, assign the root block position, now that all content is laid out.
-  LayoutRect boundingRect = childRect;
-  parentBlock.setLocation(boundingRect.location());
-  parentBlock.setSize(boundingRect.size());
+  setLineTopBottomPositions(logicalTop(), logicalBottom(), logicalTop(),
+                            logicalBottom());
+}
 
-  // Position all children relative to the parent block.
-  for (InlineBox* child = firstChild(); child; child = child->nextOnLine()) {
-    // Skip generated content.
-    if (!child->getLineLayoutItem().node())
-      continue;
-    child->move(LayoutSize(-childRect.x(), -childRect.y()));
+LayoutRect SVGRootInlineBox::layoutInlineBoxes(InlineBox& box) {
+  LayoutRect rect;
+  if (box.isSVGInlineTextBox()) {
+    rect = toSVGInlineTextBox(box).calculateBoundaries();
+  } else {
+    for (InlineBox* child = toInlineFlowBox(box).firstChild(); child;
+         child = child->nextOnLine())
+      rect.unite(layoutInlineBoxes(*child));
   }
 
-  // Position ourselves.
-  setX(LayoutUnit());
-  setY(LayoutUnit());
-  setLogicalWidth(childRect.width());
-  setLogicalHeight(childRect.height());
-  setLineTopBottomPositions(LayoutUnit(), boundingRect.height(), LayoutUnit(),
-                            boundingRect.height());
+  box.setX(rect.x());
+  box.setY(rect.y());
+  box.setLogicalWidth(box.isHorizontal() ? rect.width() : rect.height());
+  LayoutUnit logicalHeight = box.isHorizontal() ? rect.height() : rect.width();
+  if (box.isSVGInlineTextBox())
+    toSVGInlineTextBox(box).setLogicalHeight(logicalHeight);
+  else if (box.isSVGInlineFlowBox())
+    toSVGInlineFlowBox(box).setLogicalHeight(logicalHeight);
+  else
+    toSVGRootInlineBox(box).setLogicalHeight(logicalHeight);
+
+  return rect;
 }
 
 InlineBox* SVGRootInlineBox::closestLeafChildForPosition(
@@ -150,7 +126,7 @@ InlineBox* SVGRootInlineBox::closestLeafChildForPosition(
       continue;
 
     closestLeaf = leaf;
-    if (point.x() < leaf->left() + leaf->logicalWidth())
+    if (point.x() < leaf->x() + leaf->logicalWidth())
       return leaf;
   }
 

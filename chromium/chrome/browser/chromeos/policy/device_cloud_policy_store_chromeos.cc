@@ -36,6 +36,7 @@ DeviceCloudPolicyStoreChromeOS::DeviceCloudPolicyStoreChromeOS(
       background_task_runner_(background_task_runner),
       weak_factory_(this) {
   device_settings_service_->AddObserver(this);
+  device_settings_service_->SetDeviceMode(install_attributes_->GetMode());
 }
 
 DeviceCloudPolicyStoreChromeOS::~DeviceCloudPolicyStoreChromeOS() {
@@ -49,7 +50,7 @@ void DeviceCloudPolicyStoreChromeOS::Store(
 
   scoped_refptr<ownership::PublicKey> public_key(
       device_settings_service_->GetPublicKey());
-  if (!install_attributes_->IsEnterpriseDevice() ||
+  if (!install_attributes_->IsCloudManaged() ||
       !device_settings_service_->policy_data() || !public_key.get() ||
       !public_key->is_loaded()) {
     status_ = STATUS_BAD_STATE;
@@ -60,8 +61,7 @@ void DeviceCloudPolicyStoreChromeOS::Store(
   std::unique_ptr<DeviceCloudPolicyValidator> validator(
       CreateValidator(policy));
   validator->ValidateSignatureAllowingRotation(
-      public_key->as_string(), GetPolicyVerificationKey(),
-      install_attributes_->GetDomain());
+      public_key->as_string(), install_attributes_->GetDomain());
   validator->ValidateAgainstCurrentPolicy(
       device_settings_service_->policy_data(),
       CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED,
@@ -81,7 +81,7 @@ void DeviceCloudPolicyStoreChromeOS::InstallInitialPolicy(
   // Cancel all pending requests.
   weak_factory_.InvalidateWeakPtrs();
 
-  if (!install_attributes_->IsEnterpriseDevice()) {
+  if (!install_attributes_->IsCloudManaged()) {
     status_ = STATUS_BAD_STATE;
     NotifyStoreError();
     return;
@@ -89,8 +89,7 @@ void DeviceCloudPolicyStoreChromeOS::InstallInitialPolicy(
 
   std::unique_ptr<DeviceCloudPolicyValidator> validator(
       CreateValidator(policy));
-  validator->ValidateInitialKey(GetPolicyVerificationKey(),
-                                install_attributes_->GetDomain());
+  validator->ValidateInitialKey(install_attributes_->GetDomain());
   validator.release()->StartValidation(
       base::Bind(&DeviceCloudPolicyStoreChromeOS::OnPolicyToStoreValidated,
                  weak_factory_.GetWeakPtr()));
@@ -139,7 +138,7 @@ void DeviceCloudPolicyStoreChromeOS::OnPolicyStored() {
 }
 
 void DeviceCloudPolicyStoreChromeOS::UpdateFromService() {
-  if (!install_attributes_->IsEnterpriseDevice()) {
+  if (!install_attributes_->IsEnterpriseManaged()) {
     status_ = STATUS_BAD_STATE;
     NotifyStoreError();
     return;
@@ -162,6 +161,10 @@ void DeviceCloudPolicyStoreChromeOS::UpdateFromService() {
                          &new_policy_map);
     }
     policy_map_.Swap(&new_policy_map);
+
+    scoped_refptr<ownership::PublicKey> key =
+        device_settings_service_->GetPublicKey();
+    policy_signature_public_key_ = key ? key->as_string() : std::string();
 
     NotifyStoreLoaded();
     return;
@@ -213,6 +216,11 @@ void DeviceCloudPolicyStoreChromeOS::CheckDMToken() {
     return;
   }
   dm_token_checked_ = true;
+
+  // PolicyData from Active Directory doesn't contain a DM token.
+  if (install_attributes_->IsActiveDirectoryManaged()) {
+    return;
+  }
 
   // At the time LoginDisplayHostImpl decides whether enrollment flow is to be
   // started, policy hasn't been read yet.  To work around this, once the need

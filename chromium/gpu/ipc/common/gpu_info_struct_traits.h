@@ -96,6 +96,11 @@ struct StructTraits<gpu::mojom::VideoDecodeAcceleratorCapabilitiesDataView,
   static uint32_t flags(const gpu::VideoDecodeAcceleratorCapabilities& input) {
     return input.flags;
   }
+
+  static std::vector<gpu::VideoDecodeAcceleratorSupportedProfile>
+      supported_profiles(const gpu::VideoDecodeAcceleratorCapabilities& input) {
+    return input.supported_profiles;
+  }
 };
 
 template <>
@@ -241,6 +246,10 @@ struct StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo> {
 
   static bool in_process_gpu(const gpu::GPUInfo& input) {
     return input.in_process_gpu;
+  }
+
+  static bool passthrough_cmd_decoder(const gpu::GPUInfo& input) {
+    return input.passthrough_cmd_decoder;
   }
 
   static gpu::CollectInfoResult basic_info_state(const gpu::GPUInfo& input) {

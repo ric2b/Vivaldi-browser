@@ -99,10 +99,10 @@ Resources.IDBDataView = class extends UI.SimpleView {
     this._createEditorToolbar();
 
     this._refreshButton = new UI.ToolbarButton(Common.UIString('Refresh'), 'largeicon-refresh');
-    this._refreshButton.addEventListener('click', this._refreshButtonClicked, this);
+    this._refreshButton.addEventListener(UI.ToolbarButton.Events.Click, this._refreshButtonClicked, this);
 
     this._clearButton = new UI.ToolbarButton(Common.UIString('Clear object store'), 'largeicon-clear');
-    this._clearButton.addEventListener('click', this._clearButtonClicked, this);
+    this._clearButton.addEventListener(UI.ToolbarButton.Events.Click, this._clearButtonClicked, this);
 
     this._pageSize = 50;
     this._skipCount = 0;
@@ -112,12 +112,12 @@ Resources.IDBDataView = class extends UI.SimpleView {
   }
 
   /**
-   * @return {!UI.DataGrid}
+   * @return {!DataGrid.DataGrid}
    */
   _createDataGrid() {
     var keyPath = this._isIndex ? this._index.keyPath : this._objectStore.keyPath;
 
-    var columns = /** @type {!Array<!UI.DataGrid.ColumnDescriptor>} */ ([]);
+    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([]);
     columns.push({id: 'number', title: Common.UIString('#'), sortable: false, width: '50px'});
     columns.push(
         {id: 'key', titleDOMFragment: this._keyColumnHeaderFragment(Common.UIString('Key'), keyPath), sortable: false});
@@ -130,7 +130,7 @@ Resources.IDBDataView = class extends UI.SimpleView {
     }
     columns.push({id: 'value', title: Common.UIString('Value'), sortable: false});
 
-    var dataGrid = new UI.DataGrid(columns);
+    var dataGrid = new DataGrid.DataGrid(columns);
     return dataGrid;
   }
 
@@ -179,12 +179,12 @@ Resources.IDBDataView = class extends UI.SimpleView {
     var editorToolbar = new UI.Toolbar('data-view-toolbar', this.element);
 
     this._pageBackButton = new UI.ToolbarButton(Common.UIString('Show previous page'), 'largeicon-play-back');
-    this._pageBackButton.addEventListener('click', this._pageBackButtonClicked, this);
+    this._pageBackButton.addEventListener(UI.ToolbarButton.Events.Click, this._pageBackButtonClicked, this);
     editorToolbar.appendToolbarItem(this._pageBackButton);
 
     this._pageForwardButton = new UI.ToolbarButton(Common.UIString('Show next page'), 'largeicon-play');
     this._pageForwardButton.setEnabled(false);
-    this._pageForwardButton.addEventListener('click', this._pageForwardButtonClicked, this);
+    this._pageForwardButton.addEventListener(UI.ToolbarButton.Events.Click, this._pageForwardButtonClicked, this);
     editorToolbar.appendToolbarItem(this._pageForwardButton);
 
     this._keyInputElement = editorToolbar.element.createChild('input', 'key-input');
@@ -195,12 +195,18 @@ Resources.IDBDataView = class extends UI.SimpleView {
     this._keyInputElement.addEventListener('keydown', this._keyInputChanged.bind(this), false);
   }
 
-  _pageBackButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _pageBackButtonClicked(event) {
     this._skipCount = Math.max(0, this._skipCount - this._pageSize);
     this._updateData(false);
   }
 
-  _pageForwardButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _pageForwardButtonClicked(event) {
     this._skipCount = this._skipCount + this._pageSize;
     this._updateData(false);
   }
@@ -295,10 +301,16 @@ Resources.IDBDataView = class extends UI.SimpleView {
     }
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _refreshButtonClicked(event) {
     this._updateData(true);
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _clearButtonClicked(event) {
     /**
      * @this {Resources.IDBDataView}
@@ -328,7 +340,7 @@ Resources.IDBDataView = class extends UI.SimpleView {
 /**
  * @unrestricted
  */
-Resources.IDBDataGridNode = class extends UI.DataGridNode {
+Resources.IDBDataGridNode = class extends DataGrid.DataGridNode {
   /**
    * @param {!Object.<string, *>} data
    */

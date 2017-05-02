@@ -3,9 +3,10 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//cc/cc.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
-component("ipc") {
+cc_component("ipc") {
   output_name = "cc_ipc"
 
   defines = [ "CC_IPC_IMPLEMENTATION" ]
@@ -48,11 +49,12 @@ mojom("interfaces") {
     "mojo_compositor_frame_sink.mojom",
     "quads.mojom",
     "render_pass.mojom",
-    "render_pass_id.mojom",
     "returned_resource.mojom",
     "selection.mojom",
     "shared_quad_state.mojom",
     "surface_id.mojom",
+    "surface_info.mojom",
+    "surface_reference.mojom",
     "surface_sequence.mojom",
     "transferable_resource.mojom",
   ]
@@ -75,7 +77,9 @@ mojom("internal_interfaces") {
 
   public_deps = [
     ":interfaces",
+    "//gpu/ipc/common:interfaces",
     "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo",
   ]
 }
 
@@ -90,7 +94,7 @@ mojom("test_interfaces") {
   ]
 }
 
-source_set("struct_traits") {
+cc_source_set("struct_traits") {
   sources = [
     "begin_frame_args_struct_traits.h",
     "compositor_frame_metadata_struct_traits.cc",
@@ -103,12 +107,13 @@ source_set("struct_traits") {
     "local_frame_id_struct_traits.h",
     "quads_struct_traits.cc",
     "quads_struct_traits.h",
-    "render_pass_id_struct_traits.h",
     "render_pass_struct_traits.cc",
     "render_pass_struct_traits.h",
     "selection_struct_traits.h",
     "shared_quad_state_struct_traits.h",
     "surface_id_struct_traits.h",
+    "surface_info_struct_traits.h",
+    "surface_reference_struct_traits.h",
     "surface_sequence_struct_traits.h",
     "transferable_resource_struct_traits.cc",
     "transferable_resource_struct_traits.h",

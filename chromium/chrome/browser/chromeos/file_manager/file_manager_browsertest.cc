@@ -11,6 +11,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user_manager.h"
 
@@ -51,19 +52,6 @@ class FileManagerBrowserTestWithLegacyEventDispatch
 };
 
 IN_PROC_BROWSER_TEST_P(FileManagerBrowserTestWithLegacyEventDispatch, Test) {
-  StartTest();
-}
-
-// Test fixture class for details panel.
-// TODO(ryoh): remove after we release details panel feature.
-class FileManagerDetailsPanelBrowserTest : public FileManagerBrowserTest {
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    FileManagerBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch("--enable-files-details-panel");
-  }
-};
-
-IN_PROC_BROWSER_TEST_P(FileManagerDetailsPanelBrowserTest, Test) {
   StartTest();
 }
 
@@ -199,17 +187,9 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(NOT_IN_GUEST_MODE, "deleteOneItemFromToolbar")));
 
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    QuickView,
+    DISABLED_QuickView,
     FileManagerBrowserTest,
     ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "openQuickView")));
-
-WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DetailsPanel,
-    FileManagerDetailsPanelBrowserTest,
-    ::testing::Values(
-        TestParameter(NOT_IN_GUEST_MODE, "openDetailsPanel"),
-        TestParameter(NOT_IN_GUEST_MODE, "openDetailsPanelForSingleFile"),
-        TestParameter(NOT_IN_GUEST_MODE, "openSingleFileAndSeeDetailsPanel")));
 
 #if defined(DISABLE_SLOW_FILESAPP_TESTS)
 #define MAYBE_DirectoryTreeContextMenu DISABLED_DirectoryTreeContextMenu
@@ -656,13 +636,13 @@ class MultiProfileFileManagerBrowserTest : public FileManagerBrowserTestBase {
 
   // Adds a new user for testing to the current session.
   void AddUser(const TestAccountInfo& info, bool log_in) {
-    user_manager::UserManager* const user_manager =
-        user_manager::UserManager::Get();
     const AccountId account_id(AccountId::FromUserEmail(info.email));
-    if (log_in)
-      user_manager->UserLoggedIn(account_id, info.hash, false);
-    user_manager->SaveUserDisplayName(account_id,
-                                      base::UTF8ToUTF16(info.display_name));
+    if (log_in) {
+      session_manager::SessionManager::Get()->CreateSession(account_id,
+                                                            info.hash);
+    }
+    user_manager::UserManager::Get()->SaveUserDisplayName(
+        account_id, base::UTF8ToUTF16(info.display_name));
     SigninManagerFactory::GetForProfile(
         chromeos::ProfileHelper::GetProfileByUserIdHash(info.hash))
         ->SetAuthenticatedAccountInfo(info.gaia_id, info.email);

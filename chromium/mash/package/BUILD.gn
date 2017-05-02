@@ -9,19 +9,28 @@ source_set("package") {
   ]
 
   deps = [
-    "//ash/autoclick/mus:lib",
-    "//ash/mus:lib",
-    "//ash/touch_hud/mus:lib",
     "//mash/catalog_viewer:lib",
+    "//mash/catalog_viewer/public/interfaces:constants",
     "//mash/public/interfaces",
     "//mash/quick_launch:lib",
+    "//mash/quick_launch/public/interfaces:constants",
     "//mash/session:lib",
+    "//mash/session/public/interfaces:constants",
     "//mash/task_viewer:lib",
+    "//mash/task_viewer/public/interfaces:constants",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
     "//services/ui:lib",
     "//services/ui/ime/test_ime_driver:lib",
   ]
+
+  if (is_chromeos) {
+    deps += [
+      "//ash/autoclick/mus:lib",
+      "//ash/mus:lib",
+      "//ash/touch_hud/mus:lib",
+    ]
+  }
 
   if (is_linux && !is_android) {
     deps += [ "//components/font_service:lib" ]

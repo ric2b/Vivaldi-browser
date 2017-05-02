@@ -4,12 +4,13 @@
 
 #include "core/layout/ng/ng_block_layout_algorithm.h"
 
-#include "core/layout/ng/ng_box.h"
+#include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_physical_fragment_base.h"
-#include "core/layout/ng/ng_physical_fragment.h"
+#include "core/layout/ng/ng_layout_coordinator.h"
 #include "core/layout/ng/ng_length_utils.h"
+#include "core/layout/ng/ng_physical_box_fragment.h"
+#include "core/layout/ng/ng_physical_fragment.h"
 #include "core/layout/ng/ng_units.h"
 #include "core/style/ComputedStyle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,25 +20,45 @@ namespace {
 
 NGConstraintSpace* ConstructConstraintSpace(NGWritingMode writing_mode,
                                             TextDirection direction,
-                                            NGLogicalSize size) {
-  NGConstraintSpaceBuilder builder(writing_mode);
-  builder.SetAvailableSize(size).SetPercentageResolutionSize(size);
-
-  return new NGConstraintSpace(writing_mode, direction,
-                               builder.ToConstraintSpace());
+                                            NGLogicalSize size,
+                                            bool shrink_to_fit = false) {
+  return NGConstraintSpaceBuilder(writing_mode)
+      .SetAvailableSize(size)
+      .SetPercentageResolutionSize(size)
+      .SetTextDirection(direction)
+      .SetWritingMode(writing_mode)
+      .SetIsShrinkToFit(shrink_to_fit)
+      .ToConstraintSpace();
 }
 
 class NGBlockLayoutAlgorithmTest : public ::testing::Test {
  protected:
   void SetUp() override { style_ = ComputedStyle::create(); }
 
-  NGPhysicalFragment* RunBlockLayoutAlgorithm(NGConstraintSpace* space,
-                                              NGBox* first_child) {
-    NGBlockLayoutAlgorithm algorithm(style_, first_child, space);
-    NGPhysicalFragmentBase* frag;
-    while (!algorithm.Layout(nullptr, &frag, nullptr))
-      continue;
-    return toNGPhysicalFragment(frag);
+  NGPhysicalBoxFragment* RunBlockLayoutAlgorithm(NGConstraintSpace* space,
+                                                 NGBlockNode* first_child) {
+    NGBlockNode parent(style_.get());
+    parent.SetFirstChild(first_child);
+
+    NGBlockLayoutAlgorithm algorithm(style_.get(), first_child, space);
+
+    NGPhysicalFragment* fragment;
+    NGLayoutAlgorithm* not_used;
+    EXPECT_EQ(kNewFragment, algorithm.Layout(nullptr, &fragment, &not_used));
+
+    return toNGPhysicalBoxFragment(fragment);
+  }
+
+  MinAndMaxContentSizes RunComputeMinAndMax(NGBlockNode* first_child) {
+    // The constraint space is not used for min/max computation, but we need
+    // it to create the algorithm.
+    NGConstraintSpace* space =
+        ConstructConstraintSpace(kHorizontalTopBottom, TextDirection::kLtr,
+                                 NGLogicalSize(LayoutUnit(), LayoutUnit()));
+    NGBlockLayoutAlgorithm algorithm(style_.get(), first_child, space);
+    MinAndMaxContentSizes sizes;
+    EXPECT_TRUE(algorithm.ComputeMinAndMaxContentSizes(&sizes));
+    return sizes;
   }
 
   RefPtr<ComputedStyle> style_;
@@ -48,9 +69,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, FixedSize) {
   style_->setHeight(Length(40, Fixed));
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragmentBase* frag = RunBlockLayoutAlgorithm(space, nullptr);
+  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, nullptr);
 
   EXPECT_EQ(LayoutUnit(30), frag->Width());
   EXPECT_EQ(LayoutUnit(40), frag->Height());
@@ -67,27 +88,27 @@ TEST_F(NGBlockLayoutAlgorithmTest, LayoutBlockChildren) {
 
   RefPtr<ComputedStyle> first_style = ComputedStyle::create();
   first_style->setHeight(Length(kHeight1, Fixed));
-  NGBox* first_child = new NGBox(first_style.get());
+  NGBlockNode* first_child = new NGBlockNode(first_style.get());
 
   RefPtr<ComputedStyle> second_style = ComputedStyle::create();
   second_style->setHeight(Length(kHeight2, Fixed));
   second_style->setMarginTop(Length(kMarginTop, Fixed));
   second_style->setMarginBottom(Length(kMarginBottom, Fixed));
-  NGBox* second_child = new NGBox(second_style.get());
+  NGBlockNode* second_child = new NGBlockNode(second_style.get());
 
   first_child->SetNextSibling(second_child);
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
 
   EXPECT_EQ(LayoutUnit(kWidth), frag->Width());
   EXPECT_EQ(LayoutUnit(kHeight1 + kHeight2 + kMarginTop), frag->Height());
-  EXPECT_EQ(NGPhysicalFragmentBase::FragmentBox, frag->Type());
+  EXPECT_EQ(NGPhysicalFragment::kFragmentBox, frag->Type());
   ASSERT_EQ(frag->Children().size(), 2UL);
 
-  const NGPhysicalFragmentBase* child = frag->Children()[0];
+  const NGPhysicalFragment* child = frag->Children()[0];
   EXPECT_EQ(kHeight1, child->Height());
   EXPECT_EQ(0, child->TopOffset());
 
@@ -111,26 +132,26 @@ TEST_F(NGBlockLayoutAlgorithmTest, LayoutBlockChildrenWithWritingMode) {
   const int kMarginLeft = 100;
 
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
-  div1_style->setWritingMode(LeftToRightWritingMode);
-  NGBox* div1 = new NGBox(div1_style.get());
+  div1_style->setWritingMode(WritingMode::kVerticalLr);
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setHeight(Length(kHeight, Fixed));
   div2_style->setWidth(Length(kWidth, Fixed));
-  div1_style->setWritingMode(TopToBottomWritingMode);
+  div1_style->setWritingMode(WritingMode::kHorizontalTb);
   div2_style->setMarginLeft(Length(kMarginLeft, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   div1->SetFirstChild(div2);
 
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LTR,
+      ConstructConstraintSpace(kHorizontalTopBottom, TextDirection::kLtr,
                                NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
-  const NGPhysicalFragmentBase* child = frag->Children()[0];
+  const NGPhysicalFragment* child = frag->Children()[0];
   // DIV2
-  child = static_cast<const NGPhysicalFragment*>(child)->Children()[0];
+  child = static_cast<const NGPhysicalBoxFragment*>(child)->Children()[0];
 
   EXPECT_EQ(kHeight, child->Height());
   EXPECT_EQ(0, child->TopOffset());
@@ -158,25 +179,29 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase1) {
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
   div1_style->setHeight(Length(kHeight, Fixed));
   div1_style->setMarginTop(Length(kDiv1MarginTop, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setMarginTop(Length(kDiv2MarginTop, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   div1->SetFirstChild(div2);
 
-  auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
-      NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  space->SetIsNewFormattingContext(true);
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  auto* space =
+      NGConstraintSpaceBuilder(kHorizontalTopBottom)
+          .SetAvailableSize(NGLogicalSize(LayoutUnit(100), NGSizeIndefinite))
+          .SetPercentageResolutionSize(
+              NGLogicalSize(LayoutUnit(100), NGSizeIndefinite))
+          .SetTextDirection(TextDirection::kLtr)
+          .SetIsNewFormattingContext(true)
+          .ToConstraintSpace();
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   EXPECT_TRUE(frag->MarginStrut().IsEmpty());
   ASSERT_EQ(frag->Children().size(), 1UL);
-  const NGPhysicalFragment* div2_fragment =
-      static_cast<const NGPhysicalFragment*>(frag->Children()[0].get());
+  const NGPhysicalBoxFragment* div2_fragment =
+      static_cast<const NGPhysicalBoxFragment*>(frag->Children()[0].get());
   EXPECT_EQ(NGMarginStrut({LayoutUnit(kDiv2MarginTop)}),
             div2_fragment->MarginStrut());
   EXPECT_EQ(kDiv1MarginTop, div2_fragment->TopOffset());
@@ -212,28 +237,28 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase2) {
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
   div1_style->setHeight(Length(kHeight, Fixed));
   div1_style->setMarginBottom(Length(kDiv1MarginBottom, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setMarginBottom(Length(kDiv2MarginBottom, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   // Empty DIVs: DIV3, DIV4, DIV6
-  NGBox* div3 = new NGBox(ComputedStyle::create().get());
-  NGBox* div4 = new NGBox(ComputedStyle::create().get());
-  NGBox* div6 = new NGBox(ComputedStyle::create().get());
+  NGBlockNode* div3 = new NGBlockNode(ComputedStyle::create().get());
+  NGBlockNode* div4 = new NGBlockNode(ComputedStyle::create().get());
+  NGBlockNode* div6 = new NGBlockNode(ComputedStyle::create().get());
 
   // DIV5
   RefPtr<ComputedStyle> div5_style = ComputedStyle::create();
   div5_style->setHeight(Length(kHeight, Fixed));
   div5_style->setMarginTop(Length(kDiv5MarginTop, Fixed));
-  NGBox* div5 = new NGBox(div5_style.get());
+  NGBlockNode* div5 = new NGBlockNode(div5_style.get());
 
   // DIV7
   RefPtr<ComputedStyle> div7_style = ComputedStyle::create();
   div7_style->setMarginTop(Length(kDiv7MarginTop, Fixed));
-  NGBox* div7 = new NGBox(div7_style.get());
+  NGBlockNode* div7 = new NGBlockNode(div7_style.get());
 
   div1->SetFirstChild(div2);
   div2->SetNextSibling(div3);
@@ -243,14 +268,14 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase2) {
   div6->SetNextSibling(div7);
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   ASSERT_EQ(frag->Children().size(), 3UL);
 
   // DIV1
-  const NGPhysicalFragmentBase* child = frag->Children()[0];
+  const NGPhysicalFragment* child = frag->Children()[0];
   EXPECT_EQ(kHeight, child->Height());
   EXPECT_EQ(0, child->TopOffset());
 
@@ -281,20 +306,20 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase3) {
   // DIV1
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
   div1_style->setMarginBottom(Length(kDiv1MarginBottom, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setHeight(Length(kHeight, Fixed));
   div2_style->setMarginBottom(Length(kDiv2MarginBottom, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   div1->SetFirstChild(div2);
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   // Verify that margins are collapsed.
   EXPECT_EQ(NGMarginStrut({LayoutUnit(0), LayoutUnit(kDiv2MarginBottom)}),
@@ -329,21 +354,21 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase4) {
   div1_style->setMarginBottom(Length(kDiv1Margin, Fixed));
   div1_style->setPaddingTop(Length(kDiv1Padding, Fixed));
   div1_style->setPaddingBottom(Length(kDiv1Padding, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setHeight(Length(kHeight, Fixed));
   div2_style->setMarginTop(Length(kDiv2Margin, Fixed));
   div2_style->setMarginBottom(Length(kDiv2Margin, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   div1->SetFirstChild(div2);
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   // Verify that margins do NOT collapse.
   frag = RunBlockLayoutAlgorithm(space, div1);
@@ -352,7 +377,7 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase4) {
   ASSERT_EQ(frag->Children().size(), 1UL);
 
   EXPECT_EQ(NGMarginStrut({LayoutUnit(kDiv2Margin), LayoutUnit(kDiv2Margin)}),
-            static_cast<const NGPhysicalFragment*>(frag->Children()[0].get())
+            static_cast<const NGPhysicalBoxFragment*>(frag->Children()[0].get())
                 ->MarginStrut());
 
   // Reset padding and verify that margins DO collapse.
@@ -375,33 +400,34 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase4) {
 //   </div>
 TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase5) {
   const int kVerticalDivMarginRight = 60;
-  const int kVerticalDivWidth = 60;
+  const int kVerticalDivWidth = 50;
   const int kHorizontalDivMarginLeft = 100;
 
   style_->setWidth(Length(500, Fixed));
   style_->setHeight(Length(500, Fixed));
-  style_->setWritingMode(LeftToRightWritingMode);
+  style_->setWritingMode(WritingMode::kVerticalLr);
 
   // Vertical DIV
   RefPtr<ComputedStyle> vertical_style = ComputedStyle::create();
   vertical_style->setMarginRight(Length(kVerticalDivMarginRight, Fixed));
   vertical_style->setWidth(Length(kVerticalDivWidth, Fixed));
-  NGBox* vertical_div = new NGBox(vertical_style.get());
+  NGBlockNode* vertical_div = new NGBlockNode(vertical_style.get());
 
   // Horizontal DIV
   RefPtr<ComputedStyle> horizontal_style = ComputedStyle::create();
   horizontal_style->setMarginLeft(Length(kHorizontalDivMarginLeft, Fixed));
-  horizontal_style->setWritingMode(TopToBottomWritingMode);
-  NGBox* horizontal_div = new NGBox(horizontal_style.get());
+  horizontal_style->setWritingMode(WritingMode::kHorizontalTb);
+  NGBlockNode* horizontal_div = new NGBlockNode(horizontal_style.get());
 
   vertical_div->SetNextSibling(horizontal_div);
 
-  auto* space = ConstructConstraintSpace(
-      VerticalLeftRight, LTR, NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, vertical_div);
+  auto* space =
+      ConstructConstraintSpace(kVerticalLeftRight, TextDirection::kLtr,
+                               NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, vertical_div);
 
   ASSERT_EQ(frag->Children().size(), 2UL);
-  const NGPhysicalFragmentBase* child = frag->Children()[1];
+  const NGPhysicalFragment* child = frag->Children()[1];
   // Horizontal div
   EXPECT_EQ(0, child->TopOffset());
   EXPECT_EQ(kVerticalDivWidth + kHorizontalDivMarginLeft, child->LeftOffset());
@@ -434,37 +460,37 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase6) {
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
   div1_style->setWidth(Length(kWidth, Fixed));
   div1_style->setHeight(Length(kHeight, Fixed));
-  div1_style->setWritingMode(RightToLeftWritingMode);
+  div1_style->setWritingMode(WritingMode::kVerticalRl);
   div1_style->setMarginBottom(Length(kMarginBottom, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setWidth(Length(kWidth, Fixed));
   div2_style->setMarginLeft(Length(kMarginLeft, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   // DIV3
   RefPtr<ComputedStyle> div3_style = ComputedStyle::create();
   div3_style->setHeight(Length(kHeight, Fixed));
   div3_style->setMarginTop(Length(kMarginTop, Fixed));
-  NGBox* div3 = new NGBox(div3_style.get());
+  NGBlockNode* div3 = new NGBlockNode(div3_style.get());
 
   div1->SetFirstChild(div2);
   div1->SetNextSibling(div3);
 
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LTR,
+      ConstructConstraintSpace(kHorizontalTopBottom, TextDirection::kLtr,
                                NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   ASSERT_EQ(frag->Children().size(), 2UL);
 
-  const NGPhysicalFragmentBase* child1 = frag->Children()[0];
+  const NGPhysicalFragment* child1 = frag->Children()[0];
   EXPECT_EQ(0, child1->TopOffset());
   EXPECT_EQ(kHeight, child1->Height());
 
-  const NGPhysicalFragmentBase* child2 = frag->Children()[1];
+  const NGPhysicalFragment* child2 = frag->Children()[1];
   EXPECT_EQ(kHeight + std::max(kMarginBottom, kMarginTop), child2->TopOffset());
 }
 
@@ -509,33 +535,33 @@ TEST_F(NGBlockLayoutAlgorithmTest, BorderAndPadding) {
   div1_style->setPaddingRight(Length(kPaddingRight, Fixed));
   div1_style->setPaddingBottom(Length(kPaddingBottom, Fixed));
   div1_style->setPaddingLeft(Length(kPaddingLeft, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   div1->SetFirstChild(div2);
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   ASSERT_EQ(frag->Children().size(), 1UL);
 
   // div1
-  const NGPhysicalFragmentBase* child = frag->Children()[0];
+  const NGPhysicalFragment* child = frag->Children()[0];
   EXPECT_EQ(kBorderLeft + kPaddingLeft + kWidth + kPaddingRight + kBorderRight,
             child->Width());
   EXPECT_EQ(kBorderTop + kPaddingTop + kHeight + kPaddingBottom + kBorderBottom,
             child->Height());
 
-  ASSERT_TRUE(child->Type() == NGPhysicalFragmentBase::FragmentBox);
-  ASSERT_EQ(static_cast<const NGPhysicalFragment*>(child)->Children().size(),
+  ASSERT_TRUE(child->Type() == NGPhysicalFragment::kFragmentBox);
+  ASSERT_EQ(static_cast<const NGPhysicalBoxFragment*>(child)->Children().size(),
             1UL);
 
   // div2
-  child = static_cast<const NGPhysicalFragment*>(child)->Children()[0];
+  child = static_cast<const NGPhysicalBoxFragment*>(child)->Children()[0];
   EXPECT_EQ(kBorderTop + kPaddingTop, child->TopOffset());
   EXPECT_EQ(kBorderLeft + kPaddingLeft, child->LeftOffset());
 }
@@ -548,19 +574,19 @@ TEST_F(NGBlockLayoutAlgorithmTest, PercentageResolutionSize) {
 
   RefPtr<ComputedStyle> first_style = ComputedStyle::create();
   first_style->setWidth(Length(40, Percent));
-  NGBox* first_child = new NGBox(first_style.get());
+  NGBlockNode* first_child = new NGBlockNode(first_style.get());
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
 
-  EXPECT_EQ(frag->Width(), LayoutUnit(kWidth + kPaddingLeft));
-  EXPECT_EQ(frag->Type(), NGPhysicalFragmentBase::FragmentBox);
+  EXPECT_EQ(LayoutUnit(kWidth + kPaddingLeft), frag->Width());
+  EXPECT_EQ(NGPhysicalFragment::kFragmentBox, frag->Type());
   ASSERT_EQ(frag->Children().size(), 1UL);
 
-  const NGPhysicalFragmentBase* child = frag->Children()[0];
-  EXPECT_EQ(child->Width(), LayoutUnit(12));
+  const NGPhysicalFragment* child = frag->Children()[0];
+  EXPECT_EQ(LayoutUnit(12), child->Width());
 }
 
 // A very simple auto margin case. We rely on the tests in ng_length_utils_test
@@ -576,19 +602,19 @@ TEST_F(NGBlockLayoutAlgorithmTest, AutoMargin) {
   first_style->setWidth(Length(kChildWidth, Fixed));
   first_style->setMarginLeft(Length(Auto));
   first_style->setMarginRight(Length(Auto));
-  NGBox* first_child = new NGBox(first_style.get());
+  NGBlockNode* first_child = new NGBlockNode(first_style.get());
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
 
   EXPECT_EQ(LayoutUnit(kWidth + kPaddingLeft), frag->Width());
-  EXPECT_EQ(NGPhysicalFragmentBase::FragmentBox, frag->Type());
+  EXPECT_EQ(NGPhysicalFragment::kFragmentBox, frag->Type());
   EXPECT_EQ(LayoutUnit(kWidth + kPaddingLeft), frag->WidthOverflow());
   ASSERT_EQ(1UL, frag->Children().size());
 
-  const NGPhysicalFragmentBase* child = frag->Children()[0];
+  const NGPhysicalFragment* child = frag->Children()[0];
   EXPECT_EQ(LayoutUnit(kChildWidth), child->Width());
   EXPECT_EQ(LayoutUnit(kPaddingLeft + 10), child->LeftOffset());
   EXPECT_EQ(LayoutUnit(0), child->TopOffset());
@@ -630,58 +656,58 @@ TEST_F(NGBlockLayoutAlgorithmTest, PositionFloatFragments) {
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
   div1_style->setWidth(Length(kDiv1Size, Fixed));
   div1_style->setHeight(Length(kDiv1Size, Fixed));
-  div1_style->setFloating(EFloat::Left);
+  div1_style->setFloating(EFloat::kLeft);
   div1_style->setMarginTop(Length(kDiv1TopMargin, Fixed));
-  NGBox* div1 = new NGBox(div1_style.get());
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setWidth(Length(kDiv2Size, Fixed));
   div2_style->setHeight(Length(kDiv2Size, Fixed));
-  NGBox* div2 = new NGBox(div2_style.get());
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   // DIV3
   RefPtr<ComputedStyle> div3_style = ComputedStyle::create();
   div3_style->setWidth(Length(kDiv3Size, Fixed));
   div3_style->setHeight(Length(kDiv3Size, Fixed));
-  div3_style->setFloating(EFloat::Right);
-  NGBox* div3 = new NGBox(div3_style.get());
+  div3_style->setFloating(EFloat::kRight);
+  NGBlockNode* div3 = new NGBlockNode(div3_style.get());
 
   // DIV4
   RefPtr<ComputedStyle> div4_style = ComputedStyle::create();
   div4_style->setWidth(Length(kDiv4Size, Fixed));
   div4_style->setHeight(Length(kDiv4Size, Fixed));
   div4_style->setMarginLeft(Length(kDiv4LeftMargin, Fixed));
-  div4_style->setFloating(EFloat::Left);
-  NGBox* div4 = new NGBox(div4_style.get());
+  div4_style->setFloating(EFloat::kLeft);
+  NGBlockNode* div4 = new NGBlockNode(div4_style.get());
 
   div1->SetNextSibling(div2);
   div2->SetNextSibling(div3);
   div3->SetNextSibling(div4);
 
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(kParentSize), LayoutUnit(kParentSize)));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
   ASSERT_EQ(frag->Children().size(), 4UL);
 
   // DIV1
-  const NGPhysicalFragmentBase* child1 = frag->Children()[0];
+  const NGPhysicalFragment* child1 = frag->Children()[0];
   EXPECT_EQ(kDiv1TopMargin, child1->TopOffset());
   EXPECT_EQ(kParentLeftPadding, child1->LeftOffset());
 
   // DIV2
-  const NGPhysicalFragmentBase* child2 = frag->Children()[1];
+  const NGPhysicalFragment* child2 = frag->Children()[1];
   EXPECT_EQ(0, child2->TopOffset());
   EXPECT_EQ(kParentLeftPadding, child2->LeftOffset());
 
   // DIV3
-  const NGPhysicalFragmentBase* child3 = frag->Children()[2];
+  const NGPhysicalFragment* child3 = frag->Children()[2];
   EXPECT_EQ(kDiv2Size, child3->TopOffset());
   EXPECT_EQ(kParentLeftPadding + kParentSize - kDiv3Size, child3->LeftOffset());
 
   // DIV4
-  const NGPhysicalFragmentBase* child4 = frag->Children()[3];
+  const NGPhysicalFragment* child4 = frag->Children()[3];
   EXPECT_EQ(kDiv2Size + kDiv3Size, child4->TopOffset());
   EXPECT_EQ(kParentLeftPadding + kDiv4LeftMargin, child4->LeftOffset());
 }
@@ -714,22 +740,22 @@ TEST_F(NGBlockLayoutAlgorithmTest, PositionFragmentsWithClear) {
   RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
   div1_style->setWidth(Length(kDiv1Size, Fixed));
   div1_style->setHeight(Length(kDiv1Size, Fixed));
-  div1_style->setFloating(EFloat::Left);
-  NGBox* div1 = new NGBox(div1_style.get());
+  div1_style->setFloating(EFloat::kLeft);
+  NGBlockNode* div1 = new NGBlockNode(div1_style.get());
 
   // DIV2
   RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
   div2_style->setWidth(Length(kDiv2Size, Fixed));
   div2_style->setHeight(Length(kDiv2Size, Fixed));
   div2_style->setClear(EClear::ClearLeft);
-  div2_style->setFloating(EFloat::Right);
-  NGBox* div2 = new NGBox(div2_style.get());
+  div2_style->setFloating(EFloat::kRight);
+  NGBlockNode* div2 = new NGBlockNode(div2_style.get());
 
   // DIV3
   RefPtr<ComputedStyle> div3_style = ComputedStyle::create();
   div3_style->setWidth(Length(kDiv3Size, Fixed));
   div3_style->setHeight(Length(kDiv3Size, Fixed));
-  NGBox* div3 = new NGBox(div3_style.get());
+  NGBlockNode* div3 = new NGBlockNode(div3_style.get());
 
   div1->SetNextSibling(div2);
   div2->SetNextSibling(div3);
@@ -737,16 +763,16 @@ TEST_F(NGBlockLayoutAlgorithmTest, PositionFragmentsWithClear) {
   // clear: left;
   div3_style->setClear(EClear::ClearLeft);
   auto* space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(kParentSize), LayoutUnit(kParentSize)));
-  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
-  const NGPhysicalFragmentBase* child3 = frag->Children()[2];
+  NGPhysicalBoxFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  const NGPhysicalFragment* child3 = frag->Children()[2];
   EXPECT_EQ(kDiv1Size, child3->TopOffset());
 
   // clear: right;
   div3_style->setClear(EClear::ClearRight);
   space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(kParentSize), LayoutUnit(kParentSize)));
   frag = RunBlockLayoutAlgorithm(space, div1);
   child3 = frag->Children()[2];
@@ -755,14 +781,779 @@ TEST_F(NGBlockLayoutAlgorithmTest, PositionFragmentsWithClear) {
   // clear: both;
   div3_style->setClear(EClear::ClearBoth);
   space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(kParentSize), LayoutUnit(kParentSize)));
   frag = RunBlockLayoutAlgorithm(space, div1);
   space = ConstructConstraintSpace(
-      HorizontalTopBottom, LTR,
+      kHorizontalTopBottom, TextDirection::kLtr,
       NGLogicalSize(LayoutUnit(kParentSize), LayoutUnit(kParentSize)));
   child3 = frag->Children()[2];
   EXPECT_EQ(kDiv1Size + kDiv2Size, child3->TopOffset());
+}
+
+// Verifies that we compute the right min and max-content size.
+TEST_F(NGBlockLayoutAlgorithmTest, ComputeMinMaxContent) {
+  const int kWidth = 50;
+  const int kWidthChild1 = 20;
+  const int kWidthChild2 = 30;
+
+  // This should have no impact on the min/max content size.
+  style_->setWidth(Length(kWidth, Fixed));
+
+  RefPtr<ComputedStyle> first_style = ComputedStyle::create();
+  first_style->setWidth(Length(kWidthChild1, Fixed));
+  NGBlockNode* first_child = new NGBlockNode(first_style.get());
+
+  RefPtr<ComputedStyle> second_style = ComputedStyle::create();
+  second_style->setWidth(Length(kWidthChild2, Fixed));
+  NGBlockNode* second_child = new NGBlockNode(second_style.get());
+
+  first_child->SetNextSibling(second_child);
+
+  MinAndMaxContentSizes sizes = RunComputeMinAndMax(first_child);
+  EXPECT_EQ(kWidthChild2, sizes.min_content);
+  EXPECT_EQ(kWidthChild2, sizes.max_content);
+}
+
+// Tests that we correctly handle shrink-to-fit
+TEST_F(NGBlockLayoutAlgorithmTest, ShrinkToFit) {
+  const int kWidthChild1 = 20;
+  const int kWidthChild2 = 30;
+
+  RefPtr<ComputedStyle> first_style = ComputedStyle::create();
+  first_style->setWidth(Length(kWidthChild1, Fixed));
+  NGBlockNode* first_child = new NGBlockNode(first_style.get());
+
+  RefPtr<ComputedStyle> second_style = ComputedStyle::create();
+  second_style->setWidth(Length(kWidthChild2, Fixed));
+  NGBlockNode* second_child = new NGBlockNode(second_style.get());
+
+  first_child->SetNextSibling(second_child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(100), NGSizeIndefinite), true);
+  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
+
+  EXPECT_EQ(LayoutUnit(30), frag->Width());
+}
+
+class FragmentChildIterator
+    : public GarbageCollectedFinalized<FragmentChildIterator> {
+ public:
+  FragmentChildIterator() {}
+  FragmentChildIterator(const NGPhysicalBoxFragment* parent) {
+    SetParent(parent);
+  }
+  void SetParent(const NGPhysicalBoxFragment* parent) {
+    parent_ = parent;
+    index_ = 0;
+  }
+
+  const NGPhysicalBoxFragment* NextChild() {
+    if (!parent_)
+      return nullptr;
+    if (index_ >= parent_->Children().size())
+      return nullptr;
+    while (parent_->Children()[index_]->Type() !=
+           NGPhysicalFragment::kFragmentBox) {
+      ++index_;
+      if (index_ >= parent_->Children().size())
+        return nullptr;
+    }
+    return toNGPhysicalBoxFragment(parent_->Children()[index_++]);
+  }
+
+  DEFINE_INLINE_TRACE() { visitor->trace(parent_); }
+
+ private:
+  Member<const NGPhysicalBoxFragment> parent_;
+  unsigned index_;
+};
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:2; column-fill:auto; column-gap:10px;
+//                          width:210px; height:100px;">
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, EmptyMulticol) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(2);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(210, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(210), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  // There should be nothing inside the multicol container.
+  EXPECT_FALSE(FragmentChildIterator(fragment).NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:2; column-fill:auto; column-gap:10px;
+//                          width:210px; height:100px;">
+//    <div id="child"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, EmptyBlock) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(2);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(210, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child
+  RefPtr<ComputedStyle> child_style = ComputedStyle::create();
+  NGBlockNode* child = new NGBlockNode(child_style.get());
+
+  parent->SetFirstChild(child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  EXPECT_EQ(LayoutUnit(210), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  ASSERT_TRUE(fragment);
+  EXPECT_FALSE(iterator.NextChild());
+  iterator.SetParent(fragment);
+
+  // #child fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(100), fragment->Width());
+  EXPECT_EQ(LayoutUnit(), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:2; column-fill:auto; column-gap:10px;
+//                          width:310px; height:100px;">
+//    <div id="child" style="width:60%; height:100px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, BlockInOneColumn) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(2);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(310, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child
+  RefPtr<ComputedStyle> child_style = ComputedStyle::create();
+  child_style->setWidth(Length(60, Percent));
+  child_style->setHeight(Length(100, Fixed));
+  NGBlockNode* child = new NGBlockNode(child_style.get());
+
+  parent->SetFirstChild(child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(310), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+  iterator.SetParent(fragment);
+
+  // #child fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(90), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:2; column-fill:auto; column-gap:10px;
+//                          width:210px; height:100px;">
+//    <div id="child" style="width:75%; height:150px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, BlockInTwoColumns) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(2);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(210, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child
+  RefPtr<ComputedStyle> child_style = ComputedStyle::create();
+  child_style->setWidth(Length(75, Percent));
+  child_style->setHeight(Length(150, Fixed));
+  NGBlockNode* child = new NGBlockNode(child_style.get());
+
+  parent->SetFirstChild(child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(210), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
+  // #child fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(110), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(50), fragment->Height());
+  EXPECT_EQ(0U, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:3; column-fill:auto; column-gap:10px;
+//                          width:320px; height:100px;">
+//    <div id="child" style="width:75%; height:250px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, BlockInThreeColumns) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(3);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(320, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child
+  RefPtr<ComputedStyle> child_style = ComputedStyle::create();
+  child_style->setWidth(Length(75, Percent));
+  child_style->setHeight(Length(250, Fixed));
+  NGBlockNode* child = new NGBlockNode(child_style.get());
+
+  parent->SetFirstChild(child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(320), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
+  // #child fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(110), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0U, fragment->Children().size());
+
+  // #child fragment in third column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(220), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(50), fragment->Height());
+  EXPECT_EQ(0U, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:2; column-fill:auto; column-gap:10px;
+//                          width:210px; height:100px;">
+//    <div id="child" style="width:1px; height:250px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, ActualColumnCountGreaterThanSpecified) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(2);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(210, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child
+  RefPtr<ComputedStyle> child_style = ComputedStyle::create();
+  child_style->setWidth(Length(1, Fixed));
+  child_style->setHeight(Length(250, Fixed));
+  NGBlockNode* child = new NGBlockNode(child_style.get());
+
+  parent->SetFirstChild(child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(210), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(1), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
+  // #child fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(110), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(1), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0U, fragment->Children().size());
+
+  // #child fragment in third column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(220), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(1), fragment->Width());
+  EXPECT_EQ(LayoutUnit(50), fragment->Height());
+  EXPECT_EQ(0U, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:3; column-fill:auto; column-gap:10px;
+//                          width:320px; height:100px;">
+//    <div id="child1" style="width:75%; height:60px;"></div>
+//    <div id="child2" style="width:85%; height:60px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, TwoBlocksInTwoColumns) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(3);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(320, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child1
+  RefPtr<ComputedStyle> child1_style = ComputedStyle::create();
+  child1_style->setWidth(Length(75, Percent));
+  child1_style->setHeight(Length(60, Fixed));
+  NGBlockNode* child1 = new NGBlockNode(child1_style.get());
+
+  // child2
+  RefPtr<ComputedStyle> child2_style = ComputedStyle::create();
+  child2_style->setWidth(Length(85, Percent));
+  child2_style->setHeight(Length(60, Fixed));
+  NGBlockNode* child2 = new NGBlockNode(child2_style.get());
+
+  parent->SetFirstChild(child1);
+  child1->SetNextSibling(child2);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(320), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child1 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(60), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  // #child2 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(60), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(85), fragment->Width());
+  EXPECT_EQ(LayoutUnit(40), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
+  // #child2 fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(110), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(85), fragment->Width());
+  EXPECT_EQ(LayoutUnit(20), fragment->Height());
+  EXPECT_EQ(0U, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:3; column-fill:auto; column-gap:10px;
+//                          width:320px; height:100px;">
+//    <div id="child1" style="width:75%; height:60px;">
+//      <div id="grandchild1" style="width:50px; height:120px;"></div>
+//      <div id="grandchild2" style="width:40px; height:20px;"></div>
+//    </div>
+//    <div id="child2" style="width:85%; height:10px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, OverflowedBlock) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(3);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(320, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child1
+  RefPtr<ComputedStyle> child1_style = ComputedStyle::create();
+  child1_style->setWidth(Length(75, Percent));
+  child1_style->setHeight(Length(60, Fixed));
+  NGBlockNode* child1 = new NGBlockNode(child1_style.get());
+
+  // grandchild1
+  RefPtr<ComputedStyle> grandchild1_style = ComputedStyle::create();
+  grandchild1_style->setWidth(Length(50, Fixed));
+  grandchild1_style->setHeight(Length(120, Fixed));
+  NGBlockNode* grandchild1 = new NGBlockNode(grandchild1_style.get());
+
+  // grandchild2
+  RefPtr<ComputedStyle> grandchild2_style = ComputedStyle::create();
+  grandchild2_style->setWidth(Length(40, Fixed));
+  grandchild2_style->setHeight(Length(20, Fixed));
+  NGBlockNode* grandchild2 = new NGBlockNode(grandchild2_style.get());
+
+  // child2
+  RefPtr<ComputedStyle> child2_style = ComputedStyle::create();
+  child2_style->setWidth(Length(85, Percent));
+  child2_style->setHeight(Length(10, Fixed));
+  NGBlockNode* child2 = new NGBlockNode(child2_style.get());
+
+  parent->SetFirstChild(child1);
+  child1->SetNextSibling(child2);
+  child1->SetFirstChild(grandchild1);
+  grandchild1->SetNextSibling(grandchild2);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(320), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child1 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(60), fragment->Height());
+  FragmentChildIterator grandchild_iterator(fragment);
+  // #grandchild1 fragment in first column
+  fragment = grandchild_iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(50), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(grandchild_iterator.NextChild());
+  // #child2 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(60), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(85), fragment->Width());
+  EXPECT_EQ(LayoutUnit(10), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
+  // #child1 fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(110), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(), fragment->Height());
+  grandchild_iterator.SetParent(fragment);
+  // #grandchild1 fragment in second column
+  fragment = grandchild_iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(50), fragment->Width());
+  EXPECT_EQ(LayoutUnit(20), fragment->Height());
+  // #grandchild2 fragment in second column
+  fragment = grandchild_iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(20), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(40), fragment->Width());
+  EXPECT_EQ(LayoutUnit(20), fragment->Height());
+  EXPECT_FALSE(grandchild_iterator.NextChild());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:3; column-fill:auto; column-gap:10px;
+//                          width:320px; height:100px;">
+//    <div id="child" style="float:left; width:75%; height:100px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, FloatInOneColumn) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(3);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(320, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child
+  RefPtr<ComputedStyle> child_style = ComputedStyle::create();
+  child_style->setFloating(EFloat::kLeft);
+  child_style->setWidth(Length(75, Percent));
+  child_style->setHeight(Length(100, Fixed));
+  NGBlockNode* child = new NGBlockNode(child_style.get());
+
+  parent->SetFirstChild(child);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(320), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(75), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:3; column-fill:auto; column-gap:10px;
+//                          width:320px; height:100px;">
+//    <div id="child1" style="float:left; width:15%; height:100px;"></div>
+//    <div id="child2" style="float:right; width:16%; height:100px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, TwoFloatsInOneColumn) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(3);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(320, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child1
+  RefPtr<ComputedStyle> child1_style = ComputedStyle::create();
+  child1_style->setFloating(EFloat::kLeft);
+  child1_style->setWidth(Length(15, Percent));
+  child1_style->setHeight(Length(100, Fixed));
+  NGBlockNode* child1 = new NGBlockNode(child1_style.get());
+
+  // child2
+  RefPtr<ComputedStyle> child2_style = ComputedStyle::create();
+  child2_style->setFloating(EFloat::kRight);
+  child2_style->setWidth(Length(16, Percent));
+  child2_style->setHeight(Length(100, Fixed));
+  NGBlockNode* child2 = new NGBlockNode(child2_style.get());
+
+  parent->SetFirstChild(child1);
+  child1->SetNextSibling(child2);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(320), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child1 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(15), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  // #child2 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(84), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(16), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
+}
+
+// Test case's HTML representation:
+//  <div id="parent" style="columns:3; column-fill:auto; column-gap:10px;
+//                          width:320px; height:100px;">
+//    <div id="child1" style="float:left; width:15%; height:150px;"></div>
+//    <div id="child2" style="float:right; width:16%; height:150px;"></div>
+//  </div>
+TEST_F(NGBlockLayoutAlgorithmTest, TwoFloatsInTwoColumns) {
+  // parent
+  RefPtr<ComputedStyle> parent_style = ComputedStyle::create();
+  parent_style->setColumnCount(3);
+  parent_style->setColumnFill(ColumnFillAuto);
+  parent_style->setColumnGap(10);
+  parent_style->setHeight(Length(100, Fixed));
+  parent_style->setWidth(Length(320, Fixed));
+  NGBlockNode* parent = new NGBlockNode(parent_style.get());
+
+  // child1
+  RefPtr<ComputedStyle> child1_style = ComputedStyle::create();
+  child1_style->setFloating(EFloat::kLeft);
+  child1_style->setWidth(Length(15, Percent));
+  child1_style->setHeight(Length(150, Fixed));
+  NGBlockNode* child1 = new NGBlockNode(child1_style.get());
+
+  // child2
+  RefPtr<ComputedStyle> child2_style = ComputedStyle::create();
+  child2_style->setFloating(EFloat::kRight);
+  child2_style->setWidth(Length(16, Percent));
+  child2_style->setHeight(Length(150, Fixed));
+  NGBlockNode* child2 = new NGBlockNode(child2_style.get());
+
+  parent->SetFirstChild(child1);
+  child1->SetNextSibling(child2);
+
+  auto* space = ConstructConstraintSpace(
+      kHorizontalTopBottom, TextDirection::kLtr,
+      NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  const auto* fragment = RunBlockLayoutAlgorithm(space, parent);
+
+  FragmentChildIterator iterator(fragment);
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(320), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_FALSE(iterator.NextChild());
+
+  iterator.SetParent(fragment);
+  // #child1 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(15), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  // #child2 fragment in first column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(84), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(16), fragment->Width());
+  EXPECT_EQ(LayoutUnit(100), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
+  // #child1 fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(110), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(15), fragment->Width());
+  EXPECT_EQ(LayoutUnit(50), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  // #child2 fragment in second column
+  fragment = iterator.NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(LayoutUnit(194), fragment->LeftOffset());
+  EXPECT_EQ(LayoutUnit(), fragment->TopOffset());
+  EXPECT_EQ(LayoutUnit(16), fragment->Width());
+  EXPECT_EQ(LayoutUnit(50), fragment->Height());
+  EXPECT_EQ(0UL, fragment->Children().size());
+  EXPECT_FALSE(iterator.NextChild());
 }
 
 }  // namespace

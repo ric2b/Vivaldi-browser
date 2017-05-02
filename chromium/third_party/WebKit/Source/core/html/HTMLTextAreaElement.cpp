@@ -27,7 +27,6 @@
 #include "core/html/HTMLTextAreaElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
@@ -71,9 +70,8 @@ static inline unsigned computeLengthForAPIValue(const String& text) {
   return text.length() - crlfCount;
 }
 
-HTMLTextAreaElement::HTMLTextAreaElement(Document& document,
-                                         HTMLFormElement* form)
-    : TextControlElement(textareaTag, document, form),
+HTMLTextAreaElement::HTMLTextAreaElement(Document& document)
+    : TextControlElement(textareaTag, document),
       m_rows(defaultRows),
       m_cols(defaultCols),
       m_wrap(SoftWrap),
@@ -81,9 +79,8 @@ HTMLTextAreaElement::HTMLTextAreaElement(Document& document,
       m_valueIsUpToDate(true),
       m_isPlaceholderVisible(false) {}
 
-HTMLTextAreaElement* HTMLTextAreaElement::create(Document& document,
-                                                 HTMLFormElement* form) {
-  HTMLTextAreaElement* textArea = new HTMLTextAreaElement(document, form);
+HTMLTextAreaElement* HTMLTextAreaElement::create(Document& document) {
+  HTMLTextAreaElement* textArea = new HTMLTextAreaElement(document);
   textArea->ensureUserAgentShadowRoot();
   return textArea;
 }
@@ -150,9 +147,10 @@ void HTMLTextAreaElement::collectStyleForPresentationAttribute(
   }
 }
 
-void HTMLTextAreaElement::parseAttribute(const QualifiedName& name,
-                                         const AtomicString& oldValue,
-                                         const AtomicString& value) {
+void HTMLTextAreaElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
+  const AtomicString& value = params.newValue;
   if (name == rowsAttr) {
     unsigned rows = 0;
     if (value.isEmpty() || !parseHTMLNonNegativeInteger(value, rows) ||
@@ -203,7 +201,7 @@ void HTMLTextAreaElement::parseAttribute(const QualifiedName& name,
     UseCounter::count(document(), UseCounter::TextAreaMinLength);
     setNeedsValidityCheck();
   } else {
-    TextControlElement::parseAttribute(name, oldValue, value);
+    TextControlElement::parseAttribute(params);
   }
 }
 
@@ -382,11 +380,6 @@ void HTMLTextAreaElement::setValue(const String& value,
                                    TextFieldEventBehavior eventBehavior) {
   setValueCommon(value, eventBehavior);
   m_isDirty = true;
-  if (document().focusedElement() == this)
-    document()
-        .frameHost()
-        ->chromeClient()
-        .didUpdateTextOfFocusedElementByNonUserInput(*document().frame());
 }
 
 void HTMLTextAreaElement::setNonDirtyValue(const String& value) {
@@ -478,11 +471,10 @@ void HTMLTextAreaElement::setDefaultValue(const String& defaultValue) {
   HeapVector<Member<Node>> textNodes;
   for (Node* n = firstChild(); n; n = n->nextSibling()) {
     if (n->isTextNode())
-      textNodes.append(n);
+      textNodes.push_back(n);
   }
-  size_t size = textNodes.size();
-  for (size_t i = 0; i < size; ++i)
-    removeChild(textNodes[i].get(), IGNORE_EXCEPTION);
+  for (const auto& text : textNodes)
+    removeChild(text.get(), IGNORE_EXCEPTION_FOR_TESTING);
 
   // Normalize line endings.
   String value = defaultValue;
@@ -490,7 +482,7 @@ void HTMLTextAreaElement::setDefaultValue(const String& defaultValue) {
   value.replace('\r', '\n');
 
   insertBefore(document().createTextNode(value), firstChild(),
-               IGNORE_EXCEPTION);
+               IGNORE_EXCEPTION_FOR_TESTING);
 
   if (!m_isDirty)
     setNonDirtyValue(value);

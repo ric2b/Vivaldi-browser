@@ -91,6 +91,8 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   aura::Window* content_window() { return content_window_; }
 
+  Widget::InitParams::Type widget_type() const { return widget_type_; }
+
   // Ensures that the correct window is activated/deactivated based on whether
   // we are being activated/deactivated.
   void HandleActivationChanged(bool active);
@@ -177,8 +179,6 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void SetVisibilityAnimationDuration(const base::TimeDelta& duration) override;
   void SetVisibilityAnimationTransition(
       Widget::VisibilityTransition transition) override;
-  ui::NativeTheme* GetNativeTheme() const override;
-  void OnRootViewLayout() override;
   bool IsTranslucentWindowOpacitySupported() const override;
   void OnSizeConstraintsChanged() override;
   void RepostNativeEvent(gfx::NativeEvent native_event) override;
@@ -233,8 +233,8 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void OnHostCloseRequested(const aura::WindowTreeHost* host) override;
   void OnHostResized(const aura::WindowTreeHost* host) override;
   void OnHostWorkspaceChanged(const aura::WindowTreeHost* host) override;
-  void OnHostMoved(const aura::WindowTreeHost* host,
-                   const gfx::Point& new_origin) override;
+  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+                           const gfx::Point& new_origin_in_pixels) override;
 
  private:
   friend class RootWindowDestructionObserver;
@@ -307,6 +307,9 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   // See class documentation for Widget in widget.h for a note about type.
   Widget::InitParams::Type widget_type_;
+
+  // See DesktopWindowTreeHost::ShouldUseDesktopNativeCursorManager().
+  bool use_desktop_native_cursor_manager_ = false;
 
   // The following factory is used for calls to close the NativeWidgetAura
   // instance.

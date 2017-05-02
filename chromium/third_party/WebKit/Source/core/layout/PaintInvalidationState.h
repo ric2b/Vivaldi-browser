@@ -108,6 +108,8 @@ class CORE_EXPORT PaintInvalidationState {
   friend class VisualRectMappingTest;
   friend class PaintInvalidatorContextAdapter;
 
+  inline PaintLayer& childPaintingLayer(const LayoutObject& child) const;
+
   void mapLocalRectToPaintInvalidationContainer(LayoutRect&) const;
 
   void updateForCurrentObject(const PaintInvalidationState& parentState);
@@ -168,11 +170,11 @@ class CORE_EXPORT PaintInvalidationState {
 
   PaintLayer& m_paintingLayer;
 
-#if ENABLE(ASSERT)
-  bool m_didUpdateForChildren;
+#if DCHECK_IS_ON()
+  bool m_didUpdateForChildren = false;
 #endif
 
-#if ENABLE(ASSERT) && !defined(NDEBUG)
+#if DCHECK_IS_ON() && !defined(NDEBUG)
 // #define CHECK_FAST_PATH_SLOW_PATH_EQUALITY
 #endif
 

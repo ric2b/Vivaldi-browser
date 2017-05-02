@@ -9,6 +9,7 @@
 #include "cc/resources/shared_bitmap.h"
 #include "content/public/browser/browser_thread.h"
 #include "skia/ext/platform_canvas.h"
+#include "skia/ext/skia_utils_win.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/gdi_util.h"
 #include "ui/gfx/skia_util.h"
@@ -139,9 +140,9 @@ SkCanvas* SoftwareOutputDeviceWin::BeginPaint(const gfx::Rect& damage_rect) {
       }
     }
     if (can_create_contents) {
-      contents_ = sk_sp<SkCanvas>(skia::CreatePlatformCanvas(
+      contents_ = skia::CreatePlatformCanvasWithSharedSection(
           viewport_pixel_size_.width(), viewport_pixel_size_.height(), true,
-          shared_section, skia::CRASH_ON_FAILURE));
+          shared_section, skia::CRASH_ON_FAILURE);
     }
   }
 
@@ -165,6 +166,8 @@ void SoftwareOutputDeviceWin::EndPaint() {
   if (rect.IsEmpty())
     return;
 
+  HDC dib_dc = skia::GetNativeDrawingContext(contents_.get());
+
   if (is_hwnd_composited_) {
     RECT wr;
     GetWindowRect(hwnd_, &wr);
@@ -178,21 +181,24 @@ void SoftwareOutputDeviceWin::EndPaint() {
     style |= WS_EX_LAYERED;
     SetWindowLong(hwnd_, GWL_EXSTYLE, style);
 
-    skia::ScopedPlatformPaint spp(contents_.get());
-    HDC dib_dc = spp.GetNativeDrawingContext();
     ::UpdateLayeredWindow(hwnd_, NULL, &position, &size, dib_dc, &zero,
                           RGB(0xFF, 0xFF, 0xFF), &blend, ULW_ALPHA);
   } else {
     HDC hdc = ::GetDC(hwnd_);
     RECT src_rect = rect.ToRECT();
-    skia::DrawToNativeContext(contents_.get(), hdc, rect.x(), rect.y(),
-                              &src_rect);
+    skia::CopyHDC(dib_dc,
+                  hdc,
+                  rect.x(),
+                  rect.y(),
+                  contents_.get()->imageInfo().isOpaque(),
+                  src_rect,
+                  contents_.get()->getTotalMatrix());
+
     ::ReleaseDC(hwnd_, hdc);
   }
 }
 
 void SoftwareOutputDeviceWin::ReleaseContents() {
-  DCHECK(!contents_ || contents_->unique());
   DCHECK(!in_paint_);
   contents_.reset();
 }

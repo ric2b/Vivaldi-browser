@@ -9,7 +9,7 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -89,7 +89,7 @@ public class PasswordViewingTypeTest extends NativeLibraryTestBase {
             }
 
             @Override
-            public boolean isBackendInitialized() {
+            public boolean isEngineInitialized() {
                 return true;
             }
         }
@@ -133,7 +133,7 @@ public class PasswordViewingTypeTest extends NativeLibraryTestBase {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                assertTrue(ProfileSyncService.get().isBackendInitialized());
+                assertTrue(ProfileSyncService.get().isEngineInitialized());
                 assertFalse(ProfileSyncService.get().isUsingSecondaryPassphrase());
             }
         });

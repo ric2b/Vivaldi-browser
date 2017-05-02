@@ -54,7 +54,6 @@ class CORE_EXPORT HTMLSelectElement final
 
  public:
   static HTMLSelectElement* create(Document&);
-  static HTMLSelectElement* create(Document&, HTMLFormElement*);
   ~HTMLSelectElement() override;
 
   int selectedIndex() const;
@@ -173,7 +172,7 @@ class CORE_EXPORT HTMLSelectElement final
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  HTMLSelectElement(Document&, HTMLFormElement*);
+  explicit HTMLSelectElement(Document&);
 
  private:
   const AtomicString& formControlType() const override;
@@ -197,9 +196,7 @@ class CORE_EXPORT HTMLSelectElement final
   FormControlState saveFormControlState() const override;
   void restoreFormControlState(const FormControlState&) override;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
 
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
@@ -236,7 +233,7 @@ class CORE_EXPORT HTMLSelectElement final
   };
   typedef unsigned SelectOptionFlags;
   void selectOption(HTMLOptionElement*, SelectOptionFlags);
-  void deselectItemsWithoutValidation(
+  bool deselectItemsWithoutValidation(
       HTMLOptionElement* elementToExclude = nullptr);
   void parseMultipleAttribute(const AtomicString&);
   HTMLOptionElement* lastSelectedOption() const;

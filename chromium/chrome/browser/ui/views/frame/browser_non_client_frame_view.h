@@ -17,6 +17,9 @@ class BrowserView;
 class BrowserNonClientFrameView : public views::NonClientFrameView,
                                   public ProfileAttributesStorage::Observer {
  public:
+  // The padding on the left, right, and bottom of the avatar icon.
+  static constexpr int kAvatarIconPadding = 4;
+
   BrowserNonClientFrameView(BrowserFrame* frame, BrowserView* browser_view);
   ~BrowserNonClientFrameView() override;
 
@@ -50,13 +53,6 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
 
   // Updates the throbber.
   virtual void UpdateThrobber(bool running) = 0;
-
-  // Updates any toolbar components in the frame. The default implementation
-  // does nothing.
-  virtual void UpdateToolbar();
-
-  // Returns the location icon, if this frame has any.
-  virtual views::View* GetLocationIconView() const;
 
   // Returns the profile switcher button, if this frame has any.
   virtual views::View* GetProfileSwitcherView() const;

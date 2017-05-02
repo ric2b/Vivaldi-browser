@@ -4,18 +4,16 @@
 
 /**
  * Controller of metadata box.
+ * This should be initialized with |init| method.
  *
  * @param{!MetadataModel} metadataModel
- * @param{!FilesMetadataBox} metadataBox
- * @param{!FilesQuickView} quickView
  * @param{!QuickViewModel} quickViewModel
  * @param{!FileMetadataFormatter} fileMetadataFormatter
  *
  * @constructor
  */
 function MetadataBoxController(
-    metadataModel, metadataBox, quickView, quickViewModel,
-    fileMetadataFormatter) {
+    metadataModel, quickViewModel, fileMetadataFormatter) {
   /**
    * @type {!MetadataModel}
    * @private
@@ -23,40 +21,49 @@ function MetadataBoxController(
   this.metadataModel_ = metadataModel;
 
   /**
-   * @type {!FilesMetadataBox}
+   * @type {!QuickViewModel}
    * @private
    */
-  this.metadataBox_ = metadataBox;
+  this.quickViewModel_ = quickViewModel;
+
+ /**
+  * @type {FilesMetadataBox} metadataBox
+  * @private
+  */
+  this.metadataBox_ = null;
 
   /**
-   * @type {!FilesQuickView}
+   * @type {FilesQuickView} quickView
    * @private
    */
-  this.quickView_ = quickView;
+  this.quickView_ = null;
 
   /**
    * @type {!FileMetadataFormatter}
    * @private
    */
   this.fileMetadataFormatter_ = fileMetadataFormatter;
+}
 
+/**
+ * Initialize the controller with quick view which will be lazily loaded.
+ * @param{!FilesQuickView} quickView
+ */
+MetadataBoxController.prototype.init = function(quickView) {
   // TODO(oka): Add storage to persist the value of
   // quickViewModel_.metadataBoxActive.
-  /**
-   * @type {!QuickViewModel}
-   * @private
-   */
-  this.quickViewModel_ = quickViewModel;
-
-  fileMetadataFormatter.addEventListener(
+  this.fileMetadataFormatter_.addEventListener(
       'date-time-format-changed', this.updateView_.bind(this));
 
   quickView.addEventListener(
       'metadata-box-active-changed', this.updateView_.bind(this));
 
-  quickViewModel.addEventListener(
+  this.quickViewModel_.addEventListener(
       'selected-entry-changed', this.updateView_.bind(this));
-}
+
+  this.metadataBox_ = quickView.getFilesMetadataBox();
+  this.quickView_ = quickView;
+};
 
 /**
  * @const {!Array<string>}
@@ -125,8 +132,6 @@ MetadataBoxController.prototype.onGeneralMetadataLoaded_ = function(
     }.bind(this));
   }
 
-  var type = FileType.getType(entry).type;
-  this.metadataBox_.type = type;
   if (['image', 'video', 'audio'].includes(type)) {
     if (item.externalFileUrl) {
       this.metadataModel_.get([entry], ['imageHeight', 'imageWidth'])
@@ -139,13 +144,30 @@ MetadataBoxController.prototype.onGeneralMetadataLoaded_ = function(
       this.metadataModel_
           .get(
               [entry],
-              ['imageHeight', 'imageWidth', 'mediaArtist', 'mediaTitle'])
+              [
+                'ifd',
+                'imageHeight',
+                'imageWidth',
+                'mediaAlbum',
+                'mediaArtist',
+                'mediaDuration',
+                'mediaGenre',
+                'mediaTitle',
+                'mediaTrack',
+                'mediaYearRecorded',
+              ])
           .then(function(items) {
             var item = items[0];
-            this.metadataBox_.imageHeight = item.imageHeight;
-            this.metadataBox_.imageWidth = item.imageWidth;
-            this.metadataBox_.mediaArtist = item.mediaArtist;
-            this.metadataBox_.mediaTitle = item.mediaTitle;
+            this.metadataBox_.ifd = item.ifd || null;
+            this.metadataBox_.imageHeight = item.imageHeight || 0;
+            this.metadataBox_.imageWidth = item.imageWidth || 0;
+            this.metadataBox_.mediaAlbum = item.mediaAlbum || '';
+            this.metadataBox_.mediaArtist = item.mediaArtist || '';
+            this.metadataBox_.mediaDuration = item.mediaDuration || 0;
+            this.metadataBox_.mediaGenre = item.mediaGenre || '';
+            this.metadataBox_.mediaTitle = item.mediaTitle || '';
+            this.metadataBox_.mediaTrack = item.mediaTrack || '';
+            this.metadataBox_.mediaYearRecorded = item.mediaYearRecorded || '';
           }.bind(this));
     }
   }

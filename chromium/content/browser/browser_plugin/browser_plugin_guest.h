@@ -51,7 +51,6 @@ struct FrameHostMsg_ShowPopup_Params;
 #endif
 
 namespace cc {
-class CompositorFrame;
 class SurfaceId;
 struct SurfaceSequence;
 }  // namespace cc
@@ -277,6 +276,9 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
     return can_use_cross_process_frames_;
   }
 
+  gfx::Point GetCoordinatesInEmbedderWebContents(
+      const gfx::Point& relative_point);
+
  protected:
 
   // BrowserPluginGuest is a WebContentsObserver of |web_contents| and
@@ -366,9 +368,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
       const std::vector<blink::WebCompositionUnderline>& underlines,
       int selection_start,
       int selection_end);
-  void OnImeCommitText(int instance_id,
-                       const std::string& text,
-                       int relative_cursor_pos);
+  void OnImeCommitText(
+      int instance_id,
+      const std::string& text,
+      const std::vector<blink::WebCompositionUnderline>& underlines,
+      int relative_cursor_pos);
   void OnImeFinishComposingText(bool keep_selection);
   void OnExtendSelectionAndDelete(int instance_id, int before, int after);
   void OnImeCancelComposition();

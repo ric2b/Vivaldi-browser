@@ -13,6 +13,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/numerics/safe_math.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
@@ -22,6 +23,7 @@
 #include "media/base/video_frame.h"
 #include "media/gpu/gpu_video_accelerator_util.h"
 #include "media/gpu/ipc/common/media_messages.h"
+#include "media/media_features.h"
 
 #if defined(OS_CHROMEOS)
 #if defined(USE_V4L2_CODEC)
@@ -30,7 +32,7 @@
 #if defined(ARCH_CPU_X86_FAMILY)
 #include "media/gpu/vaapi_video_encode_accelerator.h"
 #endif
-#elif defined(OS_ANDROID) && defined(ENABLE_WEBRTC)
+#elif defined(OS_ANDROID) && BUILDFLAG(ENABLE_WEBRTC)
 #include "media/gpu/android_video_encode_accelerator.h"
 #elif defined(OS_MACOSX)
 #include "media/gpu/vt_video_encode_accelerator_mac.h"
@@ -80,7 +82,7 @@ std::unique_ptr<VideoEncodeAccelerator> CreateVaapiVEA() {
 }
 #endif
 
-#if defined(OS_ANDROID) && defined(ENABLE_WEBRTC)
+#if defined(OS_ANDROID) && BUILDFLAG(ENABLE_WEBRTC)
 std::unique_ptr<VideoEncodeAccelerator> CreateAndroidVEA() {
   return base::WrapUnique<VideoEncodeAccelerator>(
       new AndroidVideoEncodeAccelerator());
@@ -359,7 +361,7 @@ GpuVideoEncodeAccelerator::GetVEAFactoryFunctions(
   if (!gpu_preferences.disable_vaapi_accelerated_video_encode)
     vea_factory_functions.push_back(base::Bind(&CreateVaapiVEA));
 #endif
-#if defined(OS_ANDROID) && defined(ENABLE_WEBRTC)
+#if defined(OS_ANDROID) && BUILDFLAG(ENABLE_WEBRTC)
   if (!gpu_preferences.disable_web_rtc_hw_encoding)
     vea_factory_functions.push_back(base::Bind(&CreateAndroidVEA));
 #endif

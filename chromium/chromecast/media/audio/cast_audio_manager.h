@@ -10,8 +10,6 @@
 
 namespace chromecast {
 
-class TaskRunnerImpl;
-
 namespace media {
 
 class CastAudioMixer;
@@ -41,6 +39,7 @@ class CastAudioManager : public ::media::AudioManagerBase {
       ::media::AudioDeviceNames* device_names) override;
   ::media::AudioParameters GetInputStreamParameters(
       const std::string& device_id) override;
+  const char* GetName() override;
 
   // AudioManagerBase implementation
   void ReleaseOutputStream(::media::AudioOutputStream* stream) override;

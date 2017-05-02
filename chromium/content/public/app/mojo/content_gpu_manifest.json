@@ -6,14 +6,16 @@
       "provides": {
         "browser": [
           "IPC::mojom::ChannelBootstrap",
-          "service_manager::mojom::ServiceFactory"
+          "service_manager::mojom::ServiceFactory",
+          "ui::mojom::GpuMain"
         ],
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"
         ]
       },
       "requires": {
-        "content_browser": [ "gpu" ]
+        "content_browser": [ "gpu" ],
+        "device": [ "device:power_monitor" ]
       }
     }
   }

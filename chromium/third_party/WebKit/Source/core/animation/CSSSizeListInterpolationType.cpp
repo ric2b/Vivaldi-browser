@@ -18,7 +18,7 @@ class UnderlyingSizeListChecker : public InterpolationType::ConversionChecker {
 
   static std::unique_ptr<UnderlyingSizeListChecker> create(
       const NonInterpolableList& underlyingList) {
-    return wrapUnique(new UnderlyingSizeListChecker(underlyingList));
+    return WTF::wrapUnique(new UnderlyingSizeListChecker(underlyingList));
   }
 
  private:
@@ -52,7 +52,7 @@ class InheritedSizeListChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedSizeListChecker> create(
       CSSPropertyID property,
       const SizeList& inheritedSizeList) {
-    return wrapUnique(
+    return WTF::wrapUnique(
         new InheritedSizeListChecker(property, inheritedSizeList));
   }
 
@@ -112,7 +112,8 @@ InterpolationValue CSSSizeListInterpolationType::maybeConvertNeutral(
     ConversionCheckers& conversionCheckers) const {
   const auto& underlyingList =
       toNonInterpolableList(*underlying.nonInterpolableValue);
-  conversionCheckers.append(UnderlyingSizeListChecker::create(underlyingList));
+  conversionCheckers.push_back(
+      UnderlyingSizeListChecker::create(underlyingList));
   return ListInterpolationFunctions::createList(
       underlyingList.length(), [&underlyingList](size_t index) {
         return SizeInterpolationFunctions::createNeutralValue(
@@ -132,7 +133,7 @@ InterpolationValue CSSSizeListInterpolationType::maybeConvertInherit(
     ConversionCheckers& conversionCheckers) const {
   SizeList inheritedSizeList = SizeListPropertyFunctions::getSizeList(
       cssProperty(), *state.parentStyle());
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedSizeListChecker::create(cssProperty(), inheritedSizeList));
   return convertSizeList(inheritedSizeList, state.style()->effectiveZoom());
 }
@@ -152,9 +153,10 @@ PairwiseInterpolationValue CSSSizeListInterpolationType::maybeMergeSingles(
       SizeInterpolationFunctions::maybeMergeSingles);
 }
 
-InterpolationValue CSSSizeListInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  const ComputedStyle& style = *environment.state().style();
+InterpolationValue
+CSSSizeListInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  const ComputedStyle& style = *state.style();
   return convertSizeList(
       SizeListPropertyFunctions::getSizeList(cssProperty(), style),
       style.effectiveZoom());
@@ -171,10 +173,10 @@ void CSSSizeListInterpolationType::composite(
       SizeInterpolationFunctions::composite);
 }
 
-void CSSSizeListInterpolationType::apply(
+void CSSSizeListInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   const auto& interpolableList = toInterpolableList(interpolableValue);
   const auto& nonInterpolableList =
       toNonInterpolableList(*nonInterpolableValue);
@@ -187,10 +189,10 @@ void CSSSizeListInterpolationType::apply(
     sizeList[i] = SizeInterpolationFunctions::createFillSize(
         *interpolableList.get(i * 2), nonInterpolableList.get(i * 2),
         *interpolableList.get(i * 2 + 1), nonInterpolableList.get(i * 2 + 1),
-        environment.state().cssToLengthConversionData());
+        state.cssToLengthConversionData());
   }
-  SizeListPropertyFunctions::setSizeList(
-      cssProperty(), *environment.state().style(), sizeList);
+  SizeListPropertyFunctions::setSizeList(cssProperty(), *state.style(),
+                                         sizeList);
 }
 
 }  // namespace blink

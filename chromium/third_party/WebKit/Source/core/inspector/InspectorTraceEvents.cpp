@@ -12,7 +12,6 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/events/Event.h"
-#include "core/fetch/CSSStyleSheetResource.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -20,6 +19,7 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutObject.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -27,10 +27,10 @@
 #include "core/xmlhttprequest/XMLHttpRequest.h"
 #include "platform/InstanceCounters.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
-#include "platform/tracing/TracedValue.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Vector.h"
 #include "wtf/text/TextPosition.h"
@@ -119,6 +119,7 @@ const char* pseudoTypeToString(CSSSelector::PseudoType pseudoType) {
     DEFINE_STRING_MAPPING(PseudoBackdrop)
     DEFINE_STRING_MAPPING(PseudoLang)
     DEFINE_STRING_MAPPING(PseudoNot)
+    DEFINE_STRING_MAPPING(PseudoPlaceholder)
     DEFINE_STRING_MAPPING(PseudoResizer)
     DEFINE_STRING_MAPPING(PseudoRoot)
     DEFINE_STRING_MAPPING(PseudoScope)
@@ -554,11 +555,16 @@ std::unique_ptr<TracedValue> InspectorReceiveResponseEvent::data(
   value->setString("frame", toHexString(frame));
   value->setInteger("statusCode", response.httpStatusCode());
   value->setString("mimeType", response.mimeType().getString().isolatedCopy());
+  value->setDouble("encodedDataLength", response.encodedDataLength());
+  value->setBoolean("fromCache", response.wasCached());
+  value->setBoolean("fromServiceWorker", response.wasFetchedViaServiceWorker());
   if (response.resourceLoadTiming()) {
     value->beginDictionary("timing");
     recordTiming(*response.resourceLoadTiming(), value.get());
     value->endDictionary();
   }
+  if (response.wasFetchedViaServiceWorker())
+    value->setBoolean("fromServiceWorker", true);
   return value;
 }
 
@@ -578,12 +584,14 @@ std::unique_ptr<TracedValue> InspectorReceiveDataEvent::data(
 std::unique_ptr<TracedValue> InspectorResourceFinishEvent::data(
     unsigned long identifier,
     double finishTime,
-    bool didFail) {
+    bool didFail,
+    int64_t encodedDataLength) {
   String requestId = IdentifiersFactory::requestId(identifier);
 
   std::unique_ptr<TracedValue> value = TracedValue::create();
   value->setString("requestId", requestId);
   value->setBoolean("didFail", didFail);
+  value->setDouble("encodedDataLength", encodedDataLength);
   if (finishTime)
     value->setDouble("finishTime", finishTime);
   return value;
@@ -897,7 +905,7 @@ std::unique_ptr<TracedValue> InspectorPaintImageEvent::data(
     const LayoutImage& layoutImage) {
   std::unique_ptr<TracedValue> value = TracedValue::create();
   setGeneratingNodeInfo(value.get(), &layoutImage, "nodeId");
-  if (const ImageResource* resource = layoutImage.cachedImage())
+  if (const ImageResourceContent* resource = layoutImage.cachedImage())
     value->setString("url", resource->url().getString());
   return value;
 }
@@ -907,14 +915,14 @@ std::unique_ptr<TracedValue> InspectorPaintImageEvent::data(
     const StyleImage& styleImage) {
   std::unique_ptr<TracedValue> value = TracedValue::create();
   setGeneratingNodeInfo(value.get(), &owningLayoutObject, "nodeId");
-  if (const ImageResource* resource = styleImage.cachedImage())
+  if (const ImageResourceContent* resource = styleImage.cachedImage())
     value->setString("url", resource->url().getString());
   return value;
 }
 
 std::unique_ptr<TracedValue> InspectorPaintImageEvent::data(
     const LayoutObject* owningLayoutObject,
-    const ImageResource& imageResource) {
+    const ImageResourceContent& imageResource) {
   std::unique_ptr<TracedValue> value = TracedValue::create();
   setGeneratingNodeInfo(value.get(), owningLayoutObject, "nodeId");
   value->setString("url", imageResource.url().getString());

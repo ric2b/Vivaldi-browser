@@ -6,14 +6,6 @@
  * @fileoverview
  * 'settings-users-page' is the settings page for managing user accounts on
  * the device.
- *
- * Example:
- *
- *    <neon-animated-pages>
- *      <settings-users-page prefs="{{prefs}}">
- *      </settings-users-page>
- *      ... other pages ...
- *    </neon-animated-pages>
  */
 Polymer({
   is: 'settings-users-page',
@@ -40,10 +32,6 @@ Polymer({
     },
   },
 
-  keyBindings: {
-    'enter': 'addUser_'
-  },
-
   /** @override */
   created: function() {
     chrome.usersPrivate.isCurrentUserOwner(function(isOwner) {
@@ -55,8 +43,12 @@ Polymer({
     }.bind(this));
   },
 
-  /** @private */
-  openAddUserDialog_: function() {
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  openAddUserDialog_: function(e) {
+    e.preventDefault();
     this.$.addUserDialog.open();
   },
 

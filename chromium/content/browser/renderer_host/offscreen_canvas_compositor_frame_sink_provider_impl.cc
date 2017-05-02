@@ -4,6 +4,8 @@
 
 #include "content/browser/renderer_host/offscreen_canvas_compositor_frame_sink_provider_impl.h"
 
+#include "base/memory/ptr_util.h"
+#include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/offscreen_canvas_compositor_frame_sink.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -15,20 +17,29 @@ OffscreenCanvasCompositorFrameSinkProviderImpl::
 OffscreenCanvasCompositorFrameSinkProviderImpl::
     ~OffscreenCanvasCompositorFrameSinkProviderImpl() {}
 
-// static
-void OffscreenCanvasCompositorFrameSinkProviderImpl::Create(
+void OffscreenCanvasCompositorFrameSinkProviderImpl::Add(
     blink::mojom::OffscreenCanvasCompositorFrameSinkProviderRequest request) {
-  mojo::MakeStrongBinding(
-      base::MakeUnique<OffscreenCanvasCompositorFrameSinkProviderImpl>(),
-      std::move(request));
+  bindings_.AddBinding(this, std::move(request));
 }
 
 void OffscreenCanvasCompositorFrameSinkProviderImpl::CreateCompositorFrameSink(
-    const cc::SurfaceId& surface_id,
+    const cc::FrameSinkId& frame_sink_id,
     cc::mojom::MojoCompositorFrameSinkClientPtr client,
     cc::mojom::MojoCompositorFrameSinkRequest request) {
-  OffscreenCanvasCompositorFrameSink::Create(surface_id, std::move(client),
-                                             std::move(request));
+  compositor_frame_sinks_[frame_sink_id] =
+      base::MakeUnique<OffscreenCanvasCompositorFrameSink>(
+          this, frame_sink_id, std::move(request), std::move(client));
+}
+
+cc::SurfaceManager*
+OffscreenCanvasCompositorFrameSinkProviderImpl::GetSurfaceManager() {
+  return content::GetSurfaceManager();
+}
+
+void OffscreenCanvasCompositorFrameSinkProviderImpl::
+    OnCompositorFrameSinkClientConnectionLost(
+        const cc::FrameSinkId& frame_sink_id) {
+  compositor_frame_sinks_.erase(frame_sink_id);
 }
 
 }  // namespace content

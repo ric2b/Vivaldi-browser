@@ -151,9 +151,11 @@ void SyncRecordDatatypeBin(const std::string& name, int sample, int value);
         break;                                                 \
       case ::syncer::PROXY_TABS:                               \
         PER_DATA_TYPE_MACRO("Tabs");                           \
-        break;                                                 \
       case ::syncer::READING_LIST:                             \
         PER_DATA_TYPE_MACRO("ReadingList");                    \
+        break;                                                 \
+      case ::syncer::NOTES:                                    \
+        PER_DATA_TYPE_MACRO("Notes");                          \
         break;                                                 \
       default:                                                 \
         NOTREACHED() << "Unknown datatype "                    \

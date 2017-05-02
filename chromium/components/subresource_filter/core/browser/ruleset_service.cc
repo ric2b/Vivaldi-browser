@@ -28,6 +28,7 @@
 #include "components/subresource_filter/core/common/copying_file_stream.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
 #include "components/subresource_filter/core/common/proto/rules.pb.h"
+#include "components/subresource_filter/core/common/time_measurements.h"
 #include "components/subresource_filter/core/common/unindexed_ruleset.h"
 #include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
 
@@ -344,8 +345,12 @@ IndexedRulesetVersion RulesetService::IndexAndWriteRuleset(
 bool RulesetService::IndexRuleset(base::File unindexed_ruleset_file,
                                   RulesetIndexer* indexer) {
   SCOPED_UMA_HISTOGRAM_TIMER("SubresourceFilter.IndexRuleset.WallDuration");
+  SCOPED_UMA_HISTOGRAM_THREAD_TIMER(
+      "SubresourceFilter.IndexRuleset.CPUDuration");
 
   int64_t unindexed_ruleset_size = unindexed_ruleset_file.GetLength();
+  if (unindexed_ruleset_size < 0)
+    return false;
   CopyingFileInputStream copying_stream(std::move(unindexed_ruleset_file));
   google::protobuf::io::CopyingInputStreamAdaptor zero_copy_stream_adaptor(
       &copying_stream, 4096 /* buffer_size */);

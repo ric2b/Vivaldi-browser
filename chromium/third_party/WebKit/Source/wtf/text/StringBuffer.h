@@ -64,7 +64,7 @@ class StringBuffer {
     return characters()[i];
   }
 
-  PassRefPtr<StringImpl> release() { return m_data.release(); }
+  PassRefPtr<StringImpl> release() { return std::move(m_data); }
 
  private:
   RefPtr<StringImpl> m_data;
@@ -72,7 +72,7 @@ class StringBuffer {
 
 template <typename CharType>
 void StringBuffer<CharType>::shrink(unsigned newLength) {
-  ASSERT(m_data);
+  DCHECK(m_data);
   if (m_data->length() == newLength)
     return;
   m_data = m_data->substring(0, newLength);

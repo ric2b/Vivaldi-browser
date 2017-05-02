@@ -5,25 +5,28 @@
 #include "chrome/browser/android/offline_pages/offline_page_utils.h"
 
 #include "base/bind.h"
+#include "base/guid.h"
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/android/tab_android.h"
-#include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/background/save_page_request.h"
-#include "components/offline_pages/client_namespace_constants.h"
-#include "components/offline_pages/client_policy_controller.h"
-#include "components/offline_pages/offline_page_feature.h"
-#include "components/offline_pages/offline_page_item.h"
-#include "components/offline_pages/offline_page_model.h"
-#include "components/offline_pages/request_header/offline_page_header.h"
+#include "chrome/browser/net/net_error_tab_helper.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/background/save_page_request.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/client_policy_controller.h"
+#include "components/offline_pages/core/offline_page_feature.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
@@ -137,6 +140,14 @@ bool OfflinePageUtils::IsShowingOfflinePreview(
 }
 
 // static
+bool OfflinePageUtils::IsShowingDownloadButtonInErrorPage(
+    content::WebContents* web_contents) {
+  chrome_browser_net::NetErrorTabHelper* tab_helper =
+      chrome_browser_net::NetErrorTabHelper::FromWebContents(web_contents);
+  return tab_helper && tab_helper->is_showing_download_button_in_error_page();
+}
+
+// static
 bool OfflinePageUtils::GetTabId(content::WebContents* web_contents,
                                 int* tab_id) {
   TabAndroid* tab_android = TabAndroid::FromWebContents(web_contents);
@@ -185,6 +196,8 @@ void OfflinePageUtils::CheckExistenceOfRequestsWithURL(
     const PagesExistCallback& callback) {
   RequestCoordinator* request_coordinator =
       RequestCoordinatorFactory::GetForBrowserContext(browser_context);
+  if (!request_coordinator)
+    return;
 
   auto request_coordinator_continuation = [](
       const std::string& name_space, const GURL& offline_page_url,
@@ -216,6 +229,27 @@ bool OfflinePageUtils::EqualsIgnoringFragment(const GURL& lhs,
   GURL rhs_stripped = rhs.ReplaceComponents(remove_params);
 
   return lhs_stripped == rhs_stripped;
+}
+
+// static
+void OfflinePageUtils::StartOfflinePageDownload(
+    content::BrowserContext* context,
+    const GURL& url) {
+  RequestCoordinator* request_coordinator =
+      RequestCoordinatorFactory::GetForBrowserContext(context);
+
+  // TODO(dimich): Enable in Incognito when Android Downloads implement
+  // Incognito story.
+  if (!request_coordinator)
+    return;
+
+  ClientId client_id(kDownloadNamespace, base::GenerateGUID());
+  request_coordinator->SavePageLater(
+      url, client_id, true,
+      RequestCoordinator::RequestAvailability::ENABLED_FOR_OFFLINER);
+
+  android::OfflinePageNotificationBridge notification_bridge;
+  notification_bridge.ShowDownloadingToast();
 }
 
 }  // namespace offline_pages

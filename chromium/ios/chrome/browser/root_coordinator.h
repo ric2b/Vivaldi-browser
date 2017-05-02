@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_ROOT_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_ROOT_COORDINATOR_H_
 
-#include <UIKit/UIKit.h>
+#import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/chrome_coordinator.h"
 
@@ -20,7 +20,7 @@
 - (nullable instancetype)initWithBaseViewController:
     (nullable UIViewController*)viewController NS_UNAVAILABLE;
 
-@property(nonatomic, readonly, nullable) UIWindow* window;
+@property(weak, nonatomic, readonly, nullable) UIWindow* window;
 
 @end
 

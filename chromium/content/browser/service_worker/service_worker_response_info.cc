@@ -44,8 +44,7 @@ void ServiceWorkerResponseInfo::GetExtraResponseInfo(
   response_info->was_fetched_via_foreign_fetch = was_fetched_via_foreign_fetch_;
   response_info->was_fallback_required_by_service_worker =
       was_fallback_required_;
-  response_info->original_url_via_service_worker =
-      original_url_via_service_worker_;
+  response_info->url_list_via_service_worker = url_list_via_service_worker_;
   response_info->response_type_via_service_worker =
       response_type_via_service_worker_;
   response_info->service_worker_start_time = service_worker_start_time_;
@@ -53,11 +52,14 @@ void ServiceWorkerResponseInfo::GetExtraResponseInfo(
   response_info->is_in_cache_storage = response_is_in_cache_storage_;
   response_info->cache_storage_cache_name = response_cache_storage_cache_name_;
   response_info->cors_exposed_header_names = cors_exposed_header_names_;
+  response_info->did_service_worker_navigation_preload =
+      did_navigation_preload_;
 }
 
 void ServiceWorkerResponseInfo::OnPrepareToRestart(
     base::TimeTicks service_worker_start_time,
-    base::TimeTicks service_worker_ready_time) {
+    base::TimeTicks service_worker_ready_time,
+    bool did_navigation_preload) {
   ResetData();
 
   // Update times, if not already set by a previous Job.
@@ -65,23 +67,29 @@ void ServiceWorkerResponseInfo::OnPrepareToRestart(
     service_worker_start_time_ = service_worker_start_time;
     service_worker_ready_time_ = service_worker_ready_time;
   }
+  // Don't reset navigation preload flag it if a previous job already set it,
+  // since the UseCounter should still reflect that navigation preload occurred
+  // for this request.
+  if (did_navigation_preload)
+    did_navigation_preload_ = true;
 }
 
 void ServiceWorkerResponseInfo::OnStartCompleted(
     bool was_fetched_via_service_worker,
     bool was_fetched_via_foreign_fetch,
     bool was_fallback_required,
-    const GURL& original_url_via_service_worker,
+    const std::vector<GURL>& url_list_via_service_worker,
     blink::WebServiceWorkerResponseType response_type_via_service_worker,
     base::TimeTicks service_worker_start_time,
     base::TimeTicks service_worker_ready_time,
     bool response_is_in_cache_storage,
     const std::string& response_cache_storage_cache_name,
-    const ServiceWorkerHeaderList& cors_exposed_header_names) {
+    const ServiceWorkerHeaderList& cors_exposed_header_names,
+    bool did_navigation_preload) {
   was_fetched_via_service_worker_ = was_fetched_via_service_worker;
   was_fetched_via_foreign_fetch_ = was_fetched_via_foreign_fetch;
   was_fallback_required_ = was_fallback_required;
-  original_url_via_service_worker_ = original_url_via_service_worker;
+  url_list_via_service_worker_ = url_list_via_service_worker;
   response_type_via_service_worker_ = response_type_via_service_worker;
   response_is_in_cache_storage_ = response_is_in_cache_storage;
   response_cache_storage_cache_name_ = response_cache_storage_cache_name;
@@ -92,18 +100,26 @@ void ServiceWorkerResponseInfo::OnStartCompleted(
     service_worker_start_time_ = service_worker_start_time;
     service_worker_ready_time_ = service_worker_ready_time;
   }
+
+  did_navigation_preload_ = did_navigation_preload;
 }
 
 void ServiceWorkerResponseInfo::ResetData() {
   was_fetched_via_service_worker_ = false;
   was_fetched_via_foreign_fetch_ = false;
   was_fallback_required_ = false;
-  original_url_via_service_worker_ = GURL();
+  url_list_via_service_worker_.clear();
   response_type_via_service_worker_ =
       blink::WebServiceWorkerResponseTypeDefault;
+  // Don't reset |service_worker_start_time_| or |service_worker_ready_time_|
+  // since it's historical timing information that should persist between job
+  // restarts.
   response_is_in_cache_storage_ = false;
   response_cache_storage_cache_name_ = std::string();
   cors_exposed_header_names_.clear();
+  // Don't reset the |did_navigation_preload_| flag. This is used for the
+  // UseCounter, and if it was ever true for a request, it should remain true
+  // even if the job restarts.
 }
 
 ServiceWorkerResponseInfo::ServiceWorkerResponseInfo() {}

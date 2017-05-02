@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
@@ -252,7 +253,7 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerTest, DISABLED_ExistingUserLogin) {
   EXPECT_CALL(*mock_login_display_, SetUIEnabled(true))
       .Times(1);
   EXPECT_CALL(*mock_login_display_host_,
-              StartWizard(WizardController::kTermsOfServiceScreenName))
+              StartWizard(OobeScreen::SCREEN_TERMS_OF_SERVICE))
       .Times(0);
 
   content::WindowedNotificationObserver profile_prepared_observer(
@@ -445,7 +446,7 @@ class ExistingUserControllerPublicSessionTest
         UserSessionManager::GetInstance());
     session_manager_test_api.InjectStubUserContext(user_context);
     EXPECT_CALL(*mock_login_display_host_,
-                StartWizard(WizardController::kTermsOfServiceScreenName))
+                StartWizard(OobeScreen::SCREEN_TERMS_OF_SERVICE))
         .Times(0);
     EXPECT_CALL(*mock_login_display_, SetUIEnabled(false)).Times(AnyNumber());
     EXPECT_CALL(*mock_login_display_, SetUIEnabled(true)).Times(AnyNumber());

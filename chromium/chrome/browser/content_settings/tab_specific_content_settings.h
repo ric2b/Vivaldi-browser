@@ -28,6 +28,10 @@
 
 class HostContentSettingsMap;
 
+namespace content {
+class NavigationHandle;
+}
+
 namespace net {
 class CookieOptions;
 }
@@ -161,11 +165,11 @@ class TabSpecificContentSettings
   // |blocked_by_policy_javascript| or/and |blocked_by_policy_cookie| should be
   // true, and this function should invoke OnContentBlocked for JavaScript
   // or/and cookies respectively.
-  static void ServiceWorkerAccessed(int render_process_id,
-                                    int render_frame_id,
-                                    const GURL& scope,
-                                    bool blocked_by_policy_javascript,
-                                    bool blocked_by_policy_cookie);
+  static void ServiceWorkerAccessed(
+      const base::Callback<content::WebContents*(void)>& wc_getter,
+      const GURL& scope,
+      bool blocked_by_policy_javascript,
+      bool blocked_by_policy_cookie);
 
   // Resets the |content_settings_status_|, except for
   // information which are needed for navigation: CONTENT_SETTINGS_TYPE_COOKIES
@@ -353,7 +357,6 @@ class TabSpecificContentSettings
                              bool blocked_by_policy);
   void OnGeolocationPermissionSet(const GURL& requesting_frame,
                                   bool allowed);
-  void OnDidUseKeygen(const GURL& url);
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   void OnProtectedMediaIdentifierPermissionSet(const GURL& requesting_frame,
                                                bool allowed);

@@ -85,6 +85,11 @@ class WinTool(object):
     """Simple stamp command."""
     open(path, 'w').close()
 
+  def ExecDeleteFile(self, path):
+    """Simple file delete command."""
+    if os.path.exists(path):
+      os.unlink(path)
+
   def ExecRecursiveMirror(self, source, dest):
     """Emulation of rm -rf out && cp -af in out."""
     if os.path.exists(dest):
@@ -108,7 +113,7 @@ class WinTool(object):
       shutil.copy2(source, dest)
 
   def SignTarget(self, return_code, args):
-    if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and 
+    if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
       os.environ.get("VIVALDI_SIGNING_KEY", None)):
       for target in set([x.partition(":")[-1]
                          for x in args if x.startswith("/OUT:")
@@ -153,14 +158,15 @@ class WinTool(object):
     # non-Windows don't do that there.
     link = subprocess.Popen(args, shell=sys.platform == 'win32', env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, _ = link.communicate()
-    for line in out.splitlines():
+    # Read output one line at a time as it shows up to avoid OOM failures when
+    # GBs of output is produced.
+    for line in link.stdout:
       if (not line.startswith('   Creating library ') and
           not line.startswith('Generating code') and
           not line.startswith('Finished generating code')):
         print line
 
-    return_code = link.returncode
+    return_code = link.wait()
 
     if return_code == 0:
       return_code = self.SignTarget(return_code, args)

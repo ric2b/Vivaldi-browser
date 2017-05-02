@@ -74,7 +74,7 @@ PaintLayerStackingNode::PaintLayerStackingNode(PaintLayer* layer)
 }
 
 PaintLayerStackingNode::~PaintLayerStackingNode() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   if (!layoutObject()->documentBeingDestroyed()) {
     DCHECK(!isInStackingParentZOrderLists());
 
@@ -100,7 +100,7 @@ void PaintLayerStackingNode::dirtyZOrderLists() {
 #endif
   DCHECK(isStackingContext());
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   updateStackingParentForZOrderLists(0);
 #endif
 
@@ -158,14 +158,16 @@ void PaintLayerStackingNode::rebuildZOrderLists() {
       if (childElement && childElement->isInTopLayer()) {
         PaintLayer* layer = toLayoutBoxModelObject(child)->layer();
         // Create the buffer if it doesn't exist yet.
-        if (!m_posZOrderList)
-          m_posZOrderList = wrapUnique(new Vector<PaintLayerStackingNode*>);
-        m_posZOrderList->append(layer->stackingNode());
+        if (!m_posZOrderList) {
+          m_posZOrderList =
+              WTF::wrapUnique(new Vector<PaintLayerStackingNode*>);
+        }
+        m_posZOrderList->push_back(layer->stackingNode());
       }
     }
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   updateStackingParentForZOrderLists(this);
 #endif
 
@@ -182,8 +184,8 @@ void PaintLayerStackingNode::collectLayers(
     std::unique_ptr<Vector<PaintLayerStackingNode*>>& buffer =
         (zIndex() >= 0) ? posBuffer : negBuffer;
     if (!buffer)
-      buffer = wrapUnique(new Vector<PaintLayerStackingNode*>);
-    buffer->append(this);
+      buffer = WTF::wrapUnique(new Vector<PaintLayerStackingNode*>);
+    buffer->push_back(this);
   }
 
   if (!isStackingContext()) {
@@ -193,7 +195,7 @@ void PaintLayerStackingNode::collectLayers(
   }
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool PaintLayerStackingNode::isInStackingParentZOrderLists() const {
   if (!m_stackingParent || m_stackingParent->zOrderListsDirty())
     return false;

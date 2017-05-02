@@ -9,8 +9,6 @@ import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 component("ipc") {
   sources = [
-    "brokerable_attachment.cc",
-    "brokerable_attachment.h",
     "export_template.h",
     "handle_attachment_win.cc",
     "handle_attachment_win.h",
@@ -86,24 +84,15 @@ component("ipc") {
     "param_traits_write_macros.h",
     "struct_constructor_macros.h",
     "struct_destructor_macros.h",
-    "unix_domain_socket_util.cc",
-    "unix_domain_socket_util.h",
   ]
 
   if (is_nacl && !is_nacl_nonsfi) {
-    sources -= [
-      "ipc_channel.cc",
-      "unix_domain_socket_util.cc",
-    ]
+    sources -= [ "ipc_channel.cc" ]
   } else {
     sources -= [
       "ipc_channel_nacl.cc",
       "ipc_channel_nacl.h",
     ]
-  }
-
-  if (is_win || is_nacl_nonsfi) {
-    sources -= [ "unix_domain_socket_util.cc" ]
   }
 
   defines = [ "IPC_IMPLEMENTATION" ]
@@ -185,10 +174,6 @@ if (!is_ios) {
       "sync_socket_unittest.cc",
     ]
 
-    if (!is_win && !is_ios) {
-      sources += [ "unix_domain_socket_util_unittest.cc" ]
-    }
-
     if (!is_ios) {
       sources += [ "ipc_send_fds_test.cc" ]
     }
@@ -221,12 +206,14 @@ if (!is_ios) {
 
     deps = [
       ":ipc",
+      ":test_interfaces",
       ":test_support",
       "//base",
       "//base:i18n",
       "//base/test:test_support",
       "//mojo/edk/system",
       "//mojo/edk/test:test_support",
+      "//mojo/edk/test:test_support_impl",
       "//testing/gtest",
     ]
   }
@@ -234,8 +221,6 @@ if (!is_ios) {
   static_library("test_support") {
     testonly = true
     sources = [
-      "ipc_perftest_support.cc",
-      "ipc_perftest_support.h",
       "ipc_security_test_util.cc",
       "ipc_security_test_util.h",
       "ipc_test_base.cc",

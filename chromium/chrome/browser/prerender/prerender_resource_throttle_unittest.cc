@@ -16,8 +16,9 @@
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_resource_throttle.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/browser/resource_throttle.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/test/test_browser_thread.h"
 #include "ipc/ipc_message.h"
 #include "net/base/request_priority.h"
@@ -91,7 +92,7 @@ class TestPrerenderManager : public PrerenderManager {
 };
 
 class DeferredRedirectDelegate : public net::URLRequest::Delegate,
-                                 public content::ResourceController {
+                                 public content::ResourceThrottle::Delegate {
  public:
   DeferredRedirectDelegate()
       : throttle_(NULL),
@@ -102,7 +103,7 @@ class DeferredRedirectDelegate : public net::URLRequest::Delegate,
 
   void SetThrottle(PrerenderResourceThrottle* throttle) {
     throttle_ = throttle;
-    throttle_->set_controller_for_testing(this);
+    throttle_->set_delegate_for_testing(this);
   }
 
   void Run() {
@@ -128,7 +129,7 @@ class DeferredRedirectDelegate : public net::URLRequest::Delegate,
   void OnResponseStarted(net::URLRequest* request, int net_error) override {}
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override {}
 
-  // content::ResourceController implementation:
+  // content::ResourceThrottle::Delegate implementation:
   void Cancel() override {
     EXPECT_FALSE(cancel_called_);
     EXPECT_FALSE(resume_called_);
@@ -212,17 +213,12 @@ TEST_F(PrerenderResourceThrottleTest, RedirectResume) {
       net::URLRequestMockHTTPJob::GetMockUrl("prerender/image-deferred.png"),
       net::DEFAULT_PRIORITY, &delegate));
   content::ResourceRequestInfo::AllocateForTesting(
-      request.get(),
-      content::RESOURCE_TYPE_IMAGE,
-      NULL,
-      kDefaultChildId,
-      kDefaultRouteId,
-      MSG_ROUTING_NONE,
-      false,  // is_main_frame
-      false,  // parent_is_main_frame
-      true,   // allow_download
-      true,   // is_async
-      false); // is_using_lofi
+      request.get(), content::RESOURCE_TYPE_IMAGE, NULL, kDefaultChildId,
+      kDefaultRouteId, MSG_ROUTING_NONE,
+      /*is_main_frame=*/false,
+      /*parent_is_main_frame=*/false,
+      /*allow_download=*/true,
+      /*is_async=*/true, content::PREVIEWS_OFF);
 
   // Install a prerender throttle.
   PrerenderResourceThrottle throttle(request.get());
@@ -255,17 +251,12 @@ TEST_F(PrerenderResourceThrottleTest, RedirectMainFrame) {
       net::URLRequestMockHTTPJob::GetMockUrl("prerender/image-deferred.png"),
       net::DEFAULT_PRIORITY, &delegate));
   content::ResourceRequestInfo::AllocateForTesting(
-      request.get(),
-      content::RESOURCE_TYPE_MAIN_FRAME,
-      NULL,
-      kDefaultChildId,
-      kDefaultRouteId,
-      MSG_ROUTING_NONE,
-      true,   // is_main_frame
-      false,  // parent_is_main_frame
-      true,   // allow_download
-      true,   // is_async
-      false); // is_using_lofi
+      request.get(), content::RESOURCE_TYPE_MAIN_FRAME, NULL, kDefaultChildId,
+      kDefaultRouteId, MSG_ROUTING_NONE,
+      /*is_main_frame=*/true,
+      /*parent_is_main_frame=*/false,
+      /*allow_download=*/true,
+      /*is_async=*/true, content::PREVIEWS_OFF);
 
   // Install a prerender throttle.
   PrerenderResourceThrottle throttle(request.get());
@@ -296,17 +287,12 @@ TEST_F(PrerenderResourceThrottleTest, RedirectSyncXHR) {
       net::URLRequestMockHTTPJob::GetMockUrl("prerender/image-deferred.png"),
       net::DEFAULT_PRIORITY, &delegate));
   content::ResourceRequestInfo::AllocateForTesting(
-      request.get(),
-      content::RESOURCE_TYPE_XHR,
-      NULL,
-      kDefaultChildId,
-      kDefaultRouteId,
-      MSG_ROUTING_NONE,
-      false,   // is_main_frame
-      false,   // parent_is_main_frame
-      true,    // allow_download
-      false,   // is_async
-      false);  // is_using_lofi
+      request.get(), content::RESOURCE_TYPE_XHR, NULL, kDefaultChildId,
+      kDefaultRouteId, MSG_ROUTING_NONE,
+      /*is_main_frame=*/false,
+      /*parent_is_main_frame=*/false,
+      /*allow_download=*/true,
+      /*is_async=*/false, content::PREVIEWS_OFF);
 
   // Install a prerender throttle.
   PrerenderResourceThrottle throttle(request.get());

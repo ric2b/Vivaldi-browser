@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/rappor/test_rappor_service.h"
 #include "components/variations/variations_associated_data.h"
@@ -16,7 +15,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/android/background_sync_launcher_android.h"
 #endif
 
@@ -28,16 +27,19 @@ const char kFieldTrialGroup[] = "GroupA";
 
 class TestBackgroundSyncControllerImpl : public BackgroundSyncControllerImpl {
  public:
-  TestBackgroundSyncControllerImpl(Profile* profile,
-                                   rappor::TestRapporService* rappor_service)
+  TestBackgroundSyncControllerImpl(
+      Profile* profile,
+      rappor::TestRapporServiceImpl* rappor_service)
       : BackgroundSyncControllerImpl(profile),
         rappor_service_(rappor_service) {}
 
  protected:
-  rappor::RapporService* GetRapporService() override { return rappor_service_; }
+  rappor::RapporServiceImpl* GetRapporServiceImpl() override {
+    return rappor_service_;
+  }
 
  private:
-  rappor::TestRapporService* rappor_service_;
+  rappor::TestRapporServiceImpl* rappor_service_;
 
   DISALLOW_COPY_AND_ASSIGN(TestBackgroundSyncControllerImpl);
 };
@@ -49,7 +51,7 @@ class BackgroundSyncControllerImplTest : public testing::Test {
         controller_(
             new TestBackgroundSyncControllerImpl(&profile_, &rappor_service_)) {
     ResetFieldTrialList();
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
     BackgroundSyncLauncherAndroid::SetPlayServicesVersionCheckDisabledForTests(
         true);
 #endif
@@ -65,7 +67,7 @@ class BackgroundSyncControllerImplTest : public testing::Test {
 
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
-  rappor::TestRapporService rappor_service_;
+  rappor::TestRapporServiceImpl rappor_service_;
   std::unique_ptr<TestBackgroundSyncControllerImpl> controller_;
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
 

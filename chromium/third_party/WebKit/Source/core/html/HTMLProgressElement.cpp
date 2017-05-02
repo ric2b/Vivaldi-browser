@@ -22,7 +22,6 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/UseCounter.h"
@@ -69,17 +68,16 @@ LayoutProgress* HTMLProgressElement::layoutProgress() const {
   return nullptr;
 }
 
-void HTMLProgressElement::parseAttribute(const QualifiedName& name,
-                                         const AtomicString& oldValue,
-                                         const AtomicString& value) {
-  if (name == valueAttr) {
-    if (oldValue.isNull() != value.isNull())
+void HTMLProgressElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == valueAttr) {
+    if (params.oldValue.isNull() != params.newValue.isNull())
       pseudoStateChanged(CSSSelector::PseudoIndeterminate);
     didElementStateChange();
-  } else if (name == maxAttr) {
+  } else if (params.name == maxAttr) {
     didElementStateChange();
   } else {
-    LabelableElement::parseAttribute(name, oldValue, value);
+    LabelableElement::parseAttribute(params);
   }
 }
 

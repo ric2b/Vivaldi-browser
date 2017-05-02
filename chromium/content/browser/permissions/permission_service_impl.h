@@ -51,7 +51,7 @@ class PermissionServiceImpl : public blink::mojom::PermissionService {
     RequestPermissionsCallback callback;
     int request_count;
   };
-  using RequestsMap = IDMap<PendingRequest, IDMapOwnPointer>;
+  using RequestsMap = IDMap<std::unique_ptr<PendingRequest>>;
 
   // blink::mojom::PermissionService.
   void HasPermission(blink::mojom::PermissionDescriptorPtr permission,

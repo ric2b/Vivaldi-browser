@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/common/content_client.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -201,8 +202,9 @@ TEST_F(AsyncRevalidationDriverTest, ResumeDeferredRequestWorks) {
   driver_->StartRequest();
   base::RunLoop().RunUntilIdle();
 
-  ResourceController* driver_as_resource_controller = driver_.get();
-  driver_as_resource_controller->Resume();
+  ResourceThrottle::Delegate* driver_as_resource_throttle_delegate =
+      driver_.get();
+  driver_as_resource_throttle_delegate->Resume();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(async_revalidation_complete_called());
 }

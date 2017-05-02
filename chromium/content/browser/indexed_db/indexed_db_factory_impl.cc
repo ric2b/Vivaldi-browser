@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
@@ -262,8 +263,9 @@ void IndexedDBFactoryImpl::DeleteDatabase(
     return;
   }
 
-  scoped_refptr<IndexedDBDatabase> database = IndexedDBDatabase::Create(
-      name, backing_store.get(), this, unique_identifier, &s);
+  scoped_refptr<IndexedDBDatabase> database;
+  std::tie(database, s) = IndexedDBDatabase::Create(name, backing_store.get(),
+                                                    this, unique_identifier);
   if (!database.get()) {
     IndexedDBDatabaseError error(
         blink::WebIDBDatabaseExceptionUnknownError,
@@ -311,8 +313,14 @@ void IndexedDBFactoryImpl::HandleBackingStoreCorruption(
   Origin saved_origin(origin);
   DCHECK(context_);
   base::FilePath path_base = context_->data_path();
-  IndexedDBBackingStore::RecordCorruptionInfo(
-      path_base, saved_origin, base::UTF16ToUTF8(error.message()));
+
+  // The message may contain the database path, which may be considered
+  // sensitive data, and those strings are passed to the extension, so strip it.
+  std::string sanitized_message = base::UTF16ToUTF8(error.message());
+  base::ReplaceSubstringsAfterOffset(&sanitized_message, 0u,
+                                     path_base.AsUTF8Unsafe(), "...");
+  IndexedDBBackingStore::RecordCorruptionInfo(path_base, saved_origin,
+                                              sanitized_message);
   HandleBackingStoreFailure(saved_origin);
   // Note: DestroyBackingStore only deletes LevelDB files, leaving all others,
   //       so our corruption info file will remain.
@@ -436,8 +444,8 @@ void IndexedDBFactoryImpl::Open(
       return;
     }
 
-    database = IndexedDBDatabase::Create(
-        name, backing_store.get(), this, unique_identifier, &s);
+    std::tie(database, s) = IndexedDBDatabase::Create(name, backing_store.get(),
+                                                      this, unique_identifier);
     if (!database.get()) {
       DLOG(ERROR) << "Unable to create the database";
       IndexedDBDatabaseError error(blink::WebIDBDatabaseExceptionUnknownError,

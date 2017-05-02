@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "net/android/cert_verify_result_android.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/mime_util.h"
 #include "net/base/net_export.h"
 
@@ -36,14 +37,9 @@ void AddTestRootCertificate(const uint8_t* cert, size_t len);
 // Removes all root certificates added by |AddTestRootCertificate| calls.
 void ClearTestRootCertificates();
 
-// Helper for the <keygen> handler. Passes the DER-encoded key pair via JNI to
-// the Credentials store. The public key should be a DER-encoded
-// SubjectPublicKeyInfo (X.509) and the private key a DER-encode PrivateKeyInfo
-// (PKCS#8).
-bool StoreKeyPair(const uint8_t* public_key,
-                  size_t public_len,
-                  const uint8_t* private_key,
-                  size_t private_len);
+// Returns true if cleartext traffic to |host| is allowed by the app. Always
+// true on L and older.
+bool IsCleartextPermitted(const std::string& host);
 
 // Returns true if it can determine that only loopback addresses are configured.
 // i.e. if only 127.0.0.1 and ::1 are routable.
@@ -71,9 +67,21 @@ NET_EXPORT std::string GetTelephonySimOperator();
 // true, it suggests that use of data may incur extra costs.
 NET_EXPORT bool GetIsRoaming();
 
+// Returns true if the system's captive portal probe was blocked for the current
+// default data network. The method will return false if the captive portal
+// probe was not blocked, the login process to the captive portal has been
+// successfully completed, or if the captive portal status can't be determined.
+// Requires ACCESS_NETWORK_STATE permission. Only available on Android
+// Marshmallow and later versions. Returns false on earlier versions.
+NET_EXPORT bool GetIsCaptivePortal();
+
 // Gets the SSID of the currently associated WiFi access point if there is one.
 // Otherwise, returns empty string.
 NET_EXPORT_PRIVATE std::string GetWifiSSID();
+
+// Gets the DNS servers and puts them in |dns_servers|.
+// Only callable on Marshmallow and newer releases.
+NET_EXPORT_PRIVATE void GetDnsServers(std::vector<IPEndPoint>* dns_servers);
 
 }  // namespace android
 }  // namespace net

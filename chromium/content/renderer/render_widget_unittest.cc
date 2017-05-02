@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -32,6 +33,8 @@ namespace {
 
 const char* EVENT_LISTENER_RESULT_HISTOGRAM = "Event.PassiveListeners";
 
+// Keep in sync with enum defined in
+// RenderWidgetInputHandler::LogPassiveEventListenersUma.
 enum {
   PASSIVE_LISTENER_UMA_ENUM_PASSIVE,
   PASSIVE_LISTENER_UMA_ENUM_UNCANCELABLE,
@@ -39,6 +42,7 @@ enum {
   PASSIVE_LISTENER_UMA_ENUM_CANCELABLE,
   PASSIVE_LISTENER_UMA_ENUM_CANCELABLE_AND_CANCELED,
   PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING,
+  PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_MAIN_THREAD_RESPONSIVENESS,
   PASSIVE_LISTENER_UMA_ENUM_COUNT
 };
 
@@ -61,7 +65,7 @@ class InteractiveRenderWidget : public RenderWidget {
                      false,
                      false),
         always_overscroll_(false) {
-    Init(MSG_ROUTING_NONE, mock_webwidget());
+    Init(RenderWidget::ShowCallback(), mock_webwidget());
   }
 
   void SetTouchRegion(const std::vector<gfx::Rect>& rects) {
@@ -99,7 +103,7 @@ class InteractiveRenderWidget : public RenderWidget {
 
   bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override {
     if (always_overscroll_ &&
-        event.type == blink::WebInputEvent::GestureScrollUpdate) {
+        event.type() == blink::WebInputEvent::GestureScrollUpdate) {
       didOverscroll(blink::WebFloatSize(event.data.scrollUpdate.deltaX,
                                         event.data.scrollUpdate.deltaY),
                     blink::WebFloatSize(event.data.scrollUpdate.deltaX,
@@ -244,8 +248,10 @@ TEST_F(RenderWidgetUnittest, EventOverscroll) {
       .WillRepeatedly(
           ::testing::Return(blink::WebInputEventResult::NotHandled));
 
-  blink::WebGestureEvent scroll;
-  scroll.type = blink::WebInputEvent::GestureScrollUpdate;
+  blink::WebGestureEvent scroll(
+      blink::WebInputEvent::GestureScrollUpdate,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   scroll.x = -10;
   scroll.data.scrollUpdate.deltaY = 10;
   widget()->SendInputEvent(scroll);
@@ -258,7 +264,7 @@ TEST_F(RenderWidgetUnittest, EventOverscroll) {
   InputHostMsg_HandleInputEvent_ACK::Param params;
   InputHostMsg_HandleInputEvent_ACK::Read(message, &params);
   const InputEventAck& ack = std::get<0>(params);
-  ASSERT_EQ(ack.type, scroll.type);
+  ASSERT_EQ(ack.type, scroll.type());
   ASSERT_TRUE(ack.overscroll);
   EXPECT_EQ(gfx::Vector2dF(0, 10), ack.overscroll->accumulated_overscroll);
   EXPECT_EQ(gfx::Vector2dF(0, 10), ack.overscroll->latest_overscroll_delta);
@@ -292,7 +298,7 @@ TEST_F(RenderWidgetUnittest, RenderWidgetInputEventUmaMetrics) {
   touch.touchStartOrFirstTouchMove = true;
 
   EXPECT_CALL(*widget()->mock_webwidget(), handleInputEvent(_))
-      .Times(5)
+      .Times(7)
       .WillRepeatedly(
           ::testing::Return(blink::WebInputEventResult::NotHandled));
 
@@ -327,6 +333,24 @@ TEST_F(RenderWidgetUnittest, RenderWidgetInputEventUmaMetrics) {
   histogram_tester().ExpectBucketCount(
       EVENT_LISTENER_RESULT_HISTOGRAM,
       PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING, 2);
+
+  touch.dispatchType = blink::WebInputEvent::DispatchType::
+      ListenersForcedNonBlockingDueToMainThreadResponsiveness;
+  widget()->SendInputEvent(touch);
+  histogram_tester().ExpectBucketCount(
+      EVENT_LISTENER_RESULT_HISTOGRAM,
+      PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_MAIN_THREAD_RESPONSIVENESS,
+      1);
+
+  touch.MovePoint(0, 10, 10);
+  touch.touchStartOrFirstTouchMove = true;
+  touch.dispatchType = blink::WebInputEvent::DispatchType::
+      ListenersForcedNonBlockingDueToMainThreadResponsiveness;
+  widget()->SendInputEvent(touch);
+  histogram_tester().ExpectBucketCount(
+      EVENT_LISTENER_RESULT_HISTOGRAM,
+      PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_MAIN_THREAD_RESPONSIVENESS,
+      2);
 
   EXPECT_CALL(*widget()->mock_webwidget(), handleInputEvent(_))
       .WillOnce(
@@ -383,7 +407,7 @@ class PopupRenderWidget : public RenderWidget {
                      false,
                      false,
                      false) {
-    Init(MSG_ROUTING_NONE, mock_webwidget());
+    Init(RenderWidget::ShowCallback(), mock_webwidget());
     did_show_ = true;
   }
 

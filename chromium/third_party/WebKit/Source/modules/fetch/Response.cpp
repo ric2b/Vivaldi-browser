@@ -17,6 +17,7 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/URLSearchParams.h"
+#include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
 #include "core/html/FormData.h"
 #include "core/streams/ReadableStreamOperations.h"
@@ -44,7 +45,11 @@ FetchResponseData* createFetchResponseDataFromWebResponse(
   else
     response = FetchResponseData::createNetworkErrorResponse();
 
-  response->setURL(webResponse.url());
+  const WebVector<WebURL>& webURLList = webResponse.urlList();
+  Vector<KURL> urlList(webURLList.size());
+  std::transform(webURLList.begin(), webURLList.end(), urlList.begin(),
+                 [](const WebURL& url) { return url; });
+  response->setURLList(urlList);
   response->setStatus(webResponse.status());
   response->setStatusMessage(webResponse.statusText());
   response->setResponseTime(webResponse.responseTime());
@@ -183,7 +188,7 @@ Response* Response::create(ScriptState* scriptState,
     // Add a hidden reference so that the weak persistent in the
     // ReadableStreamBytesConsumer will be valid as long as the
     // Response is valid.
-    v8::Local<v8::Value> wrapper = toV8(response, scriptState);
+    v8::Local<v8::Value> wrapper = ToV8(response, scriptState);
     if (wrapper.IsEmpty()) {
       exceptionState.throwTypeError("Cannot create a Response wrapper");
       return nullptr;
@@ -295,19 +300,19 @@ Response* Response::create(ScriptState* scriptState,
   return new Response(scriptState->getExecutionContext(), responseData);
 }
 
-Response* Response::error(ExecutionContext* context) {
+Response* Response::error(ScriptState* scriptState) {
   FetchResponseData* responseData =
       FetchResponseData::createNetworkErrorResponse();
-  Response* r = new Response(context, responseData);
+  Response* r = new Response(scriptState->getExecutionContext(), responseData);
   r->m_headers->setGuard(Headers::ImmutableGuard);
   return r;
 }
 
-Response* Response::redirect(ExecutionContext* context,
+Response* Response::redirect(ScriptState* scriptState,
                              const String& url,
                              unsigned short status,
                              ExceptionState& exceptionState) {
-  KURL parsedURL = context->completeURL(url);
+  KURL parsedURL = scriptState->getExecutionContext()->completeURL(url);
   if (!parsedURL.isValid()) {
     exceptionState.throwTypeError("Failed to parse URL from " + url);
     return nullptr;
@@ -318,7 +323,7 @@ Response* Response::redirect(ExecutionContext* context,
     return nullptr;
   }
 
-  Response* r = new Response(context);
+  Response* r = new Response(scriptState->getExecutionContext());
   r->m_headers->setGuard(Headers::ImmutableGuard);
   r->m_response->setStatus(status);
   r->m_response->headerList()->set("Location", parsedURL);
@@ -350,11 +355,18 @@ String Response::url() const {
   // "The url attribute's getter must return the empty string if response's
   // url is null and response's url, serialized with the exclude fragment
   // flag set, otherwise."
-  if (!m_response->url().hasFragmentIdentifier())
-    return m_response->url();
-  KURL url(m_response->url());
+  const KURL* responseURL = m_response->url();
+  if (!responseURL)
+    return emptyString();
+  if (!responseURL->hasFragmentIdentifier())
+    return *responseURL;
+  KURL url(*responseURL);
   url.removeFragmentIdentifier();
   return url;
+}
+
+bool Response::redirected() const {
+  return m_response->urlList().size() > 1;
 }
 
 unsigned short Response::status() const {
@@ -365,7 +377,7 @@ unsigned short Response::status() const {
 bool Response::ok() const {
   // "The ok attribute's getter must return true
   // if response's status is in the range 200 to 299, and false otherwise."
-  return 200 <= status() && status() <= 299;
+  return FetchUtils::isOkStatus(status());
 }
 
 String Response::statusText() const {
@@ -393,8 +405,7 @@ Response* Response::clone(ScriptState* scriptState,
 }
 
 bool Response::hasPendingActivity() const {
-  if (!getExecutionContext() ||
-      getExecutionContext()->activeDOMObjectsAreStopped())
+  if (!getExecutionContext() || getExecutionContext()->isContextDestroyed())
     return false;
   if (!internalBodyBuffer())
     return false;
@@ -439,6 +450,10 @@ String Response::internalMIMEType() const {
   return m_response->internalMIMEType();
 }
 
+const Vector<KURL>& Response::internalURLList() const {
+  return m_response->internalURLList();
+}
+
 void Response::installBody() {
   if (!internalBodyBuffer())
     return;
@@ -446,8 +461,8 @@ void Response::installBody() {
 }
 
 void Response::refreshBody(ScriptState* scriptState) {
-  v8::Local<v8::Value> bodyBuffer = toV8(internalBodyBuffer(), scriptState);
-  v8::Local<v8::Value> response = toV8(this, scriptState);
+  v8::Local<v8::Value> bodyBuffer = ToV8(internalBodyBuffer(), scriptState);
+  v8::Local<v8::Value> response = ToV8(this, scriptState);
   if (response.IsEmpty()) {
     // |toV8| can return an empty handle when the worker is terminating.
     // We don't want the renderer to crash in such cases.

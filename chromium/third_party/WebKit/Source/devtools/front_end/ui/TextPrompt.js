@@ -120,7 +120,6 @@ UI.TextPrompt = class extends Common.Object {
     this._element.addEventListener('mousewheel', this._boundOnMouseWheel, false);
     this._element.addEventListener('selectstart', this._boundClearAutocomplete, false);
     this._element.addEventListener('blur', this._boundClearAutocomplete, false);
-    this._element.ownerDocument.defaultView.addEventListener('resize', this._boundClearAutocomplete, false);
 
     this._suggestBox = new UI.SuggestBox(this, 20, true);
 
@@ -196,17 +195,26 @@ UI.TextPrompt = class extends Common.Object {
       this._proxyElement.title = title;
   }
 
+  /**
+   * @param {string} placeholder
+   */
+  setPlaceholder(placeholder) {
+    if (placeholder)
+      this._element.setAttribute('data-placeholder', placeholder);
+    else
+      this._element.removeAttribute('data-placeholder');
+  }
+
   _removeFromElement() {
     this.clearAutocomplete();
     this._element.removeEventListener('keydown', this._boundOnKeyDown, false);
     this._element.removeEventListener('input', this._boundOnInput, false);
     this._element.removeEventListener('selectstart', this._boundClearAutocomplete, false);
     this._element.removeEventListener('blur', this._boundClearAutocomplete, false);
-    this._element.ownerDocument.defaultView.removeEventListener('resize', this._boundClearAutocomplete, false);
     if (this._isEditing)
       this._stopEditing();
     if (this._suggestBox)
-      this._suggestBox.removeFromElement();
+      this._suggestBox.hide();
   }
 
   /**
@@ -317,11 +325,16 @@ UI.TextPrompt = class extends Common.Object {
   }
 
   clearAutocomplete() {
+    var beforeText = this.textWithCurrentSuggestion();
+
     if (this._isSuggestBoxVisible())
       this._suggestBox.hide();
     this._clearAutocompleteTimeout();
     this._queryRange = null;
     this._refreshGhostText();
+
+    if (beforeText !== this.textWithCurrentSuggestion())
+      this.dispatchEventToListeners(UI.TextPrompt.Events.ItemApplied);
   }
 
   _refreshGhostText() {

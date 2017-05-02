@@ -11,15 +11,6 @@ from gpu_tests import exception_formatter
 from gpu_tests import gpu_test_expectations
 
 
-# Temporary class which bridges the gap beween these serially executed
-# browser tests and the old benchmark-based tests. As soon as all of
-# the tests have been coverted over, this will be deleted.
-class _EmulatedPage(object):
-  def __init__(self, url, name):
-    self.url = url
-    self.name = name
-
-
 class GpuIntegrationTest(
     serially_executed_browser_test_case.SeriallyExecutedBrowserTestCase):
 
@@ -37,6 +28,8 @@ class GpuIntegrationTest(
         restart = 'Starting browser, attempt %d of 3' % (x + 1)
         logging.warning(restart)
         super(GpuIntegrationTest, cls).StartBrowser()
+        cls.tab = cls.browser.tabs[0]
+        logging.warning('Started browser successfully.')
         return
       except Exception:
         # If we are on the last try and there is an exception take a screenshot
@@ -50,6 +43,10 @@ class GpuIntegrationTest(
           else:
             logging.warning("GpuIntegrationTest unable to take screenshot")
           raise
+        # Otherwise, stop the browser to make sure it's in an
+        # acceptable state to try restarting it.
+        if cls.browser:
+          cls.StopBrowser()
 
   @classmethod
   def _RestartBrowser(cls, reason):
@@ -57,13 +54,11 @@ class GpuIntegrationTest(
     cls.StopBrowser()
     cls.SetBrowserOptions(cls._finder_options)
     cls.StartBrowser()
-    cls.tab = cls.browser.tabs[0]
 
   def _RunGpuTest(self, url, test_name, *args):
-    temp_page = _EmulatedPage(url, test_name)
     expectations = self.__class__.GetExpectations()
-    expectation = expectations.GetExpectationForPage(
-      self.browser, temp_page)
+    expectation = expectations.GetExpectationForTest(
+      self.browser, url, test_name)
     if expectation == 'skip':
       # skipTest in Python's unittest harness raises an exception, so
       # aborts the control flow here.
@@ -109,8 +104,8 @@ class GpuIntegrationTest(
           expectation, test_name)
         raise
       # Flaky tests are handled here.
-      num_retries = expectations.GetFlakyRetriesForPage(
-        self.browser, temp_page)
+      num_retries = expectations.GetFlakyRetriesForTest(
+        self.browser, url, test_name)
       if not num_retries:
         # Re-raise the exception.
         raise

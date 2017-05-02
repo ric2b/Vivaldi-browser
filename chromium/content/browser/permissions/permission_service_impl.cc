@@ -5,9 +5,12 @@
 #include "content/browser/permissions/permission_service_impl.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_manager.h"
 #include "content/public/browser/permission_type.h"
@@ -120,8 +123,9 @@ void PermissionServiceImpl::RequestPermission(
     return;
   }
 
-  int pending_request_id = pending_requests_.Add(new PendingRequest(
-      base::Bind(&PermissionRequestResponseCallbackWrapper, callback), 1));
+  int pending_request_id =
+      pending_requests_.Add(base::MakeUnique<PendingRequest>(
+          base::Bind(&PermissionRequestResponseCallbackWrapper, callback), 1));
   int id = browser_context->GetPermissionManager()->RequestPermission(
       PermissionDescriptorToPermissionType(permission),
       context_->render_frame_host(), origin.GetURL(), user_gesture,
@@ -172,7 +176,7 @@ void PermissionServiceImpl::RequestPermissions(
     types[i] = PermissionDescriptorToPermissionType(permissions[i]);
 
   int pending_request_id = pending_requests_.Add(
-      new PendingRequest(callback, permissions.size()));
+      base::MakeUnique<PendingRequest>(callback, permissions.size()));
   int id = browser_context->GetPermissionManager()->RequestPermissions(
       types, context_->render_frame_host(), origin.GetURL(), user_gesture,
       base::Bind(&PermissionServiceImpl::OnRequestPermissionsResponse,

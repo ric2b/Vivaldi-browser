@@ -893,8 +893,6 @@ TEST_F(CertVerifyProcTest, IntranetHostsRejected) {
 // that were issued after 1 January 2016, while still allowing those from
 // before that date, with SHA-1 in the intermediate, or from an enterprise
 // CA.
-//
-// TODO(rsleevi): This code should be removed in M57.
 TEST_F(CertVerifyProcTest, VerifyRejectsSHA1AfterDeprecationLegacyMode) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(CertVerifyProc::kSHA1LegacyMode);
@@ -939,7 +937,7 @@ TEST_F(CertVerifyProcTest, VerifyRejectsSHA1AfterDeprecationLegacyMode) {
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_WEAK_SIGNATURE_ALGORITHM);
 
   // Enterprise issued SHA-1 leaf certificates issued on/after 1 January 2016
-  // remain accepted until SHA-1 is disabled.
+  // remain accepted.
   verify_result.Reset();
   dummy_result.Reset();
   dummy_result.is_issued_by_known_root = false;
@@ -1219,39 +1217,32 @@ TEST_F(CertVerifyProcTest, CRLSet) {
 
 TEST_F(CertVerifyProcTest, CRLSetLeafSerial) {
   CertificateList ca_cert_list =
-      CreateCertificateListFromFile(GetTestCertsDirectory(),
-                                    "quic_root.crt",
+      CreateCertificateListFromFile(GetTestCertsDirectory(), "root_ca_cert.pem",
                                     X509Certificate::FORMAT_AUTO);
   ASSERT_EQ(1U, ca_cert_list.size());
   ScopedTestRoot test_root(ca_cert_list[0].get());
 
-  CertificateList intermediate_cert_list =
-      CreateCertificateListFromFile(GetTestCertsDirectory(),
-                                    "quic_intermediate.crt",
-                                    X509Certificate::FORMAT_AUTO);
+  CertificateList intermediate_cert_list = CreateCertificateListFromFile(
+      GetTestCertsDirectory(), "intermediate_ca_cert.pem",
+      X509Certificate::FORMAT_AUTO);
   ASSERT_EQ(1U, intermediate_cert_list.size());
   X509Certificate::OSCertHandles intermediates;
   intermediates.push_back(intermediate_cert_list[0]->os_cert_handle());
 
   CertificateList cert_list = CreateCertificateListFromFile(
-      GetTestCertsDirectory(), "quic_test.example.com.crt",
+      GetTestCertsDirectory(), "ok_cert_by_intermediate.pem",
       X509Certificate::FORMAT_AUTO);
   ASSERT_EQ(1U, cert_list.size());
 
-  scoped_refptr<X509Certificate> leaf =
-      X509Certificate::CreateFromHandle(cert_list[0]->os_cert_handle(),
-                                        intermediates);
+  scoped_refptr<X509Certificate> leaf = X509Certificate::CreateFromHandle(
+      cert_list[0]->os_cert_handle(), intermediates);
+  ASSERT_TRUE(leaf);
 
   int flags = 0;
   CertVerifyResult verify_result;
-  int error = Verify(leaf.get(),
-                     "test.example.com",
-                     flags,
-                     NULL,
-                     empty_cert_list_,
+  int error = Verify(leaf.get(), "127.0.0.1", flags, NULL, empty_cert_list_,
                      &verify_result);
   EXPECT_THAT(error, IsOk());
-  EXPECT_EQ(CERT_STATUS_SHA1_SIGNATURE_PRESENT, verify_result.cert_status);
 
   // Test revocation by serial number of a certificate not under the root.
   scoped_refptr<CRLSet> crl_set;
@@ -1261,12 +1252,8 @@ TEST_F(CertVerifyProcTest, CRLSetLeafSerial) {
       &crl_set_bytes));
   ASSERT_TRUE(CRLSetStorage::Parse(crl_set_bytes, &crl_set));
 
-  error = Verify(leaf.get(),
-                 "test.example.com",
-                 flags,
-                 crl_set.get(),
-                 empty_cert_list_,
-                 &verify_result);
+  error = Verify(leaf.get(), "127.0.0.1", flags, crl_set.get(),
+                 empty_cert_list_, &verify_result);
   EXPECT_THAT(error, IsError(ERR_CERT_REVOKED));
 }
 
@@ -1647,7 +1634,7 @@ TEST_F(CertVerifyProcTest, RejectsPublicSHA1IntermediatesUnlessAllowed) {
   }
 }
 
-TEST_F(CertVerifyProcTest, AcceptsPrivateSHA1) {
+TEST_F(CertVerifyProcTest, RejectsPrivateSHA1UnlessFlag) {
   scoped_refptr<X509Certificate> cert(
       ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem"));
   ASSERT_TRUE(cert);
@@ -1658,10 +1645,19 @@ TEST_F(CertVerifyProcTest, AcceptsPrivateSHA1) {
   result.is_issued_by_known_root = false;
   verify_proc_ = new MockCertVerifyProc(result);
 
+  // SHA-1 should be rejected by default for private roots...
   int flags = 0;
   CertVerifyResult verify_result;
   int error = Verify(cert.get(), "127.0.0.1", flags, nullptr /* crl_set */,
                      empty_cert_list_, &verify_result);
+  EXPECT_THAT(error, IsError(ERR_CERT_WEAK_SIGNATURE_ALGORITHM));
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_SHA1_SIGNATURE_PRESENT);
+
+  // ... unless VERIFY_ENABLE_SHA1_LOCAL_ANCHORS was supplied.
+  flags = CertVerifier::VERIFY_ENABLE_SHA1_LOCAL_ANCHORS;
+  verify_result.Reset();
+  error = Verify(cert.get(), "127.0.0.1", flags, nullptr /* crl_set */,
+                 empty_cert_list_, &verify_result);
   EXPECT_THAT(error, IsOk());
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_SHA1_SIGNATURE_PRESENT);
 }
@@ -1681,14 +1677,20 @@ struct WeakDigestTestData {
   int expected_algorithms;
 };
 
+const char* StringOrDefault(const char* str, const char* default_value) {
+  if (!str)
+    return default_value;
+  return str;
+}
+
 // GTest 'magic' pretty-printer, so that if/when a test fails, it knows how
 // to output the parameter that was passed. Without this, it will simply
 // attempt to print out the first twenty bytes of the object, which depending
 // on platform and alignment, may result in an invalid read.
 void PrintTo(const WeakDigestTestData& data, std::ostream* os) {
-  *os << "root: "
-      << (data.root_cert_filename ? data.root_cert_filename : "none")
-      << "; intermediate: " << data.intermediate_cert_filename
+  *os << "root: " << StringOrDefault(data.root_cert_filename, "none")
+      << "; intermediate: "
+      << StringOrDefault(data.intermediate_cert_filename, "none")
       << "; end-entity: " << data.ee_cert_filename;
 }
 
@@ -1700,30 +1702,34 @@ class CertVerifyProcWeakDigestTest
   virtual ~CertVerifyProcWeakDigestTest() {}
 };
 
-// Test that the underlying cryptographic library properly surfaces the
-// algorithms used in the chain. Some libraries, like NSS, don't return
-// the failing chain on error, and thus not all tests can be run.
+// Test that the CertVerifyProc::Verify() properly surfaces the (weak) hashing
+// algorithms used in the chain.
 TEST_P(CertVerifyProcWeakDigestTest, VerifyDetectsAlgorithm) {
   WeakDigestTestData data = GetParam();
   base::FilePath certs_dir = GetTestCertsDirectory();
 
-  ScopedTestRoot test_root;
-  if (data.root_cert_filename) {
-     scoped_refptr<X509Certificate> root_cert =
-         ImportCertFromFile(certs_dir, data.root_cert_filename);
-     ASSERT_TRUE(root_cert);
-     test_root.Reset(root_cert.get());
+  scoped_refptr<X509Certificate> intermediate_cert;
+  scoped_refptr<X509Certificate> root_cert;
+
+  // Build |intermediates| as the full chain (including trust anchor).
+  X509Certificate::OSCertHandles intermediates;
+
+  if (data.intermediate_cert_filename) {
+    intermediate_cert =
+        ImportCertFromFile(certs_dir, data.intermediate_cert_filename);
+    ASSERT_TRUE(intermediate_cert);
+    intermediates.push_back(intermediate_cert->os_cert_handle());
   }
 
-  scoped_refptr<X509Certificate> intermediate_cert =
-      ImportCertFromFile(certs_dir, data.intermediate_cert_filename);
-  ASSERT_TRUE(intermediate_cert);
+  if (data.root_cert_filename) {
+    root_cert = ImportCertFromFile(certs_dir, data.root_cert_filename);
+    ASSERT_TRUE(root_cert);
+    intermediates.push_back(root_cert->os_cert_handle());
+  }
+
   scoped_refptr<X509Certificate> ee_cert =
       ImportCertFromFile(certs_dir, data.ee_cert_filename);
   ASSERT_TRUE(ee_cert);
-
-  X509Certificate::OSCertHandles intermediates;
-  intermediates.push_back(intermediate_cert->os_cert_handle());
 
   scoped_refptr<X509Certificate> ee_chain =
       X509Certificate::CreateFromHandle(ee_cert->os_cert_handle(),
@@ -1732,8 +1738,16 @@ TEST_P(CertVerifyProcWeakDigestTest, VerifyDetectsAlgorithm) {
 
   int flags = 0;
   CertVerifyResult verify_result;
-  Verify(ee_chain.get(), "127.0.0.1", flags, NULL, empty_cert_list_,
-         &verify_result);
+
+  // Use a mock CertVerifyProc that returns success with a verified_cert of
+  // |ee_chain|.
+  //
+  // This is sufficient for the purposes of this test, as the checking for weak
+  // hashing algorithms is done by CertVerifyProc::Verify().
+  scoped_refptr<CertVerifyProc> proc =
+      new MockCertVerifyProc(CertVerifyResult());
+  proc->Verify(ee_chain.get(), "127.0.0.1", std::string(), flags, nullptr,
+               empty_cert_list_, &verify_result);
   EXPECT_EQ(!!(data.expected_algorithms & EXPECT_MD2), verify_result.has_md2);
   EXPECT_EQ(!!(data.expected_algorithms & EXPECT_MD4), verify_result.has_md4);
   EXPECT_EQ(!!(data.expected_algorithms & EXPECT_MD5), verify_result.has_md5);
@@ -1742,34 +1756,16 @@ TEST_P(CertVerifyProcWeakDigestTest, VerifyDetectsAlgorithm) {
             verify_result.has_sha1_leaf);
 }
 
-// Unlike TEST/TEST_F, which are macros that expand to further macros,
-// INSTANTIATE_TEST_CASE_P is a macro that expands directly to code that
-// stringizes the arguments. As a result, macros passed as parameters (such as
-// prefix or test_case_name) will not be expanded by the preprocessor. To work
-// around this, indirect the macro for INSTANTIATE_TEST_CASE_P, so that the
-// pre-processor will expand macros such as MAYBE_test_name before
-// instantiating the test.
-#define WRAPPED_INSTANTIATE_TEST_CASE_P(prefix, test_case_name, generator) \
-    INSTANTIATE_TEST_CASE_P(prefix, test_case_name, generator)
-
 // The signature algorithm of the root CA should not matter.
 const WeakDigestTestData kVerifyRootCATestData[] = {
     {"weak_digest_md5_root.pem", "weak_digest_sha1_intermediate.pem",
      "weak_digest_sha1_ee.pem", EXPECT_SHA1 | EXPECT_SHA1_LEAF},
-#if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-    // MD4 is not supported by OS X / NSS
     {"weak_digest_md4_root.pem", "weak_digest_sha1_intermediate.pem",
      "weak_digest_sha1_ee.pem", EXPECT_SHA1 | EXPECT_SHA1_LEAF},
-#endif
     {"weak_digest_md2_root.pem", "weak_digest_sha1_intermediate.pem",
      "weak_digest_sha1_ee.pem", EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 };
-#if defined(OS_ANDROID)
-#define MAYBE_VerifyRoot DISABLED_VerifyRoot
-#else
-#define MAYBE_VerifyRoot VerifyRoot
-#endif
-INSTANTIATE_TEST_CASE_P(MAYBE_VerifyRoot,
+INSTANTIATE_TEST_CASE_P(VerifyRoot,
                         CertVerifyProcWeakDigestTest,
                         testing::ValuesIn(kVerifyRootCATestData));
 
@@ -1777,99 +1773,66 @@ INSTANTIATE_TEST_CASE_P(MAYBE_VerifyRoot,
 const WeakDigestTestData kVerifyIntermediateCATestData[] = {
     {"weak_digest_sha1_root.pem", "weak_digest_md5_intermediate.pem",
      "weak_digest_sha1_ee.pem", EXPECT_MD5 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
-#if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-    // MD4 is not supported by OS X / NSS
     {"weak_digest_sha1_root.pem", "weak_digest_md4_intermediate.pem",
      "weak_digest_sha1_ee.pem", EXPECT_MD4 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
-#endif
     {"weak_digest_sha1_root.pem", "weak_digest_md2_intermediate.pem",
      "weak_digest_sha1_ee.pem", EXPECT_MD2 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 };
-// Disabled on NSS - MD4 is not supported, and MD2 and MD5 are disabled.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
-#define MAYBE_VerifyIntermediate DISABLED_VerifyIntermediate
-#else
-#define MAYBE_VerifyIntermediate VerifyIntermediate
-#endif
-WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_VerifyIntermediate,
-    CertVerifyProcWeakDigestTest,
-    testing::ValuesIn(kVerifyIntermediateCATestData));
+
+INSTANTIATE_TEST_CASE_P(VerifyIntermediate,
+                        CertVerifyProcWeakDigestTest,
+                        testing::ValuesIn(kVerifyIntermediateCATestData));
 
 // The signature algorithm of end-entity should be properly detected.
 const WeakDigestTestData kVerifyEndEntityTestData[] = {
   { "weak_digest_sha1_root.pem", "weak_digest_sha1_intermediate.pem",
     "weak_digest_md5_ee.pem", EXPECT_MD5 | EXPECT_SHA1 },
-#if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-  // MD4 is not supported by OS X / NSS
   { "weak_digest_sha1_root.pem", "weak_digest_sha1_intermediate.pem",
     "weak_digest_md4_ee.pem", EXPECT_MD4 | EXPECT_SHA1 },
-#endif
   { "weak_digest_sha1_root.pem", "weak_digest_sha1_intermediate.pem",
     "weak_digest_md2_ee.pem", EXPECT_MD2 | EXPECT_SHA1 },
 };
-// Disabled on NSS - NSS caches chains/signatures in such a way that cannot
-// be cleared until NSS is cleanly shutdown, which is not presently supported
-// in Chromium.
-// OSX 10.12+ stops building the chain at the first weak digest.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_MACOSX)
-#define MAYBE_VerifyEndEntity DISABLED_VerifyEndEntity
-#else
-#define MAYBE_VerifyEndEntity VerifyEndEntity
-#endif
-WRAPPED_INSTANTIATE_TEST_CASE_P(MAYBE_VerifyEndEntity,
-                                CertVerifyProcWeakDigestTest,
-                                testing::ValuesIn(kVerifyEndEntityTestData));
 
-// Incomplete chains should still report the status of the intermediate.
+INSTANTIATE_TEST_CASE_P(VerifyEndEntity,
+                        CertVerifyProcWeakDigestTest,
+                        testing::ValuesIn(kVerifyEndEntityTestData));
+
+// Incomplete chains do not report the status of the intermediate.
+// Note: really each of these tests should also expect the digest algorithm of
+// the intermediate (included as a comment). However CertVerifyProc::Verify() is
+// unable to distinguish that this is an intermediate and not a trust anchor, so
+// this intermediate is treated like a trust anchor.
 const WeakDigestTestData kVerifyIncompleteIntermediateTestData[] = {
     {NULL, "weak_digest_md5_intermediate.pem", "weak_digest_sha1_ee.pem",
-     EXPECT_MD5 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
-#if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-    // MD4 is not supported by OS X / NSS
+     /*EXPECT_MD5 |*/ EXPECT_SHA1 | EXPECT_SHA1_LEAF},
     {NULL, "weak_digest_md4_intermediate.pem", "weak_digest_sha1_ee.pem",
-     EXPECT_MD4 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
-#endif
+     /*EXPECT_MD4 |*/ EXPECT_SHA1 | EXPECT_SHA1_LEAF},
     {NULL, "weak_digest_md2_intermediate.pem", "weak_digest_sha1_ee.pem",
-     EXPECT_MD2 | EXPECT_SHA1 | EXPECT_SHA1_LEAF},
+     /*EXPECT_MD2 |*/ EXPECT_SHA1 | EXPECT_SHA1_LEAF},
 };
-// Disabled on NSS - libpkix does not return constructed chains on error,
-// preventing us from detecting/inspecting the verified chain.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_ANDROID)
-#define MAYBE_VerifyIncompleteIntermediate \
-    DISABLED_VerifyIncompleteIntermediate
-#else
-#define MAYBE_VerifyIncompleteIntermediate VerifyIncompleteIntermediate
-#endif
-WRAPPED_INSTANTIATE_TEST_CASE_P(
+
+INSTANTIATE_TEST_CASE_P(
     MAYBE_VerifyIncompleteIntermediate,
     CertVerifyProcWeakDigestTest,
     testing::ValuesIn(kVerifyIncompleteIntermediateTestData));
 
-// Incomplete chains should still report the status of the end-entity.
+// Incomplete chains should report the status of the end-entity.
+// Note: really each of these tests should also expect EXPECT_SHA1 (included as
+// a comment). However CertVerifyProc::Verify() is unable to distinguish that
+// this is an intermediate and not a trust anchor, so this intermediate is
+// treated like a trust anchor.
 const WeakDigestTestData kVerifyIncompleteEETestData[] = {
-  { NULL, "weak_digest_sha1_intermediate.pem", "weak_digest_md5_ee.pem",
-    EXPECT_MD5 | EXPECT_SHA1 },
-#if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-  // MD4 is not supported by OS X / NSS
-  { NULL, "weak_digest_sha1_intermediate.pem", "weak_digest_md4_ee.pem",
-    EXPECT_MD4 | EXPECT_SHA1 },
-#endif
-  { NULL, "weak_digest_sha1_intermediate.pem", "weak_digest_md2_ee.pem",
-    EXPECT_MD2 | EXPECT_SHA1 },
+    {NULL, "weak_digest_sha1_intermediate.pem", "weak_digest_md5_ee.pem",
+     /*EXPECT_SHA1 |*/ EXPECT_MD5},
+    {NULL, "weak_digest_sha1_intermediate.pem", "weak_digest_md4_ee.pem",
+     /*EXPECT_SHA1 |*/ EXPECT_MD4},
+    {NULL, "weak_digest_sha1_intermediate.pem", "weak_digest_md2_ee.pem",
+     /*EXPECT_SHA1 |*/ EXPECT_MD2},
 };
-// Disabled on NSS - libpkix does not return constructed chains on error,
-// preventing us from detecting/inspecting the verified chain.
-// OSX 10.12+ stops building the chain at the first weak digest.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_MACOSX)
-#define MAYBE_VerifyIncompleteEndEntity DISABLED_VerifyIncompleteEndEntity
-#else
-#define MAYBE_VerifyIncompleteEndEntity VerifyIncompleteEndEntity
-#endif
-WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_VerifyIncompleteEndEntity,
-    CertVerifyProcWeakDigestTest,
-    testing::ValuesIn(kVerifyIncompleteEETestData));
+
+INSTANTIATE_TEST_CASE_P(VerifyIncompleteEndEntity,
+                        CertVerifyProcWeakDigestTest,
+                        testing::ValuesIn(kVerifyIncompleteEETestData));
 
 // Differing algorithms between the intermediate and the EE should still be
 // reported.
@@ -1878,24 +1841,26 @@ const WeakDigestTestData kVerifyMixedTestData[] = {
     "weak_digest_md2_ee.pem", EXPECT_MD2 | EXPECT_MD5 },
   { "weak_digest_sha1_root.pem", "weak_digest_md2_intermediate.pem",
     "weak_digest_md5_ee.pem", EXPECT_MD2 | EXPECT_MD5 },
-#if defined(USE_OPENSSL_CERTS) || defined(OS_WIN)
-  // MD4 is not supported by OS X / NSS
   { "weak_digest_sha1_root.pem", "weak_digest_md4_intermediate.pem",
     "weak_digest_md2_ee.pem", EXPECT_MD2 | EXPECT_MD4 },
-#endif
 };
-// NSS does not support MD4 and does not enable MD2 by default, making all
-// permutations invalid.
-// OSX 10.12+ stops building the chain at the first weak digest.
-#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_MACOSX)
-#define MAYBE_VerifyMixed DISABLED_VerifyMixed
-#else
-#define MAYBE_VerifyMixed VerifyMixed
-#endif
-WRAPPED_INSTANTIATE_TEST_CASE_P(
-    MAYBE_VerifyMixed,
-    CertVerifyProcWeakDigestTest,
-    testing::ValuesIn(kVerifyMixedTestData));
+
+INSTANTIATE_TEST_CASE_P(VerifyMixed,
+                        CertVerifyProcWeakDigestTest,
+                        testing::ValuesIn(kVerifyMixedTestData));
+
+// The EE is a trusted certificate. Even though it uses weak hashes, these
+// should not be reported.
+const WeakDigestTestData kVerifyTrustedEETestData[] = {
+    {NULL, NULL, "weak_digest_md5_ee.pem", 0},
+    {NULL, NULL, "weak_digest_md4_ee.pem", 0},
+    {NULL, NULL, "weak_digest_md2_ee.pem", 0},
+    {NULL, NULL, "weak_digest_sha1_ee.pem", 0},
+};
+
+INSTANTIATE_TEST_CASE_P(VerifyTrustedEE,
+                        CertVerifyProcWeakDigestTest,
+                        testing::ValuesIn(kVerifyTrustedEETestData));
 
 // For the list of valid hostnames, see
 // net/cert/data/ssl/certificates/subjectAltName_sanity_check.pem
@@ -1957,10 +1922,9 @@ TEST_P(CertVerifyProcNameTest, VerifyCertName) {
   }
 }
 
-WRAPPED_INSTANTIATE_TEST_CASE_P(
-    VerifyName,
-    CertVerifyProcNameTest,
-    testing::ValuesIn(kVerifyNameData));
+INSTANTIATE_TEST_CASE_P(VerifyName,
+                        CertVerifyProcNameTest,
+                        testing::ValuesIn(kVerifyNameData));
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 // Test that CertVerifyProcMac reacts appropriately when Apple's certificate

@@ -881,6 +881,15 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="CustomTabs.ServiceClient.PackageNameThirdParty"
+    type="UMA_RAPPOR_TYPE">
+  <owner>yusufo@chromium.org</owner>
+  <summary>
+    The package name for a client that has connected through the custom tabs
+    service excluding Google Search App.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="DeviceSensors.DeviceMotion" type="ETLD_PLUS_ONE">
   <owner>timvolodine@chromium.org</owner>
   <summary>
@@ -907,6 +916,79 @@ components/rappor/rappor_parameters.h.
   <summary>
     The eTLD+1 of the frame URL where Reader Mode is prompted.
   </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="Event.Latency.ScrollBegin.Touch.TimeToScrollUpdateSwapBegin2"
+    type="UMA_RAPPOR_TYPE">
+  <owner>nzolghadr@chromium.org</owner>
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the website visited, along with the time between initial
+    creation of a touch event and the start of the frame swap on the GPU service
+    caused by the generated ScrollUpdate gesture event if that ScrollUpdate is
+    the first such event in a given scroll gesture event sequence. If no swap
+    was induced by the event, no recording is made.
+  </summary>
+  <string-field name="Domain">
+    <summary>
+      The domain+registry of the URL.
+    </summary>
+  </string-field>
+  <uint64-field name="Latency">
+    <summary>
+      Latency in microseconds representing first
+      Touch.TimeToScrollUpdateSwapBegin.
+    </summary>
+  </uint64-field>
+</rappor-metric>
+
+<rappor-metric
+    name="Event.Latency.ScrollBegin.Wheel.TimeToScrollUpdateSwapBegin2"
+    type="UMA_RAPPOR_TYPE">
+  <owner>nzolghadr@chromium.org</owner>
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the website visited, along with  the time between initial
+    creation of a wheel event and the start of the frame swap on the GPU service
+    caused by the generated ScrollUpdate gesture event if that ScrollUpdate is
+    the first such event in a given scroll gesture event sequence. If no swap
+    was induced by the event, no recording is made.
+  </summary>
+  <string-field name="Domain">
+    <summary>
+      The domain+registry of the URL.
+    </summary>
+  </string-field>
+  <uint64-field name="Latency">
+    <summary>
+      Latency in microseconds representing first
+      Wheel.TimeToScrollUpdateSwapBegin.
+    </summary>
+  </uint64-field>
+</rappor-metric>
+
+<rappor-metric
+    name="Event.Latency.ScrollUpdate.Touch.TimeToScrollUpdateSwapBegin2"
+    type="UMA_RAPPOR_TYPE">
+  <owner>nzolghadr@chromium.org</owner>
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the website visited, along with the time between the initial
+    creation of a touch event and the start of the frame swap on the GPU service
+    caused by the generated ScrollUpdate gesture event. If no swap was induced
+    by the event, no recording is made.
+  </summary>
+  <string-field name="Domain">
+    <summary>
+      The domain+registry of the URL.
+    </summary>
+  </string-field>
+  <uint64-field name="Latency">
+    <summary>
+      Latency in microseconds representing Touch.TimeToScrollUpdateSwapBegin.
+    </summary>
+  </uint64-field>
 </rappor-metric>
 
 <rappor-metric name="Extensions.AffectedByIsolateExtensions"
@@ -991,6 +1073,99 @@ components/rappor/rappor_parameters.h.
     The eTLD+1 of a URL that was launched from the Android Home screen via an
     intent added from an unknown source. This explicitly does not count
     relaunches via the Android Recents menu.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.Autoplay.CrossOrigin.Allowed.ChildFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a cross-origin iframe URL containing media that was allowed to
+    autoplay.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.Autoplay.CrossOrigin.Allowed.TopLevelFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the top-level frame URL that has a cross-origin iframe
+    containing media that was allowed to autoplay.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.Autoplay.CrossOrigin.Blocked.ChildFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a cross-origin iframe URL containing media that was blocked to
+    autoplay.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.Autoplay.CrossOrigin.Blocked.TopLevelFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the top-level frame URL that has a cross-origin iframe
+    containing media that was blocked to autoplay.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="Media.Autoplay.CrossOrigin.PlayedWithGestureAfterBlock.ChildFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a cross-origin iframe URL containing media that was blocked to
+    autoplay but the user plays the media by gesture at some point.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="Media.Autoplay.CrossOrigin.PlayedWithGestureAfterBlock.TopLevelFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the top-level frame URL that has a cross-origin iframe
+    containing media that was allowed to autoplay but the user plays the media
+    by gesture at some point.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="Media.Autoplay.CrossOrigin.UserPausedAutoplayingVideo.ChildFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a cross-origin iframe URL containing an autoplaying video but
+    the user actively paused it.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="Media.Autoplay.CrossOrigin.UserPausedAutoplayingVideo.TopLevelFrame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the top-level frame URL that has a cross-origin iframe
+    containing an autoplaying video but the user actively paused it.
   </summary>
 </rappor-metric>
 
@@ -1141,6 +1316,36 @@ now we are only interested in H264, VP8 and VP9.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="Media.Session.APIUsage.Origin" type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the URL of frames using the Media Session API.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.Video.Autoplay.Muted.Attribute.Frame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the frame URL that has an autoplay muted video by attribute.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.Video.Autoplay.Muted.PlayMethod.Frame"
+    type="ETLD_PLUS_ONE">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The eTLD+1 of the frame URL that has an autoplay muted video by play()
+    method.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="NTP.ExplicitUserAction.PageNavigation.NTPTileClick"
     type="UMA_RAPPOR_TYPE">
   <owner>knn@chromium.org</owner>
@@ -1157,6 +1362,36 @@ now we are only interested in H264, VP8 and VP9.
     The eTLD+1 of the website visited by a user by typing the URL in the omnibox
     including those completed from suggestions but not including those that end
     up being searches in the search engine.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="NTP.SuggestionsImpressions.IconsColor"
+    type="UMA_RAPPOR_TYPE">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a most visited tile displayed in the NTP, for cases where the
+    fallback color was used (as opposed to having an icon, or simply being
+    gray).
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="NTP.SuggestionsImpressions.IconsGray"
+    type="UMA_RAPPOR_TYPE">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a most visited tile displayed in the NTP, for cases where the
+    gray fallback icon was used (as opposed to having an icon, or a fallback
+    color).
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="NTP.SuggestionsImpressions.IconsReal"
+    type="UMA_RAPPOR_TYPE">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a most visited tile displayed in the NTP, for cases where the
+    real icon was used (as opposed to having a fallback color or simply being
+    gray).
   </summary>
 </rappor-metric>
 
@@ -1732,6 +1967,16 @@ now we are only interested in H264, VP8 and VP9.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="RTCPeerConnection.Unconnected" type="ETLD_PLUS_ONE">
+  <owner>guidou@chromium.org</owner>
+  <owner>hta@chromium.org</owner>
+  <owner>tommi@chromium.org</owner>
+  <summary>
+    The ETLD+1 of the URL with a WebRTC peer connection that was created but
+    never connected.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="RTCPeerConnection.Video" type="ETLD_PLUS_ONE">
   <owner>guidou@chromium.org</owner>
   <owner>hta@chromium.org</owner>
@@ -2012,8 +2257,8 @@ now we are only interested in H264, VP8 and VP9.
   <owner>dominickn@chromium.org</owner>
   <owner>nparker@chromium.org</owner>
   <summary>
-    The domain+registry of a URL that triggered a safe-browsing UWS
-    interstitial.
+    **DEPRECATED as of M57. The domain+registry of a URL that triggered a
+    safe-browsing UWS interstitial.
   </summary>
   <string-field name="domain">
     <summary>
@@ -2039,8 +2284,8 @@ now we are only interested in H264, VP8 and VP9.
   </summary>
   <string-field name="domain">
     <summary>
-      The domain+registry of a URL that triggered a safe-browsing malware
-      interstitial.
+      **DEPRECATED as of M57. The domain+registry of a URL that triggered a
+      safe-browsing malware interstitial.
     </summary>
   </string-field>
   <flags-field name="flags">
@@ -2102,8 +2347,8 @@ now we are only interested in H264, VP8 and VP9.
   <owner>dominickn@chromium.org</owner>
   <owner>nparker@chromium.org</owner>
   <summary>
-    The domain+registry of a URL that triggered a safe-browsing phishing
-    interstitial.
+    **DEPRECATED as of M57. The domain+registry of a URL that triggered a
+    safe-browsing phishing interstitial.
   </summary>
   <string-field name="domain">
     <summary>
@@ -2153,7 +2398,8 @@ now we are only interested in H264, VP8 and VP9.
   <owner>dominickn@chromium.org</owner>
   <owner>nparker@chromium.org</owner>
   <summary>
-    The domain+registry of a URL that triggered an SSL interstitial.
+    **DEPRECATED as of M57. The domain+registry of a URL that triggered an SSL
+    interstitial.
   </summary>
   <string-field name="domain">
     <summary>

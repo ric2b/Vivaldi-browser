@@ -21,14 +21,14 @@
 #include "chrome/browser/browsing_data/browsing_data_indexed_db_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_service_worker_helper.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/cryptohome/homedir_methods.h"
-#include "components/browsing_data/content/storage_partition_http_cache_data_remover.h"
+#include "components/browsing_data/content/conditional_cache_counting_helper.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_context.h"
@@ -232,13 +232,12 @@ void StorageHandler::UpdateBrowsingDataSize() {
   has_browser_site_data_size_ = false;
   Profile* const profile = Profile::FromWebUI(web_ui());
   // Fetch the size of http cache in browsing data.
-  // StoragePartitionHttpCacheDataRemover deletes itself when it is done.
-  browsing_data::StoragePartitionHttpCacheDataRemover::CreateForRange(
+  // ConditionalCacheCountingHelper deletes itself when it is done.
+  browsing_data::ConditionalCacheCountingHelper::CreateForRange(
       content::BrowserContext::GetDefaultStoragePartition(profile),
-      base::Time(),
-      base::Time::Max())->Count(
-          base::Bind(&StorageHandler::OnGetBrowsingDataSize,
-                     base::Unretained(this), false));
+      base::Time(), base::Time::Max())
+      ->CountAndDestroySelfWhenFinished(
+          base::Bind(&StorageHandler::OnGetCacheSize, base::Unretained(this)));
 
   // Fetch the size of site data in browsing data.
   if (!site_data_size_collector_.get()) {
@@ -264,6 +263,11 @@ void StorageHandler::UpdateBrowsingDataSize() {
   site_data_size_collector_->Fetch(
       base::Bind(&StorageHandler::OnGetBrowsingDataSize,
                  base::Unretained(this), true));
+}
+
+void StorageHandler::OnGetCacheSize(int64_t size, bool is_upper_limit) {
+  DCHECK(!is_upper_limit);
+  OnGetBrowsingDataSize(false, size);
 }
 
 void StorageHandler::OnGetBrowsingDataSize(bool is_site_data, int64_t size) {
@@ -345,9 +349,9 @@ void StorageHandler::UpdateAndroidSize() {
   updating_android_size_ = true;
 
   Profile* const profile = Profile::FromWebUI(web_ui());
-  if (!arc::ArcAuthService::IsAllowedForProfile(profile) ||
-      arc::ArcAuthService::IsOptInVerificationDisabled() ||
-      !arc::ArcAuthService::Get()->IsArcEnabled()) {
+  if (!arc::ArcSessionManager::IsAllowedForProfile(profile) ||
+      arc::ArcSessionManager::IsOptInVerificationDisabled() ||
+      !arc::ArcSessionManager::Get()->IsArcEnabled()) {
     return;
   }
 

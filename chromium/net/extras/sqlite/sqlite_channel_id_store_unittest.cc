@@ -65,8 +65,8 @@ class SQLiteChannelIDStoreTest : public testing::Test {
     ASSERT_TRUE(asn1::ExtractSPKIFromDERCert(*cert_data, &spki));
     std::vector<uint8_t> public_key(spki.size());
     memcpy(public_key.data(), spki.data(), spki.size());
-    *key = crypto::ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
-        ChannelIDService::kEPKIPassword, private_key, public_key);
+    *key = crypto::ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(private_key,
+                                                                   public_key);
   }
 
   static base::Time GetTestCertExpirationTime() {
@@ -84,7 +84,9 @@ class SQLiteChannelIDStoreTest : public testing::Test {
     exploded_time.minute = 22;
     exploded_time.second = 39;
     exploded_time.millisecond = 0;
-    return base::Time::FromUTCExploded(exploded_time);
+    base::Time out_time;
+    EXPECT_TRUE(base::Time::FromUTCExploded(exploded_time, &out_time));
+    return out_time;
   }
 
   static base::Time GetTestCertCreationTime() {
@@ -98,7 +100,9 @@ class SQLiteChannelIDStoreTest : public testing::Test {
     exploded_time.minute = 22;
     exploded_time.second = 39;
     exploded_time.millisecond = 0;
-    return base::Time::FromUTCExploded(exploded_time);
+    base::Time out_time;
+    EXPECT_TRUE(base::Time::FromUTCExploded(exploded_time, &out_time));
+    return out_time;
   }
 
   void SetUp() override {

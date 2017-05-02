@@ -39,8 +39,6 @@
 #include "net/ssl/channel_id_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/device/device_service.h"
-#include "services/device/public/cpp/constants.h"
 #include "services/file/file_service.h"
 #include "services/file/public/interfaces/constants.mojom.h"
 #include "services/file/user_id_map.h"
@@ -239,8 +237,6 @@ StoragePartition* BrowserContext::GetStoragePartition(
   std::string partition_name;
   bool in_memory = false;
 
-  // TODO(ajwong): After GetDefaultStoragePartition() is removed, get rid of
-  // this conditional and require that |site_instance| is non-NULL.
   if (site_instance) {
     GetContentClient()->browser()->GetStoragePartitionConfigForSite(
         browser_context, site_instance->GetSiteURL(), true,
@@ -438,19 +434,17 @@ void BrowserContext::Initialize(
     // Mojo or the global service manager connection.
 
     service_manager::mojom::ServicePtr service;
-    service_manager::mojom::ServiceRequest service_request =
-        mojo::GetProxy(&service);
+    service_manager::mojom::ServiceRequest service_request(&service);
 
     service_manager::mojom::PIDReceiverPtr pid_receiver;
-    service_manager::Connector::ConnectParams params(
-        service_manager::Identity(mojom::kBrowserServiceName, new_id));
-    params.set_client_process_connection(std::move(service),
-                                         mojo::GetProxy(&pid_receiver));
+    service_manager::Identity identity(mojom::kBrowserServiceName, new_id);
+    service_manager_connection->GetConnector()->StartService(
+        identity, std::move(service), mojo::MakeRequest(&pid_receiver));
     pid_receiver->SetPID(base::GetCurrentProcId());
 
     BrowserContextServiceManagerConnectionHolder* connection_holder =
         new BrowserContextServiceManagerConnectionHolder(
-            service_manager_connection->GetConnector()->Connect(&params),
+            service_manager_connection->GetConnector()->Connect(identity),
             std::move(service_request));
     browser_context->SetUserData(kServiceManagerConnection, connection_holder);
 
@@ -459,13 +453,6 @@ void BrowserContext::Initialize(
     connection->Start();
 
     // New embedded service factories should be added to |connection| here.
-    // TODO(blundell): Does this belong as a global service rather than per
-    // BrowserContext?
-    ServiceInfo info;
-    info.factory =
-        base::Bind(&device::CreateDeviceService,
-                   BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
-    connection->AddEmbeddedService(device::kDeviceServiceName, info);
 
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kMojoLocalStorage)) {

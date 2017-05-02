@@ -30,9 +30,7 @@ std::string AutocompleteMatchType::ToString(AutocompleteMatchType::Type type) {
     "url-from-clipboard",
     "voice-suggest",
     "physical-web",
-    "physical-web-overflow",
-    "bookmark-nick",
-    "bookmark-description",
+    "physical-web-overflow"
   };
   static_assert(arraysize(strings) == AutocompleteMatchType::NUM_TYPES,
                 "strings array must have NUM_TYPES elements");

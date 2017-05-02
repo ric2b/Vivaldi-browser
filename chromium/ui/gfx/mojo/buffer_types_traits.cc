@@ -63,17 +63,26 @@ bool StructTraits<
 mojo::ScopedHandle StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
                                 gfx::GpuMemoryBufferHandle>::
     shared_memory_handle(const gfx::GpuMemoryBufferHandle& handle) {
-  if (handle.is_null())
+  if (handle.type != gfx::SHARED_MEMORY_BUFFER)
     return mojo::ScopedHandle();
+#if defined(OS_MACOSX)
+  base::SharedMemoryHandle shm_handle = handle.handle;
+  size_t num_bytes = 0;
+  if (!shm_handle.GetSize(&num_bytes))
+    return mojo::ScopedHandle();
+  mojo::ScopedSharedBufferHandle scoped_handle =
+      mojo::WrapSharedMemoryHandle(shm_handle, num_bytes, false);
+  mojo::Handle mojo_handle = scoped_handle.release();
+  return mojo::MakeScopedHandle(mojo_handle);
+#else  // defined(OS_MACOSX)
   base::PlatformFile platform_file = base::kInvalidPlatformFile;
 #if defined(OS_WIN)
   platform_file = handle.handle.GetHandle();
-#elif defined(OS_MACOSX) || defined(OS_IOS)
-  NOTIMPLEMENTED();
 #else
   platform_file = handle.handle.fd;
 #endif
   return mojo::WrapPlatformFile(platform_file);
+#endif  // defined(OS_MACOSX)
 }
 
 const gfx::NativePixmapHandle&
@@ -88,6 +97,18 @@ StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
 #endif
 }
 
+mojo::ScopedHandle StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
+                                gfx::GpuMemoryBufferHandle>::
+    mach_port(const gfx::GpuMemoryBufferHandle& handle) {
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  if (handle.type != gfx::IO_SURFACE_BUFFER)
+    return mojo::ScopedHandle();
+  return mojo::WrapMachPort(handle.mach_port.get());
+#else
+  return mojo::ScopedHandle();
+#endif
+}
+
 bool StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
                   gfx::GpuMemoryBufferHandle>::
     Read(gfx::mojom::GpuMemoryBufferHandleDataView data,
@@ -95,31 +116,49 @@ bool StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
   if (!data.ReadType(&out->type) || !data.ReadId(&out->id))
     return false;
 
-  mojo::ScopedHandle handle = data.TakeSharedMemoryHandle();
-  if (handle.is_valid()) {
-    base::PlatformFile platform_file;
-    MojoResult unwrap_result = mojo::UnwrapPlatformFile(
-        std::move(handle), &platform_file);
+  if (out->type == gfx::SHARED_MEMORY_BUFFER) {
+    mojo::ScopedHandle handle = data.TakeSharedMemoryHandle();
+    if (handle.is_valid()) {
+#if defined(OS_MACOSX)
+      mojo::Handle mojo_handle = handle.release();
+      mojo::ScopedSharedBufferHandle buffer_handle =
+          mojo::MakeScopedHandle(mojo::SharedBufferHandle(mojo_handle.value()));
+      MojoResult unwrap_result = mojo::UnwrapSharedMemoryHandle(
+          std::move(buffer_handle), &out->handle, nullptr, nullptr);
+      if (unwrap_result != MOJO_RESULT_OK)
+        return false;
+#else  // defined(OS_MACOSX)
+      base::PlatformFile platform_file;
+      MojoResult unwrap_result =
+          mojo::UnwrapPlatformFile(std::move(handle), &platform_file);
+      if (unwrap_result != MOJO_RESULT_OK)
+        return false;
+#if defined(OS_WIN)
+      out->handle =
+          base::SharedMemoryHandle(platform_file, base::GetCurrentProcId());
+#else
+      out->handle = base::SharedMemoryHandle(platform_file, true);
+#endif
+#endif  // defined(OS_MACOSX)
+    }
+
+    out->offset = data.offset();
+    out->stride = data.stride();
+  }
+#if defined(USE_OZONE)
+  if (out->type == gfx::OZONE_NATIVE_PIXMAP &&
+      !data.ReadNativePixmapHandle(&out->native_pixmap_handle))
+    return false;
+#endif
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  if (out->type == gfx::IO_SURFACE_BUFFER) {
+    mach_port_t mach_port;
+    MojoResult unwrap_result =
+        mojo::UnwrapMachPort(data.TakeMachPort(), &mach_port);
     if (unwrap_result != MOJO_RESULT_OK)
       return false;
-#if defined(OS_WIN)
-    out->handle =
-        base::SharedMemoryHandle(platform_file, base::GetCurrentProcId());
-#elif defined(OS_MACOSX) || defined(OS_IOS)
-    // TODO: Add support for mach_port on mac.
-    out->handle = base::SharedMemoryHandle();
-#else
-    out->handle = base::SharedMemoryHandle(platform_file, true);
-#endif
-  } else {
-    out->handle = base::SharedMemoryHandle();
+    out->mach_port.reset(mach_port);
   }
-
-  out->offset = data.offset();
-  out->stride = data.stride();
-#if defined(USE_OZONE)
-  if (!data.ReadNativePixmapHandle(&out->native_pixmap_handle))
-    return false;
 #endif
   return true;
 }

@@ -22,6 +22,7 @@
     kSessionsPrivate,
     kSettings,
     kShowMenu,
+    kSync,
     kTabsPrivate,
     kThumbnails,
     kUtilities,

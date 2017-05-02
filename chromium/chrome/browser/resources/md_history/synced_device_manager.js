@@ -20,15 +20,26 @@ Polymer({
     /**
      * @type {?Array<!ForeignSession>}
      */
-    sessionList: {type: Array, observer: 'updateSyncedDevices'},
+    sessionList: {
+      type: Array,
+      observer: 'updateSyncedDevices',
+    },
 
-    searchTerm: {type: String, observer: 'searchTermChanged'},
+    searchTerm: {
+      type: String,
+      observer: 'searchTermChanged',
+    },
 
     /**
      * An array of synced devices with synced tab data.
      * @type {!Array<!ForeignDeviceInternal>}
      */
-    syncedDevices_: {type: Array, value: function() { return []; }},
+    syncedDevices_: {
+      type: Array,
+      value: function() {
+        return [];
+      },
+    },
 
     /** @private */
     signInState: {
@@ -48,12 +59,18 @@ Polymer({
       value: false,
     },
 
+    /** @private */
     hasSeenForeignData_: Boolean,
+
+    /**
+     * The session ID referring to the currently active action menu.
+     * @private {?string}
+     */
+    actionMenuModel_: String,
   },
 
   listeners: {
-    'toggle-menu': 'onToggleMenu_',
-    'scroll': 'onListScroll_',
+    'open-menu': 'onOpenMenu_',
     'update-focus-grid': 'updateFocusGrid_',
   },
 
@@ -72,10 +89,14 @@ Polymer({
   },
 
   /** @override */
-  detached: function() { this.focusGrid_.destroy(); },
+  detached: function() {
+    this.focusGrid_.destroy();
+  },
 
   /** @return {HTMLElement} */
-  getContentScrollTarget: function() { return this; },
+  getContentScrollTarget: function() {
+    return this;
+  },
 
   /**
    * @param {!ForeignSession} session
@@ -125,24 +146,18 @@ Polymer({
   },
 
   /** @private */
-  onSignInTap_: function() { chrome.send('startSignInFlow'); },
-
-  /** @private */
-  onListScroll_: function() {
-    var menu = this.$.menu.getIfExists();
-    if (menu)
-      menu.closeMenu();
+  onSignInTap_: function() {
+    chrome.send('startSignInFlow');
   },
 
   /** @private */
-  onToggleMenu_: function(e) {
-    var menu = /** @type {CrSharedMenuElement} */ this.$.menu.get();
-    menu.toggleMenu(e.detail.target, e.detail.tag);
-    if (menu.menuOpen) {
-      md_history.BrowserService.getInstance().recordHistogram(
-          SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.SHOW_SESSION_MENU,
-          SyncedTabsHistogram.LIMIT);
-    }
+  onOpenMenu_: function(e) {
+    var menu = /** @type {CrActionMenuElement} */ this.$.menu.get();
+    this.actionMenuModel_ = e.detail.tag;
+    menu.showAt(e.detail.target);
+    md_history.BrowserService.getInstance().recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.SHOW_SESSION_MENU,
+        SyncedTabsHistogram.LIMIT);
   },
 
   /** @private */
@@ -152,9 +167,9 @@ Polymer({
     browserService.recordHistogram(
         SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.OPEN_ALL,
         SyncedTabsHistogram.LIMIT);
-    browserService.openForeignSessionAllTabs(
-        menu.itemData);
-    menu.closeMenu();
+    browserService.openForeignSessionAllTabs(assert(this.actionMenuModel_));
+    this.actionMenuModel_ = null;
+    menu.close();
   },
 
   /** @private */
@@ -172,8 +187,10 @@ Polymer({
                 return prev.concat(cur.createFocusRows());
               },
               [])
-          .forEach(function(row) { this.focusGrid_.addRow(row); }.bind(this));
-      this.focusGrid_.ensureRowActive();
+          .forEach(function(row) {
+            this.focusGrid_.addRow(row);
+          }.bind(this));
+      this.focusGrid_.ensureRowActive(1);
     });
   },
 
@@ -184,12 +201,15 @@ Polymer({
     browserService.recordHistogram(
         SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.HIDE_FOR_NOW,
         SyncedTabsHistogram.LIMIT);
-    browserService.deleteForeignSession(menu.itemData);
-    menu.closeMenu();
+    browserService.deleteForeignSession(assert(this.actionMenuModel_));
+    this.actionMenuModel_ = null;
+    menu.close();
   },
 
   /** @private */
-  clearDisplayedSyncedDevices_: function() { this.syncedDevices_ = []; },
+  clearDisplayedSyncedDevices_: function() {
+    this.syncedDevices_ = [];
+  },
 
   /**
    * Decide whether or not should display no synced tabs message.
@@ -252,8 +272,8 @@ Polymer({
     if (sessionList.length > 0 && !this.hasSeenForeignData_) {
       this.hasSeenForeignData_ = true;
       md_history.BrowserService.getInstance().recordHistogram(
-        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.HAS_FOREIGN_DATA,
-        SyncedTabsHistogram.LIMIT);
+          SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.HAS_FOREIGN_DATA,
+          SyncedTabsHistogram.LIMIT);
     }
 
     var devices = [];
@@ -264,14 +284,6 @@ Polymer({
     }.bind(this));
 
     this.syncedDevices_ = devices;
-  },
-
-  /**
-   * End fetching synced tabs when sync is disabled.
-   */
-  tabSyncDisabled: function() {
-    this.fetchingSyncedTabs_ = false;
-    this.clearDisplayedSyncedDevices_();
   },
 
   /**

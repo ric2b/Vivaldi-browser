@@ -280,8 +280,8 @@ GL_APICALL GLuint       GL_APIENTRY glCreateGpuMemoryBufferImageCHROMIUM (GLsize
 GL_APICALL void         GL_APIENTRY glDescheduleUntilFinishedCHROMIUM (void);
 GL_APICALL void         GL_APIENTRY glGetTranslatedShaderSourceANGLE (GLidShader shader, GLsizeiNotNegative bufsize, GLsizeiOptional* length, char* source);
 GL_APICALL void         GL_APIENTRY glPostSubBufferCHROMIUM (GLint x, GLint y, GLint width, GLint height);
-GL_APICALL void         GL_APIENTRY glCopyTextureCHROMIUM (GLenum source_id, GLenum dest_id, GLintTextureInternalFormat internalformat, GLenumPixelType dest_type, GLboolean unpack_flip_y, GLboolean unpack_premultiply_alpha, GLboolean unpack_unmultiply_alpha);
-GL_APICALL void         GL_APIENTRY glCopySubTextureCHROMIUM (GLenum source_id, GLenum dest_id, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height, GLboolean unpack_flip_y, GLboolean unpack_premultiply_alpha, GLboolean unpack_unmultiply_alpha);
+GL_APICALL void         GL_APIENTRY glCopyTextureCHROMIUM (GLenum source_id, GLint source_level, GLenum dest_id, GLint dest_level, GLintTextureInternalFormat internalformat, GLenumPixelType dest_type, GLboolean unpack_flip_y, GLboolean unpack_premultiply_alpha, GLboolean unpack_unmultiply_alpha);
+GL_APICALL void         GL_APIENTRY glCopySubTextureCHROMIUM (GLenum source_id, GLint source_level, GLenum dest_id, GLint dest_level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height, GLboolean unpack_flip_y, GLboolean unpack_premultiply_alpha, GLboolean unpack_unmultiply_alpha);
 GL_APICALL void         GL_APIENTRY glCompressedCopyTextureCHROMIUM (GLenum source_id, GLenum dest_id);
 GL_APICALL void         GL_APIENTRY glDrawArraysInstancedANGLE (GLenumDrawMode mode, GLint first, GLsizei count, GLsizei primcount);
 GL_APICALL void         GL_APIENTRY glDrawElementsInstancedANGLE (GLenumDrawMode mode, GLsizei count, GLenumIndexType type, const void* indices, GLsizei primcount);
@@ -297,7 +297,7 @@ GL_APICALL void         GL_APIENTRY glBindTexImage2DCHROMIUM (GLenumTextureBindT
 GL_APICALL void         GL_APIENTRY glReleaseTexImage2DCHROMIUM (GLenumTextureBindTarget target, GLint imageId);
 GL_APICALL void         GL_APIENTRY glTraceBeginCHROMIUM (const char* category_name, const char* trace_name);
 GL_APICALL void         GL_APIENTRY glTraceEndCHROMIUM (void);
-GL_APICALL void         GL_APIENTRY glDiscardFramebufferEXT (GLenum target, GLsizei count, const GLenum* attachments);
+GL_APICALL void         GL_APIENTRY glDiscardFramebufferEXT (GLenumFramebufferTarget target, GLsizei count, const GLenum* attachments);
 GL_APICALL void         GL_APIENTRY glLoseContextCHROMIUM (GLenumResetStatus current, GLenumResetStatus other);
 GL_APICALL GLuint64     GL_APIENTRY glInsertFenceSyncCHROMIUM (void);
 GL_APICALL void         GL_APIENTRY glGenSyncTokenCHROMIUM (GLuint64 fence_sync, GLbyte* sync_token);
@@ -361,5 +361,6 @@ GL_APICALL GLint        GL_APIENTRY glGetFragDataIndexEXT (GLidProgram program, 
 
 // Extension CHROMIUM_stream_texture_matrix
 GL_APICALL void         GL_APIENTRY glUniformMatrix4fvStreamTextureMatrixCHROMIUM (GLintUniformLocation location, GLbooleanFalseOnly transpose, const GLfloat* transform);
+GL_APICALL void         GL_APIENTRY glOverlayPromotionHintCHROMIUM (GLidBindTexture texture, GLboolean promotion_hint, GLint display_x, GLint display_y);
 
 GL_APICALL void         GL_APIENTRY glSwapBuffersWithDamageCHROMIUM (GLint x, GLint y, GLint width, GLint height);

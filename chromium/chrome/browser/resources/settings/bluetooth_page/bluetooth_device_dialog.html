@@ -26,9 +26,8 @@
       }
 
       paper-spinner {
-        height: 20px;
+        @apply(--cr-icon-height-width);
         margin: 0 10px;
-        width: 20px;
       }
 
       .dialog-message {
@@ -45,7 +44,7 @@
         border-radius: 4px;
         box-shadow: 0 0 0 1px #222;
         color: #222;
-        font-size: 16px;
+        font-size: 123.08%;  /* 16px / 13px */
         height: 38px;
         line-height: 38px;
         margin: 0 5px;
@@ -70,13 +69,13 @@
       /* .confirm indicates a confirmation passkey. */
       span.confirm {
         color: #999;
-        font-size: 20px;
+        font-size: 153.85%;  /* 20px / 13px */
         font-weight: 600;  /* semibold */
         margin: 0 20px;
       }
     </style>
     <dialog is="cr-dialog" id="dialog" on-cancel="onDialogCanceled_">
-      <div class="title">[[getTitle_(dialogId)]]</div>
+      <div class="title">$i18n{bluetoothPairDevicePageTitle}</div>
       <div class="body">
         <div class="contents layout vertical center center-justified">
           <!-- Note: dialog + dom-if + iron-list makes sizing complicated so use
@@ -91,7 +90,7 @@
                 scrollable>
               <iron-list items="[[getUnpaired_(deviceList.*)]]"
                   selection-enabled selected-item="{{selectedItem}}"
-                  scroll-target="container" tabindex="0">
+                  scroll-target="container">
                 <template>
                   <bluetooth-device-list-item device="[[item]]"
                       tabindex$="[[tabIndex]]">
@@ -158,7 +157,7 @@
               on-tap="onRejectTap_">$i18n{bluetoothReject}</paper-button>
           <paper-button hidden$="[[!showConnect_(pairingEvent)]]"
               disabled="[[!enableConnect_(pairingEvent, pinOrPass)]]"
-              on-tap="onConnectTap_">$i18n{bluetoothConnect}</paper-button>
+              on-tap="onConnectTap_">$i18n{bluetoothPair}</paper-button>
           <paper-button hidden$="[[!showDismiss_(pairingDevice, pairingEvent)]]"
               on-tap="close">$i18n{bluetoothDismiss}</paper-button>
           <paper-button hidden$="[[showDismiss_(pairingDevice, pairingEvent)]]"

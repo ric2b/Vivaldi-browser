@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.text.TextUtils;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.content_public.browser.ImageDownloadCallback;
 import org.chromium.content_public.browser.WebContents;
 
@@ -36,9 +37,8 @@ import java.util.Locale;
  *   ratio score:
  *   - The dominant size score lies in [0, 1] and is computed using |mMinimumSize| and |mIdealSize|:
  *     - If size < |mMinimumSize| (too small), the size score is 0.
- *     - If size > 4 * |mIdealSize| (too large), the size score lies is 0.
  *     - If |mMinimumSize| <= size <= |mIdealSize|, the score increases linearly from 0.2 to 1.
- *     - If |mIdealSize| < size <= 4 * |mIdealSize|, the score drops linearly from 1 to 0.6.
+ *     - If size > |mIdealSize|, the score is |mIdealSize| / size, which drops from 1 to 0.
  *     - When the size is "any", the size score is 0.8.
  *     - If unspecified, use the default size score (0.4).
  *   - The aspect ratio score lies in [0, 1] and is computed by dividing the short edge length by
@@ -54,6 +54,9 @@ public class MediaImageManager implements ImageDownloadCallback {
     private static final double TYPE_SCORE_BMP = 0.5;
     private static final double TYPE_SCORE_XICON = 0.4;
     private static final double TYPE_SCORE_GIF = 0.3;
+
+    @VisibleForTesting
+    static final int MAX_BITMAP_SIZE_FOR_DOWNLOAD = 2048;
 
     private static final Object LOCK = new Object();
 
@@ -73,6 +76,12 @@ public class MediaImageManager implements ImageDownloadCallback {
     private int mRequestId;
     // The callback to be called when the pending download image request completes.
     private MediaImageCallback mCallback;
+
+    // The last image src for download, used for avoiding fetching the same src when artwork is set
+    // multiple times but the same src is chosen.
+    //
+    // Will be reset when initiating a new download request.
+    private String mLastImageSrc;
 
     /**
      * MediaImageManager constructor.
@@ -116,7 +125,7 @@ public class MediaImageManager implements ImageDownloadCallback {
 
     /**
      * Select the best image from |images| and start download.
-     * @param images The list of images to choose from.
+     * @param images The list of images to choose from. Null is equivalent to empty list.
      * @param callback The callback when image download completes.
      */
     public void downloadImage(List<MediaImage> images, MediaImageCallback callback) {
@@ -124,18 +133,27 @@ public class MediaImageManager implements ImageDownloadCallback {
 
         mCallback = callback;
         MediaImage image = selectImage(images);
-        if (image == null) return;
+        if (image == null) {
+            mLastImageSrc = null;
+            mCallback.onImageDownloaded(null);
+            clearRequests();
+            return;
+        }
 
+        // Avoid fetching the same image twice.
+        if (TextUtils.equals(image.getSrc(), mLastImageSrc)) return;
+        mLastImageSrc = image.getSrc();
+
+        // Limit |maxBitmapSize| to |MAX_BITMAP_SIZE_FOR_DOWNLOAD| to avoid passing huge bitmaps
+        // through JNI. |maxBitmapSize| does not prevent huge images to be downloaded. It is used to
+        // filter/rescale the download images. See documentation of
+        // {@link WebContents#downloadImage()} for details.
         mRequestId = mWebContents.downloadImage(
-            image.getSrc(), false, 8 * mIdealSize, false, this);
-    }
-
-    /**
-     * Clear previous requests.
-     */
-    public void clearRequests() {
-        mRequestId = -1;
-        mCallback = null;
+                image.getSrc(),                // url
+                false,                         // isFavicon
+                MAX_BITMAP_SIZE_FOR_DOWNLOAD,  // maxBitmapSize
+                false,                         // bypassCache
+                this);                         // callback
     }
 
     /**
@@ -147,7 +165,6 @@ public class MediaImageManager implements ImageDownloadCallback {
     public void onFinishDownloadImage(int id, int httpStatusCode, String imageUrl,
             List<Bitmap> bitmaps, List<Rect> originalImageSizes) {
         if (id != mRequestId) return;
-        if (httpStatusCode < 200 || httpStatusCode >= 300) return;
 
         Iterator<Bitmap> iterBitmap = bitmaps.iterator();
         Iterator<Rect> iterSize = originalImageSizes.iterator();
@@ -163,15 +180,17 @@ public class MediaImageManager implements ImageDownloadCallback {
                 bestScore = newScore;
             }
         }
-        if (bestBitmap != null) mCallback.onImageDownloaded(bestBitmap);
+        mCallback.onImageDownloaded(bestBitmap);
         clearRequests();
     }
 
     /**
      * Select the best image from the |images|.
-     * @param images The list of images to select from.
+     * @param images The list of images to select from. Null is equivalent to empty list.
      */
     private MediaImage selectImage(List<MediaImage> images) {
+        if (images == null) return null;
+
         MediaImage selectedImage = null;
         double bestScore = 0;
         for (MediaImage image : images) {
@@ -182,6 +201,11 @@ public class MediaImageManager implements ImageDownloadCallback {
             }
         }
         return selectedImage;
+    }
+
+    private void clearRequests() {
+        mRequestId = -1;
+        mCallback = null;
     }
 
     private double getImageScore(MediaImage image) {
@@ -203,18 +227,15 @@ public class MediaImageManager implements ImageDownloadCallback {
 
     private double getImageDominantSizeScore(int width, int height) {
         int dominantSize = Math.max(width, height);
-
         // When the size is "any".
         if (dominantSize == 0) return 0.8;
         // Ignore images that are too small.
         if (dominantSize < mMinimumSize) return 0;
-        // Ignore images that are too large.
-        if (dominantSize > 4 * mIdealSize) return 0;
 
         if (dominantSize <= mIdealSize) {
             return 0.8 * (dominantSize - mMinimumSize) / (mIdealSize - mMinimumSize) + 0.2;
         }
-        return 0.4 * (dominantSize - mIdealSize) / (3 * mIdealSize) + 0.6;
+        return 1.0 * mIdealSize / dominantSize;
     }
 
     private double getImageAspectRatioScore(int width, int height) {

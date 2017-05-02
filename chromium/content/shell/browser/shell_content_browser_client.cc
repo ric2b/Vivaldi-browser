@@ -196,7 +196,7 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
 
 void ShellContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
-#if (ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   {
     content::ServiceInfo info;
     info.factory = base::Bind(&media::CreateMediaServiceForTesting);
@@ -219,8 +219,7 @@ void ShellContentBrowserClient::RegisterOutOfProcessServices(
 }
 
 std::unique_ptr<base::Value>
-ShellContentBrowserClient::GetServiceManifestOverlay(
-    const std::string& name) {
+ShellContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
   int id = -1;
   if (name == content::mojom::kBrowserServiceName)
     id = IDR_CONTENT_SHELL_BROWSER_MANIFEST_OVERLAY;
@@ -331,42 +330,27 @@ void ShellContentBrowserClient::OpenURL(
                                       gfx::Size())->web_contents());
 }
 
-#if defined(OS_ANDROID)
-void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
-    const base::CommandLine& command_line,
-    int child_process_id,
-    content::FileDescriptorInfo* mappings,
-    std::map<int, base::MemoryMappedFile::Region>* regions) {
-  mappings->Share(
-      kShellPakDescriptor,
-      base::GlobalDescriptors::GetInstance()->Get(kShellPakDescriptor));
-  regions->insert(std::make_pair(
-      kShellPakDescriptor,
-      base::GlobalDescriptors::GetInstance()->GetRegion(kShellPakDescriptor)));
-
-  if (breakpad::IsCrashReporterEnabled()) {
-    base::File f(breakpad::CrashDumpManager::GetInstance()->CreateMinidumpFile(
-        child_process_id));
-    if (!f.IsValid()) {
-      LOG(ERROR) << "Failed to create file for minidump, crash reporting will "
-                 << "be disabled for this process.";
-    } else {
-      mappings->Transfer(kAndroidMinidumpDescriptor,
-                         base::ScopedFD(f.TakePlatformFile()));
-    }
-  }
-}
-#elif defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
 void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
     const base::CommandLine& command_line,
     int child_process_id,
     content::FileDescriptorInfo* mappings) {
+#if defined(OS_ANDROID)
+  mappings->ShareWithRegion(
+      kShellPakDescriptor,
+      base::GlobalDescriptors::GetInstance()->Get(kShellPakDescriptor),
+      base::GlobalDescriptors::GetInstance()->GetRegion(kShellPakDescriptor));
+
+  breakpad::CrashDumpObserver::GetInstance()->BrowserChildProcessStarted(
+      child_process_id, mappings);
+#else
   int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
     mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
-}
 #endif  // defined(OS_ANDROID)
+}
+#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 
 #if defined(OS_WIN)
 bool ShellContentBrowserClient::PreSpawnRenderer(

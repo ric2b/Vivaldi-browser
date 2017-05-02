@@ -48,7 +48,8 @@ void PrerenderHandle::OnCancel() {
 
 bool PrerenderHandle::IsPrerendering() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return prerender_data_.get() != nullptr;
+  return prerender_data_.get() != nullptr &&
+      !prerender_data_->contents()->prerendering_has_been_cancelled();
 }
 
 bool PrerenderHandle::IsFinishedLoading() const {
@@ -64,14 +65,6 @@ bool PrerenderHandle::IsAbandoned() const {
 PrerenderContents* PrerenderHandle::contents() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return prerender_data_ ? prerender_data_->contents() : nullptr;
-}
-
-bool PrerenderHandle::Matches(
-    const GURL& url,
-    const content::SessionStorageNamespace* session_storage_namespace) const {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return prerender_data_ &&
-         prerender_data_->contents()->Matches(url, session_storage_namespace);
 }
 
 PrerenderHandle::PrerenderHandle(

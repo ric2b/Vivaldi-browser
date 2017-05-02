@@ -6,11 +6,14 @@
       "provides": {
         // A collection of interfaces needed by a generic client of mus.
         // Additional interfaces may be requested a-la-carte.
+        // NOTE: when adding a new interface chances are you will want to add it
+        // to window_manager as well.
         "app": [
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "ui::mojom::Clipboard",
+          "ui::mojom::DisplayCompositor",
           "ui::mojom::DisplayManager",
           "ui::mojom::Gpu",
-          "ui::mojom::GpuService",
           "ui::mojom::IMEServer",
           "ui::mojom::InputDeviceServer",
           "ui::mojom::WindowTreeFactory"
@@ -22,23 +25,32 @@
         "test": [
           "ui::mojom::WindowServerTest"
         ],
-        "ui:gpu_client": [
-          "ui::mojom::Gpu",
-          "ui::mojom::GpuService"
+        "discardable_memory": [
+          "discardable_memory::mojom::DiscardableSharedMemoryManager"
         ],
-        "ui:ime_registrar": [
+        "gpu_client": [
+          "ui::mojom::Gpu"
+        ],
+        "ime_registrar": [
           "ui::mojom::IMERegistrar"
         ],
-        "ui:user_access_manager": [
+        "user_access_manager": [
           "ui::mojom::UserAccessManager"
         ],
-        "ui:window_manager": [
+        "window_manager": [
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "display::mojom::DisplayController",
           "display::mojom::TestDisplayController",
           "ui::mojom::AccessibilityManager",
+          "ui::mojom::Clipboard",
+          "ui::mojom::DisplayCompositor",
+          "ui::mojom::DisplayManager",
+          "ui::mojom::Gpu",
+          "ui::mojom::IMEServer",
+          "ui::mojom::InputDeviceServer",
           "ui::mojom::WindowManagerWindowTreeFactory"
         ],
-        "ui:window_tree_host_factory": [
+        "window_tree_host_factory": [
           "ui::mojom::WindowTreeHostFactory"
         ]
       },

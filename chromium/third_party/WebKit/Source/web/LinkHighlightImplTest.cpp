@@ -25,7 +25,7 @@
 
 #include "web/LinkHighlightImpl.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Node.h"
 #include "core/frame/FrameView.h"
 #include "core/input/EventHandler.h"
@@ -55,12 +55,12 @@ namespace blink {
 
 GestureEventWithHitTestResults getTargetedEvent(WebViewImpl* webViewImpl,
                                                 WebGestureEvent& touchEvent) {
-  PlatformGestureEventBuilder platformEvent(
+  WebGestureEvent scaledEvent = TransformWebGestureEvent(
       webViewImpl->mainFrameImpl()->frameView(), touchEvent);
   return webViewImpl->page()
       ->deprecatedLocalMainFrame()
       ->eventHandler()
-      .targetGestureEvent(platformEvent, true);
+      .targetGestureEvent(scaledEvent, true);
 }
 
 TEST(LinkHighlightImplTest, verifyWebViewImplIntegration) {
@@ -78,8 +78,9 @@ TEST(LinkHighlightImplTest, verifyWebViewImplIntegration) {
   webViewImpl->resize(WebSize(pageWidth, pageHeight));
   webViewImpl->updateAllLifecyclePhases();
 
-  WebGestureEvent touchEvent;
-  touchEvent.type = WebInputEvent::GestureShowPress;
+  WebGestureEvent touchEvent(WebInputEvent::GestureShowPress,
+                             WebInputEvent::NoModifiers,
+                             WebInputEvent::TimeStampForTesting);
   touchEvent.sourceDevice = WebGestureDeviceTouchscreen;
 
   // The coordinates below are linked to absolute positions in the referenced
@@ -155,8 +156,9 @@ TEST(LinkHighlightImplTest, resetDuringNodeRemoval) {
   webViewImpl->resize(WebSize(pageWidth, pageHeight));
   webViewImpl->updateAllLifecyclePhases();
 
-  WebGestureEvent touchEvent;
-  touchEvent.type = WebInputEvent::GestureShowPress;
+  WebGestureEvent touchEvent(WebInputEvent::GestureShowPress,
+                             WebInputEvent::NoModifiers,
+                             WebInputEvent::TimeStampForTesting);
   touchEvent.sourceDevice = WebGestureDeviceTouchscreen;
   touchEvent.x = 20;
   touchEvent.y = 20;
@@ -174,7 +176,7 @@ TEST(LinkHighlightImplTest, resetDuringNodeRemoval) {
   ASSERT_TRUE(highlightLayer);
   EXPECT_TRUE(highlightLayer->getLinkHighlight(0));
 
-  touchNode->remove(IGNORE_EXCEPTION);
+  touchNode->remove(IGNORE_EXCEPTION_FOR_TESTING);
   webViewImpl->updateAllLifecyclePhases();
   ASSERT_EQ(0U, highlightLayer->numLinkHighlights());
 
@@ -185,7 +187,7 @@ TEST(LinkHighlightImplTest, resetDuringNodeRemoval) {
 // A lifetime test: delete LayerTreeView while running LinkHighlights.
 TEST(LinkHighlightImplTest, resetLayerTreeView) {
   std::unique_ptr<FakeCompositingWebViewClient> webViewClient =
-      makeUnique<FakeCompositingWebViewClient>();
+      WTF::makeUnique<FakeCompositingWebViewClient>();
 
   const std::string baseURL("http://www.test.com/");
   const std::string fileName("test_touch_link_highlight.html");
@@ -202,8 +204,9 @@ TEST(LinkHighlightImplTest, resetLayerTreeView) {
   webViewImpl->resize(WebSize(pageWidth, pageHeight));
   webViewImpl->updateAllLifecyclePhases();
 
-  WebGestureEvent touchEvent;
-  touchEvent.type = WebInputEvent::GestureShowPress;
+  WebGestureEvent touchEvent(WebInputEvent::GestureShowPress,
+                             WebInputEvent::NoModifiers,
+                             WebInputEvent::TimeStampForTesting);
   touchEvent.sourceDevice = WebGestureDeviceTouchscreen;
   touchEvent.x = 20;
   touchEvent.y = 20;

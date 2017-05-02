@@ -56,7 +56,7 @@ class PODIntervalSearchAdapter {
   const T& highValue() const { return m_highValue; }
   void collectIfNeeded(const IntervalType& data) const {
     if (data.overlaps(m_lowValue, m_highValue))
-      m_result.append(data);
+      m_result.push_back(data);
   }
 
  private:
@@ -146,7 +146,8 @@ class PODIntervalTree final : public PODRedBlackTree<PODInterval<T, UserData>> {
   // interval to the result vector. The intervals are sorted by
   // increasing low endpoint.
   template <class AdapterType>
-  void searchForOverlapsFrom(IntervalNode* node, AdapterType& adapter) const {
+  DISABLE_CFI_PERF void searchForOverlapsFrom(IntervalNode* node,
+                                              AdapterType& adapter) const {
     if (!node)
       return;
 

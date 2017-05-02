@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/common/site_isolation_policy.h"
+#include "content/common/url_schemes.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -27,6 +28,7 @@
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_service_manager_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/url_util.h"
 
 #if defined(OS_ANDROID)
 #include "content/browser/android/browser_jni_registrar.h"
@@ -120,23 +122,14 @@ void RunMessageLoop() {
 void RunThisRunLoop(base::RunLoop* run_loop) {
   base::MessageLoop::ScopedNestableTaskAllower allow(
       base::MessageLoop::current());
-
-  // If we're running inside a browser test, we might need to allow the test
-  // launcher to do extra work before/after running a nested message loop.
-  TestLauncherDelegate* delegate = NULL;
-  delegate = GetCurrentTestLauncherDelegate();
-  if (delegate)
-    delegate->PreRunMessageLoop(run_loop);
   run_loop->Run();
-  if (delegate)
-    delegate->PostRunMessageLoop();
 }
 
 void RunAllPendingInMessageLoop() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::RunLoop run_loop;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, GetQuitTaskForRunLoop(&run_loop));
+      FROM_HERE, GetDeferredQuitTaskForRunLoop(&run_loop));
   RunThisRunLoop(&run_loop);
 }
 
@@ -175,7 +168,7 @@ void RunAllBlockingPoolTasksUntilIdle() {
   }
 }
 
-base::Closure GetQuitTaskForRunLoop(base::RunLoop* run_loop) {
+base::Closure GetDeferredQuitTaskForRunLoop(base::RunLoop* run_loop) {
   return base::Bind(&DeferredQuitRunLoop, run_loop->QuitClosure(),
                     kNumQuitDeferrals);
 }
@@ -201,6 +194,12 @@ void IsolateAllSitesForTesting(base::CommandLine* command_line) {
   command_line->AppendSwitch(switches::kSitePerProcess);
 }
 
+void ResetSchemesAndOriginsWhitelist() {
+  url::Shutdown();
+  RegisterContentSchemes(false);
+  url::Initialize();
+}
+
 #if defined(OS_ANDROID)
 // Registers content/browser JNI bindings necessary for some types of tests.
 bool RegisterJniForTesting(JNIEnv* env) {
@@ -208,9 +207,8 @@ bool RegisterJniForTesting(JNIEnv* env) {
 }
 #endif
 
-MessageLoopRunner::MessageLoopRunner()
-    : loop_running_(false),
-      quit_closure_called_(false) {
+MessageLoopRunner::MessageLoopRunner(QuitMode quit_mode)
+    : quit_mode_(quit_mode), loop_running_(false), quit_closure_called_(false) {
 }
 
 MessageLoopRunner::~MessageLoopRunner() = default;
@@ -239,7 +237,14 @@ void MessageLoopRunner::Quit() {
 
   // Only run the quit task if we are running the message loop.
   if (loop_running_) {
-    GetQuitTaskForRunLoop(&run_loop_).Run();
+    switch (quit_mode_) {
+      case QuitMode::DEFERRED:
+        GetDeferredQuitTaskForRunLoop(&run_loop_).Run();
+        break;
+      case QuitMode::IMMEDIATE:
+        run_loop_.Quit();
+        break;
+    }
     loop_running_ = false;
   }
 }
@@ -318,8 +323,8 @@ InProcessUtilityThreadHelper::~InProcessUtilityThreadHelper() {
   if (child_thread_count_) {
     DCHECK(BrowserThread::IsMessageLoopValid(BrowserThread::UI));
     DCHECK(BrowserThread::IsMessageLoopValid(BrowserThread::IO));
-    runner_ = new MessageLoopRunner;
-    runner_->Run();
+    run_loop_.reset(new base::RunLoop);
+    run_loop_->Run();
   }
   BrowserChildProcessObserver::Remove(this);
   RenderProcessHost::SetRunRendererInProcess(false);
@@ -335,8 +340,8 @@ void InProcessUtilityThreadHelper::BrowserChildProcessHostDisconnected(
   if (--child_thread_count_)
     return;
 
-  if (runner_.get())
-    runner_->Quit();
+  if (run_loop_)
+    run_loop_->Quit();
 }
 
 RenderFrameDeletedObserver::RenderFrameDeletedObserver(RenderFrameHost* rfh)
@@ -373,19 +378,19 @@ void RenderFrameDeletedObserver::WaitUntilDeleted() {
 
 WebContentsDestroyedWatcher::WebContentsDestroyedWatcher(
     WebContents* web_contents)
-    : WebContentsObserver(web_contents),
-      message_loop_runner_(new MessageLoopRunner) {
+    : WebContentsObserver(web_contents) {
   EXPECT_TRUE(web_contents != NULL);
 }
 
-WebContentsDestroyedWatcher::~WebContentsDestroyedWatcher() {}
+WebContentsDestroyedWatcher::~WebContentsDestroyedWatcher() {
+}
 
 void WebContentsDestroyedWatcher::Wait() {
-  message_loop_runner_->Run();
+  run_loop_.Run();
 }
 
 void WebContentsDestroyedWatcher::WebContentsDestroyed() {
-  message_loop_runner_->Quit();
+  run_loop_.Quit();
 }
 
 }  // namespace content

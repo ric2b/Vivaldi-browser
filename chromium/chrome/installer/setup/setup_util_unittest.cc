@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/process/process_handle.h"
@@ -31,6 +32,7 @@
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_constants.h"
+#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/updating_app_registration_data.h"
 #include "chrome/installer/util/util_constants.h"
@@ -193,6 +195,48 @@ TEST(SetupUtilTest, GuidToSquid) {
             L"3E026ADE89AA64838BE14339BCE2E020");
 }
 
+TEST(SetupUtilTest, RegisterEventLogProvider) {
+  registry_util::RegistryOverrideManager registry_override_manager;
+  registry_override_manager.OverrideRegistry(HKEY_LOCAL_MACHINE);
+
+  const base::Version version("1.2.3.4");
+  const base::FilePath install_directory(
+      FILE_PATH_LITERAL("c:\\some_path\\test"));
+  installer::RegisterEventLogProvider(install_directory, version);
+
+  // TODO(grt): use install_static::InstallDetails::Get().install_full_name()
+  // when InstallDetails is initialized in the installer.
+  base::string16 reg_path(
+      L"SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\");
+#if defined(GOOGLE_CHROME_BUILD)
+  reg_path.append(L"Chrome");
+  if (InstallUtil::IsChromeSxSProcess())
+    reg_path.append(L" SxS");
+#else
+  reg_path.append(L"Chromium");
+#endif
+  base::win::RegKey key;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Open(HKEY_LOCAL_MACHINE, reg_path.c_str(), KEY_READ));
+  EXPECT_TRUE(key.HasValue(L"CategoryCount"));
+  EXPECT_TRUE(key.HasValue(L"TypesSupported"));
+  EXPECT_TRUE(key.HasValue(L"CategoryMessageFile"));
+  EXPECT_TRUE(key.HasValue(L"EventMessageFile"));
+  EXPECT_TRUE(key.HasValue(L"ParameterMessageFile"));
+  base::string16 value;
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"CategoryMessageFile", &value));
+  const base::FilePath expected_directory(
+      install_directory.AppendASCII(version.GetString()));
+  const base::FilePath provider_path(value);
+  EXPECT_EQ(expected_directory, provider_path.DirName());
+  key.Close();
+
+  installer::DeRegisterEventLogProvider();
+
+  EXPECT_NE(ERROR_SUCCESS,
+            key.Open(HKEY_LOCAL_MACHINE, reg_path.c_str(), KEY_READ));
+}
+
 const char kAdjustProcessPriority[] = "adjust-process-priority";
 
 PriorityClassChangeResult DoProcessPriorityAdjustment() {
@@ -344,8 +388,7 @@ class FindArchiveToPatchTest : public testing::Test {
         kSystemInstall_ ? installer::InstallerState::SYSTEM_LEVEL :
         installer::InstallerState::USER_LEVEL));
     installer_state_->AddProductFromState(
-        kProductType_,
-        *original_state_->GetProductState(kSystemInstall_, kProductType_));
+        *original_state_->GetProductState(kSystemInstall_));
 
     // Create archives in the two version dirs.
     ASSERT_TRUE(
@@ -377,8 +420,7 @@ class FindArchiveToPatchTest : public testing::Test {
 
   void InstallProduct() {
     FakeProductState* product = FakeProductState::FromProductState(
-        original_state_->GetNonVersionedProductState(kSystemInstall_,
-                                                     kProductType_));
+        original_state_->GetNonVersionedProductState(kSystemInstall_));
 
     product->set_version(product_version_);
     base::CommandLine uninstall_command(
@@ -392,13 +434,11 @@ class FindArchiveToPatchTest : public testing::Test {
 
   void UninstallProduct() {
     FakeProductState::FromProductState(
-        original_state_->GetNonVersionedProductState(kSystemInstall_,
-                                                     kProductType_))
+        original_state_->GetNonVersionedProductState(kSystemInstall_))
         ->set_version(base::Version());
   }
 
   static const bool kSystemInstall_;
-  static const BrowserDistribution::Type kProductType_;
   base::ScopedTempDir test_dir_;
   base::Version product_version_;
   base::Version max_version_;
@@ -412,8 +452,6 @@ class FindArchiveToPatchTest : public testing::Test {
 };
 
 const bool FindArchiveToPatchTest::kSystemInstall_ = false;
-const BrowserDistribution::Type FindArchiveToPatchTest::kProductType_ =
-    BrowserDistribution::CHROME_BROWSER;
 
 }  // namespace
 
@@ -466,87 +504,6 @@ TEST_F(FindArchiveToPatchTest, DesiredVersionNotFound) {
     *original_state_, *installer_state_, base::Version("1.2.3.4")));
   EXPECT_EQ(base::FilePath().value(), patch_source.value());
 }
-
-#if defined(GOOGLE_CHROME_BUILD)
-namespace {
-const bool kSystemLevel = false;
-const HKEY kRootKey = kSystemLevel ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-const wchar_t kVersionString[] = L"30.0.1574.0";
-const wchar_t kMultiChannel[] = L"2.0-dev-multi-chromeframe";
-
-class MigrateMultiToSingleTest : public testing::Test {
- protected:
-  void SetUp() override {
-    registry_override_manager_.OverrideRegistry(kRootKey);
-  }
-
- private:
-  registry_util::RegistryOverrideManager registry_override_manager_;
-};
-}  // namespace
-
-// Test migrating Chrome Frame from multi to single.
-TEST_F(MigrateMultiToSingleTest, ChromeFrame) {
-  installer::ProductState chrome_frame;
-  installer::ProductState binaries;
-#ifndef OMIT_CHROME_FRAME
-  DWORD usagestats = 0;
-#endif
-
-  // Set up a config with dev-channel multi-install GCF.
-  base::win::RegKey key;
-
-  BrowserDistribution* dist = BrowserDistribution::GetSpecificDistribution(
-      BrowserDistribution::CHROME_BINARIES);
-  ASSERT_EQ(ERROR_SUCCESS,
-            base::win::RegKey(kRootKey, dist->GetVersionKey().c_str(),
-                              KEY_SET_VALUE)
-                .WriteValue(google_update::kRegVersionField, kVersionString));
-  ASSERT_EQ(ERROR_SUCCESS,
-            base::win::RegKey(kRootKey, dist->GetStateKey().c_str(),
-                              KEY_SET_VALUE)
-                .WriteValue(google_update::kRegApField, kMultiChannel));
-  ASSERT_EQ(ERROR_SUCCESS,
-            base::win::RegKey(kRootKey, dist->GetStateKey().c_str(),
-                              KEY_SET_VALUE)
-                .WriteValue(google_update::kRegUsageStatsField, 1U));
-
-#ifndef OMIT_CHROME_FRAME
-  dist = BrowserDistribution::GetSpecificDistribution(
-      BrowserDistribution::CHROME_FRAME);
-  ASSERT_EQ(ERROR_SUCCESS,
-            base::win::RegKey(kRootKey, dist->GetVersionKey().c_str(),
-                              KEY_SET_VALUE)
-                .WriteValue(google_update::kRegVersionField, kVersionString));
-  ASSERT_EQ(ERROR_SUCCESS,
-            base::win::RegKey(kRootKey, dist->GetStateKey().c_str(),
-                              KEY_SET_VALUE)
-                .WriteValue(google_update::kRegApField, kMultiChannel));
-
-  // Do the registry migration.
-  installer::InstallationState machine_state;
-  machine_state.Initialize();
-
-  installer::MigrateGoogleUpdateStateMultiToSingle(
-      kSystemLevel,
-      BrowserDistribution::CHROME_FRAME,
-      machine_state);
-
-  // Confirm that usagestats were copied to CF and that its channel was
-  // stripped.
-  ASSERT_TRUE(chrome_frame.Initialize(kSystemLevel,
-                                      BrowserDistribution::CHROME_FRAME));
-  EXPECT_TRUE(chrome_frame.GetUsageStats(&usagestats));
-  EXPECT_EQ(1U, usagestats);
-  EXPECT_EQ(L"2.0-dev", chrome_frame.channel().value());
-#endif
-
-  // Confirm that the binaries' channel no longer contains GCF.
-  ASSERT_TRUE(binaries.Initialize(kSystemLevel,
-                                  BrowserDistribution::CHROME_BINARIES));
-  EXPECT_EQ(L"2.0-dev-multi", binaries.channel().value());
-}
-#endif
 
 TEST(SetupUtilTest, ContainsUnsupportedSwitch) {
   EXPECT_FALSE(installer::ContainsUnsupportedSwitch(
@@ -677,6 +634,143 @@ TEST_F(DeleteRegistryKeyPartialTest, NonEmptyKeyWithPreserve) {
     base::win::RegistryValueIterator it(root_, path_.c_str());
     ASSERT_EQ(0u, it.ValueCount());
   }
+}
+
+class LegacyCleanupsTest : public ::testing::Test {
+ protected:
+  LegacyCleanupsTest() = default;
+  void SetUp() override {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    registry_override_manager_.OverrideRegistry(HKEY_CURRENT_USER);
+    installer_state_ =
+        base::MakeUnique<FakeInstallerState>(temp_dir_.GetPath());
+    // Create the state to be cleared.
+    ASSERT_TRUE(base::win::RegKey(HKEY_CURRENT_USER, kBinariesClientsKeyPath,
+                                  KEY_WRITE | KEY_WOW64_32KEY)
+                    .Valid());
+#if defined(GOOGLE_CHROME_BUILD)
+    ASSERT_TRUE(base::win::RegKey(HKEY_CURRENT_USER, kGCFClientsKeyPath,
+                                  KEY_WRITE | KEY_WOW64_32KEY)
+                    .Valid());
+    ASSERT_TRUE(base::win::RegKey(HKEY_CURRENT_USER, kAppLauncherClientsKeyPath,
+                                  KEY_WRITE | KEY_WOW64_32KEY)
+                    .Valid());
+    ASSERT_GT(base::WriteFile(GetAppHostExePath(), "cha", 3), 0);
+    ASSERT_TRUE(
+        base::win::RegKey(HKEY_CURRENT_USER,
+                          GetChromeAppCommandPath(L"install-extension").c_str(),
+                          KEY_WRITE | KEY_WOW64_32KEY)
+            .Valid());
+#endif  // GOOGLE_CHROME_BUILD
+  }
+
+  const InstallerState& installer_state() const { return *installer_state_; }
+
+  bool HasBinariesVersionKey() const {
+    return base::win::RegKey(HKEY_CURRENT_USER, kBinariesClientsKeyPath,
+                             KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+        .Valid();
+  }
+
+#if defined(GOOGLE_CHROME_BUILD)
+  bool HasMultiGCFVersionKey() const {
+    return base::win::RegKey(HKEY_CURRENT_USER, kGCFClientsKeyPath,
+                             KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+        .Valid();
+  }
+
+  bool HasAppLauncherVersionKey() const {
+    return base::win::RegKey(HKEY_CURRENT_USER, kAppLauncherClientsKeyPath,
+                             KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+        .Valid();
+  }
+
+  bool HasAppHostExe() const { return base::PathExists(GetAppHostExePath()); }
+
+  bool HasInstallExtensionCommand() const {
+    return base::win::RegKey(
+               HKEY_CURRENT_USER,
+               GetChromeAppCommandPath(L"install-extension").c_str(),
+               KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+        .Valid();
+  }
+#endif  // GOOGLE_CHROME_BUILD
+
+ private:
+  // An InstallerState for a per-user install of Chrome in a given directory.
+  class FakeInstallerState : public InstallerState {
+   public:
+    explicit FakeInstallerState(const base::FilePath& target_path) {
+      BrowserDistribution* dist = BrowserDistribution::GetDistribution();
+      operation_ = InstallerState::SINGLE_INSTALL_OR_UPDATE;
+      target_path_ = target_path;
+      state_key_ = dist->GetStateKey();
+      product_ = base::MakeUnique<Product>(dist);
+      level_ = InstallerState::USER_LEVEL;
+      root_key_ = HKEY_CURRENT_USER;
+    }
+  };
+
+#if defined(GOOGLE_CHROME_BUILD)
+  base::FilePath GetAppHostExePath() const {
+    return installer_state_->target_path().AppendASCII("app_host.exe");
+  }
+
+  base::string16 GetChromeAppCommandPath(const wchar_t* command) const {
+    return base::string16(
+               L"SOFTWARE\\Google\\Update\\Clients\\"
+               L"{8A69D345-D564-463c-AFF1-A69D9E530F96}\\Commands\\") +
+           command;
+  }
+#endif  // GOOGLE_CHROME_BUILD
+
+  static const wchar_t kBinariesClientsKeyPath[];
+#if defined(GOOGLE_CHROME_BUILD)
+  static const wchar_t kGCFClientsKeyPath[];
+  static const wchar_t kAppLauncherClientsKeyPath[];
+#endif
+
+  base::ScopedTempDir temp_dir_;
+  registry_util::RegistryOverrideManager registry_override_manager_;
+  std::unique_ptr<FakeInstallerState> installer_state_;
+  DISALLOW_COPY_AND_ASSIGN(LegacyCleanupsTest);
+};
+
+#if defined(GOOGLE_CHROME_BUILD)
+const wchar_t LegacyCleanupsTest::kBinariesClientsKeyPath[] =
+    L"SOFTWARE\\Google\\Update\\Clients\\"
+    L"{4DC8B4CA-1BDA-483e-B5FA-D3C12E15B62D}";
+const wchar_t LegacyCleanupsTest::kGCFClientsKeyPath[] =
+    L"SOFTWARE\\Google\\Update\\Clients\\"
+    L"{8BA986DA-5100-405E-AA35-86F34A02ACBF}";
+const wchar_t LegacyCleanupsTest::kAppLauncherClientsKeyPath[] =
+    L"SOFTWARE\\Google\\Update\\Clients\\"
+    L"{FDA71E6F-AC4C-4a00-8B70-9958A68906BF}";
+#else   // GOOGLE_CHROME_BUILD
+const wchar_t LegacyCleanupsTest::kBinariesClientsKeyPath[] =
+    L"SOFTWARE\\Chromium Binaries";
+#endif  // !GOOGLE_CHROME_BUILD
+
+TEST_F(LegacyCleanupsTest, NoOpOnFailedUpdate) {
+  DoLegacyCleanups(installer_state(), INSTALL_FAILED);
+  EXPECT_TRUE(HasBinariesVersionKey());
+#if defined(GOOGLE_CHROME_BUILD)
+  EXPECT_TRUE(HasMultiGCFVersionKey());
+  EXPECT_TRUE(HasAppLauncherVersionKey());
+  EXPECT_TRUE(HasAppHostExe());
+  EXPECT_TRUE(HasInstallExtensionCommand());
+#endif  // GOOGLE_CHROME_BUILD
+}
+
+TEST_F(LegacyCleanupsTest, Do) {
+  DoLegacyCleanups(installer_state(), NEW_VERSION_UPDATED);
+  EXPECT_FALSE(HasBinariesVersionKey());
+#if defined(GOOGLE_CHROME_BUILD)
+  EXPECT_FALSE(HasMultiGCFVersionKey());
+  EXPECT_FALSE(HasAppLauncherVersionKey());
+  EXPECT_FALSE(HasAppHostExe());
+  EXPECT_FALSE(HasInstallExtensionCommand());
+#endif  // GOOGLE_CHROME_BUILD
 }
 
 }  // namespace installer

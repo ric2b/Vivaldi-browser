@@ -41,6 +41,7 @@
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2122028596993374965">Διακοπή μετάδοσης <ph name="TAB_NAME" /> σε <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Χαμηλή ισχύς φορτιστή</translation>
 <translation id="2204305834655267233">Πληροφορίες δικτύου</translation>
 <translation id="2208323208084708176">Ενιαία λειτουργία επιφάνειας εργασίας.</translation>
@@ -54,10 +55,8 @@
 <translation id="2429753432712299108">Η συσκευή Bluetooth "<ph name="DEVICE_NAME" />" ζητά δικαιώματα σύζευξης. Προτού αποδεχτείτε, επιβεβαιώστε ότι αυτό το κλειδί πρόσβασης εμφανίζεται στη συγκεκριμένη συσκευή: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Παρουσιάστηκε σφάλμα</translation>
 <translation id="2509468283778169019">Το CAPS LOCK είναι ενεργοποιημένο</translation>
-<translation id="252373100621549798">Άγνωστη οθόνη</translation>
 <translation id="2532589005999780174">Λειτουργία υψηλής αντίθεσης</translation>
 <translation id="2562916301614567480">Ιδιωτικό δίκτυο</translation>
-<translation id="2661637000095600270">Δεν ήταν δυνατός ο αντικατοπτρισμός των οθονών καθώς δεν βρέθηκαν υποστηριζόμενες αναλύσεις. Έχει ενεργοποιηθεί εναλλακτικά η εκτεταμένη επιφάνεια εργασίας. Κάντε κλικ για να στείλετε μια αναφορά με σχόλια.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: Σύνδεση…</translation>
 <translation id="2700058918926273959">Η περίοδος σύνδεσης λήγει σε <ph name="SESSION_TIME_REMAINING" />. Θα αποσυνδεθείτε.</translation>
 <translation id="2727977024730340865">Σύνδεση με φορτιστή χαμηλής ισχύος. Η φόρτιση της μπαταρίας ενδέχεται να μη γίνεται με αξιόπιστο τρόπο.</translation>
@@ -114,7 +113,6 @@
 <translation id="3846575436967432996">Δεν υπάρχουν διαθέσιμες πληροφορίες δικτύου</translation>
 <translation id="3866182280516392520">Διεύθυνση IPv6</translation>
 <translation id="3891340733213178823">Πατήστε Ctrl + Shift + Q δύο φορές για να αποσυνδεθείτε.</translation>
-<translation id="3892641579809465218">Εσωτερική οθόνη</translation>
 <translation id="3893630138897523026">ChromeVox (προφορικά σχόλια)</translation>
 <translation id="3899995891769452915">Φωνητική είσοδος</translation>
 <translation id="3901991538546252627">Σύνδεση με <ph name="NAME" /></translation>
@@ -153,6 +151,7 @@
 <translation id="5238774010593222950">Δεν είναι δυνατή η σύνδεση σε διαφορετικό λογαριασμό.</translation>
 <translation id="532063867737390965">Αυτή η ρύθμιση δικτύου απενεργοποιήθηκε από το διαχειριστή.</translation>
 <translation id="5331975486040154427">Συσκευή USB-C (πίσω αριστερή θύρα)</translation>
+<translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">Όλοι οι διαθέσιμοι χρήστες έχουν ήδη προστεθεί σε αυτήν την περίοδο σύνδεσης.</translation>
 <translation id="5507786745520522457">Ρύθμιση δεδομένων κινητής τηλεφωνίας</translation>
 <translation id="5543001071567407895">SMS</translation>
@@ -177,6 +176,7 @@
 <translation id="5978382165065462689">Κοινόχρηστος έλεγχος της οθόνης σας μέσω της απομακρυσμένης βοήθειας.</translation>
 <translation id="5980301590375426705">Έξοδος επισκέπτη</translation>
 <translation id="6041154455840261787">Η Λειτουργία υψηλής αντίθεσης ενεργοποιήθηκε. Πατήστε Search+Shift+H ξανά για να την απενεργοποιήσετε.</translation>
+<translation id="6043212731627905357">Αυτή η οθόνη δεν είναι συμβατή με τη συσκευή σας <ph name="DEVICE_TYPE" /> (η οθόνη δεν υποστηρίζεται).</translation>
 <translation id="6043994281159824495">Έξοδος τώρα</translation>
 <translation id="6047696787498798094">Η κοινή χρήση οθόνης θα διακοπεί κατά την εναλλαγή σε άλλον χρήστη. Θέλετε να συνεχίσετε;</translation>
 <translation id="6062360702481658777">Θα αποσυνδεθείτε αυτόματα σε <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -185,7 +185,6 @@
 <translation id="6144938890088808325">Βοηθήστε μας να βελτιώσουμε τα Chromebook</translation>
 <translation id="615957422585914272">Εμφάνιση πληκτρολογίου οθόνης</translation>
 <translation id="6165508094623778733">Μάθετε περισσότερα</translation>
-<translation id="6203030746557259519">Εικονική οθόνη</translation>
 <translation id="6248847161401822652">Πατήστε Control Shift Q δύο φορές για έξοδο.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: Ενεργοποίηση…</translation>
 <translation id="6297287540776456956">Χρησιμοποιήστε τη γραφίδα για να επιλέξετε μια περιοχή</translation>
@@ -208,6 +207,7 @@
 <translation id="6700713906295497288">Κουμπί μενού IME</translation>
 <translation id="6713285437468012787">Η συσκευή Bluetooth "<ph name="DEVICE_NAME" />" έχει συζευχθεί και είναι πλέον διαθέσιμη σε όλους τους χρήστες. Μπορείτε να καταργήσετε αυτήν τη σύζευξη μέσω των Ρυθμίσεων.</translation>
 <translation id="6785414152754474415">Η μπαταρία είναι πλήρης <ph name="PERCENTAGE" />% και φορτίζει.</translation>
+<translation id="6803622936009808957">Δεν ήταν δυνατός ο αντικατοπτρισμός των οθονών καθώς δεν βρέθηκαν υποστηριζόμενες αναλύσεις. Έχει ενεργοποιηθεί εναλλακτικά η εκτεταμένη επιφάνεια εργασίας.</translation>
 <translation id="683971173229319003">Πλήκτρο αναζήτησης+L</translation>
 <translation id="6857811139397017780">Ενεργοποίηση <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Συμμετοχή σε άλλο…</translation>
@@ -253,13 +253,14 @@
 <translation id="8000066093800657092">Κανένα δίκτυο</translation>
 <translation id="8054466585765276473">Υπολογισμός χρόνου μπαταρίας που απομένει.</translation>
 <translation id="8077816382010018681">Εδώ εμφανίζεται ο τίτλος της ειδοποίησης της λειτουργίας Γρήγορου ξεκλειδώματος</translation>
+<translation id="8098591350844501178">Διακοπή μετάδοσης οθόνης σε <ph name="RECEIVER_NAME" /></translation>
 <translation id="8103386449138765447">Μηνύματα SMS: <ph name="MESSAGE_COUNT" /></translation>
 <translation id="8132793192354020517">Έγινε σύνδεση με το δίκτυο <ph name="NAME" /></translation>
+<translation id="8180896103888046100">Διακοπή μετάδοσης σε άγνωστο δέκτη</translation>
 <translation id="8185286464235484130">Πείτε μας πώς τα πηγαίνουμε απαντώντας σε ορισμένες ερωτήσεις.</translation>
 <translation id="8190698733819146287">Προσαρμογή γλωσσών και εισόδου...</translation>
 <translation id="8206859287963243715">Κινητό</translation>
 <translation id="8308637677604853869">Προηγούμενο μενού</translation>
-<translation id="8356164830168736643">Κλείσιμο <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Ρυθμίσεις</translation>
 <translation id="8454013096329229812">Το Wi-Fi έχει ενεργοποιηθεί.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: Επανασύνδεση…</translation>
@@ -275,7 +276,6 @@
 <translation id="8878886163241303700">Επέκταση οθόνης</translation>
 <translation id="8938800817013097409">Συσκευή USB-C (πίσω δεξιά θύρα)</translation>
 <translation id="8940956008527784070">Χαμηλή στάθμη μπαταρίας (<ph name="PERCENTAGE" />%)</translation>
-<translation id="9008540565042607572">Αγαπητή οθόνη, κάτι δεν πάει καλά με εμάς. (Αυτή η οθόνη δεν υποστηρίζεται. Κάντε κλικ για να στείλετε μια αναφορά με σχόλια.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Το μικρόφωνο χρησιμοποιείται.</translation>
 <translation id="9089416786594320554">Μέθοδοι εισαγωγής</translation>
@@ -285,5 +285,6 @@
 <translation id="923686485342484400">Πατήστε Ctrl + Shift + Q δύο φορές για να αποσυνδεθείτε.</translation>
 <translation id="938582441709398163">Επικάλυψη πληκτρολογίου</translation>
 <translation id="939252827960237676">Αποτυχία αποθήκευσης στιγμιότυπου οθόνης</translation>
+<translation id="945522503751344254">Αποστολή σχολίων</translation>
 <translation id="952992212772159698">Μη ενεργοποιημένο</translation>
 </translationbundle>

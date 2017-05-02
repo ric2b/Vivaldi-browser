@@ -79,51 +79,28 @@ class TemplateURLRef {
 
     struct ContextualSearchParams {
       ContextualSearchParams();
-      // Used when the content is sent in the HTTP header instead of as CGI
-      // parameters.
-      // TODO(donnd): Remove base_page_url and selection parameters once
-      // they are logged from the HTTP header.
+      // Modern constructor, used when the content is sent in the HTTP header
+      // instead of as CGI parameters.
+      // The |home_country| is an ISO country code for the country that the user
+      // considers their permanent home (which may be different from the country
+      // they are currently visiting).  Pass an empty string if none available.
       ContextualSearchParams(int version,
-                             const std::string& selection,
-                             const std::string& base_page_url,
-                             int contextual_cards_version);
-      // TODO(donnd): Delete constructor once Clank, iOS, and tests no
-      // longer depend on it.
-      ContextualSearchParams(int version,
-                             size_t start,
-                             size_t end,
-                             const std::string& selection,
-                             const std::string& content,
-                             const std::string& base_page_url,
-                             const std::string& encoding,
-                             int contextual_cards_version);
+                             int contextual_cards_version,
+                             const std::string& home_country);
       ContextualSearchParams(const ContextualSearchParams& other);
       ~ContextualSearchParams();
 
       // The version of contextual search.
       int version;
 
-      // Offset into the page content of the start of the user selection.
-      size_t start;
-
-      // Offset into the page content of the end of the user selection.
-      size_t end;
-
-      // The user selection.
-      std::string selection;
-
-      // The text including and surrounding the user selection.
-      std::string content;
-
-      // The URL of the page containing the user selection.
-      std::string base_page_url;
-
-      // The encoding of content.
-      std::string encoding;
-
       // The version of Contextual Cards data to request.
       // A value of 0 indicates no data needed.
       int contextual_cards_version;
+
+      // The locale of the user's home country in an ISO country code format,
+      // or an empty string if not available.  This indicates where the user
+      // resides, not where they currently are.
+      std::string home_country;
     };
 
     // The search terms (query).
@@ -571,11 +548,6 @@ class TemplateURL {
 
   const GURL& originating_url() const { return data_.originating_url; }
 
-  bool show_in_default_list() const { return data_.show_in_default_list; }
-  // Returns true if show_in_default_list() is true and this TemplateURL has a
-  // TemplateURLRef that supports replacement.
-  bool ShowInDefaultList(const SearchTermsData& search_terms_data) const;
-
   bool safe_for_autoreplace() const { return data_.safe_for_autoreplace; }
 
   const std::vector<std::string>& input_encodings() const {
@@ -586,6 +558,7 @@ class TemplateURL {
 
   base::Time date_created() const { return data_.date_created; }
   base::Time last_modified() const { return data_.last_modified; }
+  base::Time last_visited() const { return data_.last_visited; }
 
   bool created_by_policy() const { return data_.created_by_policy; }
 

@@ -43,10 +43,8 @@
 namespace blink {
 
 class WebAXObject;
-class WebAutofillClient;
 class WebCompositedDisplayList;
 class WebCredentialManagerClient;
-class WebDragData;
 class WebFrame;
 class WebHitTestResult;
 class WebLocalFrame;
@@ -98,8 +96,6 @@ class WebView : protected WebWidget {
   using WebWidget::mouseCaptureLost;
   using WebWidget::setFocus;
   using WebWidget::compositionRange;
-  using WebWidget::textInputInfo;
-  using WebWidget::textInputType;
   using WebWidget::selectionBounds;
   using WebWidget::selectionTextDirection;
   using WebWidget::isSelectionAnchorFirst;

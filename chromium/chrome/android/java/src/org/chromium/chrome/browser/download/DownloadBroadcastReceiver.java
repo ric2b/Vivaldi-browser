@@ -40,7 +40,7 @@ public class DownloadBroadcastReceiver extends BroadcastReceiver {
     }
 
     /**
-     * Called to open a given download item that is downloaded by the android DownloadManager.
+     * Called to open a particular download item.  Falls back to opening Download Home.
      * @param context Context of the receiver.
      * @param intent Intent from the android DownloadManager.
      */
@@ -51,22 +51,20 @@ public class DownloadBroadcastReceiver extends BroadcastReceiver {
             DownloadManagerService.openDownloadsPage(context);
             return;
         }
+
         long id = ids[0];
         Uri uri = DownloadManagerDelegate.getContentUriFromDownloadManager(context, id);
         if (uri == null) {
-            // Open the downloads page
             DownloadManagerService.openDownloadsPage(context);
-        } else {
-            String downloadFilename = IntentUtils.safeGetStringExtra(
-                    intent, DownloadNotificationService.EXTRA_DOWNLOAD_FILE_PATH);
-            boolean isSupportedMimeType =  IntentUtils.safeGetBooleanExtra(
-                    intent, DownloadNotificationService.EXTRA_IS_SUPPORTED_MIME_TYPE, false);
-            Intent launchIntent = DownloadManagerService.getLaunchIntentFromDownloadId(
-                    context, downloadFilename, id, isSupportedMimeType);
-            if (!DownloadUtils.fireOpenIntentForDownload(context, launchIntent)) {
-                DownloadManagerService.openDownloadsPage(context);
-            }
+            return;
         }
+
+        String downloadFilename = IntentUtils.safeGetStringExtra(
+                intent, DownloadNotificationService.EXTRA_DOWNLOAD_FILE_PATH);
+        boolean isSupportedMimeType =  IntentUtils.safeGetBooleanExtra(
+                intent, DownloadNotificationService.EXTRA_IS_SUPPORTED_MIME_TYPE, false);
+        DownloadManagerService.openDownloadedContent(
+                context, downloadFilename, isSupportedMimeType, id);
     }
 
     /**

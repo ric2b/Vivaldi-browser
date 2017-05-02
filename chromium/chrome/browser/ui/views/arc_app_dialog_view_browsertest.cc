@@ -6,7 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
@@ -17,7 +17,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/chromeos_switches.h"
-#include "components/arc/arc_bridge_service.h"
 #include "components/arc/common/app.mojom.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "content/public/test/test_utils.h"
@@ -37,20 +36,17 @@ class ArcAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         chromeos::switches::kEnableArc);
 
-    // A valid |arc_app_list_prefs_| is needed for the Arc bridge service and
-    // the Arc session manager.
     arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
     if (!arc_app_list_pref_) {
       ArcAppListPrefsFactory::GetInstance()->RecreateServiceInstanceForTesting(
           profile_);
     }
 
-    DCHECK(ArcBridgeService::Get());
-    ArcAuthService* auth_service = ArcAuthService::Get();
-    DCHECK(auth_service);
-    ArcAuthService::DisableUIForTesting();
-    auth_service->OnPrimaryUserProfilePrepared(profile_);
-    auth_service->EnableArc();
+    ArcSessionManager* session_manager = ArcSessionManager::Get();
+    DCHECK(session_manager);
+    ArcSessionManager::DisableUIForTesting();
+    session_manager->OnPrimaryUserProfilePrepared(profile_);
+    session_manager->EnableArc();
 
     arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
     DCHECK(arc_app_list_pref_);
@@ -87,7 +83,7 @@ class ArcAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
   }
 
   void TearDownOnMainThread() override {
-    ArcAuthService::Get()->Shutdown();
+    ArcSessionManager::Get()->Shutdown();
     InProcessBrowserTest::TearDownOnMainThread();
   }
 

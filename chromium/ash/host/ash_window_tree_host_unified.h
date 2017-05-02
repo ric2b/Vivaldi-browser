@@ -11,10 +11,6 @@
 #include "base/macros.h"
 #include "ui/aura/window_observer.h"
 
-namespace ui {
-class Reflector;
-}
-
 namespace ash {
 
 // A WTH used for unified desktop mode. This creates an offscreen
@@ -32,7 +28,7 @@ class AshWindowTreeHostUnified : public AshWindowTreeHostPlatform,
   void RegisterMirroringHost(AshWindowTreeHost* mirroring_ash_host) override;
 
   // aura::WindowTreeHost:
-  void SetBounds(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds) override;
   void SetCursorNative(gfx::NativeCursor cursor) override;
   void OnCursorVisibilityChangedNative(bool show) override;
 

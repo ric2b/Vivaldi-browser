@@ -37,7 +37,6 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/arc/test/fake_app_instance.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
@@ -1000,14 +999,14 @@ TEST_F(ArcPlayStoreAppTest, PlayStore) {
   ASSERT_TRUE(app_info);
   EXPECT_TRUE(app_info->ready);
 
-  arc_test()->arc_auth_service()->DisableArc();
+  arc_test()->arc_session_manager()->DisableArc();
 
   app_info = prefs->GetApp(arc::kPlayStoreAppId);
   ASSERT_TRUE(app_info);
   EXPECT_FALSE(app_info->ready);
 
   arc::LaunchApp(profile(), arc::kPlayStoreAppId, ui::EF_NONE);
-  EXPECT_TRUE(arc_test()->arc_auth_service()->IsArcEnabled());
+  EXPECT_TRUE(arc_test()->arc_session_manager()->IsArcEnabled());
 }
 
 // Test that icon is correctly extracted for shelf group.
@@ -1256,7 +1255,7 @@ TEST_F(ArcDefaulAppTest, DefaultApps) {
   ValidateHaveApps(all_apps);
 
   // OptOut and default apps should exist minus first.
-  arc_test()->arc_auth_service()->DisableArc();
+  arc_test()->arc_session_manager()->DisableArc();
   all_apps = fake_default_apps();
   all_apps.erase(all_apps.begin());
   ValidateHaveApps(all_apps);
@@ -1287,6 +1286,65 @@ TEST_F(ArcDefaulAppTest, DefaultApps) {
     const std::string app_id = ArcAppTest::GetAppId(default_app);
     EXPECT_EQ(oem_states[app_id], prefs->IsOem(app_id));
   }
+}
+
+TEST_F(ArcDefaulAppTest, DefaultAppsNotAvailable) {
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_NE(nullptr, prefs);
+
+  ValidateHaveApps(fake_default_apps());
+
+  const std::vector<arc::mojom::AppInfo> empty_app_list;
+
+  app_instance()->RefreshAppList();
+  app_instance()->SendRefreshAppList(empty_app_list);
+
+  ValidateHaveApps(fake_default_apps());
+
+  prefs->SimulateDefaultAppAvailabilityTimeoutForTesting();
+
+  // No default app installation and already installed packages.
+  ValidateHaveApps(empty_app_list);
+}
+
+TEST_F(ArcDefaulAppTest, DefaultAppsInstallation) {
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_NE(nullptr, prefs);
+
+  const std::vector<arc::mojom::AppInfo> empty_app_list;
+
+  ValidateHaveApps(fake_default_apps());
+
+  app_instance()->RefreshAppList();
+  app_instance()->SendRefreshAppList(empty_app_list);
+
+  ValidateHaveApps(fake_default_apps());
+
+  // Notify that default installations have been started.
+  for (const auto& fake_app : fake_default_apps())
+    app_instance()->SendInstallationStarted(fake_app.package_name);
+
+  // Timeout does not affect default app availability because all installations
+  // for default apps have been started.
+  prefs->SimulateDefaultAppAvailabilityTimeoutForTesting();
+  ValidateHaveApps(fake_default_apps());
+
+  const arc::mojom::AppInfo& app_last = fake_default_apps().back();
+  std::vector<arc::mojom::AppInfo> available_apps = fake_default_apps();
+  available_apps.pop_back();
+
+  for (const auto& fake_app : available_apps)
+    app_instance()->SendInstallationFinished(fake_app.package_name, true);
+
+  // So far we have all default apps available because not all installations
+  // completed.
+  ValidateHaveApps(fake_default_apps());
+
+  // Last default app installation failed.
+  app_instance()->SendInstallationFinished(app_last.package_name, false);
+
+  // We should have all default apps except last.
+  ValidateHaveApps(available_apps);
 }
 
 TEST_F(ArcDefaulAppForManagedUserTest, DefaultAppsForManagedUser) {

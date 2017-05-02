@@ -29,11 +29,10 @@ inline RemoteFrame::RemoteFrame(RemoteFrameClient* client,
                                 FrameHost* host,
                                 FrameOwner* owner)
     : Frame(client, host, owner),
-      m_view(nullptr),
       m_securityContext(RemoteSecurityContext::create()),
-      m_domWindow(RemoteDOMWindow::create(*this)),
-      m_windowProxyManager(WindowProxyManager::create(*this)),
-      m_remotePlatformLayer(nullptr) {}
+      m_windowProxyManager(RemoteWindowProxyManager::create(*this)) {
+  m_domWindow = RemoteDOMWindow::create(*this);
+}
 
 RemoteFrame* RemoteFrame::create(RemoteFrameClient* client,
                                  FrameHost* host,
@@ -48,13 +47,8 @@ RemoteFrame::~RemoteFrame() {
 DEFINE_TRACE(RemoteFrame) {
   visitor->trace(m_view);
   visitor->trace(m_securityContext);
-  visitor->trace(m_domWindow);
   visitor->trace(m_windowProxyManager);
   Frame::trace(visitor);
-}
-
-DOMWindow* RemoteFrame::domWindow() const {
-  return m_domWindow.get();
 }
 
 WindowProxy* RemoteFrame::windowProxy(DOMWrapperWorld& world) {
@@ -109,8 +103,14 @@ void RemoteFrame::detach(FrameDetachType type) {
   client()->willBeDetached();
   m_windowProxyManager->clearForClose();
   setView(nullptr);
-  if (m_remotePlatformLayer)
-    setRemotePlatformLayer(nullptr);
+  // ... the RemoteDOMWindow will need to be informed of detachment,
+  // as otherwise it will keep a strong reference back to this RemoteFrame.
+  // That combined with wrappers (owned and kept alive by RemoteFrame) keeping
+  // persistent strong references to RemoteDOMWindow will prevent the GCing
+  // of all these objects. Break the cycle by notifying of detachment.
+  toRemoteDOMWindow(m_domWindow)->frameDetached();
+  if (m_webLayer)
+    setWebLayer(nullptr);
   Frame::detach(type);
 }
 
@@ -129,35 +129,14 @@ bool RemoteFrame::shouldClose() {
   return true;
 }
 
-void RemoteFrame::setDocumentHasReceivedUserGesture() {
-  client()->setHasReceivedUserGesture();
-}
-
 void RemoteFrame::forwardInputEvent(Event* event) {
   client()->forwardInputEvent(event);
-}
-
-void RemoteFrame::frameRectsChanged(const IntRect& frameRect) {
-  client()->frameRectsChanged(frameRect);
-}
-
-void RemoteFrame::visibilityChanged(bool visible) {
-  if (client())
-    client()->visibilityChanged(visible);
 }
 
 void RemoteFrame::setView(RemoteFrameView* view) {
   // Oilpan: as RemoteFrameView performs no finalization actions,
   // no explicit dispose() of it needed here. (cf. FrameView::dispose().)
   m_view = view;
-
-  // ... the RemoteDOMWindow will need to be informed of detachment,
-  // as otherwise it will keep a strong reference back to this RemoteFrame.
-  // That combined with wrappers (owned and kept alive by RemoteFrame) keeping
-  // persistent strong references to RemoteDOMWindow will prevent the GCing
-  // of all these objects. Break the cycle by notifying of detachment.
-  if (!m_view)
-    m_domWindow->frameDetached();
 }
 
 void RemoteFrame::createView() {
@@ -178,12 +157,12 @@ RemoteFrameClient* RemoteFrame::client() const {
   return static_cast<RemoteFrameClient*>(Frame::client());
 }
 
-void RemoteFrame::setRemotePlatformLayer(WebLayer* layer) {
-  if (m_remotePlatformLayer)
-    GraphicsLayer::unregisterContentsLayer(m_remotePlatformLayer);
-  m_remotePlatformLayer = layer;
-  if (m_remotePlatformLayer)
-    GraphicsLayer::registerContentsLayer(layer);
+void RemoteFrame::setWebLayer(WebLayer* webLayer) {
+  if (m_webLayer)
+    GraphicsLayer::unregisterContentsLayer(m_webLayer);
+  m_webLayer = webLayer;
+  if (m_webLayer)
+    GraphicsLayer::registerContentsLayer(m_webLayer);
 
   ASSERT(owner());
   toHTMLFrameOwnerElement(owner())->setNeedsCompositingUpdate();
@@ -193,13 +172,17 @@ void RemoteFrame::advanceFocus(WebFocusType type, LocalFrame* source) {
   client()->advanceFocus(type, source);
 }
 
+WindowProxyManagerBase* RemoteFrame::getWindowProxyManager() const {
+  return m_windowProxyManager.get();
+}
+
 void RemoteFrame::detachChildren() {
   using FrameVector = HeapVector<Member<Frame>>;
   FrameVector childrenToDetach;
   childrenToDetach.reserveCapacity(tree().childCount());
   for (Frame* child = tree().firstChild(); child;
        child = child->tree().nextSibling())
-    childrenToDetach.append(child);
+    childrenToDetach.push_back(child);
   for (const auto& child : childrenToDetach)
     child->detach(FrameDetachType::Remove);
 }

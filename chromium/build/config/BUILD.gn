@@ -8,10 +8,10 @@ import("//build/config/chromecast_build.gni")
 import("//build/config/crypto.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/config/features.gni")
+import("//build/config/pch.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/toolchain/goma.gni")
-import("//build/toolchain/cc_wrapper.gni")
 
 # One common error that happens is that GYP-generated headers within gen/ get
 # included rather than the GN-generated ones within gen/ subdirectories.
@@ -32,11 +32,6 @@ declare_args() {
   # of the current object. For iterator- and thread-heavy code, this can
   # significantly slow execution.
   enable_iterator_debugging = true
-
-  # Normally we try to decide whether to use precompiled headers or
-  # not based on the other build arguments, but in some cases it is
-  # easiest to force them off explicitly.
-  disable_precompiled_headers = false
 }
 
 # ==============================================
@@ -63,15 +58,6 @@ declare_args() {
 config("feature_flags") {
   # Don't use deprecated V8 APIs anywhere.
   defines = [ "V8_DEPRECATION_WARNINGS" ]
-  if (enable_notifications) {
-    defines += [ "ENABLE_NOTIFICATIONS" ]
-  }
-  if (enable_plugins) {
-    defines += [ "ENABLE_PLUGINS=1" ]
-  }
-  if (enable_pdf) {
-    defines += [ "ENABLE_PDF=1" ]
-  }
   if (dcheck_always_on) {
     defines += [ "DCHECK_ALWAYS_ON=1" ]
   }
@@ -144,32 +130,14 @@ config("feature_flags") {
   if (use_external_popup_menu) {
     defines += [ "USE_EXTERNAL_POPUP_MENU=1" ]
   }
-  if (enable_webrtc) {
-    defines += [ "ENABLE_WEBRTC=1" ]
-  }
   if (!enable_nacl) {
     defines += [ "DISABLE_NACL" ]
-  }
-  if (enable_task_manager) {
-    defines += [ "ENABLE_TASK_MANAGER=1" ]
-  }
-  if (enable_themes) {
-    defines += [ "ENABLE_THEMES=1" ]
-  }
-  if (enable_rlz) {
-    defines += [ "ENABLE_RLZ" ]
   }
   if (enable_wayland_server) {
     defines += [ "ENABLE_WAYLAND_SERVER=1" ]
   }
-  if (enable_wifi_display) {
-    defines += [ "ENABLE_WIFI_DISPLAY=1" ]
-  }
   if (proprietary_codecs) {
     defines += [ "USE_PROPRIETARY_CODECS" ]
-  }
-  if (system_proprietary_codecs) {
-    defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
   }
   if (safe_browsing_mode == 1) {
     defines += [ "FULL_SAFE_BROWSING" ]
@@ -398,8 +366,7 @@ config("shared_library_config") {
 #
 # Recommend precompiled headers for targets with more than 50 .cc files.
 config("precompiled_headers") {
-  if (!is_official_build && !use_goma && !use_cc_wrapper &&
-      !disable_precompiled_headers) {
+  if (enable_precompiled_headers) {
     if (is_win) {
       # This is a string rather than a file GN knows about. It has to match
       # exactly what's in the /FI flag below, and what might appear in the
@@ -423,6 +390,9 @@ config("precompiled_headers") {
       # file doesn't exist, no error will be generated (probably MS tested this
       # case but forgot the other one?). To reproduce this error, do a build,
       # then delete the precompile.c.obj file, then build again.
+      #
+      # TODO(sof): determine VS2015 status and retire the setting from all
+      # precompiled configurations.
       cflags_c = [ "/wd4206" ]
     } else if (is_mac) {
       precompiled_header = "build/precompile.h"

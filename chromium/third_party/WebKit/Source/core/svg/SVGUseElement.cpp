@@ -25,7 +25,7 @@
 
 #include "core/svg/SVGUseElement.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/SVGNames.h"
 #include "core/XLinkNames.h"
 #include "core/dom/Document.h"
@@ -71,7 +71,6 @@ inline SVGUseElement::SVGUseElement(Document& document)
       m_haveFiredLoadEvent(false),
       m_needsShadowTreeRecreation(false) {
   ASSERT(hasCustomStyleCallbacks());
-  ThreadState::current()->registerPreFinalizer(this);
 
   addToPropertyMap(m_x);
   addToPropertyMap(m_y);
@@ -104,7 +103,7 @@ DEFINE_TRACE(SVGUseElement) {
   DocumentResourceClient::trace(visitor);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static inline bool isWellFormedDocument(Document* document) {
   if (document->isXMLDocument())
     return static_cast<XMLDocumentParser*>(document->parser())->wellFormed();
@@ -128,7 +127,8 @@ Node::InsertionNotificationRequest SVGUseElement::insertedInto(
 void SVGUseElement::removedFrom(ContainerNode* rootParent) {
   SVGGraphicsElement::removedFrom(rootParent);
   if (rootParent->isConnected()) {
-    clearShadowTree();
+    clearInstanceRoot();
+    removeAllOutgoingReferences();
     cancelShadowTreeRecreation();
   }
 }
@@ -179,15 +179,16 @@ void SVGUseElement::collectStyleForPresentationAttribute(
     const AtomicString& value,
     MutableStylePropertySet* style) {
   SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
-  if (property == m_x)
-    addPropertyToPresentationAttributeStyle(
-        style, CSSPropertyX, m_x->currentValue()->asCSSPrimitiveValue());
-  else if (property == m_y)
-    addPropertyToPresentationAttributeStyle(
-        style, CSSPropertyY, m_y->currentValue()->asCSSPrimitiveValue());
-  else
+  if (property == m_x) {
+    addPropertyToPresentationAttributeStyle(style, CSSPropertyX,
+                                            m_x->cssValue());
+  } else if (property == m_y) {
+    addPropertyToPresentationAttributeStyle(style, CSSPropertyY,
+                                            m_y->cssValue());
+  } else {
     SVGGraphicsElement::collectStyleForPresentationAttribute(name, value,
                                                              style);
+  }
 }
 
 bool SVGUseElement::isStructurallyExternal() const {
@@ -484,7 +485,7 @@ void SVGUseElement::toClipPath(Path& path) const {
     SVGLengthContext lengthContext(this);
     path.translate(FloatSize(m_x->currentValue()->value(lengthContext),
                              m_y->currentValue()->value(lengthContext)));
-    path.transform(calculateAnimatedLocalTransform());
+    path.transform(calculateTransform(SVGElement::IncludeMotionTransform));
   }
 }
 
@@ -497,13 +498,6 @@ SVGGraphicsElement* SVGUseElement::visibleTargetGraphicsElementForClipping()
   SVGElement& element = toSVGElement(*n);
 
   if (!element.isSVGGraphicsElement())
-    return nullptr;
-
-  if (!element.layoutObject())
-    return nullptr;
-
-  const ComputedStyle* style = element.layoutObject()->style();
-  if (!style || style->visibility() != EVisibility::Visible)
     return nullptr;
 
   // Spec: "If a <use> element is a child of a clipPath element, it must

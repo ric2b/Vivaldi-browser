@@ -45,7 +45,7 @@ Provider::~Provider() {
 
 void Provider::InitializeWithFactoryInternal(mojom::FactoryPtr* factory) {
   mojom::ProviderPtr provider;
-  Bind(GetProxy(&provider));
+  Bind(MakeRequest(&provider));
   (*factory)->CreateRecorder(std::move(provider));
 #ifdef NDEBUG
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -76,7 +76,7 @@ void Provider::Initialize(service_manager::Connector* connector,
     g_tracing_singleton_created = true;
   }
   mojom::FactoryPtr factory;
-  connector->ConnectToInterface(tracing::mojom::kServiceName, &factory);
+  connector->BindInterface(tracing::mojom::kServiceName, &factory);
   InitializeWithFactoryInternal(&factory);
   // This will only set the name for the first app in a loaded mojo file. It's
   // up to something like CoreServices to name its own child threads.
@@ -150,7 +150,7 @@ void Provider::SendChunk(
   // The string will be empty if an error eccured or there were no trace
   // events. Empty string is not a valid chunk to record so skip in this case.
   if (!events_str->data().empty()) {
-    recorder_->Record(mojo::String(events_str->data()));
+    recorder_->Record(events_str->data());
   }
   if (!has_more_events) {
     recorder_.reset();

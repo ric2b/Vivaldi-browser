@@ -5,15 +5,8 @@
 #include "ash/common/system/tray/system_tray_notifier.h"
 
 #include "ash/common/system/accessibility_observer.h"
-#include "ash/common/system/date/clock_observer.h"
-#include "ash/common/system/ime/ime_observer.h"
-#include "ash/common/system/update/update_observer.h"
-#include "ash/common/system/user/user_observer.h"
-
-#if defined(OS_CHROMEOS)
 #include "ash/common/system/chromeos/bluetooth/bluetooth_observer.h"
 #include "ash/common/system/chromeos/enterprise/enterprise_domain_observer.h"
-#include "ash/common/system/chromeos/media_security/media_capture_observer.h"
 #include "ash/common/system/chromeos/network/network_observer.h"
 #include "ash/common/system/chromeos/network/network_portal_detector_observer.h"
 #include "ash/common/system/chromeos/screen_security/screen_capture_observer.h"
@@ -23,7 +16,9 @@
 #include "ash/common/system/chromeos/session/session_length_limit_observer.h"
 #include "ash/common/system/chromeos/tray_tracing.h"
 #include "ash/common/system/chromeos/virtual_keyboard/virtual_keyboard_observer.h"
-#endif
+#include "ash/common/system/date/clock_observer.h"
+#include "ash/common/system/ime/ime_observer.h"
+#include "ash/common/system/user/user_observer.h"
 
 namespace ash {
 
@@ -45,6 +40,24 @@ void SystemTrayNotifier::NotifyAccessibilityModeChanged(
     AccessibilityNotificationVisibility notify) {
   for (auto& observer : accessibility_observers_)
     observer.OnAccessibilityModeChanged(notify);
+}
+
+void SystemTrayNotifier::AddBluetoothObserver(BluetoothObserver* observer) {
+  bluetooth_observers_.AddObserver(observer);
+}
+
+void SystemTrayNotifier::RemoveBluetoothObserver(BluetoothObserver* observer) {
+  bluetooth_observers_.RemoveObserver(observer);
+}
+
+void SystemTrayNotifier::NotifyRefreshBluetooth() {
+  for (auto& observer : bluetooth_observers_)
+    observer.OnBluetoothRefresh();
+}
+
+void SystemTrayNotifier::NotifyBluetoothDiscoveringChanged() {
+  for (auto& observer : bluetooth_observers_)
+    observer.OnBluetoothDiscoveringChanged();
 }
 
 void SystemTrayNotifier::AddClockObserver(ClockObserver* observer) {
@@ -75,6 +88,21 @@ void SystemTrayNotifier::NotifySystemClockCanSetTimeChanged(bool can_set_time) {
     observer.OnSystemClockCanSetTimeChanged(can_set_time);
 }
 
+void SystemTrayNotifier::AddEnterpriseDomainObserver(
+    EnterpriseDomainObserver* observer) {
+  enterprise_domain_observers_.AddObserver(observer);
+}
+
+void SystemTrayNotifier::RemoveEnterpriseDomainObserver(
+    EnterpriseDomainObserver* observer) {
+  enterprise_domain_observers_.RemoveObserver(observer);
+}
+
+void SystemTrayNotifier::NotifyEnterpriseDomainChanged() {
+  for (auto& observer : enterprise_domain_observers_)
+    observer.OnEnterpriseDomainChanged();
+}
+
 void SystemTrayNotifier::AddIMEObserver(IMEObserver* observer) {
   ime_observers_.AddObserver(observer);
 }
@@ -91,74 +119,6 @@ void SystemTrayNotifier::NotifyRefreshIME() {
 void SystemTrayNotifier::NotifyRefreshIMEMenu(bool is_active) {
   for (auto& observer : ime_observers_)
     observer.OnIMEMenuActivationChanged(is_active);
-}
-
-void SystemTrayNotifier::AddUpdateObserver(UpdateObserver* observer) {
-  update_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveUpdateObserver(UpdateObserver* observer) {
-  update_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyUpdateRecommended(const UpdateInfo& info) {
-  for (auto& observer : update_observers_)
-    observer.OnUpdateRecommended(info);
-}
-
-void SystemTrayNotifier::AddUserObserver(UserObserver* observer) {
-  user_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveUserObserver(UserObserver* observer) {
-  user_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyUserUpdate() {
-  for (auto& observer : user_observers_)
-    observer.OnUserUpdate();
-}
-
-void SystemTrayNotifier::NotifyUserAddedToSession() {
-  for (auto& observer : user_observers_)
-    observer.OnUserAddedToSession();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-#if defined(OS_CHROMEOS)
-
-void SystemTrayNotifier::AddBluetoothObserver(BluetoothObserver* observer) {
-  bluetooth_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveBluetoothObserver(BluetoothObserver* observer) {
-  bluetooth_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyRefreshBluetooth() {
-  for (auto& observer : bluetooth_observers_)
-    observer.OnBluetoothRefresh();
-}
-
-void SystemTrayNotifier::NotifyBluetoothDiscoveringChanged() {
-  for (auto& observer : bluetooth_observers_)
-    observer.OnBluetoothDiscoveringChanged();
-}
-
-void SystemTrayNotifier::AddEnterpriseDomainObserver(
-    EnterpriseDomainObserver* observer) {
-  enterprise_domain_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveEnterpriseDomainObserver(
-    EnterpriseDomainObserver* observer) {
-  enterprise_domain_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyEnterpriseDomainChanged() {
-  for (auto& observer : enterprise_domain_observers_)
-    observer.OnEnterpriseDomainChanged();
 }
 
 void SystemTrayNotifier::AddLastWindowClosedObserver(
@@ -195,21 +155,6 @@ void SystemTrayNotifier::NotifyLogoutDialogDurationChanged(
     base::TimeDelta duration) {
   for (auto& observer : logout_button_observers_)
     observer.OnLogoutDialogDurationChanged(duration);
-}
-
-void SystemTrayNotifier::AddMediaCaptureObserver(
-    MediaCaptureObserver* observer) {
-  media_capture_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveMediaCaptureObserver(
-    MediaCaptureObserver* observer) {
-  media_capture_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyMediaCaptureChanged() {
-  for (auto& observer : media_capture_observers_)
-    observer.OnMediaCaptureChanged();
 }
 
 void SystemTrayNotifier::AddNetworkObserver(NetworkObserver* observer) {
@@ -317,6 +262,24 @@ void SystemTrayNotifier::NotifyTracingModeChanged(bool value) {
     observer.OnTracingModeChanged(value);
 }
 
+void SystemTrayNotifier::AddUserObserver(UserObserver* observer) {
+  user_observers_.AddObserver(observer);
+}
+
+void SystemTrayNotifier::RemoveUserObserver(UserObserver* observer) {
+  user_observers_.RemoveObserver(observer);
+}
+
+void SystemTrayNotifier::NotifyUserUpdate() {
+  for (auto& observer : user_observers_)
+    observer.OnUserUpdate();
+}
+
+void SystemTrayNotifier::NotifyUserAddedToSession() {
+  for (auto& observer : user_observers_)
+    observer.OnUserAddedToSession();
+}
+
 void SystemTrayNotifier::AddVirtualKeyboardObserver(
     VirtualKeyboardObserver* observer) {
   virtual_keyboard_observers_.AddObserver(observer);
@@ -332,7 +295,5 @@ void SystemTrayNotifier::NotifyVirtualKeyboardSuppressionChanged(
   for (auto& observer : virtual_keyboard_observers_)
     observer.OnKeyboardSuppressionChanged(suppressed);
 }
-
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace ash

@@ -425,21 +425,20 @@ void HTMLMetaElement::processViewportContentAttribute(
   getViewportDescriptionFromContentAttribute(
       content, descriptionFromLegacyTag, &document(),
       document().settings() &&
-          document().settings()->viewportMetaZeroValuesQuirk());
+          document().settings()->getViewportMetaZeroValuesQuirk());
 
   document().setViewportDescription(descriptionFromLegacyTag);
 }
 
-void HTMLMetaElement::parseAttribute(const QualifiedName& name,
-                                     const AtomicString& oldValue,
-                                     const AtomicString& value) {
-  if (name == http_equivAttr || name == contentAttr) {
+void HTMLMetaElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == http_equivAttr || params.name == contentAttr) {
     process();
     return;
   }
 
-  if (name != nameAttr)
-    HTMLElement::parseAttribute(name, oldValue, value);
+  if (params.name != nameAttr)
+    HTMLElement::parseAttribute(params);
 }
 
 Node::InsertionNotificationRequest HTMLMetaElement::insertedInto(
@@ -503,7 +502,7 @@ void HTMLMetaElement::process() {
 WTF::TextEncoding HTMLMetaElement::computeEncoding() const {
   HTMLAttributeList attributeList;
   for (const Attribute& attr : attributes())
-    attributeList.append(
+    attributeList.push_back(
         std::make_pair(attr.name().localName(), attr.value().getString()));
   return encodingFromMetaAttributes(attributeList);
 }

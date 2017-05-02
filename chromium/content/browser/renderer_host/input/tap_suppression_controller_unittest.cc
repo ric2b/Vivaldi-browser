@@ -22,6 +22,7 @@ class MockTapSuppressionController : public TapSuppressionController,
   using TapSuppressionController::GFC_IN_PROGRESS;
   using TapSuppressionController::TAP_DOWN_STASHED;
   using TapSuppressionController::LAST_CANCEL_STOPPED_FLING;
+  using TapSuppressionController::SUPPRESSING_TAPS;
 
   enum Action {
     NONE                                 = 0,
@@ -70,8 +71,10 @@ class MockTapSuppressionController : public TapSuppressionController,
   }
 
   void SendTapCancel() {
+    bool stashed_tap_down_forwarded =
+        last_actions_ & STASHED_TAP_DOWN_FORWARDED;
     last_actions_ = NONE;
-    if (ShouldSuppressTapEnd())
+    if (!stashed_tap_down_forwarded && ShouldSuppressTapEnd())
       last_actions_ |= TAP_CANCEL_SUPPRESSED;
     else
       last_actions_ |= TAP_CANCEL_FORWARDED;
@@ -103,6 +106,10 @@ class MockTapSuppressionController : public TapSuppressionController,
  private:
   // TapSuppressionControllerClient implementation
   void DropStashedTapDown() override { last_actions_ |= TAP_DOWN_DROPPED; }
+
+  void ForwardStashedGestureEvents() override {
+    last_actions_ |= STASHED_TAP_DOWN_FORWARDED;
+  }
 
   void ForwardStashedTapDown() override {
     last_actions_ |= STASHED_TAP_DOWN_FORWARDED;
@@ -178,7 +185,7 @@ TEST_F(TapSuppressionControllerTest, GFCAckBeforeTapFast) {
   EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED |
             MockTapSuppressionController::TAP_DOWN_DROPPED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 
@@ -219,7 +226,7 @@ TEST_F(TapSuppressionControllerTest, GFCAckBeforeTapInsufficientlyLateTapUp) {
   EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED |
             MockTapSuppressionController::TAP_DOWN_DROPPED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 
@@ -240,7 +247,7 @@ TEST_F(TapSuppressionControllerTest, GFCAckBeforeTapSufficientlyLateTapUp) {
   EXPECT_EQ(MockTapSuppressionController::LAST_CANCEL_STOPPED_FLING,
             tap_suppression_controller_->state());
 
-  // Send MouseDown. This MouseDown should be suppressed, for now.
+  // Send TapDown. This TapDown should be suppressed, for now.
   tap_suppression_controller_->SendTapDown();
   EXPECT_EQ(MockTapSuppressionController::TAP_DOWN_DEFERRED,
             tap_suppression_controller_->last_actions());
@@ -252,14 +259,59 @@ TEST_F(TapSuppressionControllerTest, GFCAckBeforeTapSufficientlyLateTapUp) {
   tap_suppression_controller_->AdvanceTime(TimeDelta::FromMilliseconds(13));
   EXPECT_EQ(MockTapSuppressionController::STASHED_TAP_DOWN_FORWARDED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 
-  // Send TapUp. This TapUp should not be suppressed.
+  // Send TapUp. This TapUp should be still suppressed.
+  // LongTap should be suppressed when the previously suppressed TapDown is
+  // forwarded because of the timer expiration.
   tap_suppression_controller_->SendTapUp();
-  EXPECT_EQ(MockTapSuppressionController::TAP_UP_FORWARDED,
+  EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
+            tap_suppression_controller_->state());
+}
+
+// Test TapSuppressionController for when stashed TapDown gets forwarded.
+// The next TapCancel should be forwarded as well to maintain a valid input
+// stream.
+TEST_F(TapSuppressionControllerTest, GFCAckBeforeTapSufficientlyLateTapCancel) {
+  // Send GestureFlingCancel.
+  tap_suppression_controller_->SendGestureFlingCancel();
+  EXPECT_EQ(MockTapSuppressionController::NONE,
+            tap_suppression_controller_->last_actions());
+  EXPECT_EQ(MockTapSuppressionController::GFC_IN_PROGRESS,
+            tap_suppression_controller_->state());
+
+  // Send processed GestureFlingCancel Ack.
+  tap_suppression_controller_->SendGestureFlingCancelAck(true);
+  EXPECT_EQ(MockTapSuppressionController::NONE,
+            tap_suppression_controller_->last_actions());
+  EXPECT_EQ(MockTapSuppressionController::LAST_CANCEL_STOPPED_FLING,
+            tap_suppression_controller_->state());
+
+  // Send TapDown. This TapDown should be suppressed, for now.
+  tap_suppression_controller_->SendTapDown();
+  EXPECT_EQ(MockTapSuppressionController::TAP_DOWN_DEFERRED,
+            tap_suppression_controller_->last_actions());
+  EXPECT_EQ(MockTapSuppressionController::TAP_DOWN_STASHED,
+            tap_suppression_controller_->state());
+
+  // Wait more than the delay for TapDown timer. This should release the
+  // previously stashed TapDown.
+  tap_suppression_controller_->AdvanceTime(TimeDelta::FromMilliseconds(13));
+  EXPECT_EQ(MockTapSuppressionController::STASHED_TAP_DOWN_FORWARDED,
+            tap_suppression_controller_->last_actions());
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
+            tap_suppression_controller_->state());
+
+  // Send TapCancel. This TapCancel should be forwarded.
+  // When a TapDown is forwarded because of the timer expiration, the next
+  // TapCancel should get forwarded as well to maintain a valid input stream.
+  tap_suppression_controller_->SendTapCancel();
+  EXPECT_EQ(MockTapSuppressionController::TAP_CANCEL_FORWARDED,
+            tap_suppression_controller_->last_actions());
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 
@@ -300,7 +352,7 @@ TEST_F(TapSuppressionControllerTest, GFCAckBeforeTapInsufficientlyLateTapDown) {
   EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED |
             MockTapSuppressionController::TAP_DOWN_DROPPED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 
@@ -406,7 +458,7 @@ TEST_F(TapSuppressionControllerTest, GFCAckProcessedAfterTapFast) {
   EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED |
             MockTapSuppressionController::TAP_DOWN_DROPPED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 
@@ -447,7 +499,7 @@ TEST_F(TapSuppressionControllerTest, GFCAckAfterTapInsufficientlyLateTapUp) {
   EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED |
             MockTapSuppressionController::TAP_DOWN_DROPPED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 
@@ -480,14 +532,16 @@ TEST_F(TapSuppressionControllerTest, GFCAckAfterTapSufficientlyLateTapUp) {
   tap_suppression_controller_->AdvanceTime(TimeDelta::FromMilliseconds(13));
   EXPECT_EQ(MockTapSuppressionController::STASHED_TAP_DOWN_FORWARDED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 
-  // Send TapUp. This TapUp should not be suppressed.
+  // Send TapUp. This TapUp should be still suppressed.
+  // LongTap should be suppressed when the previously suppressed TapDown is
+  // forwarded because of timer expiration.
   tap_suppression_controller_->SendTapUp();
-  EXPECT_EQ(MockTapSuppressionController::TAP_UP_FORWARDED,
+  EXPECT_EQ(MockTapSuppressionController::TAP_UP_SUPPRESSED,
             tap_suppression_controller_->last_actions());
-  EXPECT_EQ(MockTapSuppressionController::NOTHING,
+  EXPECT_EQ(MockTapSuppressionController::SUPPRESSING_TAPS,
             tap_suppression_controller_->state());
 }
 

@@ -11,16 +11,14 @@
 class GURL;
 
 namespace blink {
-class WebFrame;
-class WebURL;
+class WebLocalFrame;
 }
 
 namespace extensions {
 
 class Dispatcher;
 
-// Encapsulates the policy for when chrome-extension:// and
-// chrome-extension-resource:// URLs can be requested.
+// Encapsulates the policy for when chrome-extension:// URLs can be requested.
 class ResourceRequestPolicy {
  public:
   explicit ResourceRequestPolicy(Dispatcher* dispatcher);
@@ -30,13 +28,8 @@ class ResourceRequestPolicy {
   // this request was generated. Web triggered transitions are more restrictive
   // than those triggered through UI.
   bool CanRequestResource(const GURL& resource_url,
-                          blink::WebFrame* frame,
+                          blink::WebLocalFrame* frame,
                           ui::PageTransition transition_type);
-
-  // Returns true if the chrome-extension-resource:// |resource_url| can be
-  // requested from |frame_url|.
-  bool CanRequestExtensionResourceScheme(const blink::WebURL& resource_url,
-                                         blink::WebFrame* frame);
 
  private:
   Dispatcher* dispatcher_;

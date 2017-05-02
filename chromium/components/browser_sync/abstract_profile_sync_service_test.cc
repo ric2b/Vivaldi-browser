@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/browser_sync/test_http_bridge_factory.h"
 #include "components/browser_sync/test_profile_sync_service.h"
 #include "components/sync/driver/glue/sync_backend_host_core.h"
@@ -31,95 +32,73 @@ namespace browser_sync {
 
 namespace {
 
-class SyncBackendHostForProfileSyncTest : public SyncBackendHostImpl {
+std::unique_ptr<syncer::HttpPostProviderFactory> GetHttpPostProviderFactory(
+    syncer::CancelationSignal* signal) {
+  return base::MakeUnique<TestHttpBridgeFactory>();
+}
+
+class SyncEngineForProfileSyncTest : public SyncBackendHostImpl {
  public:
-  SyncBackendHostForProfileSyncTest(
+  SyncEngineForProfileSyncTest(
       const base::FilePath& temp_dir,
       syncer::SyncClient* sync_client,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       invalidation::InvalidationService* invalidator,
       const base::WeakPtr<syncer::SyncPrefs>& sync_prefs,
       const base::Closure& callback);
-  ~SyncBackendHostForProfileSyncTest() override;
+  ~SyncEngineForProfileSyncTest() override;
 
-  void RequestConfigureSyncer(
-      syncer::ConfigureReason reason,
-      syncer::ModelTypeSet to_download,
-      syncer::ModelTypeSet to_purge,
-      syncer::ModelTypeSet to_journal,
-      syncer::ModelTypeSet to_unapply,
-      syncer::ModelTypeSet to_ignore,
-      const syncer::ModelSafeRoutingInfo& routing_info,
-      const base::Callback<void(syncer::ModelTypeSet, syncer::ModelTypeSet)>&
-          ready_task,
-      const base::Closure& retry_callback) override;
+  void Initialize(InitParams params) override;
 
- protected:
-  void InitCore(std::unique_ptr<syncer::DoInitializeOptions> options) override;
+  void ConfigureDataTypes(ConfigureParams params) override;
 
  private:
   // Invoked at the start of HandleSyncManagerInitializationOnFrontendLoop.
-  // Allows extra initialization work to be performed before the backend comes
+  // Allows extra initialization work to be performed before the engine comes
   // up.
   base::Closure callback_;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncBackendHostForProfileSyncTest);
+  DISALLOW_COPY_AND_ASSIGN(SyncEngineForProfileSyncTest);
 };
 
-SyncBackendHostForProfileSyncTest::SyncBackendHostForProfileSyncTest(
+SyncEngineForProfileSyncTest::SyncEngineForProfileSyncTest(
     const base::FilePath& temp_dir,
     syncer::SyncClient* sync_client,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
     invalidation::InvalidationService* invalidator,
     const base::WeakPtr<syncer::SyncPrefs>& sync_prefs,
     const base::Closure& callback)
     : SyncBackendHostImpl(
           "dummy_debug_name",
           sync_client,
-          ui_thread,
           invalidator,
           sync_prefs,
           temp_dir.Append(base::FilePath(FILE_PATH_LITERAL("test")))),
       callback_(callback) {}
 
-SyncBackendHostForProfileSyncTest::~SyncBackendHostForProfileSyncTest() {}
+SyncEngineForProfileSyncTest::~SyncEngineForProfileSyncTest() {}
 
-void SyncBackendHostForProfileSyncTest::InitCore(
-    std::unique_ptr<syncer::DoInitializeOptions> options) {
-  options->http_bridge_factory = base::MakeUnique<TestHttpBridgeFactory>();
-  options->sync_manager_factory =
+void SyncEngineForProfileSyncTest::Initialize(InitParams params) {
+  params.http_factory_getter = base::Bind(&GetHttpPostProviderFactory);
+  params.sync_manager_factory =
       base::MakeUnique<syncer::SyncManagerFactoryForProfileSyncTest>(callback_);
-  options->credentials.email = "testuser@gmail.com";
-  options->credentials.sync_token = "token";
-  options->credentials.scope_set.insert(GaiaConstants::kChromeSyncOAuth2Scope);
-  options->restored_key_for_bootstrapping.clear();
+  params.credentials.email = "testuser@gmail.com";
+  params.credentials.sync_token = "token";
+  params.credentials.scope_set.insert(GaiaConstants::kChromeSyncOAuth2Scope);
+  params.restored_key_for_bootstrapping.clear();
 
   // It'd be nice if we avoided creating the EngineComponentsFactory in the
-  // first place, but SyncBackendHost will have created one by now so we must
-  // free it. Grab the switches to pass on first.
+  // first place, but SyncEngine will have created one by now so we must free
+  // it. Grab the switches to pass on first.
   syncer::EngineComponentsFactory::Switches factory_switches =
-      options->engine_components_factory->GetSwitches();
-  options->engine_components_factory =
+      params.engine_components_factory->GetSwitches();
+  params.engine_components_factory =
       base::MakeUnique<syncer::TestEngineComponentsFactory>(
           factory_switches, syncer::EngineComponentsFactory::STORAGE_IN_MEMORY,
           nullptr);
 
-  SyncBackendHostImpl::InitCore(std::move(options));
+  SyncBackendHostImpl::Initialize(std::move(params));
 }
 
-void SyncBackendHostForProfileSyncTest::RequestConfigureSyncer(
-    syncer::ConfigureReason reason,
-    syncer::ModelTypeSet to_download,
-    syncer::ModelTypeSet to_purge,
-    syncer::ModelTypeSet to_journal,
-    syncer::ModelTypeSet to_unapply,
-    syncer::ModelTypeSet to_ignore,
-    const syncer::ModelSafeRoutingInfo& routing_info,
-    const base::Callback<void(syncer::ModelTypeSet, syncer::ModelTypeSet)>&
-        ready_task,
-    const base::Closure& retry_callback) {
-  syncer::ModelTypeSet failed_configuration_types;
-
+void SyncEngineForProfileSyncTest::ConfigureDataTypes(ConfigureParams params) {
   // The first parameter there should be the set of enabled types.  That's not
   // something we have access to from this strange test harness.  We'll just
   // send back the list of newly configured types instead and hope it doesn't
@@ -127,12 +106,10 @@ void SyncBackendHostForProfileSyncTest::RequestConfigureSyncer(
   // Posted to avoid re-entrancy issues.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&SyncBackendHostForProfileSyncTest::
-                     FinishConfigureDataTypesOnFrontendLoop,
-                 base::Unretained(this),
-                 syncer::Difference(to_download, failed_configuration_types),
-                 syncer::Difference(to_download, failed_configuration_types),
-                 failed_configuration_types, ready_task));
+      base::Bind(
+          &SyncEngineForProfileSyncTest::FinishConfigureDataTypesOnFrontendLoop,
+          base::Unretained(this), params.to_download, params.to_download,
+          syncer::ModelTypeSet(), params.ready_task));
 }
 
 // Helper function for return-type-upcasting of the callback.
@@ -194,10 +171,9 @@ void AbstractProfileSyncServiceTest::CreateSyncService(
 
   syncer::SyncApiComponentFactoryMock* components =
       profile_sync_service_bundle_.component_factory();
-  EXPECT_CALL(*components, CreateSyncBackendHost(_, _, _, _))
-      .WillOnce(Return(new SyncBackendHostForProfileSyncTest(
+  EXPECT_CALL(*components, CreateSyncEngine(_, _, _, _))
+      .WillOnce(Return(new SyncEngineForProfileSyncTest(
           temp_dir_.GetPath(), sync_service_->GetSyncClient(),
-          base::ThreadTaskRunnerHandle::Get(),
           profile_sync_service_bundle_.fake_invalidation_service(),
           sync_service_->sync_prefs()->AsWeakPtr(),
           initialization_success_callback)));

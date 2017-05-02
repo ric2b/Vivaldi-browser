@@ -18,6 +18,12 @@ WebStateDelegate::~WebStateDelegate() {
   DCHECK(attached_states_.empty());
 }
 
+WebState* WebStateDelegate::OpenURLFromWebState(
+    WebState*,
+    const WebState::OpenURLParams&) {
+  return nullptr;
+}
+
 void WebStateDelegate::LoadProgressChanged(WebState*, double) {}
 
 bool WebStateDelegate::HandleContextMenu(WebState*, const ContextMenuParams&) {
@@ -27,6 +33,13 @@ bool WebStateDelegate::HandleContextMenu(WebState*, const ContextMenuParams&) {
 JavaScriptDialogPresenter* WebStateDelegate::GetJavaScriptDialogPresenter(
     WebState*) {
   return nullptr;
+}
+
+void WebStateDelegate::OnAuthRequired(WebState* source,
+                                      NSURLProtectionSpace* protection_space,
+                                      NSURLCredential* proposed_credential,
+                                      const AuthCallback& callback) {
+  callback.Run(nil, nil);
 }
 
 void WebStateDelegate::Attach(WebState* source) {

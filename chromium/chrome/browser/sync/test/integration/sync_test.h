@@ -61,7 +61,6 @@ namespace net {
 class FakeURLFetcherFactory;
 class ScopedDefaultHostResolverProc;
 class URLFetcherImplFactory;
-class URLRequestContextGetter;
 }  // namespace net
 
 // This is the base class for integration tests for all sync data types. Derived
@@ -311,10 +310,12 @@ class SyncTest : public InProcessBrowserTest {
   bool CreateGaiaAccount(const std::string& username,
                          const std::string& password);
 
+ protected:
   // Helper to block the current thread while the data models sync depends on
   // finish loading.
-  void WaitForDataModels(Profile* profile);
+  virtual void WaitForDataModels(Profile* profile);
 
+ private:
   // Helper method used to read GAIA credentials from a local password file
   // specified via the "--password-file-for-test" command line switch.
   // Note: The password file must be a plain text file with exactly two lines --

@@ -40,8 +40,9 @@
 #include "modules/encryptedmedia/MediaKeyMessageEvent.h"
 #include "modules/encryptedmedia/MediaKeys.h"
 #include "platform/ContentDecryptionModuleResult.h"
-#include "platform/ContentType.h"
+#include "platform/InstanceCounters.h"
 #include "platform/Timer.h"
+#include "platform/network/mime/ContentType.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "public/platform/WebContentDecryptionModuleException.h"
 #include "public/platform/WebContentDecryptionModuleSession.h"
@@ -355,17 +356,13 @@ MediaKeySession* MediaKeySession::create(
     ScriptState* scriptState,
     MediaKeys* mediaKeys,
     WebEncryptedMediaSessionType sessionType) {
-  MediaKeySession* session =
-      new MediaKeySession(scriptState, mediaKeys, sessionType);
-  session->suspendIfNeeded();
-  return session;
+  return new MediaKeySession(scriptState, mediaKeys, sessionType);
 }
 
 MediaKeySession::MediaKeySession(ScriptState* scriptState,
                                  MediaKeys* mediaKeys,
                                  WebEncryptedMediaSessionType sessionType)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(scriptState->getExecutionContext()),
+    : ContextLifecycleObserver(scriptState->getExecutionContext()),
       m_asyncEventQueue(GenericEventQueue::create(this)),
       m_mediaKeys(mediaKeys),
       m_sessionType(sessionType),
@@ -379,13 +376,13 @@ MediaKeySession::MediaKeySession(ScriptState* scriptState,
                                         ClosedPromise::Closed)),
       m_actionTimer(this, &MediaKeySession::actionTimerFired) {
   DVLOG(MEDIA_KEY_SESSION_LOG_LEVEL) << __func__ << "(" << this << ")";
-  ThreadState::current()->registerPreFinalizer(this);
+  InstanceCounters::incrementCounter(InstanceCounters::MediaKeySessionCounter);
 
   // Create the matching Chromium object. It will not be usable until
   // initializeNewSession() is called in response to the user calling
   // generateRequest().
   WebContentDecryptionModule* cdm = mediaKeys->contentDecryptionModule();
-  m_session = wrapUnique(cdm->createSession());
+  m_session = WTF::wrapUnique(cdm->createSession());
   m_session->setClientInterface(this);
 
   // From https://w3c.github.io/encrypted-media/#createSession:
@@ -421,6 +418,7 @@ MediaKeySession::MediaKeySession(ScriptState* scriptState,
 
 MediaKeySession::~MediaKeySession() {
   DVLOG(MEDIA_KEY_SESSION_LOG_LEVEL) << __func__ << "(" << this << ")";
+  InstanceCounters::decrementCounter(InstanceCounters::MediaKeySessionCounter);
 }
 
 void MediaKeySession::dispose() {
@@ -1014,7 +1012,7 @@ const AtomicString& MediaKeySession::interfaceName() const {
 }
 
 ExecutionContext* MediaKeySession::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 bool MediaKeySession::hasPendingActivity() const {
@@ -1032,7 +1030,7 @@ bool MediaKeySession::hasPendingActivity() const {
          (m_mediaKeys && !m_isClosed);
 }
 
-void MediaKeySession::contextDestroyed() {
+void MediaKeySession::contextDestroyed(ExecutionContext*) {
   // Stop the CDM from firing any more events for this session.
   m_session.reset();
   m_isClosed = true;
@@ -1048,7 +1046,7 @@ DEFINE_TRACE(MediaKeySession) {
   visitor->trace(m_keyStatusesMap);
   visitor->trace(m_closedPromise);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

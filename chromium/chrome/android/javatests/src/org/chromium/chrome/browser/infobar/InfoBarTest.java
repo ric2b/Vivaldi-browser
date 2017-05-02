@@ -7,9 +7,8 @@ package org.chromium.chrome.browser.infobar;
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 import android.content.Context;
+import android.support.test.filters.MediumTest;
 import android.test.UiThreadTest;
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.Smoke;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
@@ -58,16 +57,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     private EmbeddedTestServer mTestServer;
     private InfoBarTestAnimationListener mListener;
 
-    private void waitUntilNoInfoBarsExist() throws InterruptedException {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return getInfoBars().isEmpty();
-            }
-        });
-    }
-
-    private void waitUntilDataReductionPromoInfoBarAppears() throws InterruptedException {
+    private void waitUntilDataReductionPromoInfoBarAppears() {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -121,7 +111,6 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     /**
      * Verify PopUp InfoBar.
      */
-    @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
     @DisabledTest(message = "crbug.com/593003")
@@ -145,7 +134,6 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     /**
      * Verify Geolocation creates an InfoBar.
      */
-    @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
     @RetryOnFailure
@@ -189,14 +177,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
                         getActivity().getActivityTab().goBack();
                     }
                 });
-        CriteriaHelper.pollInstrumentationThread(
-                new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return getInfoBars().isEmpty();
-                    }
-                },
-                MAX_TIMEOUT, CHECK_INTERVAL);
+        InfoBarUtil.waitUntilNoInfoBarsExist(getInfoBars());
         mListener.removeInfoBarAnimationFinished("InfoBar not removed.");
     }
 
@@ -208,7 +189,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
     @RetryOnFailure
-    public void testDataReductionPromoInfoBar() throws InterruptedException {
+    public void testDataReductionPromoInfoBar() {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -242,7 +223,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
         });
 
         // The renderer should have been killed and the infobar removed.
-        waitUntilNoInfoBarsExist();
+        InfoBarUtil.waitUntilNoInfoBarsExist(getInfoBars());
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -269,7 +250,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
     @RetryOnFailure
-    public void testDataReductionPromoInfoBarDismissed() throws InterruptedException {
+    public void testDataReductionPromoInfoBarDismissed() {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -303,7 +284,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
         });
 
         // The renderer should have been killed and the infobar removed.
-        waitUntilNoInfoBarsExist();
+        InfoBarUtil.waitUntilNoInfoBarsExist(getInfoBars());
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -387,7 +368,6 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     /**
      * Verifies the unresponsive renderer notification creates an InfoBar.
      */
-    @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
     @RetryOnFailure
@@ -430,7 +410,6 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     /**
      * Verifies the hung renderer InfoBar can kill the hung renderer.
      */
-    @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
     @RetryOnFailure

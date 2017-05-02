@@ -27,7 +27,6 @@ class WebScriptExecutor : public SuspendableScriptExecutor::Executor {
  public:
   WebScriptExecutor(const HeapVector<ScriptSourceCode>& sources,
                     int worldID,
-                    int extensionGroup,
                     bool userGesture);
 
   Vector<v8::Local<v8::Value>> execute(LocalFrame*) override;
@@ -40,37 +39,34 @@ class WebScriptExecutor : public SuspendableScriptExecutor::Executor {
  private:
   HeapVector<ScriptSourceCode> m_sources;
   int m_worldID;
-  int m_extensionGroup;
   bool m_userGesture;
 };
 
 WebScriptExecutor::WebScriptExecutor(
     const HeapVector<ScriptSourceCode>& sources,
     int worldID,
-    int extensionGroup,
     bool userGesture)
     : m_sources(sources),
       m_worldID(worldID),
-      m_extensionGroup(extensionGroup),
       m_userGesture(userGesture) {}
 
 Vector<v8::Local<v8::Value>> WebScriptExecutor::execute(LocalFrame* frame) {
   std::unique_ptr<UserGestureIndicator> indicator;
   if (m_userGesture) {
-    indicator =
-        wrapUnique(new UserGestureIndicator(DocumentUserGestureToken::create(
+    indicator = WTF::wrapUnique(
+        new UserGestureIndicator(DocumentUserGestureToken::create(
             frame->document(), UserGestureToken::NewGesture)));
   }
 
   Vector<v8::Local<v8::Value>> results;
   if (m_worldID) {
     frame->script().executeScriptInIsolatedWorld(m_worldID, m_sources,
-                                                 m_extensionGroup, &results);
+                                                 &results);
   } else {
     v8::Local<v8::Value> scriptValue =
         frame->script().executeScriptInMainWorldAndReturnValue(
-            m_sources.first());
-    results.append(scriptValue);
+            m_sources.front());
+    results.push_back(scriptValue);
   }
 
   return results;
@@ -114,19 +110,19 @@ Vector<v8::Local<v8::Value>> V8FunctionExecutor::execute(LocalFrame* frame) {
   Vector<v8::Local<v8::Value>> args;
   args.reserveCapacity(m_args.Size());
   for (size_t i = 0; i < m_args.Size(); ++i)
-    args.append(m_args.Get(i));
+    args.push_back(m_args.Get(i));
   {
     std::unique_ptr<UserGestureIndicator> gestureIndicator;
     if (m_gestureToken) {
       gestureIndicator =
-          wrapUnique(new UserGestureIndicator(m_gestureToken.release()));
+          WTF::wrapUnique(new UserGestureIndicator(m_gestureToken.release()));
     }
     if (V8ScriptRunner::callFunction(m_function.newLocal(isolate),
                                      frame->document(),
                                      m_receiver.newLocal(isolate), args.size(),
                                      args.data(), toIsolate(frame))
             .ToLocal(&singleResult))
-      results.append(singleResult);
+      results.push_back(singleResult);
   }
   return results;
 }
@@ -137,17 +133,15 @@ void SuspendableScriptExecutor::createAndRun(
     LocalFrame* frame,
     int worldID,
     const HeapVector<ScriptSourceCode>& sources,
-    int extensionGroup,
     bool userGesture,
     WebScriptExecutionCallback* callback) {
   // TODO(devlin): Passing in a v8::Isolate* directly would be better than
   // toIsolate() here.
   ScriptState* scriptState = ScriptState::forWorld(
-      frame,
-      *DOMWrapperWorld::fromWorldId(toIsolate(frame), worldID, extensionGroup));
+      frame, *DOMWrapperWorld::fromWorldId(toIsolate(frame), worldID));
   SuspendableScriptExecutor* executor = new SuspendableScriptExecutor(
       frame, scriptState, callback,
-      new WebScriptExecutor(sources, worldID, extensionGroup, userGesture));
+      new WebScriptExecutor(sources, worldID, userGesture));
   executor->run();
 }
 
@@ -172,8 +166,9 @@ void SuspendableScriptExecutor::createAndRun(
   executor->run();
 }
 
-void SuspendableScriptExecutor::contextDestroyed() {
-  SuspendableTimer::contextDestroyed();
+void SuspendableScriptExecutor::contextDestroyed(
+    ExecutionContext* destroyedContext) {
+  SuspendableTimer::contextDestroyed(destroyedContext);
   if (m_callback)
     m_callback->completed(Vector<v8::Local<v8::Value>>());
   dispose();
@@ -199,7 +194,7 @@ void SuspendableScriptExecutor::fired() {
 void SuspendableScriptExecutor::run() {
   ExecutionContext* context = getExecutionContext();
   DCHECK(context);
-  if (!context->activeDOMObjectsAreSuspended()) {
+  if (!context->isContextSuspended()) {
     suspendIfNeeded();
     executeAndDestroySelf();
     return;
@@ -228,7 +223,7 @@ void SuspendableScriptExecutor::executeAndDestroySelf() {
 
 void SuspendableScriptExecutor::dispose() {
   // Remove object as a ContextLifecycleObserver.
-  ActiveDOMObject::clearContext();
+  SuspendableObject::clearContext();
   m_keepAlive.clear();
   stop();
 }

@@ -36,9 +36,6 @@
 #include "core/HTMLNames.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/Document.h"
-#include "core/fetch/CSSStyleSheetResource.h"
-#include "core/fetch/FontResource.h"
-#include "core/fetch/ImageResource.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -61,10 +58,11 @@
 #include "core/inspector/V8InspectorString.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/ScriptResource.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/PlatformResourceLoader.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/ListHashSet.h"
@@ -170,6 +168,9 @@ static void maybeEncodeTextContent(const String& textContent,
   } else if (buffer) {
     *result = base64Encode(buffer->data(), buffer->size());
     *base64Encoded = true;
+  } else if (textContent.isNull()) {
+    *result = "";
+    *base64Encoded = false;
   } else {
     DCHECK(!textContent.is8Bit());
     *result = base64Encode(textContent.utf8(WTF::LenientUTF8Conversion));
@@ -444,19 +445,19 @@ Response InspectorPageAgent::reload(
       optionalScriptToEvaluateOnLoad.fromMaybe("");
   m_v8Session->setSkipAllPauses(true);
   m_reloading = true;
-  FrameLoadType reloadType = FrameLoadTypeReload;
-  if (optionalBypassCache.fromMaybe(false))
-    reloadType = FrameLoadTypeReloadBypassingCache;
-  else if (RuntimeEnabledFeatures::
-               reloadwithoutSubResourceCacheRevalidationEnabled())
-    reloadType = FrameLoadTypeReloadMainResource;
-  m_inspectedFrames->root()->reload(reloadType,
+  m_inspectedFrames->root()->reload(optionalBypassCache.fromMaybe(false)
+                                        ? FrameLoadTypeReloadBypassingCache
+                                        : FrameLoadTypeReloadMainResource,
                                     ClientRedirectPolicy::NotClientRedirect);
   return Response::OK();
 }
 
 Response InspectorPageAgent::navigate(const String& url, String* outFrameId) {
   *outFrameId = frameId(m_inspectedFrames->root());
+  return Response::OK();
+}
+
+Response InspectorPageAgent::stopLoading() {
   return Response::OK();
 }
 
@@ -476,7 +477,7 @@ static void cachedResourcesForDocument(Document* document,
       continue;
     if (cachedResource->getType() == Resource::Raw && skipXHRs)
       continue;
-    result.append(cachedResource);
+    result.push_back(cachedResource);
   }
 }
 
@@ -489,7 +490,7 @@ HeapVector<Member<Document>> InspectorPageAgent::importsForFrame(
   if (HTMLImportsController* controller = rootDocument->importsController()) {
     for (size_t i = 0; i < controller->loaderCount(); ++i) {
       if (Document* document = controller->loaderAt(i)->document())
-        result.append(document);
+        result.push_back(document);
     }
   }
 
@@ -554,7 +555,8 @@ void InspectorPageAgent::getResourceContent(
       m_resourceContentLoaderClientId,
       WTF::bind(
           &InspectorPageAgent::getResourceContentAfterResourcesContentLoaded,
-          wrapPersistent(this), frameId, url, passed(std::move(callback))));
+          wrapPersistent(this), frameId, url,
+          WTF::passed(std::move(callback))));
 }
 
 void InspectorPageAgent::searchContentAfterResourcesContentLoaded(
@@ -604,7 +606,8 @@ void InspectorPageAgent::searchInResource(
       WTF::bind(&InspectorPageAgent::searchContentAfterResourcesContentLoaded,
                 wrapPersistent(this), frameId, url, query,
                 optionalCaseSensitive.fromMaybe(false),
-                optionalIsRegex.fromMaybe(false), passed(std::move(callback))));
+                optionalIsRegex.fromMaybe(false),
+                WTF::passed(std::move(callback))));
 }
 
 Response InspectorPageAgent::setDocumentContent(const String& frameId,
@@ -858,7 +861,7 @@ Response InspectorPageAgent::getLayoutMetrics(
                            .build();
 
   FrameView* frameView = mainFrame->view();
-  ScrollOffset pageOffset = frameView->getScrollableArea()->scrollOffset();
+  ScrollOffset pageOffset = frameView->getScrollableArea()->getScrollOffset();
   float pageZoom = mainFrame->pageZoomFactor();
   FloatRect visibleRect = visualViewport.visibleRect();
   float scale = visualViewport.scale();

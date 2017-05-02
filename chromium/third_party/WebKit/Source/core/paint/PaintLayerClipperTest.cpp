@@ -8,15 +8,40 @@
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
+#include "platform/LayoutTestSupport.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 
 namespace blink {
 
-class PaintLayerClipperTest : public RenderingTest {
+class PaintLayerClipperTest : public ::testing::WithParamInterface<bool>,
+                              private ScopedSlimmingPaintV2ForTest,
+                              public RenderingTest {
  public:
-  PaintLayerClipperTest() : RenderingTest(EmptyFrameLoaderClient::create()) {}
+  PaintLayerClipperTest()
+      : ScopedSlimmingPaintV2ForTest(GetParam()),
+        RenderingTest(EmptyFrameLoaderClient::create()) {}
+
+  void SetUp() override {
+    LayoutTestSupport::setMockThemeEnabledForTest(true);
+    RenderingTest::SetUp();
+  }
+
+  void TearDown() override {
+    LayoutTestSupport::setMockThemeEnabledForTest(false);
+    RenderingTest::TearDown();
+  }
+
+  bool geometryMapperCacheEmpty(const PaintLayerClipper& clipper) {
+    return clipper.m_geometryMapper->m_data.isEmpty();
+  }
 };
 
-TEST_F(PaintLayerClipperTest, LayoutSVGRoot) {
+INSTANTIATE_TEST_CASE_P(All,
+                        PaintLayerClipperTest,
+                        ::testing::ValuesIn({false, true}));
+
+TEST_P(PaintLayerClipperTest, LayoutSVGRoot) {
   setBodyInnerHTML(
       "<!DOCTYPE html>"
       "<svg id=target width=200 height=300 style='position: relative'>"
@@ -27,17 +52,87 @@ TEST_F(PaintLayerClipperTest, LayoutSVGRoot) {
   PaintLayer* targetPaintLayer =
       toLayoutBoxModelObject(target->layoutObject())->layer();
   ClipRectsContext context(document().layoutView()->layer(), UncachedClipRects);
+  // When RLS is enabled, the LayoutView will have a composited scrolling layer,
+  // so don't apply an overflow clip.
+  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+    context.setIgnoreOverflowClip();
   LayoutRect layerBounds;
   ClipRect backgroundRect, foregroundRect;
   targetPaintLayer->clipper().calculateRects(
       context, LayoutRect(LayoutRect::infiniteIntRect()), layerBounds,
       backgroundRect, foregroundRect);
-  EXPECT_EQ(LayoutRect(LayoutRect::infiniteIntRect()), backgroundRect.rect());
-  EXPECT_EQ(LayoutRect(LayoutRect::infiniteIntRect()), foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(8, 8, 200, 300), backgroundRect.rect());
+  EXPECT_EQ(LayoutRect(8, 8, 200, 300), foregroundRect.rect());
   EXPECT_EQ(LayoutRect(8, 8, 200, 300), layerBounds);
 }
 
-TEST_F(PaintLayerClipperTest, LayoutSVGRootChild) {
+TEST_P(PaintLayerClipperTest, ControlClip) {
+  setBodyInnerHTML(
+      "<!DOCTYPE html>"
+      "<input id=target style='position:absolute; width: 200px; height: 300px'"
+      "    type=button>");
+  Element* target = document().getElementById("target");
+  PaintLayer* targetPaintLayer =
+      toLayoutBoxModelObject(target->layoutObject())->layer();
+  ClipRectsContext context(document().layoutView()->layer(), UncachedClipRects);
+  // When RLS is enabled, the LayoutView will have a composited scrolling layer,
+  // so don't apply an overflow clip.
+  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+    context.setIgnoreOverflowClip();
+  LayoutRect layerBounds;
+  ClipRect backgroundRect, foregroundRect;
+  targetPaintLayer->clipper().calculateRects(
+      context, LayoutRect(LayoutRect::infiniteIntRect()), layerBounds,
+      backgroundRect, foregroundRect);
+#if OS(MACOSX)
+  // If the PaintLayer clips overflow, the background rect is intersected with
+  // the PaintLayer bounds...
+  EXPECT_EQ(LayoutRect(3, 4, 210, 28), backgroundRect.rect());
+  // and the foreground rect is intersected with the control clip in this case.
+  EXPECT_EQ(LayoutRect(8, 8, 200, 18), foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(8, 8, 200, 18), layerBounds);
+#else
+  // If the PaintLayer clips overflow, the background rect is intersected with
+  // the PaintLayer bounds...
+  EXPECT_EQ(LayoutRect(8, 8, 200, 300), backgroundRect.rect());
+  // and the foreground rect is intersected with the control clip in this case.
+  EXPECT_EQ(LayoutRect(10, 10, 196, 296), foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(8, 8, 200, 300), layerBounds);
+#endif
+}
+
+TEST_P(PaintLayerClipperTest, ControlClipSelect) {
+  setBodyInnerHTML(
+      "<select id='target' style='position: relative; width: 100px; "
+      "    background: none; border: none; padding: 0px 15px 0px 5px;'>"
+      "  <option>"
+      "    Test long texttttttttttttttttttttttttttttttt"
+      "  </option>"
+      "</select>");
+  Element* target = document().getElementById("target");
+  PaintLayer* targetPaintLayer =
+      toLayoutBoxModelObject(target->layoutObject())->layer();
+  ClipRectsContext context(document().layoutView()->layer(), UncachedClipRects);
+  // When RLS is enabled, the LayoutView will have a composited scrolling layer,
+  // so don't apply an overflow clip.
+  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+    context.setIgnoreOverflowClip();
+  LayoutRect layerBounds;
+  ClipRect backgroundRect, foregroundRect;
+  targetPaintLayer->clipper().calculateRects(
+      context, LayoutRect(LayoutRect::infiniteIntRect()), layerBounds,
+      backgroundRect, foregroundRect);
+// The control clip for a select excludes the area for the down arrow.
+#if OS(MACOSX)
+  EXPECT_EQ(LayoutRect(16, 9, 79, 13), foregroundRect.rect());
+#elif OS(WIN)
+  EXPECT_EQ(LayoutRect(17, 9, 60, 16), foregroundRect.rect());
+#else
+  EXPECT_EQ(LayoutRect(17, 9, 60, 15), foregroundRect.rect());
+#endif
+}
+
+TEST_P(PaintLayerClipperTest, LayoutSVGRootChild) {
   setBodyInnerHTML(
       "<svg width=200 height=300 style='position: relative'>"
       "  <foreignObject width=400 height=500>"
@@ -60,7 +155,7 @@ TEST_F(PaintLayerClipperTest, LayoutSVGRootChild) {
   EXPECT_EQ(LayoutRect(8, 8, 400, 0), layerBounds);
 }
 
-TEST_F(PaintLayerClipperTest, ContainPaintClip) {
+TEST_P(PaintLayerClipperTest, ContainPaintClip) {
   setBodyInnerHTML(
       "<div id='target'"
       "    style='contain: paint; width: 200px; height: 200px; overflow: auto'>"
@@ -75,8 +170,9 @@ TEST_F(PaintLayerClipperTest, ContainPaintClip) {
   ClipRect backgroundRect, foregroundRect;
   layer->clipper().calculateRects(context, infiniteRect, layerBounds,
                                   backgroundRect, foregroundRect);
-  EXPECT_EQ(infiniteRect, backgroundRect.rect());
-  EXPECT_EQ(infiniteRect, foregroundRect.rect());
+  EXPECT_GE(backgroundRect.rect().size().width().toInt(), 33554422);
+  EXPECT_GE(backgroundRect.rect().size().height().toInt(), 33554422);
+  EXPECT_EQ(backgroundRect.rect(), foregroundRect.rect());
   EXPECT_EQ(LayoutRect(0, 0, 200, 200), layerBounds);
 
   ClipRectsContext contextClip(layer, PaintingClipRects);
@@ -87,7 +183,7 @@ TEST_F(PaintLayerClipperTest, ContainPaintClip) {
   EXPECT_EQ(LayoutRect(0, 0, 200, 200), layerBounds);
 }
 
-TEST_F(PaintLayerClipperTest, NestedContainPaintClip) {
+TEST_P(PaintLayerClipperTest, NestedContainPaintClip) {
   setBodyInnerHTML(
       "<div style='contain: paint; width: 200px; height: 200px; overflow: "
       "auto'>"
@@ -114,6 +210,133 @@ TEST_F(PaintLayerClipperTest, NestedContainPaintClip) {
   EXPECT_EQ(LayoutRect(0, 0, 200, 200), backgroundRect.rect());
   EXPECT_EQ(LayoutRect(0, 0, 200, 200), foregroundRect.rect());
   EXPECT_EQ(LayoutRect(0, 0, 200, 400), layerBounds);
+}
+
+TEST_P(PaintLayerClipperTest, LocalClipRectFixedUnderTransform) {
+  setBodyInnerHTML(
+      "<div id='transformed'"
+      "    style='will-change: transform; width: 100px; height: 100px;"
+      "    overflow: hidden'>"
+      "  <div id='fixed' "
+      "      style='position: fixed; width: 100px; height: 100px;"
+      "      top: -50px'>"
+      "   </div>"
+      "</div>");
+
+  LayoutRect infiniteRect(LayoutRect::infiniteIntRect());
+  PaintLayer* transformed =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("transformed"))
+          ->layer();
+  PaintLayer* fixed =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("fixed"))->layer();
+
+  EXPECT_EQ(LayoutRect(0, 0, 100, 100),
+            transformed->clipper().localClipRect(transformed));
+  EXPECT_EQ(LayoutRect(0, 50, 100, 100),
+            fixed->clipper().localClipRect(transformed));
+}
+
+TEST_P(PaintLayerClipperTest, ClearClipRectsRecursive) {
+  // SPv2 will re-use a global GeometryMapper, so this
+  // logic does not apply.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
+
+  setBodyInnerHTML(
+      "<style>"
+      "div { "
+      "  width: 5px; height: 5px; background: blue; overflow: hidden;"
+      "  position: relative;"
+      "}"
+      "</style>"
+      "<div id='parent'>"
+      "  <div id='child'>"
+      "    <div id='grandchild'></div>"
+      "  </div>"
+      "</div>");
+
+  PaintLayer* parent =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("parent"))->layer();
+  PaintLayer* child =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("child"))->layer();
+
+  EXPECT_TRUE(parent->clipRectsCache());
+  EXPECT_TRUE(child->clipRectsCache());
+
+  parent->clipper().clearClipRectsIncludingDescendants();
+
+  EXPECT_FALSE(parent->clipRectsCache());
+  EXPECT_FALSE(child->clipRectsCache());
+}
+
+TEST_P(PaintLayerClipperTest, ClearClipRectsRecursiveChild) {
+  // SPv2 will re-use a global GeometryMapper, so this
+  // logic does not apply.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
+
+  setBodyInnerHTML(
+      "<style>"
+      "div { "
+      "  width: 5px; height: 5px; background: blue;"
+      "  position: relative;"
+      "}"
+      "</style>"
+      "<div id='parent'>"
+      "  <div id='child'>"
+      "    <div id='grandchild'></div>"
+      "  </div>"
+      "</div>");
+
+  PaintLayer* parent =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("parent"))->layer();
+  PaintLayer* child =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("child"))->layer();
+
+  EXPECT_TRUE(parent->clipRectsCache());
+  EXPECT_TRUE(child->clipRectsCache());
+
+  child->clipper().clearClipRectsIncludingDescendants();
+
+  EXPECT_TRUE(parent->clipRectsCache());
+  EXPECT_FALSE(child->clipRectsCache());
+}
+
+TEST_P(PaintLayerClipperTest, ClearClipRectsRecursiveOneType) {
+  // SPv2 will re-use a global GeometryMapper, so this
+  // logic does not apply.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return;
+
+  setBodyInnerHTML(
+      "<style>"
+      "div { "
+      "  width: 5px; height: 5px; background: blue;"
+      "  position: relative;"
+      "}"
+      "</style>"
+      "<div id='parent'>"
+      "  <div id='child'>"
+      "    <div id='grandchild'></div>"
+      "  </div>"
+      "</div>");
+
+  PaintLayer* parent =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("parent"))->layer();
+  PaintLayer* child =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("child"))->layer();
+
+  EXPECT_TRUE(parent->clipRectsCache());
+  EXPECT_TRUE(child->clipRectsCache());
+  EXPECT_TRUE(parent->clipRectsCache()->get(AbsoluteClipRects).root);
+  EXPECT_TRUE(child->clipRectsCache()->get(AbsoluteClipRects).root);
+
+  parent->clipper().clearClipRectsIncludingDescendants(AbsoluteClipRects);
+
+  EXPECT_TRUE(parent->clipRectsCache());
+  EXPECT_TRUE(child->clipRectsCache());
+  EXPECT_FALSE(parent->clipRectsCache()->get(AbsoluteClipRects).root);
+  EXPECT_FALSE(parent->clipRectsCache()->get(AbsoluteClipRects).root);
 }
 
 }  // namespace blink

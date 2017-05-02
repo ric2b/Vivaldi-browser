@@ -117,12 +117,11 @@ void VivaldiSessionService::ResetFile(const base::FilePath& file_name) {
 }
 
 bool VivaldiSessionService::AppendCommandsToFile(
-    base::File* file, const ScopedVector<sessions::SessionCommand>& commands) {
-  for (ScopedVector<sessions::SessionCommand>::const_iterator i =
-           commands.begin();
-       i != commands.end(); ++i) {
+    base::File* file,
+    const std::vector<std::unique_ptr<sessions::SessionCommand>>& commands) {
+  for (auto &i: commands) {
     int wrote;
-    const size_type content_size = static_cast<size_type>((*i)->size());
+    const size_type content_size = static_cast<size_type>(i->size());
     const size_type total_size =  content_size + sizeof(id_type);
     wrote = file->WriteAtCurrentPos(reinterpret_cast<const char*>(&total_size),
                                     sizeof(total_size));
@@ -130,7 +129,7 @@ bool VivaldiSessionService::AppendCommandsToFile(
       NOTREACHED() << "error writing";
       return false;
     }
-    id_type command_id = (*i)->id();
+    id_type command_id = i->id();
     wrote = file->WriteAtCurrentPos(reinterpret_cast<char*>(&command_id),
                                     sizeof(command_id));
     if (wrote != sizeof(command_id)) {
@@ -138,7 +137,7 @@ bool VivaldiSessionService::AppendCommandsToFile(
       return false;
     }
     if (content_size > 0) {
-      wrote = file->WriteAtCurrentPos(reinterpret_cast<char*>((*i)->contents()),
+      wrote = file->WriteAtCurrentPos(reinterpret_cast<char*>(i->contents()),
                                       content_size);
       if (wrote != content_size) {
         NOTREACHED() << "error writing";
@@ -187,7 +186,7 @@ bool VivaldiSessionService::ShouldTrackWindow(Browser* browser,
 void VivaldiSessionService::ScheduleCommand(
     std::unique_ptr<sessions::SessionCommand> command) {
   DCHECK(command);
-  pending_commands_.push_back(command.release());
+  pending_commands_.push_back(std::move(command));
 }
 
 void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
@@ -297,7 +296,7 @@ bool VivaldiSessionService::Load(const base::FilePath& path,
   if (!current_session_file_->IsValid())
     return false;
 
-  ScopedVector<sessions::SessionCommand> commands;
+  std::vector <std::unique_ptr<sessions::SessionCommand>> commands;
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID::id_type active_window_id = 0;
 
@@ -558,7 +557,7 @@ void VivaldiSessionService::RemoveUnusedRestoreWindows(
 }
 
 bool VivaldiSessionService::Read(
-    ScopedVector<sessions::SessionCommand>* commands) {
+  std::vector<std::unique_ptr<sessions::SessionCommand>>* commands) {
   FileHeader header;
   int read_count;
   read_count = current_session_file_->ReadAtCurrentPos(
@@ -567,10 +566,10 @@ bool VivaldiSessionService::Read(
       header.version != kFileCurrentVersion)
     return false;
 
-  ScopedVector<sessions::SessionCommand> read_commands;
-  for (sessions::SessionCommand* command = ReadCommand(); command && !errored_;
-       command = ReadCommand()) {
-    read_commands.push_back(command);
+  std::vector <std::unique_ptr<sessions::SessionCommand>> read_commands;
+  for (std::unique_ptr<sessions::SessionCommand> command = ReadCommand();
+       command && !errored_; command = ReadCommand()) {
+    read_commands.push_back(std::move(command));
   }
   if (!errored_) {
     read_commands.swap(*commands);
@@ -578,7 +577,7 @@ bool VivaldiSessionService::Read(
   return !errored_;
 }
 
-sessions::SessionCommand* VivaldiSessionService::ReadCommand() {
+std::unique_ptr<sessions::SessionCommand> VivaldiSessionService::ReadCommand() {
   // Make sure there is enough in the buffer for the size of the next command.
   if (available_count_ < sizeof(size_type)) {
     if (!FillBuffer())
@@ -615,8 +614,9 @@ sessions::SessionCommand* VivaldiSessionService::ReadCommand() {
   const id_type command_id = buffer_[buffer_position_];
   // NOTE: command_size includes the size of the id, which is not part of
   // the contents of the SessionCommand.
-  sessions::SessionCommand* command =
-      new sessions::SessionCommand(command_id, command_size - sizeof(id_type));
+  std::unique_ptr<sessions::SessionCommand> command =
+      base::MakeUnique<sessions::SessionCommand>(
+          command_id, command_size - sizeof(id_type));
   if (command_size > sizeof(id_type)) {
     memcpy(command->contents(),
            &(buffer_[buffer_position_ + sizeof(id_type)]),

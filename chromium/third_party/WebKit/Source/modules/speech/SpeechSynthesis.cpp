@@ -37,7 +37,7 @@ SpeechSynthesis* SpeechSynthesis::create(ExecutionContext* context) {
 }
 
 SpeechSynthesis::SpeechSynthesis(ExecutionContext* context)
-    : ContextLifecycleObserver(context),
+    : ContextClient(context),
       m_platformSpeechSynthesizer(PlatformSpeechSynthesizer::create(this)),
       m_isPaused(false) {}
 
@@ -46,14 +46,9 @@ void SpeechSynthesis::setPlatformSynthesizer(
   m_platformSpeechSynthesizer = synthesizer;
 }
 
-ExecutionContext* SpeechSynthesis::getExecutionContext() const {
-  return ContextLifecycleObserver::getExecutionContext();
-}
-
 void SpeechSynthesis::voicesDidChange() {
   m_voiceList.clear();
-  if (getExecutionContext() &&
-      !getExecutionContext()->activeDOMObjectsAreStopped())
+  if (getExecutionContext())
     dispatchEvent(Event::create(EventTypeNames::voiceschanged));
 }
 
@@ -67,7 +62,7 @@ const HeapVector<Member<SpeechSynthesisVoice>>& SpeechSynthesis::getVoices() {
       m_platformSpeechSynthesizer->voiceList();
   size_t voiceCount = platformVoices.size();
   for (size_t k = 0; k < voiceCount; k++)
-    m_voiceList.append(SpeechSynthesisVoice::create(platformVoices[k]));
+    m_voiceList.push_back(SpeechSynthesisVoice::create(platformVoices[k]));
 
   return m_voiceList;
 }
@@ -131,13 +126,13 @@ void SpeechSynthesis::fireEvent(const AtomicString& type,
                                 SpeechSynthesisUtterance* utterance,
                                 unsigned long charIndex,
                                 const String& name) {
-  if (getExecutionContext() &&
-      !getExecutionContext()->activeDOMObjectsAreStopped()) {
-    double elapsedTimeMillis =
-        (monotonicallyIncreasingTime() - utterance->startTime()) * 1000.0;
-    utterance->dispatchEvent(SpeechSynthesisEvent::create(
-        type, utterance, charIndex, elapsedTimeMillis, name));
-  }
+  if (!getExecutionContext())
+    return;
+
+  double elapsedTimeMillis =
+      (monotonicallyIncreasingTime() - utterance->startTime()) * 1000.0;
+  utterance->dispatchEvent(SpeechSynthesisEvent::create(
+      type, utterance, charIndex, elapsedTimeMillis, name));
 }
 
 void SpeechSynthesis::handleSpeakingCompleted(
@@ -244,8 +239,8 @@ DEFINE_TRACE(SpeechSynthesis) {
   visitor->trace(m_voiceList);
   visitor->trace(m_utteranceQueue);
   PlatformSpeechSynthesizerClient::trace(visitor);
+  ContextClient::trace(visitor);
   EventTargetWithInlineData::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

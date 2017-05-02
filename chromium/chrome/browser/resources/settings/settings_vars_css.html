@@ -15,16 +15,15 @@
 
     --settings-background-color: rgb(241, 241, 241);
     --settings-box-row-padding: 20px;
+    --settings-indent-width: 36px;
     --settings-card-max-width: 640px;
     --settings-disabled-opacity: .65;
     --settings-error-color: var(--paper-red-700);
 
-    --settings-icon-ripple-size: 36px;
-    --settings-icon-size: 20px;
-
     --settings-list-frame-padding: {
       -webkit-padding-end: var(--settings-box-row-padding);
-      -webkit-padding-start: 56px;
+      -webkit-padding-start: calc(
+          var(--settings-box-row-padding) + var(--settings-indent-width));
       padding-bottom: 0;
       padding-top: 0;
     }
@@ -70,13 +69,13 @@
     --checkbox-size: 16px;
     --checkbox-spacing: 18px;
     --iron-icon-fill-color: var(--paper-grey-600);
-    --iron-icon-height: var(--settings-icon-size);
-    --iron-icon-width: var(--settings-icon-size);
+    --iron-icon-height: var(--cr-icon-size);
+    --iron-icon-width: var(--cr-icon-size);
     --paper-checkbox-label-color: inherit;
     --paper-dialog-color: inherit;
     --paper-icon-button: {
-      height: var(--settings-icon-ripple-size);
-      width: var(--settings-icon-ripple-size);
+      height: var(--cr-icon-ripple-size);
+      width: var(--cr-icon-ripple-size);
     };
     --paper-input-container-focus-color: var(--google-blue-500);
     --paper-input-container-input: {
@@ -89,7 +88,9 @@
     --paper-item: {
       font-size: inherit;
     };
+    --paper-radio-button-ink-size: 40px;
     --paper-radio-button-label-color: inherit;
+    --paper-radio-button-size: 16px;
     --paper-radio-group-item-padding: 0;
 
     --paper-toggle-button-checked-bar: var(--settings-toggle-bar-size);

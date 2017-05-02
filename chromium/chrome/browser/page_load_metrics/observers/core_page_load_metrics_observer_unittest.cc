@@ -8,8 +8,9 @@
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/test_rappor_service.h"
+#include "third_party/WebKit/public/platform/WebMouseEvent.h"
 
 namespace {
 
@@ -28,10 +29,10 @@ class CorePageLoadMetricsObserverTest
 
   void SetUp() override {
     page_load_metrics::PageLoadMetricsObserverTestHarness::SetUp();
-    TestingBrowserProcess::GetGlobal()->SetRapporService(&rappor_tester_);
+    TestingBrowserProcess::GetGlobal()->SetRapporServiceImpl(&rappor_tester_);
   }
 
-  rappor::TestRapporService rappor_tester_;
+  rappor::TestRapporServiceImpl rappor_tester_;
 };
 
 TEST_F(CorePageLoadMetricsObserverTest, NoMetrics) {
@@ -481,6 +482,14 @@ TEST_F(CorePageLoadMetricsObserverTest, NewNavigation) {
       timing.parse_start.value().InMilliseconds(), 1);
 }
 
+TEST_F(CorePageLoadMetricsObserverTest, BytesCounted) {
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+  histogram_tester().ExpectTotalCount(internal::kHistogramTotalBytes, 1);
+  histogram_tester().ExpectTotalCount(internal::kHistogramNetworkBytes, 1);
+  histogram_tester().ExpectTotalCount(internal::kHistogramCacheBytes, 1);
+}
+
 TEST_F(CorePageLoadMetricsObserverTest, FirstMeaningfulPaint) {
   page_load_metrics::PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
@@ -511,8 +520,9 @@ TEST_F(CorePageLoadMetricsObserverTest, FirstMeaningfulPaintAfterInteraction) {
   NavigateAndCommit(GURL(kDefaultTestUrl));
   SimulateTimingUpdate(timing);
 
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   SimulateInputEvent(mouse_event);
 
   timing.first_meaningful_paint = base::TimeDelta::FromMilliseconds(1000);

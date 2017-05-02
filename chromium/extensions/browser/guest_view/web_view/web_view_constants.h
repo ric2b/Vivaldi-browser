@@ -74,6 +74,8 @@ extern const char kDefaultPromptText[];
 extern const char kFindSearchText[];
 extern const char kFindFinalUpdate[];
 extern const char kInitialHeight[];
+extern const char kInitialLeft[];
+extern const char kInitialTop[];
 extern const char kInitialWidth[];
 extern const char kLastUnlockedBySelf[];
 extern const char kLevel[];

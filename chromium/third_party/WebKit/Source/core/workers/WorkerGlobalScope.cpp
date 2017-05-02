@@ -31,15 +31,14 @@
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/Event.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/frame/DOMTimerCoordinator.h"
-#include "core/frame/Deprecation.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -77,32 +76,6 @@ WorkerGlobalScope::~WorkerGlobalScope() {
       InstanceCounters::WorkerGlobalScopeCounter);
 }
 
-void WorkerGlobalScope::countFeature(UseCounter::Feature) const {
-  // TODO(nhiroki): How should we count features for shared/service workers?
-  // (http://crbug.com/376039)
-}
-
-void WorkerGlobalScope::countDeprecation(UseCounter::Feature feature) const {
-  // TODO(nhiroki): How should we count features for shared/service workers?
-  // (http://crbug.com/376039)
-
-  DCHECK(isSharedWorkerGlobalScope() || isServiceWorkerGlobalScope() ||
-         isCompositorWorkerGlobalScope());
-  DCHECK(feature != UseCounter::OBSOLETE_PageDestruction);
-  DCHECK(feature < UseCounter::NumberOfFeatures);
-
-  // For each deprecated feature, send console message at most once
-  // per worker lifecycle.
-  if (!m_deprecationWarningBits.quickGet(feature)) {
-    m_deprecationWarningBits.quickSet(feature);
-    DCHECK(!Deprecation::deprecationMessage(feature).isEmpty());
-    DCHECK(getExecutionContext());
-    getExecutionContext()->addConsoleMessage(
-        ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel,
-                               Deprecation::deprecationMessage(feature)));
-  }
-}
-
 KURL WorkerGlobalScope::completeURL(const String& url) const {
   // Always return a null URL when passed a null string.
   // FIXME: Should we change the KURL constructor to have this behavior?
@@ -118,13 +91,15 @@ void WorkerGlobalScope::dispose() {
   // Event listeners would keep DOMWrapperWorld objects alive for too long.
   // Also, they have references to JS objects, which become dangling once Heap
   // is destroyed.
-  for (auto it = m_eventListeners.begin(); it != m_eventListeners.end();) {
-    V8AbstractEventListener* listener = *it;
-    // clearListenerObject() will unregister the listener from
-    // m_eventListeners, and invalidate the iterator, so we have to advance
-    // it first.
-    ++it;
-    listener->clearListenerObject();
+  m_closing = true;
+  HeapHashSet<Member<V8AbstractEventListener>> listeners;
+  listeners.swap(m_eventListeners);
+  while (!listeners.isEmpty()) {
+    for (const auto& listener : listeners)
+      listener->clearListenerObject();
+    listeners.clear();
+    // Pick up any additions made while iterating.
+    listeners.swap(m_eventListeners);
   }
   removeAllEventListeners();
 
@@ -132,6 +107,19 @@ void WorkerGlobalScope::dispose() {
   m_scriptController.clear();
   m_eventQueue->close();
   m_thread = nullptr;
+}
+
+void WorkerGlobalScope::countFeature(UseCounter::Feature feature) {
+  DCHECK(isContextThread());
+  DCHECK(m_thread);
+  m_thread->workerReportingProxy().countFeature(feature);
+}
+
+void WorkerGlobalScope::countDeprecation(UseCounter::Feature feature) {
+  DCHECK(isContextThread());
+  DCHECK(m_thread);
+  addDeprecationMessage(feature);
+  m_thread->workerReportingProxy().countDeprecation(feature);
 }
 
 void WorkerGlobalScope::exceptionUnhandled(int exceptionId) {
@@ -144,14 +132,16 @@ void WorkerGlobalScope::exceptionUnhandled(int exceptionId) {
 
 void WorkerGlobalScope::registerEventListener(
     V8AbstractEventListener* eventListener) {
+  // TODO(sof): remove once crbug.com/677654 has been diagnosed.
+  CHECK(&ThreadState::fromObject(this)->heap() == &ThreadState::fromObject(eventListener)->heap());
   bool newEntry = m_eventListeners.add(eventListener).isNewEntry;
-  RELEASE_ASSERT(newEntry);
+  CHECK(newEntry);
 }
 
 void WorkerGlobalScope::deregisterEventListener(
     V8AbstractEventListener* eventListener) {
   auto it = m_eventListeners.find(eventListener);
-  RELEASE_ASSERT(it != m_eventListeners.end());
+  CHECK(it != m_eventListeners.end() || m_closing);
   m_eventListeners.remove(it);
 }
 
@@ -195,7 +185,7 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
           "The script at '" + url.elidedString() + "' failed to load.");
       return;
     }
-    completedURLs.append(url);
+    completedURLs.push_back(url);
   }
 
   for (const KURL& completeURL : completedURLs) {
@@ -240,9 +230,9 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
 v8::Local<v8::Object> WorkerGlobalScope::wrap(
     v8::Isolate*,
     v8::Local<v8::Object> creationContext) {
-  // WorkerGlobalScope must never be wrapped with wrap method.  The global
-  // object of ECMAScript environment is used as the wrapper.
-  RELEASE_NOTREACHED();
+  LOG(FATAL) << "WorkerGlobalScope must never be wrapped with wrap method.  "
+                "The global object of ECMAScript environment is used as the "
+                "wrapper.";
   return v8::Local<v8::Object>();
 }
 
@@ -250,7 +240,9 @@ v8::Local<v8::Object> WorkerGlobalScope::associateWithWrapper(
     v8::Isolate*,
     const WrapperTypeInfo*,
     v8::Local<v8::Object> wrapper) {
-  RELEASE_NOTREACHED();  // same as wrap method
+  LOG(FATAL) << "WorkerGlobalScope must never be wrapped with wrap method.  "
+                "The global object of ECMAScript environment is used as the "
+                "wrapper.";
   return v8::Local<v8::Object>();
 }
 
@@ -268,13 +260,6 @@ bool WorkerGlobalScope::isContextThread() const {
 
 void WorkerGlobalScope::disableEval(const String& errorMessage) {
   m_scriptController->disableEval(errorMessage);
-}
-
-void WorkerGlobalScope::postTask(const WebTraceLocation& location,
-                                 std::unique_ptr<ExecutionContextTask> task,
-                                 const String& taskNameForInstrumentation) {
-  thread()->postTask(location, std::move(task),
-                     !taskNameForInstrumentation.isEmpty());
 }
 
 void WorkerGlobalScope::addConsoleMessage(ConsoleMessage* consoleMessage) {
@@ -315,22 +300,17 @@ WorkerGlobalScope::WorkerGlobalScope(
     double timeOrigin,
     std::unique_ptr<SecurityOrigin::PrivilegeData> starterOriginPrivilageData,
     WorkerClients* workerClients)
-    : ActiveScriptWrappable(this),
-      m_url(url),
+    : m_url(url),
       m_userAgent(userAgent),
       m_v8CacheOptions(V8CacheOptionsDefault),
-      m_deprecationWarningBits(UseCounter::NumberOfFeatures),
       m_scriptController(
           WorkerOrWorkletScriptController::create(this, thread->isolate())),
       m_thread(thread),
       m_closing(false),
       m_eventQueue(WorkerEventQueue::create(this)),
       m_workerClients(workerClients),
-      m_timers(Platform::current()
-                   ->currentThread()
-                   ->scheduler()
-                   ->timerTaskRunner()
-                   ->clone()),
+      m_timers(
+          Platform::current()->currentThread()->scheduler()->timerTaskRunner()),
       m_timeOrigin(timeOrigin),
       m_lastPendingErrorEventId(0) {
   InstanceCounters::incrementCounter(

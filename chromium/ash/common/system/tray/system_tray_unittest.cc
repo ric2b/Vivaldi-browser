@@ -17,13 +17,14 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_container.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/status_area_widget_test_helper.h"
 #include "ash/test/test_system_tray_item.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "ui/base/ui_base_types.h"
@@ -34,10 +35,6 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 namespace ash {
 namespace test {
@@ -69,7 +66,7 @@ TEST_F(SystemTrayTest, OnlyVisibleItemsRecorded) {
   ASSERT_TRUE(tray->GetWidget());
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   base::HistogramTester histogram_tester;
 
@@ -108,7 +105,7 @@ TEST_F(SystemTrayTest, NotRecordedtemsAreNotRecorded) {
 
   TestSystemTrayItem* test_item =
       new TestSystemTrayItem(SystemTrayItem::UMA_NOT_RECORDED);
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   base::HistogramTester histogram_tester;
 
@@ -121,21 +118,15 @@ TEST_F(SystemTrayTest, NotRecordedtemsAreNotRecorded) {
   RunAllPendingInMessageLoop();
 }
 
-// TODO(bruthig): Re-enable.  See https://crbug.com/665960.
-#if defined(OS_WIN)
-#define MAYBE_NullDefaultViewIsNotRecorded DISABLED_NullDefaultViewIsNotRecorded
-#else
-#define MAYBE_NullDefaultViewIsNotRecorded NullDefaultViewIsNotRecorded
-#endif
 // Verifies null default views are not recorded in the
 // "Ash.SystemMenu.DefaultView.VisibleItems" histogram.
-TEST_F(SystemTrayTest, MAYBE_NullDefaultViewIsNotRecorded) {
+TEST_F(SystemTrayTest, NullDefaultViewIsNotRecorded) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
   test_item->set_has_views(false);
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   base::HistogramTester histogram_tester;
 
@@ -155,7 +146,7 @@ TEST_F(SystemTrayTest, VisibleDetailedViewsIsNotRecorded) {
   ASSERT_TRUE(tray->GetWidget());
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   base::HistogramTester histogram_tester;
 
@@ -175,7 +166,7 @@ TEST_F(SystemTrayTest, VisibleDefaultViewIsNotRecordedOnReshow) {
   ASSERT_TRUE(tray->GetWidget());
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   base::HistogramTester histogram_tester;
 
@@ -283,11 +274,11 @@ TEST_F(SystemTrayTest, SystemTrayTestItems) {
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
   TestSystemTrayItem* detailed_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
-  tray->AddTrayItem(detailed_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
+  tray->AddTrayItem(base::WrapUnique(detailed_item));
 
-  // Check items have been added
-  const std::vector<SystemTrayItem*>& items = tray->GetTrayItems();
+  // Check items have been added.
+  std::vector<SystemTrayItem*> items = tray->GetTrayItems();
   ASSERT_TRUE(std::find(items.begin(), items.end(), test_item) != items.end());
   ASSERT_TRUE(std::find(items.begin(), items.end(), detailed_item) !=
               items.end());
@@ -321,7 +312,7 @@ TEST_F(SystemTrayTest, SystemTrayNoViewItems) {
   // Verify that no crashes occur on items lacking some views.
   TestSystemTrayItem* no_view_item = new TestSystemTrayItem();
   no_view_item->set_has_views(false);
-  tray->AddTrayItem(no_view_item);
+  tray->AddTrayItem(base::WrapUnique(no_view_item));
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
   tray->ShowDetailedView(no_view_item, 0, false, BUBBLE_USE_EXISTING);
   RunAllPendingInMessageLoop();
@@ -333,12 +324,12 @@ TEST_F(SystemTrayTest, TrayWidgetAutoResizes) {
 
   // Add an initial tray item so that the tray gets laid out correctly.
   TestSystemTrayItem* initial_item = new TestSystemTrayItem();
-  tray->AddTrayItem(initial_item);
+  tray->AddTrayItem(base::WrapUnique(initial_item));
 
   gfx::Size initial_size = tray->GetWidget()->GetWindowBoundsInScreen().size();
 
   TestSystemTrayItem* new_item = new TestSystemTrayItem();
-  tray->AddTrayItem(new_item);
+  tray->AddTrayItem(base::WrapUnique(new_item));
 
   gfx::Size new_size = tray->GetWidget()->GetWindowBoundsInScreen().size();
 
@@ -362,8 +353,8 @@ TEST_F(SystemTrayTest, SystemTrayNotifications) {
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
   TestSystemTrayItem* detailed_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
-  tray->AddTrayItem(detailed_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
+  tray->AddTrayItem(base::WrapUnique(detailed_item));
 
   // Ensure the tray views are created.
   ASSERT_TRUE(test_item->tray_view() != NULL);
@@ -391,18 +382,13 @@ TEST_F(SystemTrayTest, SystemTrayNotifications) {
   ASSERT_TRUE(test_item->notification_view() != NULL);
 }
 
-// Test is flaky on Win7 and Cros (crbug.com/637978).
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
-#define MAYBE_BubbleCreationTypesTest DISABLED_BubbleCreationTypesTest
-#else
-#define MAYBE_BubbleCreationTypesTest BubbleCreationTypesTest
-#endif
-TEST_F(SystemTrayTest, MAYBE_BubbleCreationTypesTest) {
+// Test is flaky. http://crbug.com/637978
+TEST_F(SystemTrayTest, DISABLED_BubbleCreationTypesTest) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   // Ensure the tray views are created.
   ASSERT_TRUE(test_item->tray_view() != NULL);
@@ -474,7 +460,7 @@ TEST_F(SystemTrayTest, PersistentBubble) {
   ASSERT_TRUE(tray->GetWidget());
 
   TestSystemTrayItem* test_item = new TestSystemTrayItem();
-  tray->AddTrayItem(test_item);
+  tray->AddTrayItem(base::WrapUnique(test_item));
 
   std::unique_ptr<views::Widget> widget(CreateTestWidget(
       nullptr, kShellWindowId_DefaultContainer, gfx::Rect(0, 0, 100, 100)));
@@ -523,13 +509,7 @@ TEST_F(SystemTrayTest, PersistentBubble) {
   EXPECT_TRUE(tray->HasSystemBubble());
 }
 
-#if defined(OS_CHROMEOS)
-// Accessibility/Settings tray items are available only on cros.
-#define MAYBE_WithSystemModal WithSystemModal
-#else
-#define MAYBE_WithSystemModal DISABLED_WithSystemModal
-#endif
-TEST_F(SystemTrayTest, MAYBE_WithSystemModal) {
+TEST_F(SystemTrayTest, WithSystemModal) {
   // Check if the accessibility item is created even with system modal dialog.
   WmShell::Get()->accessibility_delegate()->SetVirtualKeyboardEnabled(true);
   std::unique_ptr<views::Widget> widget(CreateTestWidget(
@@ -589,7 +569,6 @@ TEST_F(SystemTrayTest, SetVisibleDuringHideAnimation) {
   EXPECT_EQ(1.0f, tray->layer()->GetTargetOpacity());
 }
 
-#if defined(OS_CHROMEOS)
 // Tests that touch on an item in the system bubble triggers it to become
 // active.
 TEST_F(SystemTrayTest, TrayPopupItemContainerTouchFeedback) {
@@ -664,7 +643,6 @@ TEST_F(SystemTrayTest, SystemTrayHeightWithBubble) {
 
   EXPECT_EQ(0, notification_tray->tray_bubble_height_for_test());
 }
-#endif  // OS_CHROMEOS
 
 }  // namespace test
 }  // namespace ash

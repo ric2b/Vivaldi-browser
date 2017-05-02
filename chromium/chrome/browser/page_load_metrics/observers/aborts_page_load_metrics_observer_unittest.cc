@@ -22,7 +22,8 @@ class AbortsPageLoadMetricsObserverTest
 
   int CountTotalAbortMetricsRecorded() {
     base::HistogramTester::CountsMap counts_map =
-        histogram_tester().GetTotalCountsForPrefix("PageLoad.AbortTiming.");
+        histogram_tester().GetTotalCountsForPrefix(
+            "PageLoad.Experimental.AbortTiming.");
     int count = 0;
     for (const auto& entry : counts_map)
       count += entry.second;
@@ -93,7 +94,6 @@ TEST_F(AbortsPageLoadMetricsObserverTest, NewNavigationBeforePaint) {
   NavigateAndCommit(GURL("https://www.example.com"));
   histogram_tester().ExpectTotalCount(
       internal::kHistogramAbortNewNavigationBeforePaint, 1);
-  EXPECT_EQ(1, CountTotalAbortMetricsRecorded());
 }
 
 TEST_F(AbortsPageLoadMetricsObserverTest, ReloadBeforePaint) {
@@ -104,7 +104,6 @@ TEST_F(AbortsPageLoadMetricsObserverTest, ReloadBeforePaint) {
                                       ui::PAGE_TRANSITION_RELOAD);
   histogram_tester().ExpectTotalCount(
       internal::kHistogramAbortReloadBeforePaint, 1);
-  EXPECT_EQ(1, CountTotalAbortMetricsRecorded());
 }
 
 TEST_F(AbortsPageLoadMetricsObserverTest, ForwardBackBeforePaint) {
@@ -117,7 +116,6 @@ TEST_F(AbortsPageLoadMetricsObserverTest, ForwardBackBeforePaint) {
                                 ui::PAGE_TRANSITION_FORWARD_BACK));
   histogram_tester().ExpectTotalCount(
       internal::kHistogramAbortForwardBackBeforePaint, 1);
-  EXPECT_EQ(1, CountTotalAbortMetricsRecorded());
 }
 
 TEST_F(AbortsPageLoadMetricsObserverTest, BackgroundBeforePaint) {

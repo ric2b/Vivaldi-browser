@@ -26,6 +26,10 @@ class SyncClient;
 class SyncService;
 }  // namespace syncer
 
+namespace vivaldi {
+class VivaldiSyncManagerFactory;
+}
+
 class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
  public:
   typedef base::Callback<std::unique_ptr<syncer::SyncClient>(Profile*)>
@@ -46,6 +50,7 @@ class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
 
  private:
   friend struct base::DefaultSingletonTraits<ProfileSyncServiceFactory>;
+  friend vivaldi::VivaldiSyncManagerFactory;
 
   ProfileSyncServiceFactory();
   ~ProfileSyncServiceFactory() override;

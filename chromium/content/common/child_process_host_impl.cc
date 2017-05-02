@@ -26,7 +26,6 @@
 #include "content/public/common/child_process_host_delegate.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
-#include "gpu/ipc/client/gpu_memory_buffer_impl_shared_memory.h"
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_mojo.h"
@@ -161,6 +160,7 @@ bool ChildProcessHostImpl::InitChannel() {
 
   for (size_t i = 0; i < filters_.size(); ++i)
     filters_[i]->OnFilterAdded(channel_.get());
+  delegate_->OnChannelInitialized(channel_.get());
 
   // Make sure these messages get sent first.
 #if defined(IPC_MESSAGE_LOG_ENABLED)
@@ -243,13 +243,6 @@ bool ChildProcessHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_BEGIN_MESSAGE_MAP(ChildProcessHostImpl, msg)
       IPC_MESSAGE_HANDLER(ChildProcessHostMsg_ShutdownRequest,
                           OnShutdownRequest)
-      // NB: The SyncAllocateGpuMemoryBuffer and DeletedGpuMemoryBuffer IPCs are
-      // handled here for non-renderer child processes. For renderer processes,
-      // they are handled in RenderMessageFilter.
-      IPC_MESSAGE_HANDLER(ChildProcessHostMsg_SyncAllocateGpuMemoryBuffer,
-                          OnAllocateGpuMemoryBuffer)
-      IPC_MESSAGE_HANDLER(ChildProcessHostMsg_DeletedGpuMemoryBuffer,
-                          OnDeletedGpuMemoryBuffer)
       IPC_MESSAGE_UNHANDLED(handled = false)
     IPC_END_MESSAGE_MAP()
 
@@ -295,31 +288,6 @@ void ChildProcessHostImpl::OnBadMessageReceived(const IPC::Message& message) {
 void ChildProcessHostImpl::OnShutdownRequest() {
   if (delegate_->CanShutdown())
     Send(new ChildProcessMsg_Shutdown());
-}
-
-void ChildProcessHostImpl::OnAllocateGpuMemoryBuffer(
-    gfx::GpuMemoryBufferId id,
-    uint32_t width,
-    uint32_t height,
-    gfx::BufferFormat format,
-    gfx::BufferUsage usage,
-    gfx::GpuMemoryBufferHandle* handle) {
-  // TODO(reveman): Add support for other types of GpuMemoryBuffers.
-
-  // AllocateForChildProcess() will check if |width| and |height| are valid
-  // and handle failure in a controlled way when not. We just need to make
-  // sure |usage| is supported here.
-  if (gpu::GpuMemoryBufferImplSharedMemory::IsUsageSupported(usage)) {
-    *handle = gpu::GpuMemoryBufferImplSharedMemory::AllocateForChildProcess(
-        id, gfx::Size(width, height), format);
-  }
-}
-
-void ChildProcessHostImpl::OnDeletedGpuMemoryBuffer(
-    gfx::GpuMemoryBufferId id,
-    const gpu::SyncToken& sync_token) {
-  // Note: Nothing to do here as ownership of shared memory backed
-  // GpuMemoryBuffers is passed with IPC.
 }
 
 }  // namespace content

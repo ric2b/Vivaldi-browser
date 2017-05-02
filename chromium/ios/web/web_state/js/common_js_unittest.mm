@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
-#include <Foundation/Foundation.h>
+#import <Foundation/Foundation.h>
 
 #include "base/macros.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
+#import "testing/gtest_mac.h"
 
 namespace {
 

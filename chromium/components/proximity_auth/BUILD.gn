@@ -6,21 +6,15 @@ import("//testing/test.gni")
 
 static_library("proximity_auth") {
   sources = [
+    "authenticator.cc",
     "authenticator.h",
     "bluetooth_connection.cc",
     "bluetooth_connection.h",
     "bluetooth_connection_finder.cc",
     "bluetooth_connection_finder.h",
-    "bluetooth_throttler.h",
-    "bluetooth_throttler_impl.cc",
-    "bluetooth_throttler_impl.h",
     "bluetooth_util.cc",
     "bluetooth_util.h",
     "bluetooth_util_chromeos.cc",
-    "connection.cc",
-    "connection.h",
-    "connection_finder.h",
-    "connection_observer.h",
     "cryptauth_enroller_factory_impl.cc",
     "cryptauth_enroller_factory_impl.h",
     "device_to_device_authenticator.cc",
@@ -46,8 +40,6 @@ static_library("proximity_auth") {
     "proximity_monitor_impl.cc",
     "proximity_monitor_impl.h",
     "proximity_monitor_observer.h",
-    "remote_device.cc",
-    "remote_device.h",
     "remote_device_life_cycle.h",
     "remote_device_life_cycle_impl.cc",
     "remote_device_life_cycle_impl.h",
@@ -65,15 +57,14 @@ static_library("proximity_auth") {
     "throttled_bluetooth_connection_finder.h",
     "unlock_manager.cc",
     "unlock_manager.h",
-    "wire_message.cc",
-    "wire_message.h",
   ]
 
   deps = [
     "//base",
+    "//components/cryptauth",
+    "//components/cryptauth/ble",
     "//components/prefs",
     "//components/proximity_auth/ble",
-    "//components/proximity_auth/cryptauth",
     "//components/proximity_auth/logging",
     "//components/signin/core/account_id:account_id",
     "//device/bluetooth",
@@ -83,10 +74,7 @@ static_library("proximity_auth") {
   # TODO(https://crbug.com/562683): This whitelists a circular include
   # dependency between this target and the following targets which should not
   # exist.
-  allow_circular_includes_from = [
-    "//components/proximity_auth/ble",
-    "//components/proximity_auth/cryptauth",
-  ]
+  allow_circular_includes_from = [ "//components/proximity_auth/ble" ]
 
   if (is_chromeos) {
     deps += [ "//chromeos" ]
@@ -99,14 +87,10 @@ static_library("test_support") {
   sources = [
     "device_to_device_responder_operations.cc",
     "device_to_device_responder_operations.h",
-    "fake_connection.cc",
-    "fake_connection.h",
     "fake_secure_context.cc",
     "fake_secure_context.h",
     "mock_proximity_auth_client.cc",
     "mock_proximity_auth_client.h",
-    "proximity_auth_test_util.cc",
-    "proximity_auth_test_util.h",
   ]
 
   public_deps = [
@@ -115,7 +99,7 @@ static_library("test_support") {
 
   deps = [
     "//base",
-    "//components/proximity_auth/cryptauth:test_support",
+    "//components/cryptauth:test_support",
     "//components/proximity_auth/logging",
     "//testing/gmock",
   ]
@@ -126,8 +110,6 @@ source_set("unit_tests") {
   sources = [
     "bluetooth_connection_finder_unittest.cc",
     "bluetooth_connection_unittest.cc",
-    "bluetooth_throttler_impl_unittest.cc",
-    "connection_unittest.cc",
     "device_to_device_authenticator_unittest.cc",
     "device_to_device_operations_unittest.cc",
     "device_to_device_secure_context_unittest.cc",
@@ -140,7 +122,6 @@ source_set("unit_tests") {
     "remote_status_update_unittest.cc",
     "throttled_bluetooth_connection_finder_unittest.cc",
     "unlock_manager_unittest.cc",
-    "wire_message_unittest.cc",
   ]
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
@@ -150,10 +131,10 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//components/cryptauth:test_support",
+    "//components/cryptauth:unit_tests",
     "//components/prefs:test_support",
     "//components/proximity_auth/ble:unit_tests",
-    "//components/proximity_auth/cryptauth:test_support",
-    "//components/proximity_auth/cryptauth:unit_tests",
     "//components/proximity_auth/logging",
     "//components/proximity_auth/logging:unit_tests",
     "//device/bluetooth:mocks",

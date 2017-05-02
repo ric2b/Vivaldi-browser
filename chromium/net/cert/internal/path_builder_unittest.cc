@@ -5,18 +5,14 @@
 #include "net/cert/internal/path_builder.h"
 
 #include "base/base_paths.h"
-#include "base/cancelable_callback.h"
 #include "base/files/file_util.h"
-#include "base/location.h"
 #include "base/path_service.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "net/base/test_completion_callback.h"
 #include "net/cert/internal/cert_issuer_source_static.h"
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/signature_policy.h"
 #include "net/cert/internal/test_helpers.h"
+#include "net/cert/internal/trust_store_collection.h"
 #include "net/cert/internal/trust_store_in_memory.h"
-#include "net/cert/internal/trust_store_test_helpers.h"
 #include "net/cert/internal/verify_certificate_chain.h"
 #include "net/cert/pem_tokenizer.h"
 #include "net/der/input.h"
@@ -44,32 +40,17 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
  public:
   class StaticAsyncRequest : public Request {
    public:
-    StaticAsyncRequest(const IssuerCallback& issuers_callback,
-                       ParsedCertificateList&& issuers)
-        : cancelable_closure_(base::Bind(&StaticAsyncRequest::RunCallback,
-                                         base::Unretained(this))),
-          issuers_callback_(issuers_callback) {
+    StaticAsyncRequest(ParsedCertificateList&& issuers) {
       issuers_.swap(issuers);
       issuers_iter_ = issuers_.begin();
     }
     ~StaticAsyncRequest() override {}
 
-    CompletionStatus GetNext(
-        scoped_refptr<ParsedCertificate>* out_cert) override {
-      if (issuers_iter_ == issuers_.end())
-        *out_cert = nullptr;
-      else
-        *out_cert = std::move(*issuers_iter_++);
-      return CompletionStatus::SYNC;
+    void GetNext(ParsedCertificateList* out_certs) override {
+      if (issuers_iter_ != issuers_.end())
+        out_certs->push_back(std::move(*issuers_iter_++));
     }
 
-    base::Closure callback() { return cancelable_closure_.callback(); }
-
-   private:
-    void RunCallback() { issuers_callback_.Run(this); }
-
-    base::CancelableClosure cancelable_closure_;
-    IssuerCallback issuers_callback_;
     ParsedCertificateList issuers_;
     ParsedCertificateList::iterator issuers_iter_;
 
@@ -85,14 +66,12 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
   void SyncGetIssuersOf(const ParsedCertificate* cert,
                         ParsedCertificateList* issuers) override {}
   void AsyncGetIssuersOf(const ParsedCertificate* cert,
-                         const IssuerCallback& issuers_callback,
                          std::unique_ptr<Request>* out_req) override {
     num_async_gets_++;
     ParsedCertificateList issuers;
     static_cert_issuer_source_.SyncGetIssuersOf(cert, &issuers);
     std::unique_ptr<StaticAsyncRequest> req(
-        new StaticAsyncRequest(issuers_callback, std::move(issuers)));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, req->callback());
+        new StaticAsyncRequest(std::move(issuers)));
     *out_req = std::move(req);
   }
   int num_async_gets() const { return num_async_gets_; }
@@ -129,21 +108,6 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
            << errors.ToDebugString();
   }
   return ::testing::AssertionSuccess();
-}
-
-// Run the path builder, and wait for async completion if necessary. The return
-// value signifies whether the path builder completed synchronously or
-// asynchronously, not that RunPathBuilder itself is asynchronous.
-CompletionStatus RunPathBuilder(CertPathBuilder* path_builder) {
-  TestClosure callback;
-  CompletionStatus rv = path_builder->Run(callback.closure());
-
-  if (rv == CompletionStatus::ASYNC) {
-    DVLOG(1) << "waiting for async completion...";
-    callback.WaitForResult();
-    DVLOG(1) << "async completed.";
-  }
-  return rv;
 }
 
 class PathBuilderMultiRootTest : public ::testing::Test {
@@ -194,7 +158,7 @@ TEST_F(PathBuilderMultiRootTest, TargetHasNameAndSpkiOfTrustAnchor) {
   CertPathBuilder path_builder(a_by_b_, &trust_store, &signature_policy_, time_,
                                &result);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   ASSERT_TRUE(result.HasValidPath());
   const auto& path = result.GetBestValidPath()->path;
@@ -214,7 +178,7 @@ TEST_F(PathBuilderMultiRootTest, TargetWithSameNameAsTrustAnchorFails) {
   CertPathBuilder path_builder(a_by_b_, &trust_store, &signature_policy_, time_,
                                &result);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_FALSE(result.HasValidPath());
 }
@@ -245,7 +209,7 @@ TEST_F(PathBuilderMultiRootTest, SelfSignedTrustAnchorSupplementalCert) {
                                expired_time, &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_FALSE(result.HasValidPath());
   ASSERT_EQ(2U, result.paths.size());
@@ -277,7 +241,7 @@ TEST_F(PathBuilderMultiRootTest, TargetIsSelfSignedTrustAnchor) {
   CertPathBuilder path_builder(e_by_e_, &trust_store, &signature_policy_, time_,
                                &result);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   ASSERT_TRUE(result.HasValidPath());
   const auto& path = result.GetBestValidPath()->path;
@@ -296,7 +260,7 @@ TEST_F(PathBuilderMultiRootTest, TargetDirectlySignedByTrustAnchor) {
   CertPathBuilder path_builder(a_by_b_, &trust_store, &signature_policy_, time_,
                                &result);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   ASSERT_TRUE(result.HasValidPath());
   const auto& path = result.GetBestValidPath()->path;
@@ -325,32 +289,9 @@ TEST_F(PathBuilderMultiRootTest, TriesSyncFirst) {
   path_builder.AddCertIssuerSource(&async_certs);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
-  EXPECT_EQ(0, async_certs.num_async_gets());
-}
-
-// Test that async cert queries are not made if no callback is provided.
-TEST_F(PathBuilderMultiRootTest, SychronousOnlyMode) {
-  TrustStoreInMemory trust_store;
-  AddTrustedCertificate(e_by_e_, &trust_store);
-
-  CertIssuerSourceStatic sync_certs;
-  sync_certs.AddCert(f_by_e_);
-
-  AsyncCertIssuerSourceStatic async_certs;
-  async_certs.AddCert(b_by_f_);
-
-  CertPathBuilder::Result result;
-  CertPathBuilder path_builder(a_by_b_, &trust_store, &signature_policy_, time_,
-                               &result);
-  path_builder.AddCertIssuerSource(&async_certs);
-  path_builder.AddCertIssuerSource(&sync_certs);
-
-  EXPECT_EQ(CompletionStatus::SYNC, path_builder.Run(base::Closure()));
-
-  EXPECT_FALSE(result.HasValidPath());
   EXPECT_EQ(0, async_certs.num_async_gets());
 }
 
@@ -377,7 +318,7 @@ TEST_F(PathBuilderMultiRootTest, TestAsyncSimultaneous) {
   path_builder.AddCertIssuerSource(&async_certs2);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
   EXPECT_EQ(1, async_certs1.num_async_gets());
@@ -402,7 +343,7 @@ TEST_F(PathBuilderMultiRootTest, TestLongChain) {
                                &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   ASSERT_TRUE(result.HasValidPath());
 
@@ -436,7 +377,7 @@ TEST_F(PathBuilderMultiRootTest, TestBacktracking) {
   path_builder.AddCertIssuerSource(&sync_certs);
   path_builder.AddCertIssuerSource(&async_certs);
 
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   ASSERT_TRUE(result.HasValidPath());
 
@@ -474,7 +415,7 @@ TEST_F(PathBuilderMultiRootTest, TestCertIssuerOrdering) {
                                  time_, &result);
     path_builder.AddCertIssuerSource(&sync_certs);
 
-    EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+    path_builder.Run();
 
     ASSERT_TRUE(result.HasValidPath());
 
@@ -558,7 +499,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestRolloverOnlyOldRootTrusted) {
                                &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
 
@@ -606,7 +547,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestRolloverBothRootsTrusted) {
                                &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
 
@@ -630,141 +571,39 @@ TEST_F(PathBuilderKeyRolloverTest, TestRolloverBothRootsTrusted) {
   }
 }
 
-// If trust anchors are provided both synchronously and asynchronously for the
-// same cert, the synchronously provided ones should be tried first, and
-// pathbuilder should finish synchronously.
-TEST_F(PathBuilderKeyRolloverTest, TestSyncAnchorsPreferred) {
-  TrustStoreInMemoryAsync trust_store;
-  // Both oldintermediate and newintermediate are trusted, but oldintermediate
-  // is returned synchronously and newintermediate asynchronously.
-  trust_store.AddSyncTrustAnchor(
-      TrustAnchor::CreateFromCertificateNoConstraints(oldintermediate_));
-  trust_store.AddAsyncTrustAnchor(
-      TrustAnchor::CreateFromCertificateNoConstraints(newintermediate_));
-
-  CertPathBuilder::Result result;
-  CertPathBuilder path_builder(target_, &trust_store, &signature_policy_, time_,
-                               &result);
-
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
-
-  EXPECT_TRUE(result.HasValidPath());
-
-  ASSERT_EQ(1U, result.paths.size());
-  const auto& path = result.paths[0]->path;
-  EXPECT_TRUE(result.paths[0]->valid);
-  ASSERT_EQ(1U, path.certs.size());
-  EXPECT_EQ(target_, path.certs[0]);
-  EXPECT_EQ(oldintermediate_, path.trust_anchor->cert());
-}
-
-// Async trust anchor checks should be done before synchronous issuer checks are
-// considered. (Avoiding creating unnecessarily long paths.)
-//
-// Two valid paths could be built:
-// newintermediate <- newrootrollover <- oldroot
-// newintermediate <- newroot
-// One invalid path could be built:
-// newintermediate <- oldroot
-//
-// First: newintermediate <- oldroot will be tried, since oldroot is
-// available synchronously, but this path will not verify.
-// Second: newintermediate <- newroot should be built, even though
-// newrootrollover issuer is available synchronously and newroot is async. This
-// path should verify and pathbuilder will stop.
-TEST_F(PathBuilderKeyRolloverTest, TestAsyncAnchorsBeforeSyncIssuers) {
-  TrustStoreInMemoryAsync trust_store;
-  trust_store.AddSyncTrustAnchor(oldroot_);
-  trust_store.AddAsyncTrustAnchor(
-      TrustAnchor::CreateFromCertificateNoConstraints(newroot_));
-
-  CertIssuerSourceStatic sync_certs;
-  sync_certs.AddCert(newrootrollover_);
-
-  CertPathBuilder::Result result;
-  CertPathBuilder path_builder(newintermediate_, &trust_store,
-                               &signature_policy_, time_, &result);
-  path_builder.AddCertIssuerSource(&sync_certs);
-
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
-
-  EXPECT_TRUE(result.HasValidPath());
-
-  ASSERT_EQ(2U, result.paths.size());
-  {
-    const auto& path = result.paths[0]->path;
-    EXPECT_FALSE(result.paths[0]->valid);
-    ASSERT_EQ(1U, path.certs.size());
-    EXPECT_EQ(newintermediate_, path.certs[0]);
-    EXPECT_EQ(oldroot_, path.trust_anchor);
-  }
-  {
-    const auto& path = result.paths[1]->path;
-    EXPECT_TRUE(result.paths[1]->valid);
-    ASSERT_EQ(1U, path.certs.size());
-    EXPECT_EQ(newintermediate_, path.certs[0]);
-    EXPECT_EQ(newroot_, path.trust_anchor->cert());
-  }
-}
-
-// If async trust anchor query returned no results, and there are no issuer
+// If trust anchor query returned no results, and there are no issuer
 // sources, path building should fail at that point.
-TEST_F(PathBuilderKeyRolloverTest, TestAsyncAnchorsNoMatchAndNoIssuerSources) {
-  TrustStoreInMemoryAsync trust_store;
-  trust_store.AddAsyncTrustAnchor(
+TEST_F(PathBuilderKeyRolloverTest, TestAnchorsNoMatchAndNoIssuerSources) {
+  TrustStoreInMemory trust_store;
+  trust_store.AddTrustAnchor(
       TrustAnchor::CreateFromCertificateNoConstraints(newroot_));
 
   CertPathBuilder::Result result;
   CertPathBuilder path_builder(target_, &trust_store, &signature_policy_, time_,
                                &result);
 
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_FALSE(result.HasValidPath());
 
   ASSERT_EQ(0U, result.paths.size());
 }
 
-// Both trust store and issuer source are async. Should successfully build a
-// path.
-TEST_F(PathBuilderKeyRolloverTest, TestAsyncAnchorsAndAsyncIssuers) {
-  TrustStoreInMemoryAsync trust_store;
-  trust_store.AddAsyncTrustAnchor(
-      TrustAnchor::CreateFromCertificateNoConstraints(newroot_));
-
-  AsyncCertIssuerSourceStatic async_certs;
-  async_certs.AddCert(newintermediate_);
-
-  CertPathBuilder::Result result;
-  CertPathBuilder path_builder(target_, &trust_store, &signature_policy_, time_,
-                               &result);
-  path_builder.AddCertIssuerSource(&async_certs);
-
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
-
-  EXPECT_TRUE(result.HasValidPath());
-
-  ASSERT_EQ(1U, result.paths.size());
-  const auto& path = result.paths[0]->path;
-  EXPECT_TRUE(result.paths[0]->valid);
-  ASSERT_EQ(2U, path.certs.size());
-  EXPECT_EQ(target_, path.certs[0]);
-  EXPECT_EQ(newintermediate_, path.certs[1]);
-  EXPECT_EQ(newroot_, path.trust_anchor->cert());
-}
-
 // Tests that multiple trust root matches on a single path will be considered.
 // Both roots have the same subject but different keys. Only one of them will
 // verify.
 TEST_F(PathBuilderKeyRolloverTest, TestMultipleRootMatchesOnlyOneWorks) {
-  TrustStoreInMemoryAsync trust_store;
-  // Since FindTrustAnchorsByNormalizedName returns newroot synchronously, it
-  // should be tried first.
-  trust_store.AddSyncTrustAnchor(
+  TrustStoreCollection trust_store_collection;
+  TrustStoreInMemory trust_store1;
+  TrustStoreInMemory trust_store2;
+  trust_store_collection.AddTrustStore(&trust_store1);
+  trust_store_collection.AddTrustStore(&trust_store2);
+  // Add two trust anchors (newroot_ and oldroot_). Path building will attempt
+  // them in this same order, as trust_store1 was added to
+  // trust_store_collection first.
+  trust_store1.AddTrustAnchor(
       TrustAnchor::CreateFromCertificateNoConstraints(newroot_));
-  // oldroot is returned asynchronously, so it should only be tried after the
-  // path built with newroot fails.
-  trust_store.AddAsyncTrustAnchor(oldroot_);
+  trust_store2.AddTrustAnchor(oldroot_);
 
   // Only oldintermediate is supplied, so the path with newroot should fail,
   // oldroot should succeed.
@@ -772,11 +611,11 @@ TEST_F(PathBuilderKeyRolloverTest, TestMultipleRootMatchesOnlyOneWorks) {
   sync_certs.AddCert(oldintermediate_);
 
   CertPathBuilder::Result result;
-  CertPathBuilder path_builder(target_, &trust_store, &signature_policy_, time_,
-                               &result);
+  CertPathBuilder path_builder(target_, &trust_store_collection,
+                               &signature_policy_, time_, &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
   ASSERT_EQ(2U, result.paths.size());
@@ -827,7 +666,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestRolloverLongChain) {
   path_builder.AddCertIssuerSource(&sync_certs);
   path_builder.AddCertIssuerSource(&async_certs);
 
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
   ASSERT_EQ(3U, result.paths.size());
@@ -882,7 +721,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestEndEntityIsTrustRoot) {
   CertPathBuilder path_builder(newintermediate_, &trust_store,
                                &signature_policy_, time_, &result);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_FALSE(result.HasValidPath());
 }
@@ -907,7 +746,7 @@ TEST_F(PathBuilderKeyRolloverTest,
                                time_, &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   // This could actually be OK, but CertPathBuilder does not build the
   // newroot <- newrootrollover <- oldroot path.
@@ -927,7 +766,7 @@ TEST_F(PathBuilderKeyRolloverTest,
   CertPathBuilder path_builder(newroot_, &trust_store, &signature_policy_,
                                time_, &result);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   ASSERT_TRUE(result.HasValidPath());
 
@@ -975,7 +814,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediates) {
   path_builder.AddCertIssuerSource(&sync_certs2);
   path_builder.AddCertIssuerSource(&async_certs);
 
-  EXPECT_EQ(CompletionStatus::ASYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_TRUE(result.HasValidPath());
   ASSERT_EQ(2U, result.paths.size());
@@ -1024,7 +863,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediateAndRoot) {
                                &result);
   path_builder.AddCertIssuerSource(&sync_certs);
 
-  EXPECT_EQ(CompletionStatus::SYNC, RunPathBuilder(&path_builder));
+  path_builder.Run();
 
   EXPECT_FALSE(result.HasValidPath());
   ASSERT_EQ(2U, result.paths.size());
@@ -1044,17 +883,15 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediateAndRoot) {
 
 class MockCertIssuerSourceRequest : public CertIssuerSource::Request {
  public:
-  MOCK_METHOD1(GetNext, CompletionStatus(scoped_refptr<ParsedCertificate>*));
+  MOCK_METHOD1(GetNext, void(ParsedCertificateList*));
 };
 
 class MockCertIssuerSource : public CertIssuerSource {
  public:
   MOCK_METHOD2(SyncGetIssuersOf,
                void(const ParsedCertificate*, ParsedCertificateList*));
-  MOCK_METHOD3(AsyncGetIssuersOf,
-               void(const ParsedCertificate*,
-                    const IssuerCallback&,
-                    std::unique_ptr<Request>*));
+  MOCK_METHOD2(AsyncGetIssuersOf,
+               void(const ParsedCertificate*, std::unique_ptr<Request>*));
 };
 
 // Helper class to pass the Request to the PathBuilder when it calls
@@ -1065,7 +902,6 @@ class CertIssuerSourceRequestMover {
   CertIssuerSourceRequestMover(std::unique_ptr<CertIssuerSource::Request> req)
       : request_(std::move(req)) {}
   void MoveIt(const ParsedCertificate* cert,
-              const CertIssuerSource::IssuerCallback& issuers_callback,
               std::unique_ptr<CertIssuerSource::Request>* out_req) {
     *out_req = std::move(request_);
   }
@@ -1074,10 +910,23 @@ class CertIssuerSourceRequestMover {
   std::unique_ptr<CertIssuerSource::Request> request_;
 };
 
+// Functor that when called with a ParsedCertificateList* will append the
+// specified certificate.
+class AppendCertToList {
+ public:
+  explicit AppendCertToList(const scoped_refptr<ParsedCertificate>& cert)
+      : cert_(cert) {}
+
+  void operator()(ParsedCertificateList* out) { out->push_back(cert_); }
+
+ private:
+  scoped_refptr<ParsedCertificate> cert_;
+};
+
 // Test that a single CertIssuerSource returning multiple async batches of
 // issuers is handled correctly. Due to the StrictMocks, it also tests that path
 // builder does not request issuers of certs that it shouldn't.
-TEST_F(PathBuilderKeyRolloverTest, TestMultipleAsyncCallbacksFromSingleSource) {
+TEST_F(PathBuilderKeyRolloverTest, TestMultipleAsyncIssuersFromSingleSource) {
   StrictMock<MockCertIssuerSource> cert_issuer_source;
 
   // Only newroot is a trusted root.
@@ -1089,7 +938,6 @@ TEST_F(PathBuilderKeyRolloverTest, TestMultipleAsyncCallbacksFromSingleSource) {
                                &result);
   path_builder.AddCertIssuerSource(&cert_issuer_source);
 
-  CertIssuerSource::IssuerCallback target_issuers_callback;
   // Create the mock CertIssuerSource::Request...
   std::unique_ptr<StrictMock<MockCertIssuerSourceRequest>>
       target_issuers_req_owner(new StrictMock<MockCertIssuerSourceRequest>());
@@ -1102,26 +950,15 @@ TEST_F(PathBuilderKeyRolloverTest, TestMultipleAsyncCallbacksFromSingleSource) {
   {
     ::testing::InSequence s;
     EXPECT_CALL(cert_issuer_source, SyncGetIssuersOf(target_.get(), _));
-    EXPECT_CALL(cert_issuer_source, AsyncGetIssuersOf(target_.get(), _, _))
-        .WillOnce(
-            DoAll(SaveArg<1>(&target_issuers_callback),
-                  Invoke(&req_mover, &CertIssuerSourceRequestMover::MoveIt)));
+    EXPECT_CALL(cert_issuer_source, AsyncGetIssuersOf(target_.get(), _))
+        .WillOnce(Invoke(&req_mover, &CertIssuerSourceRequestMover::MoveIt));
   }
 
-  TestClosure callback;
-  CompletionStatus rv = path_builder.Run(callback.closure());
-  ASSERT_EQ(CompletionStatus::ASYNC, rv);
-
-  ASSERT_FALSE(target_issuers_callback.is_null());
-
-  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
-
-  // First async batch: return oldintermediate_.
   EXPECT_CALL(*target_issuers_req, GetNext(_))
-      .WillOnce(DoAll(SetArgPointee<0>(oldintermediate_),
-                      Return(CompletionStatus::SYNC)))
-      .WillOnce(
-          DoAll(SetArgPointee<0>(nullptr), Return(CompletionStatus::ASYNC)));
+      // First async batch: return oldintermediate_.
+      .WillOnce(Invoke(AppendCertToList(oldintermediate_)))
+      // Second async batch: return newintermediate_.
+      .WillOnce(Invoke(AppendCertToList(newintermediate_)));
   {
     ::testing::InSequence s;
     // oldintermediate_ does not create a valid path, so both sync and async
@@ -1129,29 +966,20 @@ TEST_F(PathBuilderKeyRolloverTest, TestMultipleAsyncCallbacksFromSingleSource) {
     EXPECT_CALL(cert_issuer_source,
                 SyncGetIssuersOf(oldintermediate_.get(), _));
     EXPECT_CALL(cert_issuer_source,
-                AsyncGetIssuersOf(oldintermediate_.get(), _, _));
+                AsyncGetIssuersOf(oldintermediate_.get(), _));
   }
-  target_issuers_callback.Run(target_issuers_req);
-  ::testing::Mock::VerifyAndClearExpectations(target_issuers_req);
-  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
 
-  // Second async batch: return newintermediate_.
-  EXPECT_CALL(*target_issuers_req, GetNext(_))
-      .WillOnce(DoAll(SetArgPointee<0>(newintermediate_),
-                      Return(CompletionStatus::SYNC)))
-      .WillOnce(
-          DoAll(SetArgPointee<0>(nullptr), Return(CompletionStatus::ASYNC)));
   // newroot_ is in the trust store, so this path will be completed
   // synchronously. AsyncGetIssuersOf will not be called on newintermediate_.
   EXPECT_CALL(cert_issuer_source, SyncGetIssuersOf(newintermediate_.get(), _));
-  target_issuers_callback.Run(target_issuers_req);
+
+  // Ensure pathbuilder finished and filled result.
+  path_builder.Run();
+
   // Note that VerifyAndClearExpectations(target_issuers_req) is not called
   // here. PathBuilder could have destroyed it already, so just let the
   // expectations get checked by the destructor.
   ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
-
-  // Ensure pathbuilder finished and filled result.
-  callback.WaitForResult();
 
   EXPECT_TRUE(result.HasValidPath());
   ASSERT_EQ(2U, result.paths.size());
@@ -1189,7 +1017,6 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateAsyncIntermediates) {
                                &result);
   path_builder.AddCertIssuerSource(&cert_issuer_source);
 
-  CertIssuerSource::IssuerCallback target_issuers_callback;
   // Create the mock CertIssuerSource::Request...
   std::unique_ptr<StrictMock<MockCertIssuerSourceRequest>>
       target_issuers_req_owner(new StrictMock<MockCertIssuerSourceRequest>());
@@ -1202,26 +1029,22 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateAsyncIntermediates) {
   {
     ::testing::InSequence s;
     EXPECT_CALL(cert_issuer_source, SyncGetIssuersOf(target_.get(), _));
-    EXPECT_CALL(cert_issuer_source, AsyncGetIssuersOf(target_.get(), _, _))
-        .WillOnce(
-            DoAll(SaveArg<1>(&target_issuers_callback),
-                  Invoke(&req_mover, &CertIssuerSourceRequestMover::MoveIt)));
+    EXPECT_CALL(cert_issuer_source, AsyncGetIssuersOf(target_.get(), _))
+        .WillOnce(Invoke(&req_mover, &CertIssuerSourceRequestMover::MoveIt));
   }
 
-  TestClosure callback;
-  CompletionStatus rv = path_builder.Run(callback.closure());
-  ASSERT_EQ(CompletionStatus::ASYNC, rv);
+  scoped_refptr<ParsedCertificate> oldintermediate_dupe(
+      ParsedCertificate::Create(oldintermediate_->der_cert().AsStringPiece(),
+                                {}, nullptr));
 
-  ASSERT_FALSE(target_issuers_callback.is_null());
-
-  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
-
-  // First async batch: return oldintermediate_.
   EXPECT_CALL(*target_issuers_req, GetNext(_))
-      .WillOnce(DoAll(SetArgPointee<0>(oldintermediate_),
-                      Return(CompletionStatus::SYNC)))
-      .WillOnce(
-          DoAll(SetArgPointee<0>(nullptr), Return(CompletionStatus::ASYNC)));
+      // First async batch: return oldintermediate_.
+      .WillOnce(Invoke(AppendCertToList(oldintermediate_)))
+      // Second async batch: return a different copy of oldintermediate_ again.
+      .WillOnce(Invoke(AppendCertToList(oldintermediate_dupe)))
+      // Third async batch: return newintermediate_.
+      .WillOnce(Invoke(AppendCertToList(newintermediate_)));
+
   {
     ::testing::InSequence s;
     // oldintermediate_ does not create a valid path, so both sync and async
@@ -1229,44 +1052,17 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateAsyncIntermediates) {
     EXPECT_CALL(cert_issuer_source,
                 SyncGetIssuersOf(oldintermediate_.get(), _));
     EXPECT_CALL(cert_issuer_source,
-                AsyncGetIssuersOf(oldintermediate_.get(), _, _));
+                AsyncGetIssuersOf(oldintermediate_.get(), _));
   }
-  target_issuers_callback.Run(target_issuers_req);
-  ::testing::Mock::VerifyAndClearExpectations(target_issuers_req);
-  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
 
-  // Second async batch: return a different copy of oldintermediate_ again.
-  scoped_refptr<ParsedCertificate> oldintermediate_dupe(
-      ParsedCertificate::Create(oldintermediate_->der_cert().AsStringPiece(),
-                                {}, nullptr));
-  EXPECT_CALL(*target_issuers_req, GetNext(_))
-      .WillOnce(DoAll(SetArgPointee<0>(oldintermediate_dupe),
-                      Return(CompletionStatus::SYNC)))
-      .WillOnce(
-          DoAll(SetArgPointee<0>(nullptr), Return(CompletionStatus::ASYNC)));
-  target_issuers_callback.Run(target_issuers_req);
-  // oldintermediate was already processed above, it should not generate any
-  // more requests.
-  ::testing::Mock::VerifyAndClearExpectations(target_issuers_req);
-  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
-
-  // Third async batch: return newintermediate_.
-  EXPECT_CALL(*target_issuers_req, GetNext(_))
-      .WillOnce(DoAll(SetArgPointee<0>(newintermediate_),
-                      Return(CompletionStatus::SYNC)))
-      .WillOnce(
-          DoAll(SetArgPointee<0>(nullptr), Return(CompletionStatus::ASYNC)));
   // newroot_ is in the trust store, so this path will be completed
   // synchronously. AsyncGetIssuersOf will not be called on newintermediate_.
   EXPECT_CALL(cert_issuer_source, SyncGetIssuersOf(newintermediate_.get(), _));
-  target_issuers_callback.Run(target_issuers_req);
-  // Note that VerifyAndClearExpectations(target_issuers_req) is not called
-  // here. PathBuilder could have destroyed it already, so just let the
-  // expectations get checked by the destructor.
-  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
 
   // Ensure pathbuilder finished and filled result.
-  callback.WaitForResult();
+  path_builder.Run();
+
+  ::testing::Mock::VerifyAndClearExpectations(&cert_issuer_source);
 
   EXPECT_TRUE(result.HasValidPath());
   ASSERT_EQ(2U, result.paths.size());

@@ -204,7 +204,7 @@ class AssociatedInterfacePtr {
 
 // Creates an associated interface. The output |ptr| should be used locally
 // while the returned request should be passed through the message pipe endpoint
-// referred to by |associated_group| to setup the corresponding asssociated
+// referred to by |associated_group| to setup the corresponding associated
 // interface implementation at the remote side.
 //
 // NOTE: |ptr| should NOT be used to make calls before the request is sent.
@@ -212,7 +212,7 @@ class AssociatedInterfacePtr {
 // as soon as the request is sent, |ptr| is usable. There is no need to wait
 // until the request is bound to an implementation at the remote side.
 template <typename Interface>
-AssociatedInterfaceRequest<Interface> GetProxy(
+AssociatedInterfaceRequest<Interface> MakeRequest(
     AssociatedInterfacePtr<Interface>* ptr,
     AssociatedGroup* group,
     scoped_refptr<base::SingleThreadTaskRunner> runner =
@@ -226,16 +226,70 @@ AssociatedInterfaceRequest<Interface> GetProxy(
   return request;
 }
 
-// Creates an associated interface proxy which casts its messages into the void.
+// Creates an associated interface proxy in its own AssociatedGroup.
 template <typename Interface>
-void GetDummyProxyForTesting(AssociatedInterfacePtr<Interface>* proxy) {
+AssociatedInterfaceRequest<Interface> MakeRequestForTesting(
+    AssociatedInterfacePtr<Interface>* ptr,
+    scoped_refptr<base::SingleThreadTaskRunner> runner =
+        base::ThreadTaskRunnerHandle::Get()) {
   MessagePipe pipe;
-  scoped_refptr<internal::MultiplexRouter> router =
+  using internal::MultiplexRouter;
+  scoped_refptr<MultiplexRouter> router0 = new MultiplexRouter(
+      std::move(pipe.handle0), MultiplexRouter::MULTI_INTERFACE, true, runner);
+  scoped_refptr<MultiplexRouter> router1 = new MultiplexRouter(
+      std::move(pipe.handle1), MultiplexRouter::MULTI_INTERFACE, false, runner);
+
+  AssociatedInterfacePtrInfo<Interface> ptr_info;
+  AssociatedInterfaceRequest<Interface> request;
+  router1->CreateAssociatedGroup()->CreateAssociatedInterface(
+      AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
+
+  // Emulate passing |ptr_info| across a pipe.
+  ScopedInterfaceEndpointHandle handle = ptr_info.PassHandle();
+  DCHECK(!handle.is_local());
+  ptr->Bind(AssociatedInterfacePtrInfo<Interface>(
+                router0->CreateLocalEndpointHandle(handle.release()),
+                ptr_info.version()),
+            std::move(runner));
+
+  return request;
+}
+
+// Like |GetProxy|, but the interface is never associated with any other
+// interface. The returned request can be bound directly to the corresponding
+// associated interface implementation, without first passing it through a
+// message pipe endpoint.
+//
+// This function has two main uses:
+//
+//  * In testing, where the returned request is bound to e.g. a mock and there
+//    are no other interfaces involved.
+//
+//  * When discarding messages sent on an interface, which can be done by
+//    discarding the returned request.
+template <typename Interface>
+AssociatedInterfaceRequest<Interface> GetIsolatedProxy(
+    AssociatedInterfacePtr<Interface>* ptr) {
+  MessagePipe pipe;
+  scoped_refptr<internal::MultiplexRouter> router0 =
       new internal::MultiplexRouter(std::move(pipe.handle0),
                                     internal::MultiplexRouter::MULTI_INTERFACE,
                                     false, base::ThreadTaskRunnerHandle::Get());
-  std::unique_ptr<AssociatedGroup> group = router->CreateAssociatedGroup();
-  GetProxy(proxy, group.get());
+  scoped_refptr<internal::MultiplexRouter> router1 =
+      new internal::MultiplexRouter(std::move(pipe.handle1),
+                                    internal::MultiplexRouter::MULTI_INTERFACE,
+                                    true, base::ThreadTaskRunnerHandle::Get());
+
+  ScopedInterfaceEndpointHandle endpoint0, endpoint1;
+  router0->CreateEndpointHandlePair(&endpoint0, &endpoint1);
+  endpoint1 = router1->CreateLocalEndpointHandle(endpoint1.release());
+
+  ptr->Bind(AssociatedInterfacePtrInfo<Interface>(std::move(endpoint0),
+                                                  Interface::Version_));
+
+  AssociatedInterfaceRequest<Interface> request;
+  request.Bind(std::move(endpoint1));
+  return request;
 }
 
 }  // namespace mojo

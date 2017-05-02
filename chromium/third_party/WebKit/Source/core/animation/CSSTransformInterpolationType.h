@@ -16,12 +16,8 @@ class CSSTransformInterpolationType : public CSSInterpolationType {
     DCHECK_EQ(cssProperty(), CSSPropertyTransform);
   }
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
-  InterpolationValue maybeConvertSingle(const PropertySpecificKeyframe&,
-                                        const InterpolationEnvironment&,
-                                        const InterpolationValue& underlying,
-                                        ConversionCheckers&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const StyleResolverState&) const final;
   PairwiseInterpolationValue maybeMergeSingles(
       InterpolationValue&& start,
       InterpolationValue&& end) const final;
@@ -29,9 +25,9 @@ class CSSTransformInterpolationType : public CSSInterpolationType {
                  double underlyingFraction,
                  const InterpolationValue&,
                  double interpolationFraction) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   InterpolationValue maybeConvertNeutral(const InterpolationValue& underlying,
@@ -43,6 +39,7 @@ class CSSTransformInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertValue(const CSSValue&,
                                        const StyleResolverState&,
                                        ConversionCheckers&) const final;
+  void additiveKeyframeHook(InterpolationValue&) const final;
 };
 
 }  // namespace blink

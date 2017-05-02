@@ -41,11 +41,12 @@ namespace blink {
 
 class WebDataConsumerHandle;
 class WebServiceWorkerRequest;
-class WebServiceWorkerResponse;
 class WebString;
 struct WebNotificationData;
+struct WebPaymentAppRequestData;
 struct WebServiceWorkerClientInfo;
 struct WebServiceWorkerError;
+class WebURLResponse;
 
 // A proxy interface to talk to the worker's GlobalScope implementation.
 // All methods of this class must be called on the worker thread.
@@ -96,9 +97,12 @@ class WebServiceWorkerContextProxy {
                                  const WebString& tag,
                                  LastChanceOption) = 0;
 
+  virtual void dispatchPaymentRequestEvent(int eventID,
+                                           const WebPaymentAppRequestData&) = 0;
+
   virtual void onNavigationPreloadResponse(
       int fetchEventID,
-      std::unique_ptr<WebServiceWorkerResponse>,
+      std::unique_ptr<WebURLResponse>,
       std::unique_ptr<WebDataConsumerHandle>) = 0;
   virtual void onNavigationPreloadError(
       int fetchEventID,

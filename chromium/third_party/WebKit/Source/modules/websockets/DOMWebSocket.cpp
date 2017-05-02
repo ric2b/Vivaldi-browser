@@ -218,8 +218,7 @@ const char* DOMWebSocket::subprotocolSeperator() {
 }
 
 DOMWebSocket::DOMWebSocket(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : SuspendableObject(context),
       m_state(kConnecting),
       m_bufferedAmount(0),
       m_consumedBufferedAmount(0),
@@ -269,7 +268,7 @@ DOMWebSocket* DOMWebSocket::create(ExecutionContext* context,
     webSocket->connect(url, protocolsVector, exceptionState);
   } else if (protocols.isString()) {
     Vector<String> protocolsVector;
-    protocolsVector.append(protocols.getAsString());
+    protocolsVector.push_back(protocols.getAsString());
     webSocket->connect(url, protocolsVector, exceptionState);
   } else {
     DCHECK(protocols.isStringSequence());
@@ -650,10 +649,10 @@ const AtomicString& DOMWebSocket::interfaceName() const {
 }
 
 ExecutionContext* DOMWebSocket::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
-void DOMWebSocket::contextDestroyed() {
+void DOMWebSocket::contextDestroyed(ExecutionContext*) {
   NETWORK_DVLOG(1) << "WebSocket " << this << " contextDestroyed()";
   m_eventQueue->contextDestroyed();
   if (m_channel) {
@@ -863,7 +862,7 @@ DEFINE_TRACE(DOMWebSocket) {
   visitor->trace(m_eventQueue);
   WebSocketChannelClient::trace(visitor);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

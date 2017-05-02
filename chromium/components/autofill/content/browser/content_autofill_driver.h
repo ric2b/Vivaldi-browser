@@ -17,7 +17,6 @@
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
-class BrowserContext;
 class RenderFrameHost;
 struct FrameNavigateParams;
 struct LoadCommittedDetails;
@@ -84,7 +83,6 @@ class ContentAutofillDriver : public AutofillDriver,
                               const FormFieldData& field,
                               const gfx::RectF& bounding_box) override;
   void HidePopup() override;
-  void PingAck() override;
   void FocusNoLongerOnForm() override;
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override;

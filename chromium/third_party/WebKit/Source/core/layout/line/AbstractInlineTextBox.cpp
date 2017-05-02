@@ -100,7 +100,7 @@ LayoutRect AbstractInlineTextBox::localBounds() const {
   if (!m_inlineTextBox || !m_lineLayoutItem)
     return LayoutRect();
 
-  return m_inlineTextBox->calculateBoundaries();
+  return m_inlineTextBox->frameRect();
 }
 
 unsigned AbstractInlineTextBox::len() const {
@@ -114,9 +114,12 @@ AbstractInlineTextBox::Direction AbstractInlineTextBox::getDirection() const {
   if (!m_inlineTextBox || !m_lineLayoutItem)
     return LeftToRight;
 
-  if (m_lineLayoutItem.style()->isHorizontalWritingMode())
-    return (m_inlineTextBox->direction() == RTL ? RightToLeft : LeftToRight);
-  return (m_inlineTextBox->direction() == RTL ? BottomToTop : TopToBottom);
+  if (m_lineLayoutItem.style()->isHorizontalWritingMode()) {
+    return (m_inlineTextBox->direction() == TextDirection::kRtl ? RightToLeft
+                                                                : LeftToRight);
+  }
+  return (m_inlineTextBox->direction() == TextDirection::kRtl ? BottomToTop
+                                                              : TopToBottom);
 }
 
 void AbstractInlineTextBox::characterWidths(Vector<float>& widths) const {
@@ -143,7 +146,7 @@ void AbstractInlineTextBox::wordBoundaries(
   while (pos >= 0 && pos < len) {
     int next = iterator->next();
     if (isWordTextBreak(iterator))
-      words.append(WordBoundaries(pos, next));
+      words.push_back(WordBoundaries(pos, next));
     pos = next;
   }
 }

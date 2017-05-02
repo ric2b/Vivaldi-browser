@@ -7,16 +7,17 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_model_worker.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync/base/sync_prefs.h"
-#include "components/sync/driver/glue/browser_thread_model_worker.h"
-#include "components/sync/driver/glue/ui_model_worker.h"
 #include "components/sync/driver/signin_manager_wrapper.h"
+#include "components/sync/engine/browser_thread_model_worker.h"
 #include "components/sync/engine/passive_model_worker.h"
+#include "components/sync/engine/ui_model_worker.h"
 #include "net/url_request/url_request_test_util.h"
 
 namespace browser_sync {
@@ -260,7 +261,10 @@ ProfileSyncService::InitParams ProfileSyncServiceBundle::CreateBasicInitParams(
   init_params.url_request_context = url_request_context();
   init_params.debug_identifier = "dummyDebugName";
   init_params.channel = version_info::Channel::UNKNOWN;
-  init_params.blocking_pool = worker_pool_owner_.pool().get();
+  init_params.blocking_task_runner =
+      worker_pool_owner_.pool()->GetSequencedTaskRunnerWithShutdownBehavior(
+          worker_pool_owner_.pool()->GetSequenceToken(),
+          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
 
   return init_params;
 }

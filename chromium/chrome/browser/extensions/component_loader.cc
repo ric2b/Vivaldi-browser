@@ -41,6 +41,7 @@
 #include "extensions/common/extension_l10n_util.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_constants.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -170,7 +171,7 @@ std::unique_ptr<base::DictionaryValue> ComponentLoader::ParseManifest(
   JSONStringValueDeserializer deserializer(manifest_contents);
   std::unique_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
 
-  if (!manifest.get() || !manifest->IsType(base::Value::TYPE_DICTIONARY)) {
+  if (!manifest.get() || !manifest->IsType(base::Value::Type::DICTIONARY)) {
     LOG(ERROR) << "Failed to parse extension manifest.";
     return std::unique_ptr<base::DictionaryValue>();
   }
@@ -517,7 +518,7 @@ void ComponentLoader::AddDefaultComponentExtensions(
 
   AddDefaultComponentExtensionsWithBackgroundPages(skip_session_components);
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   Add(pdf_extension_util::GetManifest(),
       base::FilePath(FILE_PATH_LITERAL("pdf")));
 #endif
@@ -540,7 +541,7 @@ void ComponentLoader::AddDefaultComponentExtensionsForKioskMode(
 
   AddDefaultComponentExtensionsWithBackgroundPagesForKioskMode();
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   Add(pdf_extension_util::GetManifest(),
       base::FilePath(FILE_PATH_LITERAL("pdf")));
 #endif

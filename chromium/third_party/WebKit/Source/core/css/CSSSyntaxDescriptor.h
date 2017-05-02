@@ -9,6 +9,7 @@
 
 namespace blink {
 
+class CSSParserContext;
 class CSSValue;
 
 enum class CSSSyntaxType {
@@ -38,11 +39,13 @@ struct CSSSyntaxComponent {
   bool m_repeatable;
 };
 
-class CSSSyntaxDescriptor {
+class CORE_EXPORT CSSSyntaxDescriptor {
  public:
   CSSSyntaxDescriptor(String syntax);
 
-  const CSSValue* parse(CSSParserTokenRange, bool isAnimationTainted) const;
+  const CSSValue* parse(CSSParserTokenRange,
+                        const CSSParserContext*,
+                        bool isAnimationTainted) const;
   bool isValid() const { return !m_syntaxComponents.isEmpty(); }
   bool isTokenStream() const {
     return m_syntaxComponents.size() == 1 &&

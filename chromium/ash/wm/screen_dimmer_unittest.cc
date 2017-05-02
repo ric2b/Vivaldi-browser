@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm/window_dimmer.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/common/wm_window_user_data.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -38,7 +38,7 @@ class ScreenDimmerTest : public AshTestBase {
   aura::Window* GetDimWindow() {
     WindowDimmer* window_dimmer =
         dimmer_->window_dimmers_->Get(WmShell::Get()->GetPrimaryRootWindow());
-    return window_dimmer ? WmWindowAura::GetAuraWindow(window_dimmer->window())
+    return window_dimmer ? WmWindow::GetAuraWindow(window_dimmer->window())
                          : nullptr;
   }
 
@@ -75,13 +75,7 @@ TEST_F(ScreenDimmerTest, DimAndUndim) {
   ASSERT_EQ(nullptr, GetDimWindowLayer());
 }
 
-#if defined(OS_WIN) && !defined(USE_ASH)
-// TODO(msw): Times out on Windows. http://crbug.com/584038
-#define MAYBE_ResizeLayer DISABLED_ResizeLayer
-#else
-#define MAYBE_ResizeLayer ResizeLayer
-#endif
-TEST_F(ScreenDimmerTest, MAYBE_ResizeLayer) {
+TEST_F(ScreenDimmerTest, ResizeLayer) {
   // The dimming layer should be initially sized to cover the root window.
   dimmer_->SetDimming(true);
   ui::Layer* dimming_layer = GetDimWindowLayer();
@@ -93,7 +87,7 @@ TEST_F(ScreenDimmerTest, MAYBE_ResizeLayer) {
   // When we resize the root window, the dimming layer should be resized to
   // match.
   gfx::Rect kNewBounds(400, 300);
-  Shell::GetPrimaryRootWindow()->GetHost()->SetBounds(kNewBounds);
+  Shell::GetPrimaryRootWindow()->GetHost()->SetBoundsInPixels(kNewBounds);
   EXPECT_EQ(kNewBounds.ToString(), dimming_layer->bounds().ToString());
 }
 

@@ -17,6 +17,7 @@
 #include "core/dom/StyleEngine.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/html/imports/HTMLImportsController.h"
+#include "platform/heap/HeapCompact.h"
 #include "platform/heap/HeapPage.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
@@ -29,22 +30,27 @@ ScriptWrappableVisitor::~ScriptWrappableVisitor() {}
 void ScriptWrappableVisitor::TracePrologue() {
   // This CHECK ensures that wrapper tracing is not started from scopes
   // that forbid GC execution, e.g., constructors.
-  CHECK(!ThreadState::current()->isGCForbidden());
+  CHECK(ThreadState::current());
+  CHECK(!ThreadState::current()->isWrapperTracingForbidden());
   performCleanup();
 
-  DCHECK(!m_tracingInProgress);
-  DCHECK(!m_shouldCleanup);
-  DCHECK(m_headersToUnmark.isEmpty());
-  DCHECK(m_markingDeque.isEmpty());
-  DCHECK(m_verifierDeque.isEmpty());
+  CHECK(!m_tracingInProgress);
+  CHECK(!m_shouldCleanup);
+  CHECK(m_headersToUnmark.isEmpty());
+  CHECK(m_markingDeque.isEmpty());
+  CHECK(m_verifierDeque.isEmpty());
   m_tracingInProgress = true;
 }
 
 void ScriptWrappableVisitor::EnterFinalPause() {
-  ActiveScriptWrappable::traceActiveScriptWrappables(m_isolate, this);
+  CHECK(ThreadState::current());
+  CHECK(!ThreadState::current()->isWrapperTracingForbidden());
+  ActiveScriptWrappableBase::traceActiveScriptWrappables(m_isolate, this);
 }
 
 void ScriptWrappableVisitor::TraceEpilogue() {
+  CHECK(ThreadState::current());
+  CHECK(!ThreadState::current()->isWrapperTracingForbidden());
   DCHECK(m_markingDeque.isEmpty());
 #if DCHECK_IS_ON()
   ScriptWrappableVisitorVerifier verifier;
@@ -54,15 +60,19 @@ void ScriptWrappableVisitor::TraceEpilogue() {
 #endif
 
   m_shouldCleanup = true;
+  m_tracingInProgress = false;
   scheduleIdleLazyCleanup();
 }
 
 void ScriptWrappableVisitor::AbortTracing() {
+  CHECK(ThreadState::current());
   m_shouldCleanup = true;
+  m_tracingInProgress = false;
   performCleanup();
 }
 
 size_t ScriptWrappableVisitor::NumberOfWrappersToTrace() {
+  CHECK(ThreadState::current());
   return m_markingDeque.size();
 }
 
@@ -82,7 +92,6 @@ void ScriptWrappableVisitor::performCleanup() {
   m_markingDeque.clear();
   m_verifierDeque.clear();
   m_shouldCleanup = false;
-  m_tracingInProgress = false;
 }
 
 void ScriptWrappableVisitor::scheduleIdleLazyCleanup() {
@@ -137,7 +146,6 @@ void ScriptWrappableVisitor::performLazyCleanup(double deadlineSeconds) {
   m_markingDeque.clear();
   m_verifierDeque.clear();
   m_shouldCleanup = false;
-  m_tracingInProgress = false;
 }
 
 void ScriptWrappableVisitor::RegisterV8Reference(
@@ -163,6 +171,7 @@ void ScriptWrappableVisitor::RegisterV8Reference(
 void ScriptWrappableVisitor::RegisterV8References(
     const std::vector<std::pair<void*, void*>>&
         internalFieldsOfPotentialWrappers) {
+  CHECK(ThreadState::current());
   // TODO(hlopko): Visit the vector in the V8 instead of passing it over if
   // there is no performance impact
   for (auto& pair : internalFieldsOfPotentialWrappers) {
@@ -176,8 +185,9 @@ bool ScriptWrappableVisitor::AdvanceTracing(
   // Do not drain the marking deque in a state where we can generally not
   // perform a GC. This makes sure that TraceTraits and friends find
   // themselves in a well-defined environment, e.g., properly set up vtables.
-  DCHECK(!ThreadState::current()->isGCForbidden());
-  DCHECK(m_tracingInProgress);
+  CHECK(ThreadState::current());
+  CHECK(!ThreadState::current()->isWrapperTracingForbidden());
+  CHECK(m_tracingInProgress);
   WTF::AutoReset<bool>(&m_advancingTracing, true);
   while (actions.force_completion ==
              v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION ||
@@ -194,8 +204,12 @@ bool ScriptWrappableVisitor::markWrapperHeader(HeapObjectHeader* header) const {
   if (header->isWrapperHeaderMarked())
     return false;
 
+  // Verify that no compactable & movable objects are slated for
+  // lazy unmarking.
+  DCHECK(!HeapCompact::isCompactableArena(
+      pageFromObject(header)->arena()->arenaIndex()));
   header->markWrapperHeader();
-  m_headersToUnmark.append(header);
+  m_headersToUnmark.push_back(header);
   return true;
 }
 
@@ -233,6 +247,10 @@ void ScriptWrappableVisitor::traceWrappers(
 
 void ScriptWrappableVisitor::markWrapper(
     const v8::PersistentBase<v8::Value>* handle) const {
+  // The write barrier may try to mark a wrapper because cleanup is still
+  // delayed. Bail out in this case.
+  if (!m_tracingInProgress)
+    return;
   handle->RegisterExternalReference(m_isolate);
 }
 

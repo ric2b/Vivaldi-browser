@@ -8,12 +8,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/arc/bluetooth/bluetooth_type_converters.h"
 #include "components/arc/common/bluetooth.mojom.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
 #include "components/arc/test/fake_bluetooth_instance.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/dbus/fake_bluetooth_adapter_client.h"
@@ -22,7 +23,6 @@
 #include "device/bluetooth/dbus/fake_bluetooth_gatt_descriptor_client.h"
 #include "device/bluetooth/dbus/fake_bluetooth_gatt_service_client.h"
 #include "device/bluetooth/dbus/fake_bluetooth_le_advertising_manager_client.h"
-#include "mojo/public/cpp/bindings/array.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -89,12 +89,12 @@ class ArcBluetoothBridgeTest : public testing::Test {
     dbus_setter->SetBluetoothGattDescriptorClient(
         base::MakeUnique<bluez::FakeBluetoothGattDescriptorClient>());
 
-    fake_arc_bridge_service_.reset(new FakeArcBridgeService());
-    fake_bluetooth_instance_.reset(new FakeBluetoothInstance());
-    fake_arc_bridge_service_->bluetooth()->SetInstance(
+    arc_bridge_service_ = base::MakeUnique<ArcBridgeService>();
+    fake_bluetooth_instance_ = base::MakeUnique<FakeBluetoothInstance>();
+    arc_bridge_service_->bluetooth()->SetInstance(
         fake_bluetooth_instance_.get(), 2);
-    arc_bluetooth_bridge_.reset(
-        new ArcBluetoothBridge(fake_arc_bridge_service_.get()));
+    arc_bluetooth_bridge_ =
+        base::MakeUnique<ArcBluetoothBridge>(arc_bridge_service_.get());
 
     device::BluetoothAdapterFactory::GetAdapter(base::Bind(
         &ArcBluetoothBridgeTest::OnAdapterInitialized, base::Unretained(this)));
@@ -166,7 +166,7 @@ class ArcBluetoothBridgeTest : public testing::Test {
   int last_adv_handle_;
   mojom::BluetoothGattStatus last_status_;
 
-  std::unique_ptr<FakeArcBridgeService> fake_arc_bridge_service_;
+  std::unique_ptr<ArcBridgeService> arc_bridge_service_;
   std::unique_ptr<FakeBluetoothInstance> fake_bluetooth_instance_;
   std::unique_ptr<ArcBluetoothBridge> arc_bluetooth_bridge_;
   scoped_refptr<device::BluetoothAdapter> adapter_;
@@ -181,7 +181,7 @@ TEST_F(ArcBluetoothBridgeTest, DeviceFound) {
   EXPECT_EQ(0u, fake_bluetooth_instance_->device_found_data().size());
   AddTestDevice();
   EXPECT_EQ(2u, fake_bluetooth_instance_->device_found_data().size());
-  const mojo::Array<mojom::BluetoothPropertyPtr>& prop =
+  const std::vector<mojom::BluetoothPropertyPtr>& prop =
       fake_bluetooth_instance_->device_found_data().back();
 
   EXPECT_EQ(7u, prop.size());
@@ -208,7 +208,7 @@ TEST_F(ArcBluetoothBridgeTest, DeviceFound) {
 
   ChangeTestDeviceRssi(kTestRssi2);
   EXPECT_EQ(3u, fake_bluetooth_instance_->device_found_data().size());
-  const mojo::Array<mojom::BluetoothPropertyPtr>& prop2 =
+  const std::vector<mojom::BluetoothPropertyPtr>& prop2 =
       fake_bluetooth_instance_->device_found_data().back();
   EXPECT_EQ(7u, prop2.size());
   EXPECT_TRUE(prop2[6]->is_remote_rssi());
@@ -225,7 +225,7 @@ TEST_F(ArcBluetoothBridgeTest, LEDeviceFound) {
   const auto& le_device_found_data =
       fake_bluetooth_instance_->le_device_found_data().back();
   const mojom::BluetoothAddressPtr& addr = le_device_found_data->addr();
-  const mojo::Array<mojom::BluetoothAdvertisingDataPtr>& adv_data =
+  const std::vector<mojom::BluetoothAdvertisingDataPtr>& adv_data =
       le_device_found_data->adv_data();
 
   EXPECT_EQ(std::string(bluez::FakeBluetoothDeviceClient::kLowEnergyAddress),
@@ -234,7 +234,7 @@ TEST_F(ArcBluetoothBridgeTest, LEDeviceFound) {
 
   EXPECT_TRUE(adv_data[0]->is_local_name());
   EXPECT_EQ(std::string(bluez::FakeBluetoothDeviceClient::kLowEnergyName),
-            adv_data[0]->get_local_name().To<std::string>());
+            adv_data[0]->get_local_name());
 
   EXPECT_TRUE(adv_data[1]->is_service_uuids());
   EXPECT_EQ(1u, adv_data[1]->get_service_uuids().size());
@@ -268,7 +268,7 @@ TEST_F(ArcBluetoothBridgeTest, GetGattDB) {
   //         Descriptor: ClientCharacteristicConfiguration
   //     Characteristic: BodySensorLocation
   //     Characteristic: HeartRateControlPoint
-  const mojo::Array<mojom::BluetoothGattDBElementPtr>& db =
+  const std::vector<mojom::BluetoothGattDBElementPtr>& db =
       fake_bluetooth_instance_->gatt_db_result().back()->db();
   EXPECT_EQ(5u, db.size());
 

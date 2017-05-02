@@ -42,6 +42,9 @@
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/frame/FrameConsole.h"
+#include "core/frame/LocalFrame.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "wtf/ASCIICType.h"
 #include "wtf/HashSet.h"
 #include "wtf/NonCopyingSort.h"
@@ -82,18 +85,29 @@ bool checkOffset(double offset,
 void setKeyframeValue(Element& element,
                       StringKeyframe& keyframe,
                       const String& property,
-                      const String& value) {
+                      const String& value,
+                      ExecutionContext* executionContext) {
   StyleSheetContents* styleSheetContents =
       element.document().elementSheet().contents();
   CSSPropertyID cssProperty =
       AnimationInputHelpers::keyframeAttributeToCSSProperty(property,
                                                             element.document());
   if (cssProperty != CSSPropertyInvalid) {
-    if (cssProperty == CSSPropertyVariable)
-      keyframe.setCSSPropertyValue(AtomicString(property), value,
-                                   styleSheetContents);
-    else
-      keyframe.setCSSPropertyValue(cssProperty, value, styleSheetContents);
+    MutableStylePropertySet::SetResult setResult =
+        cssProperty == CSSPropertyVariable
+            ? keyframe.setCSSPropertyValue(
+                  AtomicString(property), element.document().propertyRegistry(),
+                  value, styleSheetContents)
+            : keyframe.setCSSPropertyValue(cssProperty, value,
+                                           styleSheetContents);
+    if (!setResult.didParse && executionContext) {
+      Document& document = toDocument(*executionContext);
+      if (document.frame()) {
+        document.frame()->console().addMessage(ConsoleMessage::create(
+            JSMessageSource, WarningMessageLevel,
+            "Invalid keyframe value for property " + property + ": " + value));
+      }
+    }
     return;
   }
   cssProperty = AnimationInputHelpers::keyframeAttributeToPresentationAttribute(
@@ -152,7 +166,7 @@ bool exhaustDictionaryIterator(DictionaryIterator& iterator,
       exceptionState.throwTypeError("Keyframes must be objects.");
       return false;
     }
-    result.append(dictionary);
+    result.push_back(dictionary);
   }
   return !exceptionState.hadException();
 }
@@ -168,9 +182,10 @@ EffectModel* EffectInput::convert(
   if (effectInput.isNull() || !element)
     return nullptr;
 
-  if (effectInput.isDictionarySequence())
+  if (effectInput.isDictionarySequence()) {
     return convertArrayForm(*element, effectInput.getAsDictionarySequence(),
-                            exceptionState);
+                            executionContext, exceptionState);
+  }
 
   const Dictionary& dictionary = effectInput.getAsDictionary();
   DictionaryIterator iterator = dictionary.getIterator(executionContext);
@@ -179,8 +194,10 @@ EffectModel* EffectInput::convert(
     // match spec.
     Vector<Dictionary> keyframeDictionaries;
     if (exhaustDictionaryIterator(iterator, executionContext, exceptionState,
-                                  keyframeDictionaries))
-      return convertArrayForm(*element, keyframeDictionaries, exceptionState);
+                                  keyframeDictionaries)) {
+      return convertArrayForm(*element, keyframeDictionaries, executionContext,
+                              exceptionState);
+    }
     return nullptr;
   }
 
@@ -191,6 +208,7 @@ EffectModel* EffectInput::convert(
 EffectModel* EffectInput::convertArrayForm(
     Element& element,
     const Vector<Dictionary>& keyframeDictionaries,
+    ExecutionContext* executionContext,
     ExceptionState& exceptionState) {
   StringKeyframeVector keyframes;
   double lastOffset = 0;
@@ -225,8 +243,10 @@ EffectModel* EffectInput::convertArrayForm(
       keyframe->setEasing(timingFunction);
     }
 
-    Vector<String> keyframeProperties;
-    keyframeDictionary.getPropertyNames(keyframeProperties);
+    const Vector<String>& keyframeProperties =
+        keyframeDictionary.getPropertyNames(exceptionState);
+    if (exceptionState.hadException())
+      return nullptr;
     for (const auto& property : keyframeProperties) {
       if (property == "offset" || property == "composite" ||
           property == "easing") {
@@ -243,9 +263,10 @@ EffectModel* EffectInput::convertArrayForm(
       String value;
       DictionaryHelper::get(keyframeDictionary, property, value);
 
-      setKeyframeValue(element, *keyframe.get(), property, value);
+      setKeyframeValue(element, *keyframe.get(), property, value,
+                       executionContext);
     }
-    keyframes.append(keyframe);
+    keyframes.push_back(keyframe);
   }
 
   DCHECK(!exceptionState.hadException());
@@ -271,7 +292,7 @@ static bool getPropertyIndexedKeyframeValues(
     // Non-object.
     String value;
     DictionaryHelper::get(keyframeDictionary, property, value);
-    result.append(value);
+    result.push_back(value);
     return true;
   }
 
@@ -280,7 +301,7 @@ static bool getPropertyIndexedKeyframeValues(
     // Non-iterable object.
     String value;
     DictionaryHelper::get(keyframeDictionary, property, value);
-    result.append(value);
+    result.push_back(value);
     return true;
   }
 
@@ -291,7 +312,7 @@ static bool getPropertyIndexedKeyframeValues(
       exceptionState.throwTypeError("Unable to read keyframe value as string.");
       return false;
     }
-    result.append(value);
+    result.push_back(value);
   }
   return !exceptionState.hadException();
 }
@@ -323,8 +344,10 @@ EffectModel* EffectInput::convertObjectForm(
   String compositeString;
   DictionaryHelper::get(keyframeDictionary, "composite", compositeString);
 
-  Vector<String> keyframeProperties;
-  keyframeDictionary.getPropertyNames(keyframeProperties);
+  const Vector<String>& keyframeProperties =
+      keyframeDictionary.getPropertyNames(exceptionState);
+  if (exceptionState.hadException())
+    return nullptr;
   for (const auto& property : keyframeProperties) {
     if (property == "offset" || property == "composite" ||
         property == "easing") {
@@ -355,8 +378,9 @@ EffectModel* EffectInput::convertObjectForm(
         keyframe->setComposite(EffectModel::CompositeAdd);
       // TODO(alancutter): Support "accumulate" keyframe composition.
 
-      setKeyframeValue(element, *keyframe.get(), property, values[i]);
-      keyframes.append(keyframe);
+      setKeyframeValue(element, *keyframe.get(), property, values[i],
+                       executionContext);
+      keyframes.push_back(keyframe);
     }
   }
 

@@ -4,27 +4,19 @@
 
 #include "ash/display/screen_position_controller.h"
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_properties.h"
-#include "ui/aura/client/capture_client.h"
-#include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_event_dispatcher.h"
-#include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/wm/core/window_util.h"
-#include "ui/wm/public/activation_client.h"
 
 namespace ash {
 
@@ -36,10 +28,10 @@ void ScreenPositionController::ConvertHostPointToRelativeToRootWindow(
     aura::Window** target_root) {
   DCHECK(!root_window->parent());
   gfx::Point point_in_root(*point);
-  root_window->GetHost()->ConvertPointFromHost(&point_in_root);
+  root_window->GetHost()->ConvertPixelsToDIP(&point_in_root);
 
 #if defined(USE_X11) || defined(USE_OZONE)
-  gfx::Rect host_bounds(root_window->GetHost()->GetBounds().size());
+  gfx::Rect host_bounds(root_window->GetHost()->GetBoundsInPixels().size());
   if (!host_bounds.Contains(*point)) {
     // This conversion is necessary to deal with X's passive input
     // grab while dragging window. For example, if we have two
@@ -63,15 +55,15 @@ void ScreenPositionController::ConvertHostPointToRelativeToRootWindow(
 
     gfx::Point location_in_native(point_in_root);
 
-    root_window->GetHost()->ConvertPointToNativeScreen(&location_in_native);
+    root_window->GetHost()->ConvertDIPToScreenInPixels(&location_in_native);
 
     for (size_t i = 0; i < root_windows.size(); ++i) {
       aura::WindowTreeHost* host = root_windows[i]->GetHost();
-      const gfx::Rect native_bounds = host->GetBounds();
+      const gfx::Rect native_bounds = host->GetBoundsInPixels();
       if (native_bounds.Contains(location_in_native)) {
         *target_root = root_windows[i];
         *point = location_in_native;
-        host->ConvertPointFromNativeScreen(point);
+        host->ConvertScreenInPixelsToDIP(point);
         return;
       }
     }
@@ -111,8 +103,9 @@ void ScreenPositionController::ConvertHostPointToScreen(
     gfx::Point* point) {
   aura::Window* root = root_window->GetRootWindow();
   aura::Window* target_root = nullptr;
-  ConvertHostPointToRelativeToRootWindow(root, Shell::GetAllRootWindows(),
-                                         point, &target_root);
+  ConvertHostPointToRelativeToRootWindow(
+      root, WmWindow::ToAuraWindows(WmShell::Get()->GetAllRootWindows()), point,
+      &target_root);
   ConvertPointToScreen(target_root, point);
 }
 
@@ -124,7 +117,7 @@ void ScreenPositionController::SetBounds(aura::Window* window,
     return;
   }
 
-  wm::SetBoundsInScreen(WmWindowAura::Get(window), bounds, display);
+  wm::SetBoundsInScreen(WmWindow::Get(window), bounds, display);
 }
 
 }  // namespace ash

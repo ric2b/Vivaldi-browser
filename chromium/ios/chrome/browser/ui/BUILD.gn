@@ -12,8 +12,6 @@ source_set("ui") {
     "animation_util.mm",
     "background_generator.h",
     "background_generator.mm",
-    "browser_otr_state.h",
-    "browser_otr_state.mm",
     "favicon_view.h",
     "favicon_view.mm",
     "file_locations.h",
@@ -22,6 +20,8 @@ source_set("ui") {
     "image_util.mm",
     "native_content_controller.h",
     "native_content_controller.mm",
+    "network_activity_indicator_manager.h",
+    "network_activity_indicator_manager.mm",
     "orientation_limiting_navigation_controller.h",
     "orientation_limiting_navigation_controller.mm",
     "prerender_final_status.h",
@@ -47,7 +47,6 @@ source_set("ui") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/ui/commands",
-    "//ios/public/provider/chrome/browser",
     "//ios/web",
     "//ui/base",
     "//ui/gfx",
@@ -58,27 +57,371 @@ source_set("ui") {
     "CoreGraphics.framework",
     "QuartzCore.framework",
   ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "browser_container_view_unittest.mm",
+    "browser_view_controller_unittest.mm",
+    "chrome_web_view_factory_unittest.mm",
+    "file_locations_unittest.mm",
+    "fullscreen_controller_unittest.mm",
+    "key_commands_provider_unittest.mm",
     "native_content_controller_unittest.mm",
+    "network_activity_indicator_manager_unittest.mm",
+    "open_in_controller_unittest.mm",
+    "open_in_toolbar_unittest.mm",
+    "page_not_available_controller_unittest.mm",
+    "preload_controller_unittest.mm",
     "ui_util_unittest.mm",
     "uikit_ui_util_unittest.mm",
   ]
   deps = [
     ":native_content_controller_test_xib",
+    ":resources_unit_tests",
+    ":test_support",
     ":ui",
+    ":ui_internal",
     "//base",
+    "//base/test:test_support",
+    "//components/bookmarks/test",
+    "//components/prefs:test_support",
+    "//components/search_engines",
+    "//components/sessions",
+    "//components/toolbar:test_support",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/find_in_page",
+    "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/sessions",
+    "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/ui/activity_services",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/ntp:ntp_internal",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/browser/ui/toolbar:test_support",
+    "//ios/chrome/browser/web:web_internal",
+    "//ios/chrome/test:test_support",
+    "//ios/testing:ocmock_support",
+    "//ios/web",
+    "//ios/web:test_support",
+    "//net",
+    "//net:test_support",
+    "//testing/gmock",
     "//testing/gtest",
     "//third_party/ocmock",
+    "//ui/base",
+    "//ui/base:test_support",
     "//url",
   ]
 }
 
-bundle_data_xib("native_content_controller_test_xib") {
+bundle_data_ib_file("native_content_controller_test_xib") {
   visibility = [ ":unit_tests" ]
   testonly = true
   source = "native_content_controller_test.xib"
+}
+
+bundle_data("resources") {
+  sources = [
+    "resources/custom_row_voice.png",
+    "resources/custom_row_voice@2x.png",
+    "resources/custom_row_voice@2x~ipad.png",
+    "resources/custom_row_voice@3x.png",
+    "resources/custom_row_voice_pressed.png",
+    "resources/custom_row_voice_pressed@2x.png",
+    "resources/custom_row_voice_pressed@2x~ipad.png",
+    "resources/custom_row_voice_pressed@3x.png",
+    "resources/custom_row_voice_pressed~ipad.png",
+    "resources/custom_row_voice~ipad.png",
+    "resources/default_favicon.png",
+    "resources/default_favicon@2x.png",
+    "resources/default_favicon@3x.png",
+    "resources/default_favicon_incognito.png",
+    "resources/default_favicon_incognito@2x.png",
+    "resources/default_favicon_incognito@3x.png",
+    "resources/keyboard_bg_portrait_tablet.png",
+    "resources/keyboard_button.png",
+    "resources/keyboard_button@2x.png",
+    "resources/keyboard_button@2x~ipad.png",
+    "resources/keyboard_button@3x.png",
+    "resources/keyboard_button~ipad.png",
+
+    # On iOS, the terms of service file need to be loaded from the application
+    # bundle, not from a datapack. As GetTermsOfServicePath() returns path to
+    # those files, they are added to //ios/chrome/browser/ui:resources.
+    "//components/resources/terms/terms_ar.html",
+    "//components/resources/terms/terms_bg.html",
+    "//components/resources/terms/terms_ca.html",
+    "//components/resources/terms/terms_cs.html",
+    "//components/resources/terms/terms_da.html",
+    "//components/resources/terms/terms_de.html",
+    "//components/resources/terms/terms_el.html",
+    "//components/resources/terms/terms_en-GB.html",
+    "//components/resources/terms/terms_en.html",
+    "//components/resources/terms/terms_es-419.html",
+    "//components/resources/terms/terms_es.html",
+    "//components/resources/terms/terms_fa.html",
+    "//components/resources/terms/terms_fi.html",
+    "//components/resources/terms/terms_fr.html",
+    "//components/resources/terms/terms_he.html",
+    "//components/resources/terms/terms_hi.html",
+    "//components/resources/terms/terms_hr.html",
+    "//components/resources/terms/terms_hu.html",
+    "//components/resources/terms/terms_id.html",
+    "//components/resources/terms/terms_it.html",
+    "//components/resources/terms/terms_ja.html",
+    "//components/resources/terms/terms_ko.html",
+    "//components/resources/terms/terms_lt.html",
+    "//components/resources/terms/terms_nb.html",
+    "//components/resources/terms/terms_nl.html",
+    "//components/resources/terms/terms_pl.html",
+    "//components/resources/terms/terms_pt-BR.html",
+    "//components/resources/terms/terms_pt-PT.html",
+    "//components/resources/terms/terms_ro.html",
+    "//components/resources/terms/terms_ru.html",
+    "//components/resources/terms/terms_sk.html",
+    "//components/resources/terms/terms_sr.html",
+    "//components/resources/terms/terms_sv.html",
+    "//components/resources/terms/terms_th.html",
+    "//components/resources/terms/terms_tr.html",
+    "//components/resources/terms/terms_uk.html",
+    "//components/resources/terms/terms_vi.html",
+    "//components/resources/terms/terms_zh-CN.html",
+    "//components/resources/terms/terms_zh-TW.html",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+source_set("ui_internal") {
+  sources = [
+    "browser_container_view.h",
+    "browser_container_view.mm",
+    "browser_view_controller.h",
+    "browser_view_controller.mm",
+    "browser_view_controller_dependency_factory.h",
+    "browser_view_controller_dependency_factory.mm",
+    "chrome_web_view_factory.h",
+    "chrome_web_view_factory.mm",
+    "external_file_controller.h",
+    "external_file_controller.mm",
+    "external_file_remover.h",
+    "external_file_remover.mm",
+    "fade_truncated_label.h",
+    "fade_truncated_label.mm",
+    "fullscreen_controller.h",
+    "fullscreen_controller.mm",
+    "key_commands_provider.h",
+    "key_commands_provider.mm",
+    "open_in_controller.h",
+    "open_in_controller.mm",
+    "open_in_controller_testing.h",
+    "open_in_toolbar.h",
+    "open_in_toolbar.mm",
+    "page_not_available_controller.h",
+    "page_not_available_controller.mm",
+    "preload_controller.h",
+    "preload_controller.mm",
+    "preload_controller_delegate.h",
+    "prerender_delegate.h",
+  ]
+  deps = [
+    ":resources",
+    ":ui",
+    "//base",
+    "//base:i18n",
+    "//components/bookmarks/browser",
+    "//components/infobars/core",
+    "//components/prefs",
+    "//components/reading_list/core",
+    "//components/reading_list/ios",
+    "//components/search_engines",
+    "//components/sessions",
+    "//components/strings",
+    "//components/toolbar",
+    "//components/url_formatter",
+    "//ios/chrome/app:tests_hook",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/find_in_page",
+    "//ios/chrome/browser/first_run",
+    "//ios/chrome/browser/geolocation:geolocation_internal",
+    "//ios/chrome/browser/infobars",
+    "//ios/chrome/browser/metrics:metrics_internal",
+    "//ios/chrome/browser/native_app_launcher:native_app_launcher_internal",
+    "//ios/chrome/browser/net",
+    "//ios/chrome/browser/passwords",
+    "//ios/chrome/browser/payments",
+    "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/reading_list",
+    "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/sessions",
+    "//ios/chrome/browser/snapshots",
+    "//ios/chrome/browser/snapshots:snapshots_internal",
+    "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/ui/activity_services",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/authentication",
+    "//ios/chrome/browser/ui/bookmarks",
+    "//ios/chrome/browser/ui/colors",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/context_menu",
+    "//ios/chrome/browser/ui/contextual_search",
+    "//ios/chrome/browser/ui/dialogs:dialogs_internal",
+    "//ios/chrome/browser/ui/elements:elements_internal",
+    "//ios/chrome/browser/ui/find_bar",
+    "//ios/chrome/browser/ui/first_run",
+    "//ios/chrome/browser/ui/history",
+    "//ios/chrome/browser/ui/keyboard",
+    "//ios/chrome/browser/ui/no_tabs",
+    "//ios/chrome/browser/ui/ntp",
+    "//ios/chrome/browser/ui/ntp:ntp_internal",
+    "//ios/chrome/browser/ui/ntp/recent_tabs",
+    "//ios/chrome/browser/ui/omnibox:omnibox_internal",
+    "//ios/chrome/browser/ui/overscroll_actions",
+    "//ios/chrome/browser/ui/print",
+    "//ios/chrome/browser/ui/qr_scanner",
+    "//ios/chrome/browser/ui/reading_list",
+    "//ios/chrome/browser/ui/stack_view",
+    "//ios/chrome/browser/ui/static_content",
+    "//ios/chrome/browser/ui/sync",
+    "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/tabs",
+    "//ios/chrome/browser/ui/tools_menu",
+    "//ios/chrome/browser/ui/voice",
+    "//ios/chrome/browser/upgrade",
+    "//ios/chrome/browser/web:web_internal",
+    "//ios/chrome/common",
+    "//ios/net",
+    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/ui",
+    "//ios/public/provider/chrome/browser/voice",
+    "//ios/third_party/material_components_ios",
+    "//ios/web",
+    "//ios/web/public/image_fetcher",
+    "//net",
+    "//third_party/google_toolbox_for_mac",
+    "//ui/base",
+    "//ui/gfx",
+    "//url",
+  ]
+  public_deps = [
+    "//ios/chrome/browser/ui/side_swipe",
+    "//ios/chrome/browser/ui/toolbar",
+  ]
+  allow_circular_includes_from = [
+    "//ios/chrome/browser/ui/tabs",
+    "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/browser/ui/overscroll_actions",
+    "//ios/chrome/browser/snapshots:snapshots_internal",
+    "//ios/chrome/browser/web:web_internal",
+    "//ios/chrome/browser/ui/ntp:ntp_internal",
+    "//ios/chrome/browser/ui/stack_view",
+  ]
+  libs = [
+    "AssetsLibrary.framework",
+    "MessageUI.framework",
+    "MobileCoreServices.framework",
+    "PassKit.framework",
+    "Photos.framework",
+    "QuartzCore.framework",
+    "StoreKit.framework",
+    "UIKit.framework",
+    "WebKit.framework",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "browser_view_controller_testing.h",
+    "browser_view_controller_testing.mm",
+  ]
+  deps = [
+    ":ui_internal",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/browser/ui/toolbar:test_support",
+  ]
+}
+
+bundle_data("resources_unit_tests") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//ios/chrome/test/data/testbadpass.pkpass",
+    "//ios/chrome/test/data/testpass.pkpass",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/ios/chrome/test/data/{{source_file_part}}",
+  ]
+}
+
+source_set("eg_tests") {
+  testonly = true
+  sources = [
+    "browser_view_controller_egtest.mm",
+    "error_page_egtest.mm",
+    "fullscreen_egtest.mm",
+    "keyboard_commands_egtest.mm",
+  ]
+  deps = [
+    ":ui",
+    ":ui_internal",
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/ntp:ntp_internal",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/browser/ui/tools_menu",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/testing:ios_test_support",
+    "//ios/third_party/earl_grey",
+    "//ios/web:earl_grey_test_support",
+    "//ios/web:test_support",
+    "//ui/base",
+    "//url",
+  ]
+  libs = [
+    "UIKit.framework",
+    "WebKit.framework",
+    "XCTest.framework",
+  ]
+}
+
+source_set("perf_tests") {
+  testonly = true
+  sources = [
+    "omnibox_perftest.mm",
+  ]
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//components/toolbar:test_support",
+    "//ios/chrome/browser/autocomplete",
+    "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/tabs:tabs_internal",
+    "//ios/chrome/browser/ui/omnibox:omnibox_internal",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/test/base:perf_test_support",
+    "//testing/gtest",
+    "//third_party/ocmock",
+    "//ui/base:test_support",
+  ]
+  libs = [ "UIKit.framework" ]
 }

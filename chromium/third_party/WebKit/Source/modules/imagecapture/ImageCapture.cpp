@@ -87,10 +87,10 @@ ExecutionContext* ImageCapture::getExecutionContext() const {
 }
 
 bool ImageCapture::hasPendingActivity() const {
-  return hasEventListeners();
+  return getExecutionContext() && hasEventListeners();
 }
 
-void ImageCapture::contextDestroyed() {
+void ImageCapture::contextDestroyed(ExecutionContext*) {
   removeAllEventListeners();
   m_serviceRequests.clear();
   DCHECK(!hasEventListeners());
@@ -180,7 +180,7 @@ ScriptPromise ImageCapture::setOptions(ScriptState* scriptState,
       auto mojoPoint = media::mojom::blink::Point2D::New();
       mojoPoint->x = point.x();
       mojoPoint->y = point.y();
-      settings->points_of_interest.append(std::move(mojoPoint));
+      settings->points_of_interest.push_back(std::move(mojoPoint));
     }
   }
   settings->has_color_temperature = photoSettings.hasColorTemperature();
@@ -248,9 +248,10 @@ ScriptPromise ImageCapture::grabFrame(ScriptState* scriptState,
   }
 
   // Create |m_frameGrabber| the first time.
-  if (!m_frameGrabber)
+  if (!m_frameGrabber) {
     m_frameGrabber =
-        wrapUnique(Platform::current()->createImageCaptureFrameGrabber());
+        WTF::wrapUnique(Platform::current()->createImageCaptureFrameGrabber());
+  }
 
   if (!m_frameGrabber) {
     resolver->reject(DOMException::create(
@@ -267,14 +268,12 @@ ScriptPromise ImageCapture::grabFrame(ScriptState* scriptState,
 }
 
 ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
-    : ActiveScriptWrappable(this),
-      ContextLifecycleObserver(context),
-      m_streamTrack(track) {
+    : ContextLifecycleObserver(context), m_streamTrack(track) {
   DCHECK(m_streamTrack);
   DCHECK(!m_service.is_bound());
 
   Platform::current()->interfaceProvider()->getInterface(
-      mojo::GetProxy(&m_service));
+      mojo::MakeRequest(&m_service));
 
   m_service.set_connection_error_handler(convertToBaseCallback(WTF::bind(
       &ImageCapture::onServiceConnectionError, wrapWeakPersistent(this))));

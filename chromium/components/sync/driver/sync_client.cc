@@ -9,4 +9,12 @@ namespace syncer {
 SyncClient::SyncClient() {}
 SyncClient::~SyncClient() {}
 
+Profile *SyncClient::GetProfile() {
+  return nullptr;
+}
+
+vivaldi::Notes_Model* SyncClient::GetNotesModel() {
+  return nullptr;
+}
+
 }  // namespace syncer

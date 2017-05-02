@@ -6,14 +6,14 @@ import logging
 import time
 
 from common import network_metrics
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 from telemetry.value import scalar
 
 
 CHROME_PROXY_VIA_HEADER = 'Chrome-Compression-Proxy'
 
 
-class ChromeProxyMetricException(page_test.MeasurementFailure):
+class ChromeProxyMetricException(legacy_page_test.MeasurementFailure):
   pass
 
 
@@ -115,4 +115,3 @@ class ChromeProxyResponse(network_metrics.HTTPResponse):
 
   def HasChromeProxyPassThroughRequest(self):
     return self.HasRequestHeader('Chrome-Proxy-Accept-Transform', "identity")
-

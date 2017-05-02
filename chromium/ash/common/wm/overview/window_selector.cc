@@ -23,10 +23,10 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
@@ -55,6 +55,11 @@ const int kTextFilterHorizontalPadding = 10;
 // The height of the text filtering textbox.
 const int kTextFilterHeight = 40;
 
+// The margin at the bottom to make sure the text filter layer is hidden.
+// This is needed because positioning the text filter directly touching the top
+// edge of the screen still allows the shadow to peek through.
+const int kTextFieldBottomMargin = 2;
+
 // Distance from top of overview to the top of text filtering textbox as a
 // proportion of the total overview area.
 const float kTextFilterTopScreenProportion = 0.02f;
@@ -78,30 +83,6 @@ const int kTextFilterIconSize = 20;
 
 // The radius used for the rounded corners on the text filtering textbox.
 const int kTextFilterCornerRadius = 2;
-
-// A comparator for locating a grid with a given root window.
-struct RootWindowGridComparator {
-  explicit RootWindowGridComparator(const WmWindow* root_window)
-      : root_window_(root_window) {}
-
-  bool operator()(const std::unique_ptr<WindowGrid>& grid) const {
-    return grid->root_window() == root_window_;
-  }
-
-  const WmWindow* root_window_;
-};
-
-// A comparator for locating a selectable window given a targeted window.
-struct WindowSelectorItemTargetComparator {
-  explicit WindowSelectorItemTargetComparator(const WmWindow* target_window)
-      : target(target_window) {}
-
-  bool operator()(WindowSelectorItem* window) const {
-    return window->Contains(target);
-  }
-
-  const WmWindow* target;
-};
 
 // A comparator for locating a selector item for a given root.
 struct WindowSelectorItemForRoot {
@@ -181,7 +162,7 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
   params.accept_events = true;
   params.bounds = GetTextFilterPosition(root_window);
   params.name = "OverviewModeTextFilter";
-  *text_filter_bottom = params.bounds.bottom();
+  *text_filter_bottom = params.bounds.bottom() + kTextFieldBottomMargin;
   root_window->GetRootWindowController()->ConfigureWidgetInitParamsForContainer(
       widget, kShellWindowId_StatusContainer, &params);
   widget->Init(params);
@@ -217,8 +198,11 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
   // The textfield initially contains no text, so shift its position to be
   // outside the visible bounds of the screen.
   gfx::Transform transform;
-  transform.Translate(0, -params.bounds.bottom());
-  WmLookup::Get()->GetWindowForWidget(widget)->SetTransform(transform);
+  transform.Translate(0, -(*text_filter_bottom));
+  WmWindow* text_filter_widget_window =
+      WmLookup::Get()->GetWindowForWidget(widget);
+  text_filter_widget_window->SetOpacity(0);
+  text_filter_widget_window->SetTransform(transform);
   widget->Show();
   textfield->RequestFocus();
 
@@ -346,7 +330,7 @@ void WindowSelector::Shutdown() {
 
   size_t remaining_items = 0;
   for (std::unique_ptr<WindowGrid>& window_grid : grid_list_) {
-    for (WindowSelectorItem* window_selector_item : window_grid->window_list())
+    for (const auto& window_selector_item : window_grid->window_list())
       window_selector_item->RestoreWindow();
     remaining_items += window_grid->size();
   }
@@ -557,15 +541,21 @@ void WindowSelector::OnWindowActivated(WmWindow* gained_active,
     return;
   }
 
+  WmWindow* root_window = gained_active->GetRootWindow();
   auto grid =
       std::find_if(grid_list_.begin(), grid_list_.end(),
-                   RootWindowGridComparator(gained_active->GetRootWindow()));
+                   [root_window](const std::unique_ptr<WindowGrid>& grid) {
+                     return grid->root_window() == root_window;
+                   });
   if (grid == grid_list_.end())
     return;
-  const std::vector<WindowSelectorItem*> windows = (*grid)->window_list();
+  const auto& windows = (*grid)->window_list();
 
-  auto iter = std::find_if(windows.begin(), windows.end(),
-                           WindowSelectorItemTargetComparator(gained_active));
+  auto iter = std::find_if(
+      windows.begin(), windows.end(),
+      [gained_active](const std::unique_ptr<WindowSelectorItem>& window) {
+        return window->Contains(gained_active);
+      });
 
   if (iter == windows.end() && showing_text_filter_ &&
       lost_active == GetTextFilterWidgetWindow()) {
@@ -633,13 +623,15 @@ void WindowSelector::PositionWindows(bool animate) {
 void WindowSelector::RepositionTextFilterOnDisplayMetricsChange() {
   WmWindow* root_window = WmShell::Get()->GetPrimaryRootWindow();
   const gfx::Rect rect = GetTextFilterPosition(root_window);
-  text_filter_bottom_ = rect.bottom();
+  text_filter_bottom_ = rect.bottom() + kTextFieldBottomMargin;
   text_filter_widget_->SetBounds(rect);
 
   gfx::Transform transform;
   transform.Translate(
       0, text_filter_string_length_ == 0 ? -text_filter_bottom_ : 0);
-  GetTextFilterWidgetWindow()->SetTransform(transform);
+  WmWindow* text_filter_window = GetTextFilterWidgetWindow();
+  text_filter_window->SetOpacity(text_filter_string_length_ == 0 ? 0 : 1);
+  text_filter_window->SetTransform(transform);
 }
 
 void WindowSelector::ResetFocusRestoreWindow(bool focus) {

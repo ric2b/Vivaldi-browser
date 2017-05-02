@@ -11,6 +11,7 @@
 #include "core/html/HTMLDialogElement.h"
 #include "core/input/EventHandler.h"
 #include "core/input/EventHandlingUtil.h"
+#include "core/input/InputDeviceCapabilities.h"
 #include "core/input/ScrollManager.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTextControlSingleLine.h"
@@ -123,8 +124,8 @@ bool mapKeyCodeForScroll(int keyCode,
 
 }  // namespace
 
-KeyboardEventManager::KeyboardEventManager(LocalFrame* frame,
-                                           ScrollManager* scrollManager)
+KeyboardEventManager::KeyboardEventManager(LocalFrame& frame,
+                                           ScrollManager& scrollManager)
     : m_frame(frame), m_scrollManager(scrollManager) {}
 
 DEFINE_TRACE(KeyboardEventManager) {
@@ -139,8 +140,8 @@ bool KeyboardEventManager::handleAccessKey(const WebKeyboardEvent& evt) {
   // correct element is matched based on Shift key state.  Firefox only matches
   // an access key if Shift is not pressed, and does that case-insensitively.
   DCHECK(!(kAccessKeyModifiers & WebInputEvent::ShiftKey));
-  if ((evt.modifiers & (WebKeyboardEvent::KeyModifiers &
-                        ~WebInputEvent::ShiftKey)) != kAccessKeyModifiers)
+  if ((evt.modifiers() & (WebKeyboardEvent::KeyModifiers &
+                          ~WebInputEvent::ShiftKey)) != kAccessKeyModifiers)
     return false;
   String key = String(evt.unmodifiedText);
   Element* elem = m_frame->document()->getElementByAccessKey(key.lower());
@@ -161,8 +162,8 @@ WebInputEventResult KeyboardEventManager::keyEvent(
     DCHECK(RuntimeEnabledFeatures::middleClickAutoscrollEnabled());
     // If a key is pressed while the middleClickAutoscroll is in progress then
     // we want to stop.
-    if (initialKeyEvent.type == WebInputEvent::KeyDown ||
-        initialKeyEvent.type == WebInputEvent::RawKeyDown)
+    if (initialKeyEvent.type() == WebInputEvent::KeyDown ||
+        initialKeyEvent.type() == WebInputEvent::RawKeyDown)
       m_scrollManager->stopAutoscroll();
 
     // If we were in panscroll mode, we swallow the key event
@@ -188,13 +189,13 @@ WebInputEventResult KeyboardEventManager::keyEvent(
   // currently match either Mac or Windows behavior, depending on whether they
   // send combined KeyDown events.
   bool matchedAnAccessKey = false;
-  if (initialKeyEvent.type == WebInputEvent::KeyDown)
+  if (initialKeyEvent.type() == WebInputEvent::KeyDown)
     matchedAnAccessKey = handleAccessKey(initialKeyEvent);
 
   // FIXME: it would be fair to let an input method handle KeyUp events before
   // DOM dispatch.
-  if (initialKeyEvent.type == WebInputEvent::KeyUp ||
-      initialKeyEvent.type == WebInputEvent::Char) {
+  if (initialKeyEvent.type() == WebInputEvent::KeyUp ||
+      initialKeyEvent.type() == WebInputEvent::Char) {
     KeyboardEvent* domEvent = KeyboardEvent::create(
         initialKeyEvent, m_frame->document()->domWindow());
 
@@ -203,8 +204,8 @@ WebInputEventResult KeyboardEventManager::keyEvent(
   }
 
   WebKeyboardEvent keyDownEvent = initialKeyEvent;
-  if (keyDownEvent.type != WebInputEvent::RawKeyDown)
-    keyDownEvent.type = WebInputEvent::RawKeyDown;
+  if (keyDownEvent.type() != WebInputEvent::RawKeyDown)
+    keyDownEvent.setType(WebInputEvent::RawKeyDown);
   KeyboardEvent* keydown =
       KeyboardEvent::create(keyDownEvent, m_frame->document()->domWindow());
   if (matchedAnAccessKey)
@@ -222,7 +223,7 @@ WebInputEventResult KeyboardEventManager::keyEvent(
   if (changedFocusedFrame)
     return WebInputEventResult::HandledSystem;
 
-  if (initialKeyEvent.type == WebInputEvent::RawKeyDown)
+  if (initialKeyEvent.type() == WebInputEvent::RawKeyDown)
     return WebInputEventResult::NotHandled;
 
   // Focus may have changed during keydown handling, so refetch node.
@@ -244,7 +245,7 @@ WebInputEventResult KeyboardEventManager::keyEvent(
 #endif
 
   WebKeyboardEvent keyPressEvent = initialKeyEvent;
-  keyPressEvent.type = WebInputEvent::Char;
+  keyPressEvent.setType(WebInputEvent::Char);
   if (keyPressEvent.text[0] == 0)
     return WebInputEventResult::NotHandled;
   KeyboardEvent* keypress =
@@ -394,9 +395,11 @@ void KeyboardEventManager::defaultTabEventHandler(KeyboardEvent* event) {
   if (m_frame->document()->inDesignMode())
     return;
 
-  if (page->focusController().advanceFocus(
-          focusType,
-          InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities()))
+  if (page->focusController().advanceFocus(focusType,
+                                           m_frame->document()
+                                               ->domWindow()
+                                               ->getInputDeviceCapabilities()
+                                               ->firesTouchEvents(false)))
     event->setDefaultHandled();
 }
 

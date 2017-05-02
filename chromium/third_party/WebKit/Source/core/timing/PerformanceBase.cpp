@@ -32,18 +32,34 @@
 #include "core/timing/PerformanceBase.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/DocumentTiming.h"
 #include "core/events/Event.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
+#include "core/loader/DocumentLoadTiming.h"
+#include "core/loader/DocumentLoader.h"
 #include "core/timing/PerformanceLongTaskTiming.h"
 #include "core/timing/PerformanceObserver.h"
 #include "core/timing/PerformanceResourceTiming.h"
 #include "core/timing/PerformanceUserTiming.h"
+#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/network/ResourceResponse.h"
 #include "platform/network/ResourceTimingInfo.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/CurrentTime.h"
 #include <algorithm>
 
 namespace blink {
+
+namespace {
+
+SecurityOrigin* getSecurityOrigin(ExecutionContext* context) {
+  if (context)
+    return context->getSecurityOrigin();
+  return nullptr;
+}
+
+}  // namespace
 
 using PerformanceObserverVector = HeapVector<Member<PerformanceObserver>>;
 
@@ -62,6 +78,28 @@ PerformanceBase::PerformanceBase(double timeOrigin)
 
 PerformanceBase::~PerformanceBase() {}
 
+PerformanceNavigationTiming::NavigationType PerformanceBase::getNavigationType(
+    NavigationType type,
+    const Document* document) {
+  if (document &&
+      document->pageVisibilityState() == PageVisibilityStatePrerender) {
+    return PerformanceNavigationTiming::NavigationType::Prerender;
+  }
+  switch (type) {
+    case NavigationTypeReload:
+      return PerformanceNavigationTiming::NavigationType::Reload;
+    case NavigationTypeBackForward:
+      return PerformanceNavigationTiming::NavigationType::BackForward;
+    case NavigationTypeLinkClicked:
+    case NavigationTypeFormSubmitted:
+    case NavigationTypeFormResubmitted:
+    case NavigationTypeOther:
+      return PerformanceNavigationTiming::NavigationType::Navigate;
+  }
+  NOTREACHED();
+  return PerformanceNavigationTiming::NavigationType::Navigate;
+}
+
 const AtomicString& PerformanceBase::interfaceName() const {
   return EventTargetNames::Performance;
 }
@@ -74,6 +112,8 @@ PerformanceEntryVector PerformanceBase::getEntries() const {
   PerformanceEntryVector entries;
 
   entries.appendVector(m_resourceTimingBuffer);
+  if (m_navigationTiming)
+    entries.push_back(m_navigationTiming);
   entries.appendVector(m_frameTimingBuffer);
 
   if (m_userTiming) {
@@ -93,21 +133,19 @@ PerformanceEntryVector PerformanceBase::getEntriesByType(
       PerformanceEntry::toEntryTypeEnum(entryType);
 
   switch (type) {
-    case PerformanceEntry::Invalid:
-      return entries;
-    case PerformanceEntry::LongTask:
-      // Unsupported for LongTask. Per the spec, Long task entries can only be
-      // accessed via Performance Observer. No separate buffer is maintained.
-      return entries;
     case PerformanceEntry::Resource:
       for (const auto& resource : m_resourceTimingBuffer)
-        entries.append(resource);
+        entries.push_back(resource);
+      break;
+    case PerformanceEntry::Navigation:
+      if (m_navigationTiming)
+        entries.push_back(m_navigationTiming);
       break;
     case PerformanceEntry::Composite:
     case PerformanceEntry::Render:
       for (const auto& frame : m_frameTimingBuffer) {
         if (type == frame->entryTypeEnum()) {
-          entries.append(frame);
+          entries.push_back(frame);
         }
       }
       break;
@@ -118,6 +156,17 @@ PerformanceEntryVector PerformanceBase::getEntriesByType(
     case PerformanceEntry::Measure:
       if (m_userTiming)
         entries.appendVector(m_userTiming->getMeasures());
+      break;
+    // Unsupported for Paint, LongTask, TaskAttribution.
+    // Per the spec, these entries can only be accessed via
+    // Performance Observer. No separate buffer is maintained.
+    case PerformanceEntry::Paint:
+      break;
+    case PerformanceEntry::LongTask:
+      break;
+    case PerformanceEntry::TaskAttribution:
+      break;
+    case PerformanceEntry::Invalid:
       break;
   }
 
@@ -139,8 +188,13 @@ PerformanceEntryVector PerformanceBase::getEntriesByName(
   if (entryType.isNull() || type == PerformanceEntry::Resource) {
     for (const auto& resource : m_resourceTimingBuffer) {
       if (resource->name() == name)
-        entries.append(resource);
+        entries.push_back(resource);
     }
+  }
+
+  if (entryType.isNull() || type == PerformanceEntry::Navigation) {
+    if (m_navigationTiming && m_navigationTiming->name() == name)
+      entries.push_back(m_navigationTiming);
   }
 
   if (entryType.isNull() || type == PerformanceEntry::Composite ||
@@ -148,7 +202,7 @@ PerformanceEntryVector PerformanceBase::getEntriesByName(
     for (const auto& frame : m_frameTimingBuffer) {
       if (frame->name() == name &&
           (entryType.isNull() || entryType == frame->entryType()))
-        entries.append(frame);
+        entries.push_back(frame);
     }
   }
 
@@ -170,11 +224,8 @@ void PerformanceBase::clearResourceTimings() {
 
 void PerformanceBase::setResourceTimingBufferSize(unsigned size) {
   m_resourceTimingBufferSize = size;
-  if (isResourceTimingBufferFull()) {
+  if (isResourceTimingBufferFull())
     dispatchEvent(Event::create(EventTypeNames::resourcetimingbufferfull));
-    dispatchEvent(
-        Event::create(EventTypeNames::webkitresourcetimingbufferfull));
-  }
 }
 
 void PerformanceBase::clearFrameTimings() {
@@ -187,7 +238,7 @@ void PerformanceBase::setFrameTimingBufferSize(unsigned size) {
     dispatchEvent(Event::create(EventTypeNames::frametimingbufferfull));
 }
 
-static bool passesTimingAllowCheck(
+bool PerformanceBase::passesTimingAllowCheck(
     const ResourceResponse& response,
     const SecurityOrigin& initiatorSecurityOrigin,
     const AtomicString& originalTimingAllowOrigin,
@@ -225,10 +276,11 @@ static bool passesTimingAllowCheck(
   return false;
 }
 
-static bool allowsTimingRedirect(const Vector<ResourceResponse>& redirectChain,
-                                 const ResourceResponse& finalResponse,
-                                 const SecurityOrigin& initiatorSecurityOrigin,
-                                 ExecutionContext* context) {
+bool PerformanceBase::allowsTimingRedirect(
+    const Vector<ResourceResponse>& redirectChain,
+    const ResourceResponse& finalResponse,
+    const SecurityOrigin& initiatorSecurityOrigin,
+    ExecutionContext* context) {
   if (!passesTimingAllowCheck(finalResponse, initiatorSecurityOrigin,
                               AtomicString(), context))
     return false;
@@ -246,10 +298,8 @@ void PerformanceBase::addResourceTiming(const ResourceTimingInfo& info) {
   if (isResourceTimingBufferFull() &&
       !hasObserverFor(PerformanceEntry::Resource))
     return;
-  SecurityOrigin* securityOrigin = nullptr;
   ExecutionContext* context = getExecutionContext();
-  if (context)
-    securityOrigin = context->getSecurityOrigin();
+  SecurityOrigin* securityOrigin = getSecurityOrigin(context);
   if (!securityOrigin)
     return;
 
@@ -280,7 +330,7 @@ void PerformanceBase::addResourceTiming(const ResourceTimingInfo& info) {
   }
 
   ResourceLoadTiming* lastRedirectTiming =
-      redirectChain.last().resourceLoadTiming();
+      redirectChain.back().resourceLoadTiming();
   ASSERT(lastRedirectTiming);
   double lastRedirectEndTime = lastRedirectTiming->receiveHeadersEnd();
 
@@ -292,14 +342,91 @@ void PerformanceBase::addResourceTiming(const ResourceTimingInfo& info) {
     addResourceTimingBuffer(*entry);
 }
 
-void PerformanceBase::addResourceTimingBuffer(PerformanceEntry& entry) {
-  m_resourceTimingBuffer.append(&entry);
+void PerformanceBase::addNavigationTiming(LocalFrame* frame) {
+  if (!RuntimeEnabledFeatures::performanceNavigationTiming2Enabled())
+    return;
+  DCHECK(frame);
+  const DocumentLoader* documentLoader = frame->loader().documentLoader();
+  DCHECK(documentLoader);
 
-  if (isResourceTimingBufferFull()) {
+  const DocumentLoadTiming& documentLoadTiming = documentLoader->timing();
+
+  const DocumentTiming* documentTiming =
+      frame->document() ? &(frame->document()->timing()) : nullptr;
+
+  ResourceTimingInfo* navigationTimingInfo =
+      documentLoader->getNavigationTimingInfo();
+  if (!navigationTimingInfo)
+    return;
+
+  const ResourceResponse& finalResponse = navigationTimingInfo->finalResponse();
+
+  ResourceLoadTiming* resourceLoadTiming = finalResponse.resourceLoadTiming();
+  // Don't create a navigation timing instance when
+  // resourceLoadTiming is null, which could happen when visiting non-http sites
+  // such as about:blank or in some error cases.
+  if (!resourceLoadTiming)
+    return;
+  double lastRedirectEndTime = documentLoadTiming.redirectEnd();
+  double finishTime = documentLoadTiming.loadEventEnd();
+
+  ExecutionContext* context = getExecutionContext();
+  SecurityOrigin* securityOrigin = getSecurityOrigin(context);
+  if (!securityOrigin)
+    return;
+
+  bool allowRedirectDetails =
+      allowsTimingRedirect(navigationTimingInfo->redirectChain(), finalResponse,
+                           *securityOrigin, context);
+
+  unsigned long long transferSize = navigationTimingInfo->transferSize();
+  unsigned long long encodedBodyLength = finalResponse.encodedBodyLength();
+  unsigned long long decodedBodyLength = finalResponse.decodedBodyLength();
+  bool didReuseConnection = finalResponse.connectionReused();
+  PerformanceNavigationTiming::NavigationType type =
+      getNavigationType(documentLoader->getNavigationType(), frame->document());
+
+  m_navigationTiming = new PerformanceNavigationTiming(
+      timeOrigin(), navigationTimingInfo->initialURL().getString(),
+      documentLoadTiming.unloadEventStart(),
+      documentLoadTiming.unloadEventEnd(), documentLoadTiming.loadEventStart(),
+      documentLoadTiming.loadEventEnd(), documentLoadTiming.redirectCount(),
+      documentTiming ? documentTiming->domInteractive() : 0,
+      documentTiming ? documentTiming->domContentLoadedEventStart() : 0,
+      documentTiming ? documentTiming->domContentLoadedEventEnd() : 0,
+      documentTiming ? documentTiming->domComplete() : 0, type,
+      documentLoadTiming.redirectStart(), documentLoadTiming.redirectEnd(),
+      documentLoadTiming.fetchStart(), documentLoadTiming.responseEnd(),
+      allowRedirectDetails,
+      documentLoadTiming.hasSameOriginAsPreviousDocument(), resourceLoadTiming,
+      lastRedirectEndTime, finishTime, transferSize, encodedBodyLength,
+      decodedBodyLength, didReuseConnection);
+  notifyObserversOfEntry(*m_navigationTiming);
+}
+
+void PerformanceBase::addFirstPaintTiming(double startTime) {
+  addPaintTiming(PerformancePaintTiming::PaintType::FirstPaint, startTime);
+}
+
+void PerformanceBase::addFirstContentfulPaintTiming(double startTime) {
+  addPaintTiming(PerformancePaintTiming::PaintType::FirstContentfulPaint,
+                 startTime);
+}
+
+void PerformanceBase::addPaintTiming(PerformancePaintTiming::PaintType type,
+                                     double startTime) {
+  if (!RuntimeEnabledFeatures::performancePaintTimingEnabled())
+    return;
+  PerformanceEntry* entry = new PerformancePaintTiming(
+      type, monotonicTimeToDOMHighResTimeStamp(startTime));
+  notifyObserversOfEntry(*entry);
+}
+
+void PerformanceBase::addResourceTimingBuffer(PerformanceEntry& entry) {
+  m_resourceTimingBuffer.push_back(&entry);
+
+  if (isResourceTimingBufferFull())
     dispatchEvent(Event::create(EventTypeNames::resourcetimingbufferfull));
-    dispatchEvent(
-        Event::create(EventTypeNames::webkitresourcetimingbufferfull));
-  }
 }
 
 bool PerformanceBase::isResourceTimingBufferFull() {
@@ -307,7 +434,7 @@ bool PerformanceBase::isResourceTimingBufferFull() {
 }
 
 void PerformanceBase::addFrameTimingBuffer(PerformanceEntry& entry) {
-  m_frameTimingBuffer.append(&entry);
+  m_frameTimingBuffer.push_back(&entry);
 
   if (isFrameTimingBufferFull())
     dispatchEvent(Event::create(EventTypeNames::frametimingbufferfull));
@@ -320,12 +447,15 @@ bool PerformanceBase::isFrameTimingBufferFull() {
 void PerformanceBase::addLongTaskTiming(double startTime,
                                         double endTime,
                                         const String& name,
-                                        DOMWindow* culpritWindow) {
+                                        const String& frameSrc,
+                                        const String& frameId,
+                                        const String& frameName) {
   if (!hasObserverFor(PerformanceEntry::LongTask))
     return;
   PerformanceEntry* entry = PerformanceLongTaskTiming::create(
-      monotonicTimeToDOMHighResTimeStampInMillis(startTime),
-      monotonicTimeToDOMHighResTimeStampInMillis(endTime), name, culpritWindow);
+      monotonicTimeToDOMHighResTimeStamp(startTime),
+      monotonicTimeToDOMHighResTimeStamp(endTime), name, frameSrc, frameId,
+      frameName);
   notifyObserversOfEntry(*entry);
 }
 
@@ -442,19 +572,21 @@ double PerformanceBase::clampTimeResolution(double timeSeconds) {
 }
 
 DOMHighResTimeStamp PerformanceBase::monotonicTimeToDOMHighResTimeStamp(
-    double monotonicTime) const {
+    double timeOrigin,
+    double monotonicTime) {
   // Avoid exposing raw platform timestamps.
-  if (m_timeOrigin == 0.0)
+  if (!monotonicTime || !timeOrigin)
     return 0.0;
 
-  double timeInSeconds = monotonicTime - m_timeOrigin;
+  double timeInSeconds = monotonicTime - timeOrigin;
+  DCHECK_GE(timeInSeconds, 0);
   return convertSecondsToDOMHighResTimeStamp(
       clampTimeResolution(timeInSeconds));
 }
 
-double PerformanceBase::monotonicTimeToDOMHighResTimeStampInMillis(
-    DOMHighResTimeStamp monotonicTime) const {
-  return monotonicTimeToDOMHighResTimeStamp(monotonicTime) * 1000;
+DOMHighResTimeStamp PerformanceBase::monotonicTimeToDOMHighResTimeStamp(
+    double monotonicTime) const {
+  return monotonicTimeToDOMHighResTimeStamp(m_timeOrigin, monotonicTime);
 }
 
 DOMHighResTimeStamp PerformanceBase::now() const {
@@ -464,6 +596,7 @@ DOMHighResTimeStamp PerformanceBase::now() const {
 DEFINE_TRACE(PerformanceBase) {
   visitor->trace(m_frameTimingBuffer);
   visitor->trace(m_resourceTimingBuffer);
+  visitor->trace(m_navigationTiming);
   visitor->trace(m_userTiming);
   visitor->trace(m_observers);
   visitor->trace(m_activeObservers);

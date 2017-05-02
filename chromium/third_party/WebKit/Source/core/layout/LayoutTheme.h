@@ -41,6 +41,7 @@ namespace blink {
 class ComputedStyle;
 class Element;
 class FileList;
+class HostWindow;
 class HTMLInputElement;
 class LayoutObject;
 class Theme;
@@ -56,6 +57,10 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   static LayoutTheme& theme();
 
   virtual ThemePainter& painter() = 0;
+
+  // This function is called after associated WebThemeEngine instance
+  // was replaced. This is called only in tests.
+  virtual void didChangeThemeEngine() {}
 
   static void setSizeIfAuto(ComputedStyle&, const IntSize&);
 
@@ -167,7 +172,10 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual int popupInternalPaddingStart(const ComputedStyle&) const {
     return 0;
   }
-  virtual int popupInternalPaddingEnd(const ComputedStyle&) const { return 0; }
+  virtual int popupInternalPaddingEnd(const HostWindow*,
+                                      const ComputedStyle&) const {
+    return 0;
+  }
   virtual int popupInternalPaddingTop(const ComputedStyle&) const { return 0; }
   virtual int popupInternalPaddingBottom(const ComputedStyle&) const {
     return 0;

@@ -18,10 +18,10 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/webrtc/api/video/video_frame.h"
 #include "third_party/webrtc/base/bind.h"
 #include "third_party/webrtc/base/refcount.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
-#include "third_party/webrtc/video_frame.h"
 
 #if defined(OS_WIN)
 #include "base/command_line.h"
@@ -210,10 +210,10 @@ int32_t RTCVideoDecoder::Decode(
 #endif
 
   bool need_to_reset_for_midstream_resize = false;
-  if (inputImage._frameType == webrtc::kVideoFrameKey) {
-    const gfx::Size new_frame_size(inputImage._encodedWidth,
-                                   inputImage._encodedHeight);
-    DVLOG(2) << "Got key frame. size=" << new_frame_size.ToString();
+  const gfx::Size new_frame_size(inputImage._encodedWidth,
+                                 inputImage._encodedHeight);
+  if (!new_frame_size.IsEmpty() && new_frame_size != frame_size_) {
+    DVLOG(2) << "Got new size=" << new_frame_size.ToString();
 
     if (new_frame_size.width() > max_resolution_.width() ||
         new_frame_size.width() < min_resolution_.width() ||
@@ -237,7 +237,7 @@ int32_t RTCVideoDecoder::Decode(
     // If we're are in an error condition, increase the counter.
     vda_error_counter_ += vda_error_counter_ ? 1 : 0;
 
-    DVLOG(1) << "The first frame should be a key frame. Drop this.";
+    DVLOG(1) << "The first frame should have resolution. Drop this.";
     return WEBRTC_VIDEO_CODEC_ERROR;
   }
 
@@ -267,8 +267,7 @@ int32_t RTCVideoDecoder::Decode(
     }
 
     if (need_to_reset_for_midstream_resize) {
-      base::AutoUnlock auto_unlock(lock_);
-      Release();
+      Reset_Locked();
     }
     return WEBRTC_VIDEO_CODEC_OK;
   }
@@ -303,14 +302,8 @@ int32_t RTCVideoDecoder::Release() {
     reset_bitstream_buffer_id_ = next_bitstream_buffer_id_ - 1;
   else
     reset_bitstream_buffer_id_ = ID_LAST;
-  // If VDA is already resetting, no need to request the reset again.
-  if (state_ != RESETTING) {
-    state_ = RESETTING;
-    factories_->GetTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&RTCVideoDecoder::ResetInternal,
-                   weak_factory_.GetWeakPtr()));
-  }
+  frame_size_.SetSize(0, 0);
+  Reset_Locked();
   return WEBRTC_VIDEO_CODEC_OK;
 }
 
@@ -662,6 +655,19 @@ void RTCVideoDecoder::MovePendingBuffersToDecodeBuffers() {
   }
 }
 
+void RTCVideoDecoder::Reset_Locked() {
+  DVLOG(2) << __func__;
+  lock_.AssertAcquired();
+  // If VDA is already resetting, no need to request the reset again.
+  if (state_ != RESETTING) {
+    state_ = RESETTING;
+    factories_->GetTaskRunner()->PostTask(
+        FROM_HERE,
+        base::Bind(&RTCVideoDecoder::ResetInternal,
+                   weak_factory_.GetWeakPtr()));
+  }
+}
+
 void RTCVideoDecoder::ResetInternal() {
   DVLOG(2) << __func__;
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
@@ -739,7 +745,7 @@ void RTCVideoDecoder::CreateVDA(media::VideoCodecProfile profile,
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
   if (!IsProfileSupported(profile)) {
-    DVLOG(1) << "Unsupported profile " << profile;
+    DVLOG(1) << "Unsupported profile " << GetProfileName(profile);
   } else {
     vda_ = factories_->CreateVideoDecodeAccelerator();
 

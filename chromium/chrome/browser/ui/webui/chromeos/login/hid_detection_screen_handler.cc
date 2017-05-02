@@ -10,9 +10,10 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
 #include "chrome/browser/chromeos/login/screens/hid_detection_model.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
@@ -69,9 +70,6 @@ void HIDDetectionScreenHandler::Bind(HIDDetectionModel& model) {
 void HIDDetectionScreenHandler::Unbind() {
   model_ = nullptr;
   BaseScreenHandler::SetBaseScreen(nullptr);
-}
-
-void HIDDetectionScreenHandler::PrepareToShow() {
 }
 
 void HIDDetectionScreenHandler::CheckIsScreenRequired(

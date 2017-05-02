@@ -5,6 +5,7 @@
 #include "platform/graphics/CompositingReasons.h"
 
 #include "wtf/StdLibExtras.h"
+#include "wtf/text/StringBuilder.h"
 
 namespace blink {
 
@@ -68,7 +69,7 @@ const CompositingReasonStringMap kCompositingReasonStringMap[] = {
      "composited descendants"},
     {CompositingReasonBlendingWithCompositedDescendants,
      "blendingWithCompositedDescendants",
-     "Has a blenidng effect that needs to be known by compositor because of "
+     "Has a blending effect that needs to be known by compositor because of "
      "composited descendants"},
     {CompositingReasonClipsCompositingDescendants,
      "clipsCompositingDescendants",
@@ -127,10 +128,16 @@ const CompositingReasonStringMap kCompositingReasonStringMap[] = {
      "Secondary layer, to contain the mask contents"},
     {CompositingReasonLayerForClippingMask, "layerForClippingMask",
      "Secondary layer, for clipping mask"},
+    {CompositingReasonLayerForAncestorClippingMask,
+     "layerForAncestorClippingMask",
+     "Secondary layer, applies a clipping mask due to a sibling in the "
+     "composited layer tree"},
     {CompositingReasonLayerForScrollingBlockSelection,
      "layerForScrollingBlockSelection",
      "Secondary layer, to house block selection gaps for composited scrolling "
      "with no scrolling contents"},
+    {CompositingReasonLayerForDecoration, "layerForDecoration",
+     "Layer painted on top of other layers as decoration"},
     {CompositingReasonInlineTransform, "inlineTransform",
      "Has an inline transform, which causes subsequent layers to assume "
      "overlap"},
@@ -138,5 +145,20 @@ const CompositingReasonStringMap kCompositingReasonStringMap[] = {
 
 const size_t kNumberOfCompositingReasons =
     WTF_ARRAY_LENGTH(kCompositingReasonStringMap);
+
+String compositingReasonsAsString(CompositingReasons reasons) {
+  if (!reasons)
+    return "none";
+
+  StringBuilder builder;
+  for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
+    if (reasons & kCompositingReasonStringMap[i].reason) {
+      if (builder.length())
+        builder.append(',');
+      builder.append(kCompositingReasonStringMap[i].shortName);
+    }
+  }
+  return builder.toString();
+}
 
 }  // namespace blink

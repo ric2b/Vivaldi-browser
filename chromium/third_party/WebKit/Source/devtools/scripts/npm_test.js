@@ -10,17 +10,13 @@ var shell = require("child_process").execSync;
 var utils = require("./utils");
 
 var Flags = {
-    BUILD_ONLY: "--build-only",
     DEBUG_DEVTOOLS: "--debug-devtools",
     DEBUG_DEVTOOLS_SHORTHAND: "-d",
-    TEST_ONLY: "--test-only",
     FETCH_CONTENT_SHELL: "--fetch-content-shell",
 };
 
 var IS_DEBUG_ENABLED = utils.includes(process.argv, Flags.DEBUG_DEVTOOLS) ||
     utils.includes(process.argv, Flags.DEBUG_DEVTOOLS_SHORTHAND);
-var IS_BUILD_ONLY = utils.includes(process.argv, Flags.BUILD_ONLY);
-var IS_TEST_ONLY = utils.includes(process.argv, Flags.TEST_ONLY);
 var IS_FETCH_CONTENT_SHELL = utils.includes(process.argv, Flags.FETCH_CONTENT_SHELL);
 
 var CONTENT_SHELL_ZIP = "content-shell.zip";
@@ -39,15 +35,9 @@ function main(){
     if (!IS_FETCH_CONTENT_SHELL && hasUserCompiledContentShell) {
         var outDir = path.resolve(RELEASE_PATH, "..");
         if (!IS_DEBUG_ENABLED) {
-            console.log("Compiling devtools frontend");
-            shell(`ninja -C ${RELEASE_PATH} devtools_frontend_resources`);
+            compileFrontend();
         }
-        runTests(outDir, {useRelease: !IS_DEBUG_ENABLED});
-        return;
-    }
-    if (IS_TEST_ONLY) {
-        findPreviousUploadedPosition(findMostRecentChromiumCommit())
-            .then(commitPosition => runTests(path.resolve(CACHE_PATH, commitPosition, "out"), {useRelease: false}));
+        runTests(outDir, IS_DEBUG_ENABLED);
         return;
     }
     if (!utils.isDir(CACHE_PATH))
@@ -64,19 +54,50 @@ function main(){
 }
 main();
 
+function compileFrontend()
+{
+    console.log("Compiling devtools frontend");
+    try {
+        shell(`ninja -C ${RELEASE_PATH} devtools_frontend_resources`);
+    } catch (err) {
+        console.log(err.stdout.toString());
+        console.log('ERROR: Cannot compile frontend\n' + err);
+        process.exit(1);
+    }
+}
+
 function onUploadedCommitPosition(commitPosition)
 {
     var contentShellDirPath = path.resolve(CACHE_PATH, commitPosition, "out", "Release");
+    var contentShellResourcesPath = path.resolve(contentShellDirPath, "resources");
+    var contentShellPath = path.resolve(CACHE_PATH, commitPosition, "out");
+
     var hasCachedContentShell = utils.isFile(getContentShellBinaryPath(contentShellDirPath));
     if (hasCachedContentShell) {
-        var contentShellPath = path.resolve(CACHE_PATH, commitPosition, "out");
         console.log(`Using cached content shell at: ${contentShellPath}`);
-        return buildAndTest(contentShellPath);
+        copyFrontend(contentShellResourcesPath);
+        return runTests(contentShellPath, true);
     }
     return prepareContentShellDirectory(commitPosition)
         .then(downloadContentShell)
         .then(extractContentShell)
-        .then(buildAndTest);
+        .then(() => copyFrontend(contentShellResourcesPath))
+        .then(() => runTests(contentShellPath, true));
+}
+
+function copyFrontend(contentShellResourcesPath)
+{
+    var devtoolsResourcesPath = path.resolve(contentShellResourcesPath, "inspector");
+    var copiedFrontendPath = path.resolve(devtoolsResourcesPath, "front_end");
+    var debugFrontendPath = path.resolve(devtoolsResourcesPath, "debug");
+    var inspectorBackendCommandsPath = path.resolve(devtoolsResourcesPath, "InspectorBackendCommands.js");
+    var supportedCSSPropertiesPath = path.resolve(devtoolsResourcesPath, "SupportedCSSProperties.js");
+    utils.removeRecursive(copiedFrontendPath);
+    utils.removeRecursive(debugFrontendPath);
+    utils.copyRecursive(SOURCE_PATH, devtoolsResourcesPath);
+    fs.renameSync(copiedFrontendPath, debugFrontendPath);
+    utils.copy(inspectorBackendCommandsPath, debugFrontendPath);
+    utils.copy(supportedCSSPropertiesPath, debugFrontendPath);
 }
 
 function getPlatform()
@@ -214,34 +235,17 @@ function getContentShellBinaryPath(dirPath)
     }
 }
 
-function buildAndTest(buildDirectoryPath)
-{
-    var contentShellResourcesPath = path.resolve(buildDirectoryPath, "Release", "resources");
-    build(contentShellResourcesPath);
-    if (IS_BUILD_ONLY)
-        return;
-    runTests(buildDirectoryPath, {useRelease: false});
-}
-
-function build(contentShellResourcesPath)
-{
-    var devtoolsResourcesPath = path.resolve(contentShellResourcesPath, "inspector");
-    var inspectorBackendCommandsPath = path.resolve(devtoolsResourcesPath, "InspectorBackendCommands.js");
-    var supportedCSSPropertiesPath = path.resolve(devtoolsResourcesPath, "SupportedCSSProperties.js");
-    utils.copy(inspectorBackendCommandsPath, SOURCE_PATH);
-    utils.copy(supportedCSSPropertiesPath, SOURCE_PATH);
-}
-
-function runTests(buildDirectoryPath, options)
+function runTests(buildDirectoryPath, useDebugDevtools)
 {
     var testArgs = getInspectorTests().concat([
         "--no-pixel-tests",
         "--build-directory",
         buildDirectoryPath,
     ]);
-    if (!options.useRelease) {
+    if (useDebugDevtools) {
         testArgs.push("--additional-driver-flag=--debug-devtools");
-        testArgs.push(`--additional-driver-flag=--custom-devtools-frontend=${SOURCE_PATH}`);
+    } else {
+        console.log("TIP: You can debug a test using: npm run debug-test inspector/test-name.html")
     }
     if (IS_DEBUG_ENABLED) {
         testArgs.push("--additional-driver-flag=--remote-debugging-port=9222");

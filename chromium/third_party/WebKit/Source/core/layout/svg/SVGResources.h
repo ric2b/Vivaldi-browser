@@ -93,6 +93,9 @@ class SVGResources {
   // Methods operating on all cached resources
   void removeClientFromCache(LayoutObject*,
                              bool markForInvalidation = true) const;
+  void removeClientFromCacheAffectingObjectBounds(
+      LayoutObject*,
+      bool markForInvalidation = true) const;
   void resourceDestroyed(LayoutSVGResourceContainer*);
 
 #ifndef NDEBUG
@@ -140,7 +143,7 @@ class SVGResources {
         : clipper(nullptr), filter(nullptr), masker(nullptr) {}
 
     static std::unique_ptr<ClipperFilterMaskerData> create() {
-      return wrapUnique(new ClipperFilterMaskerData);
+      return WTF::wrapUnique(new ClipperFilterMaskerData);
     }
 
     LayoutSVGResourceClipper* clipper;
@@ -158,7 +161,7 @@ class SVGResources {
         : markerStart(nullptr), markerMid(nullptr), markerEnd(nullptr) {}
 
     static std::unique_ptr<MarkerData> create() {
-      return wrapUnique(new MarkerData);
+      return WTF::wrapUnique(new MarkerData);
     }
 
     LayoutSVGResourceMarker* markerStart;
@@ -178,7 +181,7 @@ class SVGResources {
     FillStrokeData() : fill(nullptr), stroke(nullptr) {}
 
     static std::unique_ptr<FillStrokeData> create() {
-      return wrapUnique(new FillStrokeData);
+      return WTF::wrapUnique(new FillStrokeData);
     }
 
     LayoutSVGResourcePaintServer* fill;

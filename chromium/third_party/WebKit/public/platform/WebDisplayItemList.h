@@ -12,19 +12,22 @@
 #include "WebSize.h"
 #include "WebVector.h"
 
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkRegion.h"
-#include "third_party/skia/include/core/SkXfermode.h"
 
 class SkColorFilter;
-class SkImageFilter;
 class SkMatrix44;
+class SkPath;
 class SkPicture;
 struct SkRect;
 class SkRRect;
 
 namespace cc {
 class FilterOperations;
+}
+
+namespace gfx {
+class ColorSpace;
 }
 
 namespace blink {
@@ -43,15 +46,14 @@ class WebDisplayItemList {
   virtual void appendClipItem(const WebRect& clipRect,
                               const WebVector<SkRRect>& roundedClipRects) {}
   virtual void appendEndClipItem() {}
-  virtual void appendClipPathItem(const SkPath&, SkRegion::Op, bool antialias) {
-  }
+  virtual void appendClipPathItem(const SkPath&, bool antialias) {}
   virtual void appendEndClipPathItem() {}
   virtual void appendFloatClipItem(const WebFloatRect& clipRect) {}
   virtual void appendEndFloatClipItem() {}
   virtual void appendTransformItem(const SkMatrix44&) {}
   virtual void appendEndTransformItem() {}
   virtual void appendCompositingItem(float opacity,
-                                     SkXfermode::Mode,
+                                     SkBlendMode,
                                      SkRect* bounds,
                                      SkColorFilter*) {}
   virtual void appendEndCompositingItem() {}
@@ -69,6 +71,12 @@ class WebDisplayItemList {
   virtual void appendEndScrollItem() {}
 
   virtual void setIsSuitableForGpuRasterization(bool isSuitable) {}
+
+  // Specifies the color space that the inputs of this display list were
+  // pre-converted into. If this is specified, then rasterization must not
+  // perform any color correction, and the result must be interpreted as being
+  // in this color space.
+  virtual void setImpliedColorSpace(const gfx::ColorSpace&) {}
 };
 
 }  // namespace blink

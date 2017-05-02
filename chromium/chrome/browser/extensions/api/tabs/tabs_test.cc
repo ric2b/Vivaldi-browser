@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "apps/test/app_window_waiter.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
@@ -45,7 +46,6 @@
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
-#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/test_util.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -798,12 +798,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, UpdateDevToolsWindow) {
 // TODO(llandwerlin): Activating a browser window and waiting for the
 // action to happen requires views::Widget which is not available on
 // MacOSX. Deactivate for now.
+// TODO(warx): Move ExtensionWindowLastFocusedTest to interactive
+// uitest as it triggers native widget activation.
 #if !defined(OS_MACOSX)
 class ExtensionWindowLastFocusedTest : public ExtensionTabsTest {
  public:
   void SetUpOnMainThread() override;
-
-  void ActivateAppWindow(AppWindow* app_window);
 
   void ActivateBrowserWindow(Browser* browser);
 
@@ -815,44 +815,6 @@ class ExtensionWindowLastFocusedTest : public ExtensionTabsTest {
                            const std::string& params);
 
  private:
-  // A helper class to wait for an AppWindow to become activated. On
-  // window system like X11, for a NativeWidget to be activated, we
-  // need to wait for the round trip communication with the X server.
-  class AppWindowActivatedWaiter : public AppWindowRegistry::Observer {
-   public:
-    AppWindowActivatedWaiter(AppWindow* app_window,
-                             content::BrowserContext* browser_context)
-        : app_window_(app_window),
-          browser_context_(browser_context),
-          waiting_(false) {
-      AppWindowRegistry::Get(browser_context_)->AddObserver(this);
-    }
-    ~AppWindowActivatedWaiter() override {
-      AppWindowRegistry::Get(browser_context_)->RemoveObserver(this);
-    }
-
-    void ActivateAndWait() {
-      app_window_->GetBaseWindow()->Activate();
-      if (!app_window_->GetBaseWindow()->IsActive()) {
-        waiting_ = true;
-        content::RunMessageLoop();
-      }
-    }
-
-    // AppWindowRegistry::Observer:
-    void OnAppWindowActivated(AppWindow* app_window) override {
-      if (app_window_ == app_window && waiting_) {
-        base::MessageLoopForUI::current()->QuitWhenIdle();
-        waiting_ = false;
-      }
-    }
-
-   private:
-    AppWindow* app_window_;
-    content::BrowserContext* browser_context_;
-    bool waiting_;
-  };
-
   // A helper class to wait for an views::Widget to become activated.
   class WidgetActivatedWaiter : public views::WidgetObserver {
    public:
@@ -890,11 +852,6 @@ class ExtensionWindowLastFocusedTest : public ExtensionTabsTest {
 void ExtensionWindowLastFocusedTest::SetUpOnMainThread() {
   ExtensionTabsTest::SetUpOnMainThread();
   extension_ = test_util::CreateEmptyExtension();
-}
-
-void ExtensionWindowLastFocusedTest::ActivateAppWindow(AppWindow* app_window) {
-  AppWindowActivatedWaiter waiter(app_window, browser()->profile());
-  waiter.ActivateAndWait();
 }
 
 void ExtensionWindowLastFocusedTest::ActivateBrowserWindow(Browser* browser) {
@@ -943,6 +900,34 @@ base::Value* ExtensionWindowLastFocusedTest::RunFunction(
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
+                       ExtensionAPICannotNavigateDevtools) {
+  std::unique_ptr<base::DictionaryValue> test_extension_value(
+      api_test_utils::ParseDictionary(
+          "{\"name\": \"Test\", \"version\": \"1.0\", \"permissions\": "
+          "[\"tabs\"]}"));
+  scoped_refptr<Extension> extension(
+      api_test_utils::CreateExtension(test_extension_value.get()));
+
+  DevToolsWindow* devtools = DevToolsWindowTesting::OpenDevToolsWindowSync(
+      browser()->tab_strip_model()->GetWebContentsAt(0), false /* is_docked */);
+
+  scoped_refptr<TabsUpdateFunction> function =
+      new TabsUpdateFunction();
+  function->set_extension(extension.get());
+
+  EXPECT_TRUE(base::MatchPattern(
+      utils::RunFunctionAndReturnError(
+          function.get(), base::StringPrintf(
+              "[%d, {\"url\":\"http://example.com\"}]",
+              ExtensionTabUtil::GetTabId(
+                  DevToolsWindowTesting::Get(devtools)->main_web_contents())),
+          DevToolsWindowTesting::Get(devtools)->browser()),
+      tabs_constants::kNoCurrentWindowError));
+
+  DevToolsWindowTesting::CloseDevToolsWindowSync(devtools);
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
                        NoDevtoolsAndAppWindows) {
   DevToolsWindow* devtools = DevToolsWindowTesting::OpenDevToolsWindowSync(
       browser()->tab_strip_model()->GetWebContentsAt(0), false /* is_docked */);
@@ -965,7 +950,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
       " \"minWidth\": 200, \"minHeight\": 200,"
       " \"maxWidth\": 400, \"maxHeight\": 400}}");
   {
-    ActivateAppWindow(app_window);
+    apps::AppWindowWaiter waiter(AppWindowRegistry::Get(browser()->profile()),
+                                 app_window->extension_id());
+    waiter.WaitForActivated();
 
     scoped_refptr<WindowsGetLastFocusedFunction> get_current_app_function =
         new WindowsGetLastFocusedFunction();
@@ -1037,7 +1024,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
       " \"minWidth\": 200, \"minHeight\": 200,"
       " \"maxWidth\": 400, \"maxHeight\": 400}}");
   {
-    ActivateAppWindow(app_window);
+    apps::AppWindowWaiter waiter(AppWindowRegistry::Get(browser()->profile()),
+                                 app_window->extension_id());
+    waiter.WaitForActivated();
 
     scoped_refptr<WindowsGetLastFocusedFunction> get_current_app_function =
         new WindowsGetLastFocusedFunction();
@@ -1168,7 +1157,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DuplicateTab) {
   int duplicate_tab_window_id = GetTabWindowId(duplicate_result.get());
   int duplicate_tab_index =
       api_test_utils::GetInteger(duplicate_result.get(), "index");
-  EXPECT_EQ(base::Value::TYPE_DICTIONARY, duplicate_result->GetType());
+  EXPECT_EQ(base::Value::Type::DICTIONARY, duplicate_result->GetType());
   // Duplicate tab id should be different from the original tab id.
   EXPECT_NE(tab_id, duplicate_tab_id);
   EXPECT_EQ(window_id, duplicate_tab_window_id);
@@ -1205,7 +1194,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DuplicateTabNoPermission) {
   int duplicate_tab_window_id = GetTabWindowId(duplicate_result.get());
   int duplicate_tab_index =
       api_test_utils::GetInteger(duplicate_result.get(), "index");
-  EXPECT_EQ(base::Value::TYPE_DICTIONARY, duplicate_result->GetType());
+  EXPECT_EQ(base::Value::Type::DICTIONARY, duplicate_result->GetType());
   // Duplicate tab id should be different from the original tab id.
   EXPECT_NE(tab_id, duplicate_tab_id);
   EXPECT_EQ(window_id, duplicate_tab_window_id);

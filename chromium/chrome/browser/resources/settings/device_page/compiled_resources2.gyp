@@ -7,7 +7,6 @@
       'target_name': 'device_page',
       'dependencies': [
         '../compiled_resources2.gyp:route',
-        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
         'device_page_browser_proxy'
@@ -52,7 +51,6 @@
     {
       'target_name': 'display',
       'dependencies': [
-        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/paper-slider/compiled_resources2.gyp:paper-slider-extracted',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(EXTERNS_GYP):system_display',

@@ -10,6 +10,7 @@
 #include "base/base_paths.h"
 #include "base/files/file.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ipc/ipc.mojom.h"
@@ -17,7 +18,6 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/test/mojo_test_base.h"
 #include "mojo/edk/test/multiprocess_test_helper.h"
-#include "mojo/edk/test/scoped_ipc_support.h"
 
 #if defined(OS_POSIX)
 #include "base/file_descriptor_posix.h"

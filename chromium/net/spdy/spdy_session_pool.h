@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -23,12 +24,19 @@
 #include "net/cert/cert_database.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_server.h"
+#include "net/spdy/server_push_delegate.h"
+#include "net/spdy/spdy_protocol.h"
 #include "net/spdy/spdy_session_key.h"
 #include "net/ssl/ssl_config_service.h"
 
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
+
 namespace net {
 
-class AddressList;
 class ClientSocketHandle;
 class HostResolver;
 class HttpServerProperties;
@@ -51,7 +59,7 @@ class NET_EXPORT SpdySessionPool
                   TransportSecurityState* transport_security_state,
                   bool enable_ping_based_connection_checking,
                   size_t session_max_recv_window_size,
-                  size_t stream_max_recv_window_size,
+                  const SettingsMap& initial_settings,
                   SpdySessionPool::TimeFunc time_func,
                   ProxyDelegate* proxy_delegate);
   ~SpdySessionPool() override;
@@ -126,6 +134,10 @@ class NET_EXPORT SpdySessionPool
     return http_server_properties_;
   }
 
+  void set_server_push_delegate(ServerPushDelegate* push_delegate) {
+    push_delegate_ = push_delegate;
+  }
+
   // NetworkChangeNotifier::IPAddressObserver methods:
 
   // We flush all idle sessions and release references to the active ones so
@@ -143,6 +155,9 @@ class NET_EXPORT SpdySessionPool
   // We perform the same flushing as described above when certificate database
   // is changed.
   void OnCertDBChanged(const X509Certificate* cert) override;
+
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_dump_absolute_name) const;
 
  private:
   friend class SpdySessionPoolPeer;  // For testing.
@@ -215,9 +230,17 @@ class NET_EXPORT SpdySessionPool
   // Defaults to true. May be controlled via SpdySessionPoolPeer for tests.
   bool enable_sending_initial_data_;
   bool enable_ping_based_connection_checking_;
+
   size_t session_max_recv_window_size_;
-  size_t stream_max_recv_window_size_;
+
+  // Settings that are sent in the initial SETTINGS frame
+  // (if |enable_sending_initial_data_| is true),
+  // and also control SpdySession parameters like initial receive window size
+  // and maximum HPACK dynamic table size.
+  const SettingsMap initial_settings_;
+
   TimeFunc time_func_;
+  ServerPushDelegate* push_delegate_;
 
   // Determines if a proxy is a trusted SPDY proxy, which is allowed to push
   // resources from origins that are different from those of their associated

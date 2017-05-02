@@ -8,10 +8,10 @@ import copy
 from webkitpy.common.host_mock import MockHost
 from webkitpy.common.net.buildbot import Build
 from webkitpy.common.net.buildbot_mock import MockBuildBot
-from webkitpy.common.net.layouttestresults import LayoutTestResult, LayoutTestResults
+from webkitpy.common.net.layout_test_results import LayoutTestResult, LayoutTestResults
 from webkitpy.common.net.web_mock import MockWeb
-from webkitpy.common.system.logtesting import LoggingTestCase
-from webkitpy.common.system.executive_mock import MockExecutive2
+from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.w3c.update_w3c_test_expectations import W3CExpectationsLineAdder, MARKER_COMMENT
 
@@ -21,45 +21,17 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
     def setUp(self):
         super(UpdateW3CTestExpectationsTest, self).setUp()
         self.host = MockHost()
-        self.mock_dict_one = {
-            'fake/test/path.html': {
-                'one': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'},
-                'two': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'}
-            }
-        }
-        self.mock_dict_two = {
-            'imported/fake/test/path.html': {
-                'one': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'},
-                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/626703'},
-                'three': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'}
-            }
-        }
-        self.mock_dict_three = {
-            'imported/fake/test/path.html': {
-                'four': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'}}
-        }
-        self.mock_dict_four = {
-            'imported/fake/test/path.html': {
-                'one': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/626703'}
-            }
-        }
         self.host.builders = BuilderList({
             'mac': {'port_name': 'test-mac'},
         })
 
-    def tearDown(self):
-        super(UpdateW3CTestExpectationsTest, self).tearDown()
-        self.host = None
-
     def test_get_failing_results_dict_only_passing_results(self):
         self.host.buildbot.set_results(Build('mac', 123), LayoutTestResults({
             'tests': {
-                'fake': {
-                    'test.html': {
-                        'passing-test.html': {
-                            'expected': 'PASS',
-                            'actual': 'PASS',
-                        },
+                'x': {
+                    'passing-test.html': {
+                        'expected': 'PASS',
+                        'actual': 'PASS',
                     },
                 },
             },
@@ -76,20 +48,18 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
     def test_get_failing_results_dict_some_failing_results(self):
         self.host.buildbot.set_results(Build('mac', 123), LayoutTestResults({
             'tests': {
-                'fake': {
-                    'test.html': {
-                        'failing-test.html': {
-                            'expected': 'PASS',
-                            'actual': 'IMAGE',
-                            'is_unexpected': True,
-                        },
+                'x': {
+                    'failing-test.html': {
+                        'expected': 'PASS',
+                        'actual': 'IMAGE',
+                        'is_unexpected': True,
                     },
                 },
             },
         }))
         line_adder = W3CExpectationsLineAdder(self.host)
         self.assertEqual(line_adder.get_failing_results_dict(Build('mac', 123)), {
-            'fake/test.html/failing-test.html': {
+            'x/failing-test.html': {
                 'Mac': {
                     'actual': 'IMAGE',
                     'expected': 'PASS',
@@ -98,60 +68,118 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
             },
         })
 
-    def test_merge_same_valued_keys(self):
+    def test_merge_same_valued_keys_all_match(self):
         line_adder = W3CExpectationsLineAdder(self.host)
         self.assertEqual(
-            line_adder.merge_same_valued_keys(self.mock_dict_one['fake/test/path.html']),
-            {('two', 'one'): {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'}})
+            line_adder.merge_same_valued_keys({
+                'one': {'expected': 'FAIL', 'actual': 'PASS'},
+                'two': {'expected': 'FAIL', 'actual': 'PASS'},
+            }),
+            {('two', 'one'): {'expected': 'FAIL', 'actual': 'PASS'}})
+
+    def test_merge_same_valued_keys_one_mismatch(self):
+        line_adder = W3CExpectationsLineAdder(self.host)
         self.assertEqual(
-            line_adder.merge_same_valued_keys(self.mock_dict_two['imported/fake/test/path.html']),
+            line_adder.merge_same_valued_keys({
+                'one': {'expected': 'FAIL', 'actual': 'PASS'},
+                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
+                'three': {'expected': 'FAIL', 'actual': 'PASS'},
+            }),
             {
-                ('three', 'one'): {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/626703'},
-                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/626703'}
+                ('three', 'one'): {'expected': 'FAIL', 'actual': 'PASS'},
+                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
             })
 
     def test_get_expectations(self):
         line_adder = W3CExpectationsLineAdder(self.host)
         self.assertEqual(
             line_adder.get_expectations({'expected': 'FAIL', 'actual': 'PASS'}),
-            set(['Pass']))
+            {'Pass'})
         self.assertEqual(
             line_adder.get_expectations({'expected': 'FAIL', 'actual': 'TIMEOUT'}),
-            set(['Timeout']))
+            {'Timeout'})
         self.assertEqual(
             line_adder.get_expectations({'expected': 'TIMEOUT', 'actual': 'PASS'}),
-            set(['Pass']))
+            {'Pass'})
         self.assertEqual(
             line_adder.get_expectations({'expected': 'PASS', 'actual': 'TIMEOUT CRASH FAIL'}),
-            set(['Crash', 'Failure', 'Timeout']))
+            {'Crash', 'Failure', 'Timeout'})
         self.assertEqual(
             line_adder.get_expectations({'expected': 'SLOW CRASH FAIL TIMEOUT', 'actual': 'PASS'}),
-            set(['Pass']))
+            {'Pass'})
 
     def test_create_line_list_old_tests(self):
+        # In this example, there are two failures that are not in w3c tests.
         line_adder = W3CExpectationsLineAdder(self.host)
-        self.assertEqual(line_adder.create_line_list(self.mock_dict_one), [])
+        results = {
+            'fake/test/path.html': {
+                'one': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
+                'two': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
+            }
+        }
+        self.assertEqual(line_adder.create_line_list(results), [])
 
     def test_create_line_list_new_tests(self):
+        # In this example, there are unexpected non-fail results in w3c tests.
         line_adder = W3CExpectationsLineAdder(self.host)
+        results = {
+            'external/fake/test/path.html': {
+                'one': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
+                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/test'},
+                'three': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
+            }
+        }
         self.assertEqual(
-            line_adder.create_line_list(self.mock_dict_two),
+            line_adder.create_line_list(results),
             [
-                'crbug.com/626703 [ three ] imported/fake/test/path.html [ Pass ]',
-                'crbug.com/626703 [ two ] imported/fake/test/path.html [ Timeout ]',
-                'crbug.com/626703 [ one ] imported/fake/test/path.html [ Pass ]',
+                'crbug.com/test [ three ] external/fake/test/path.html [ Pass ]',
+                'crbug.com/test [ two ] external/fake/test/path.html [ Timeout ]',
+                'crbug.com/test [ one ] external/fake/test/path.html [ Pass ]',
             ])
 
     def test_merge_dicts_with_conflict_raise_exception(self):
         line_adder = W3CExpectationsLineAdder(self.host)
-        self.assertRaises(ValueError, line_adder.merge_dicts, self.mock_dict_two, self.mock_dict_four)
+        # Both dicts here have the key "one", and the value is not equal.
+        with self.assertRaises(ValueError):
+            line_adder.merge_dicts(
+                {
+                    'external/fake/test/path.html': {
+                        'one': {'expected': 'FAIL', 'actual': 'PASS'},
+                        'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
+                        'three': {'expected': 'FAIL', 'actual': 'PASS'},
+                    },
+                },
+                {
+                    'external/fake/test/path.html': {
+                        'one': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
+                    }
+                })
 
     def test_merge_dicts_merges_second_dict_into_first(self):
         line_adder = W3CExpectationsLineAdder(self.host)
-        output = line_adder.merge_dicts(self.mock_dict_one, self.mock_dict_three)
-        self.assertEqual(output, self.mock_dict_one)
-        output = line_adder.merge_dicts(self.mock_dict_two, self.mock_dict_three)
-        self.assertEqual(output, self.mock_dict_two)
+        one = {
+            'fake/test/path.html': {
+                'one': {'expected': 'FAIL', 'actual': 'PASS'},
+                'two': {'expected': 'FAIL', 'actual': 'PASS'},
+            }
+        }
+        two = {
+            'external/fake/test/path.html': {
+                'one': {'expected': 'FAIL', 'actual': 'PASS'},
+                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
+                'three': {'expected': 'FAIL', 'actual': 'PASS'},
+            }
+        }
+        three = {
+            'external/fake/test/path.html': {
+                'four': {'expected': 'FAIL', 'actual': 'PASS'},
+            }
+        }
+
+        output = line_adder.merge_dicts(one, three)
+        self.assertEqual(output, one)
+        output = line_adder.merge_dicts(two, three)
+        self.assertEqual(output, two)
 
     def test_generate_results_dict(self):
         line_adder = W3CExpectationsLineAdder(MockHost())
@@ -161,7 +189,7 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
                     'expected': 'bar',
                     'actual': 'foo',
                     'is_unexpected': True,
-                    'has_stderr': True
+                    'has_stderr': True,
                 }
             )]
         self.assertEqual(line_adder.generate_results_dict('dummy_platform', layout_test_list), {
@@ -169,7 +197,7 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
                 'dummy_platform': {
                     'expected': 'bar',
                     'actual': 'foo',
-                    'bug': 'crbug.com/626703'
+                    'bug': 'crbug.com/626703',
                 }
             }
         })
@@ -245,43 +273,79 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
         self.assertFalse(line_adder.is_js_test('foo/bar.html'))
 
     def test_get_test_to_rebaseline_returns_only_tests_with_failures(self):
-        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/imported/fake/test/path.html'] = (
+        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
             '<script src="/resources/testharness.js"></script>')
-        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/imported/other/test/path.html'] = (
+        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/other/test/path.html'] = (
             '<script src="/resources/testharness.js"></script>')
         line_adder = W3CExpectationsLineAdder(self.host)
-        tests_to_rebaseline, _ = line_adder.get_tests_to_rebaseline(
-            ['imported/fake/test/path.html', 'imported/other/test/path.html'], self.mock_dict_two)
+        two = {
+            'external/fake/test/path.html': {
+                'one': {'expected': 'FAIL', 'actual': 'PASS'},
+                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT'},
+                'three': {'expected': 'FAIL', 'actual': 'PASS'},
+            }
+        }
+        tests_to_rebaseline, _ = line_adder.get_tests_to_rebaseline(two)
         # The other test doesn't have an entry in the test results dict, so it is not listed as a test to rebaseline.
-        self.assertEqual(tests_to_rebaseline, ['imported/fake/test/path.html'])
+        self.assertEqual(tests_to_rebaseline, ['external/fake/test/path.html'])
 
     def test_get_test_to_rebaseline_returns_only_js_tests(self):
-        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/imported/fake/test/path.html'] = (
+        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
             'this file does not look like a testharness JS test.')
         line_adder = W3CExpectationsLineAdder(self.host)
-        tests_to_rebaseline, _ = line_adder.get_tests_to_rebaseline(
-            ['imported/fake/test/path.html'], self.mock_dict_two)
+        two = {
+            'external/fake/test/path.html': {
+                'one': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
+                'two': {'expected': 'FAIL', 'actual': 'TIMEOUT', 'bug': 'crbug.com/test'},
+                'three': {'expected': 'FAIL', 'actual': 'PASS', 'bug': 'crbug.com/test'},
+            }
+        }
+        tests_to_rebaseline, _ = line_adder.get_tests_to_rebaseline(two)
         self.assertEqual(tests_to_rebaseline, [])
 
     def test_get_tests_to_rebaseline_returns_updated_dict(self):
         test_results_dict = {
-            'imported/fake/test/path.html': {
-                'one': {'expected': 'PASS', 'actual': 'TEXT', 'bug': 'crbug.com/626703'},
-                'two': {'expected': 'PASS', 'actual': 'TIMEOUT', 'bug': 'crbug.com/626703'},
+            'external/fake/test/path.html': {
+                'one': {'expected': 'PASS', 'actual': 'TEXT'},
+                'two': {'expected': 'PASS', 'actual': 'TIMEOUT'},
             },
         }
         test_results_dict_copy = copy.deepcopy(test_results_dict)
-        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/imported/fake/test/path.html'] = (
+        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
             '<script src="/resources/testharness.js"></script>')
         line_adder = W3CExpectationsLineAdder(self.host)
         tests_to_rebaseline, modified_test_results = line_adder.get_tests_to_rebaseline(
-            ['imported/fake/test/path.html'], test_results_dict)
-        self.assertEqual(tests_to_rebaseline, ['imported/fake/test/path.html'])
+            test_results_dict)
+        self.assertEqual(tests_to_rebaseline, ['external/fake/test/path.html'])
         # The record for the builder with a timeout is kept, but not with a text mismatch,
         # since that should be covered by downloading a new baseline.
         self.assertEqual(modified_test_results, {
-            'imported/fake/test/path.html': {
-                'two': {'expected': 'PASS', 'actual': 'TIMEOUT', 'bug': 'crbug.com/626703'},
+            'external/fake/test/path.html': {
+                'two': {'expected': 'PASS', 'actual': 'TIMEOUT'},
+            },
+        })
+        # The original dict isn't modified.
+        self.assertEqual(test_results_dict, test_results_dict_copy)
+
+    def test_get_tests_to_rebaseline_also_returns_slow_tests(self):
+        test_results_dict = {
+            'external/fake/test/path.html': {
+                'one': {'expected': 'SLOW', 'actual': 'TEXT'},
+                'two': {'expected': 'SLOW', 'actual': 'TIMEOUT'},
+            },
+        }
+        test_results_dict_copy = copy.deepcopy(test_results_dict)
+        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/external/fake/test/path.html'] = (
+            '<script src="/resources/testharness.js"></script>')
+        line_adder = W3CExpectationsLineAdder(self.host)
+        tests_to_rebaseline, modified_test_results = line_adder.get_tests_to_rebaseline(
+            test_results_dict)
+        self.assertEqual(tests_to_rebaseline, ['external/fake/test/path.html'])
+        # The record for the builder with a timeout is kept, but not with a text mismatch,
+        # since that should be covered by downloading a new baseline.
+        self.assertEqual(modified_test_results, {
+            'external/fake/test/path.html': {
+                'two': {'expected': 'SLOW', 'actual': 'TIMEOUT'},
             },
         })
         # The original dict isn't modified.
@@ -313,17 +377,3 @@ class UpdateW3CTestExpectationsTest(LoggingTestCase):
                 'https://codereview.chromium.org/api/11112222/1'
             ])
         self.assertLog(['ERROR: No try job information was collected.\n'])
-
-    def test_get_modified_existing_tests(self):
-        line_adder = W3CExpectationsLineAdder(self.host)
-        modified_files = [
-            'third_party/WebKit/LayoutTests/a/b.html',
-            'third_party/WebKit/LayoutTests/a/c.html',
-            'x/y/z.cc',
-        ]
-        self.host.filesystem.files['/mock-checkout/third_party/WebKit/LayoutTests/a/b.html'] = ''
-        self.host.filesystem.files['/mock-checkout/x/y/z.cc'] = ''
-        self.host.executive = MockExecutive2(output='\n'.join(modified_files))
-        tests = line_adder.get_modified_existing_tests()
-        self.assertEqual(tests, ['a/b.html'])
-        self.assertEqual(self.host.executive.calls, [['git', 'diff', 'origin/master', '--name-only', '--diff-filter=AMR']])

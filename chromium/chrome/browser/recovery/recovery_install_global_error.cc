@@ -5,6 +5,7 @@
 #include "chrome/browser/recovery/recovery_install_global_error.h"
 
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/recovery_component_installer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,16 +15,17 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/native_theme/native_theme.h"
 
 RecoveryInstallGlobalError::RecoveryInstallGlobalError(Profile* profile)
         : elevation_needed_(false),
           profile_(profile),
           has_shown_bubble_view_(false) {
-  GlobalErrorServiceFactory::GetForProfile(profile_)->AddGlobalError(this);
+  GlobalErrorServiceFactory::GetForProfile(profile_)->AddUnownedGlobalError(
+      this);
 
   PrefService* pref = g_browser_process->local_state();
   if (pref->FindPreference(prefs::kRecoveryComponentNeedsElevation)) {
@@ -42,11 +44,11 @@ RecoveryInstallGlobalError::RecoveryInstallGlobalError(Profile* profile)
                  base::Unretained(this)));
 }
 
-RecoveryInstallGlobalError::~RecoveryInstallGlobalError() {
-}
+RecoveryInstallGlobalError::~RecoveryInstallGlobalError() {}
 
 void RecoveryInstallGlobalError::Shutdown() {
-  GlobalErrorServiceFactory::GetForProfile(profile_)->RemoveGlobalError(this);
+  GlobalErrorServiceFactory::GetForProfile(profile_)->RemoveUnownedGlobalError(
+      this);
 }
 
 GlobalError::Severity RecoveryInstallGlobalError::GetSeverity() {
@@ -66,8 +68,10 @@ base::string16 RecoveryInstallGlobalError::MenuItemLabel() {
 }
 
 gfx::Image RecoveryInstallGlobalError::MenuItemIcon() {
-  return ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-      IDR_UPDATE_MENU_SEVERITY_HIGH);
+  return gfx::Image(gfx::CreateVectorIcon(
+      kBrowserToolsUpdateIcon,
+      ui::NativeTheme::GetInstanceForNativeUi()->GetSystemColor(
+          ui::NativeTheme::kColorId_AlertSeverityHigh)));
 }
 
 void RecoveryInstallGlobalError::ExecuteMenuItem(Browser* browser) {
@@ -92,8 +96,9 @@ bool RecoveryInstallGlobalError::ShouldCloseOnDeactivate() const {
 }
 
 gfx::Image RecoveryInstallGlobalError::GetBubbleViewIcon() {
-  return ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-      IDR_UPDATE_MENU_SEVERITY_HIGH);
+  // TODO(estade): there shouldn't be an icon in the bubble, but
+  // GlobalErrorBubbleView currently requires it. See crbug.com/673995
+  return MenuItemIcon();
 }
 
 base::string16 RecoveryInstallGlobalError::GetBubbleViewTitle() {

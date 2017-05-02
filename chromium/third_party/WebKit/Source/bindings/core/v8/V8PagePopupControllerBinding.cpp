@@ -12,7 +12,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/page/PagePopupController.h"
 #include "core/page/PagePopupSupplement.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -22,9 +22,10 @@ void pagePopupControllerAttributeGetter(
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Object> holder = info.Holder();
   DOMWindow* impl = V8Window::toImpl(holder);
-  PagePopupController* cppValue = PagePopupSupplement::pagePopupController(
-      *toLocalDOMWindow(impl)->frame());
-  v8SetReturnValue(info, toV8(cppValue, holder, info.GetIsolate()));
+  PagePopupController* cppValue =
+      PagePopupSupplement::from(*toLocalDOMWindow(impl)->frame())
+          .pagePopupController();
+  v8SetReturnValue(info, ToV8(cppValue, holder, info.GetIsolate()));
 }
 
 void pagePopupControllerAttributeGetterCallback(

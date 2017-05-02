@@ -30,8 +30,8 @@ class CSSVisibilityNonInterpolableValue : public NonInterpolableValue {
       return m_start;
     if (fraction >= 1)
       return m_end;
-    if (m_start == EVisibility::Visible || m_end == EVisibility::Visible)
-      return EVisibility::Visible;
+    if (m_start == EVisibility::kVisible || m_end == EVisibility::kVisible)
+      return EVisibility::kVisible;
     return fraction < 0.5 ? m_start : m_end;
   }
 
@@ -56,7 +56,7 @@ class UnderlyingVisibilityChecker
 
   static std::unique_ptr<UnderlyingVisibilityChecker> create(
       EVisibility visibility) {
-    return wrapUnique(new UnderlyingVisibilityChecker(visibility));
+    return WTF::wrapUnique(new UnderlyingVisibilityChecker(visibility));
   }
 
  private:
@@ -80,7 +80,7 @@ class InheritedVisibilityChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedVisibilityChecker> create(
       EVisibility visibility) {
-    return wrapUnique(new InheritedVisibilityChecker(visibility));
+    return WTF::wrapUnique(new InheritedVisibilityChecker(visibility));
   }
 
  private:
@@ -110,7 +110,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertNeutral(
   EVisibility underlyingVisibility =
       toCSSVisibilityNonInterpolableValue(*underlying.nonInterpolableValue)
           .visibility(underlyingFraction);
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       UnderlyingVisibilityChecker::create(underlyingVisibility));
   return createVisibilityValue(underlyingVisibility);
 }
@@ -118,7 +118,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertNeutral(
 InterpolationValue CSSVisibilityInterpolationType::maybeConvertInitial(
     const StyleResolverState&,
     ConversionCheckers&) const {
-  return createVisibilityValue(EVisibility::Visible);
+  return createVisibilityValue(EVisibility::kVisible);
 }
 
 InterpolationValue CSSVisibilityInterpolationType::maybeConvertInherit(
@@ -127,7 +127,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertInherit(
   if (!state.parentStyle())
     return nullptr;
   EVisibility inheritedVisibility = state.parentStyle()->visibility();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedVisibilityChecker::create(inheritedVisibility));
   return createVisibilityValue(inheritedVisibility);
 }
@@ -152,9 +152,10 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertValue(
   }
 }
 
-InterpolationValue CSSVisibilityInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return createVisibilityValue(environment.state().style()->visibility());
+InterpolationValue
+CSSVisibilityInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  return createVisibilityValue(state.style()->visibility());
 }
 
 PairwiseInterpolationValue CSSVisibilityInterpolationType::maybeMergeSingles(
@@ -177,17 +178,17 @@ void CSSVisibilityInterpolationType::composite(
   underlyingValueOwner.set(*this, value);
 }
 
-void CSSVisibilityInterpolationType::apply(
+void CSSVisibilityInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   // Visibility interpolation has been deferred to application time here due to
   // its non-linear behaviour.
   double fraction = toInterpolableNumber(interpolableValue).value();
   EVisibility visibility =
       toCSSVisibilityNonInterpolableValue(nonInterpolableValue)
           ->visibility(fraction);
-  environment.state().style()->setVisibility(visibility);
+  state.style()->setVisibility(visibility);
 }
 
 }  // namespace blink

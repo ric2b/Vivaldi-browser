@@ -4,7 +4,7 @@
 
 #include "core/frame/FrameView.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/LayoutObject.h"
@@ -119,6 +119,13 @@ TEST_P(FrameViewTest, HideTooltipWhenScrollPositionChanges) {
   EXPECT_CALL(chromeClient(), mockSetToolTip(document().frame(), String(), _));
   document().view()->layoutViewportScrollableArea()->setScrollOffset(
       ScrollOffset(1, 1), UserScroll);
+
+  // Programmatic scrolling should not dismiss the tooltip, so setToolTip
+  // should not be called for this invocation.
+  EXPECT_CALL(chromeClient(), mockSetToolTip(document().frame(), String(), _))
+      .Times(0);
+  document().view()->layoutViewportScrollableArea()->setScrollOffset(
+      ScrollOffset(2, 2), ProgrammaticScroll);
 }
 
 // NoOverflowInIncrementVisuallyNonEmptyPixelCount tests fail if the number of

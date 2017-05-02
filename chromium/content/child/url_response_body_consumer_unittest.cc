@@ -20,6 +20,7 @@
 #include "net/base/request_priority.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -28,7 +29,9 @@ namespace {
 class TestRequestPeer : public RequestPeer {
  public:
   struct Context;
-  explicit TestRequestPeer(Context* context) : context_(context) {}
+  TestRequestPeer(Context* context,
+                  scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : context_(context), task_runner_(std::move(task_runner)) {}
 
   void OnUploadProgress(uint64_t position, uint64_t size) override {
     ADD_FAILURE() << "OnUploadProgress should not be called.";
@@ -51,14 +54,19 @@ class TestRequestPeer : public RequestPeer {
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override {
     EXPECT_FALSE(context_->complete);
     context_->data.append(data->payload(), data->length());
+    if (context_->release_data_asynchronously)
+      task_runner_->DeleteSoon(FROM_HERE, data.release());
     context_->run_loop_quit_closure.Run();
   }
+
+  void OnTransferSizeUpdated(int transfer_size_diff) override {}
 
   void OnCompletedRequest(int error_code,
                           bool was_ignored_by_handler,
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
-                          int64_t total_transfer_size) override {
+                          int64_t total_transfer_size,
+                          int64_t encoded_body_size) override {
     EXPECT_FALSE(context_->complete);
     context_->complete = true;
     context_->error_code = error_code;
@@ -71,10 +79,12 @@ class TestRequestPeer : public RequestPeer {
     bool complete = false;
     base::Closure run_loop_quit_closure;
     int error_code = net::OK;
+    bool release_data_asynchronously = false;
   };
 
  private:
   Context* context_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRequestPeer);
 };
@@ -125,8 +135,8 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
   int SetUpRequestPeer(std::unique_ptr<ResourceRequest> request,
                        TestRequestPeer::Context* context) {
     return dispatcher_->StartAsync(
-        std::move(request), 0, nullptr, GURL(),
-        base::MakeUnique<TestRequestPeer>(context),
+        std::move(request), 0, nullptr, url::Origin(),
+        base::MakeUnique<TestRequestPeer>(context, message_loop_.task_runner()),
         blink::WebURLRequest::LoadingIPCType::ChromeIPC, nullptr, nullptr);
   }
 
@@ -150,7 +160,6 @@ TEST_F(URLResponseBodyConsumerTest, ReceiveData) {
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
       request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
       message_loop_.task_runner()));
-  consumer->Start(message_loop_.task_runner().get());
 
   mojo::ScopedDataPipeProducerHandle writer =
       std::move(data_pipe.producer_handle);
@@ -176,7 +185,41 @@ TEST_F(URLResponseBodyConsumerTest, OnCompleteThenClose) {
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
       request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
       message_loop_.task_runner()));
-  consumer->Start(message_loop_.task_runner().get());
+
+  consumer->OnComplete(ResourceRequestCompletionStatus());
+  mojo::ScopedDataPipeProducerHandle writer =
+      std::move(data_pipe.producer_handle);
+  std::string buffer = "hello";
+  uint32_t size = buffer.size();
+  MojoResult result =
+      mojo::WriteDataRaw(writer.get(), buffer.c_str(), &size, kNone);
+  ASSERT_EQ(MOJO_RESULT_OK, result);
+  ASSERT_EQ(buffer.size(), size);
+
+  Run(&context);
+
+  writer.reset();
+  EXPECT_FALSE(context.complete);
+  EXPECT_EQ("hello", context.data);
+
+  Run(&context);
+
+  EXPECT_TRUE(context.complete);
+  EXPECT_EQ("hello", context.data);
+}
+
+// Release the received data asynchronously. This leads to MOJO_RESULT_BUSY
+// from the BeginReadDataRaw call in OnReadable.
+TEST_F(URLResponseBodyConsumerTest, OnCompleteThenCloseWithAsyncRelease) {
+  TestRequestPeer::Context context;
+  context.release_data_asynchronously = true;
+  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  int request_id = SetUpRequestPeer(std::move(request), &context);
+  mojo::DataPipe data_pipe(CreateDataPipeOptions());
+
+  scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
+      request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
+      message_loop_.task_runner()));
 
   consumer->OnComplete(ResourceRequestCompletionStatus());
   mojo::ScopedDataPipeProducerHandle writer =
@@ -209,7 +252,6 @@ TEST_F(URLResponseBodyConsumerTest, CloseThenOnComplete) {
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
       request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
       message_loop_.task_runner()));
-  consumer->Start(message_loop_.task_runner().get());
 
   ResourceRequestCompletionStatus status;
   status.error_code = net::ERR_FAILED;

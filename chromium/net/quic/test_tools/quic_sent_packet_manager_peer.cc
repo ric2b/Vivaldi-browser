@@ -8,7 +8,7 @@
 #include "net/quic/core/congestion_control/loss_detection_interface.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_sent_packet_manager.h"
 
 namespace net {
@@ -43,12 +43,6 @@ bool QuicSentPacketManagerPeer::GetUseNewRto(
 bool QuicSentPacketManagerPeer::GetUndoRetransmits(
     QuicSentPacketManager* sent_packet_manager) {
   return sent_packet_manager->undo_pending_retransmits_;
-}
-
-// static
-QuicByteCount QuicSentPacketManagerPeer::GetReceiveWindow(
-    QuicSentPacketManager* sent_packet_manager) {
-  return sent_packet_manager->receive_buffer_bytes_;
 }
 
 // static
@@ -104,7 +98,6 @@ QuicTime QuicSentPacketManagerPeer::GetSentTime(
 // static
 bool QuicSentPacketManagerPeer::IsRetransmission(
     QuicSentPacketManager* sent_packet_manager,
-    QuicPathId path_id,
     QuicPacketNumber packet_number) {
   DCHECK(HasRetransmittableFrames(sent_packet_manager, packet_number));
   if (!HasRetransmittableFrames(sent_packet_manager, packet_number)) {
@@ -121,7 +114,6 @@ bool QuicSentPacketManagerPeer::IsRetransmission(
 // static
 void QuicSentPacketManagerPeer::MarkForRetransmission(
     QuicSentPacketManager* sent_packet_manager,
-    QuicPathId path_id,
     QuicPacketNumber packet_number,
     TransmissionType transmission_type) {
   sent_packet_manager->MarkForRetransmission(packet_number, transmission_type);
@@ -160,7 +152,7 @@ QuicByteCount QuicSentPacketManagerPeer::GetBytesInFlight(
 }
 
 // static
-QuicSentPacketManagerInterface::NetworkChangeVisitor*
+QuicSentPacketManager::NetworkChangeVisitor*
 QuicSentPacketManagerPeer::GetNetworkChangeVisitor(
     const QuicSentPacketManager* sent_packet_manager) {
   return sent_packet_manager->network_change_visitor_;

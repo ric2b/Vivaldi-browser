@@ -46,7 +46,6 @@ class DataReductionProxyIOData;
 class DataReductionProxyMutableConfigValues;
 class DataReductionProxyParams;
 class DataReductionProxyRequestOptions;
-class DataReductionProxyService;
 
 typedef base::Callback<void(const std::string&)> ConfigStorer;
 
@@ -276,6 +275,9 @@ class DataReductionProxyConfigServiceClient
 
   // Time when the IP address last changed.
   base::TimeTicks last_ip_address_change_;
+
+  // True if a client config fetch is in progress.
+  bool fetch_in_progress_;
 
   // Enforce usage on the IO thread.
   base::ThreadChecker thread_checker_;

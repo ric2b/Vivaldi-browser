@@ -5,12 +5,15 @@
 #include "chrome/browser/chromeos/arc/notification/arc_boot_error_notification.h"
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -88,18 +91,16 @@ void ShowLowDiskSpaceErrorNotification() {
 ArcBootErrorNotification::ArcBootErrorNotification(
     ArcBridgeService* bridge_service)
     : ArcService(bridge_service) {
-  arc_bridge_service()->AddObserver(this);
+  ArcSessionManager::Get()->AddSessionObserver(this);
 }
 
 ArcBootErrorNotification::~ArcBootErrorNotification() {
-  arc_bridge_service()->RemoveObserver(this);
+  ArcSessionManager::Get()->RemoveSessionObserver(this);
 }
 
-void ArcBootErrorNotification::OnBridgeStopped(
-    ArcBridgeService::StopReason reason) {
-  if (reason == ArcBridgeService::StopReason::LOW_DISK_SPACE) {
+void ArcBootErrorNotification::OnSessionStopped(StopReason reason) {
+  if (reason == StopReason::LOW_DISK_SPACE)
     ShowLowDiskSpaceErrorNotification();
-  }
 }
 
 }  // namespace arc

@@ -5,36 +5,60 @@
 var vrShellUi = (function() {
   'use strict';
 
-  let scene = new ui.Scene();
-  let sceneManager;
+  let ui = new scene.Scene();
+  let uiManager;
 
   let uiRootElement = document.querySelector('#ui');
   let uiStyle = window.getComputedStyle(uiRootElement);
-  let scaleFactor = uiStyle.getPropertyValue('--scaleFactor');
+  /** @const */ var ANIM_DURATION = 150;
+
+  // This value should match the one in VrShellImpl.java
+  /** @const */ var UI_DPR = 1.2;
 
   function getStyleFloat(style, property) {
     let value = parseFloat(style.getPropertyValue(property));
     return isNaN(value) ? 0 : value;
   }
 
+  function getStyleString(style, property) {
+    let str = style.getPropertyValue(property);
+    return !str || 0 === str.length ? '' : str;
+  }
+
   class ContentQuad {
     constructor() {
-      /** @const */ var SCREEN_HEIGHT = 1.6;
-      /** @const */ var SCREEN_DISTANCE = 2.0;
+      /** @const */ this.SCREEN_HEIGHT = 1.6;
+      /** @const */ this.SCREEN_RATIO = 16 / 9;
+      /** @const */ this.BROWSING_SCREEN_DISTANCE = 2.0;
+      /** @const */ this.FULLSCREEN_DISTANCE = 3.0;
 
       let element = new api.UiElement(0, 0, 0, 0);
-      element.setIsContentQuad(false);
+      element.setIsContentQuad();
       element.setVisible(false);
-      element.setSize(SCREEN_HEIGHT * 16 / 9, SCREEN_HEIGHT);
-      element.setTranslation(0, 0, -SCREEN_DISTANCE);
-      this.elementId = scene.addElement(element);
+      element.setSize(
+          this.SCREEN_HEIGHT * this.SCREEN_RATIO, this.SCREEN_HEIGHT);
+      element.setTranslation(0, 0, -this.BROWSING_SCREEN_DISTANCE);
+      this.elementId = ui.addElement(element);
     }
 
     setEnabled(enabled) {
       let update = new api.UiElementUpdate();
       update.setVisible(enabled);
-      scene.updateElement(this.elementId, update);
+      ui.updateElement(this.elementId, update);
     }
+
+    setFullscreen(enabled) {
+      let anim = new api.Animation(this.elementId, ANIM_DURATION);
+      if (enabled) {
+        anim.setTranslation(0, 0, -this.FULLSCREEN_DISTANCE);
+      } else {
+        anim.setTranslation(0, 0, -this.BROWSING_SCREEN_DISTANCE);
+      }
+      ui.addAnimation(anim);
+    }
+
+    // TODO(crbug/643815): Add a method setting aspect ratio (and possible
+    // animation of changing it).
 
     getElementId() {
       return this.elementId;
@@ -53,17 +77,17 @@ var vrShellUi = (function() {
       let pixelHeight = Math.ceil(rect.bottom) - pixelY;
 
       let element = new api.UiElement(pixelX, pixelY, pixelWidth, pixelHeight);
-      element.setSize(scaleFactor * pixelWidth / 1000,
-          scaleFactor * pixelHeight / 1000);
+      element.setSize(pixelWidth / 1000, pixelHeight / 1000);
 
       // Pull additional custom properties from CSS.
       let style = window.getComputedStyle(domElement);
+      this.translationX = getStyleFloat(style, '--tranX');
+      this.translationY = getStyleFloat(style, '--tranY');
+      this.translationZ = getStyleFloat(style, '--tranZ');
       element.setTranslation(
-          getStyleFloat(style, '--tranX'),
-          getStyleFloat(style, '--tranY'),
-          getStyleFloat(style, '--tranZ'));
+          this.translationX, this.translationY, this.translationZ);
 
-      this.uiElementId = scene.addElement(element);
+      this.uiElementId = ui.addElement(element);
       this.uiAnimationId = -1;
       this.domElement = domElement;
     }
@@ -84,13 +108,13 @@ var vrShellUi = (function() {
       let caption = this.domElement.querySelector('.caption');
       button.style.opacity = buttonOpacity;
       caption.style.opacity = captionOpacity;
-      let anim = new api.Animation(this.uiElementId, 150);
+      let anim = new api.Animation(this.uiElementId, ANIM_DURATION);
       anim.setTranslation(0, 0, distanceForward);
       if (this.uiAnimationId >= 0) {
-        scene.removeAnimation(this.uiAnimationId);
+        ui.removeAnimation(this.uiAnimationId);
       }
-      this.uiAnimationId = scene.addAnimation(anim);
-      scene.flush();
+      this.uiAnimationId = ui.addAnimation(anim);
+      ui.flush();
     }
 
     onMouseEnter() {
@@ -104,17 +128,29 @@ var vrShellUi = (function() {
 
   class Controls {
     constructor(contentQuadId) {
+      this.enabled = false;
+      this.reloadUiEnabled = false;
+
       this.buttons = [];
       let descriptors = [
-          ['#back', function() {
+        [
+          '#back',
+          function() {
             api.doAction(api.Action.HISTORY_BACK);
-          }],
-          ['#reload', function() {
+          }
+        ],
+        [
+          '#reload',
+          function() {
             api.doAction(api.Action.RELOAD);
-          }],
-          ['#forward', function() {
+          }
+        ],
+        [
+          '#forward',
+          function() {
             api.doAction(api.Action.HISTORY_FORWARD);
-          }],
+          }
+        ],
       ];
 
       /** @const */ var BUTTON_SPACING = 0.136;
@@ -125,7 +161,7 @@ var vrShellUi = (function() {
         let position = new api.UiElement(0, 0, 0, 0);
         position.setVisible(false);
         position.setTranslation(startPosition + i * BUTTON_SPACING, -0.68, -1);
-        let id = scene.addElement(position);
+        let id = ui.addElement(position);
 
         let domId = descriptors[i][0];
         let callback = descriptors[i][1];
@@ -135,12 +171,12 @@ var vrShellUi = (function() {
         let update = new api.UiElementUpdate();
         update.setParentId(id);
         update.setVisible(false);
-        scene.updateElement(element.uiElementId, update);
+        ui.updateElement(element.uiElementId, update);
       }
 
       this.reloadUiButton = new DomUiElement('#reload-ui-button');
       this.reloadUiButton.domElement.addEventListener('click', function() {
-        scene.purge();
+        ui.purge();
         api.doAction(api.Action.RELOAD_UI);
       });
 
@@ -150,7 +186,7 @@ var vrShellUi = (function() {
       update.setScale(2.2, 2.2, 1);
       update.setTranslation(0, -0.6, 0.3);
       update.setAnchoring(api.XAnchoring.XNONE, api.YAnchoring.YBOTTOM);
-      scene.updateElement(this.reloadUiButton.uiElementId, update);
+      ui.updateElement(this.reloadUiButton.uiElementId, update);
     }
 
     setEnabled(enabled) {
@@ -167,11 +203,11 @@ var vrShellUi = (function() {
       for (let i = 0; i < this.buttons.length; i++) {
         let update = new api.UiElementUpdate();
         update.setVisible(this.enabled);
-        scene.updateElement(this.buttons[i].uiElementId, update);
+        ui.updateElement(this.buttons[i].uiElementId, update);
       }
       let update = new api.UiElementUpdate();
       update.setVisible(this.enabled && this.reloadUiEnabled);
-      scene.updateElement(this.reloadUiButton.uiElementId, update);
+      ui.updateElement(this.reloadUiButton.uiElementId, update);
     }
   };
 
@@ -180,30 +216,33 @@ var vrShellUi = (function() {
       /** @const */ var DISTANCE = 0.7;
       /** @const */ var ANGLE_UP = 16.3 * Math.PI / 180.0;
 
+      this.enabled = false;
+      this.secure = false;
+      this.secureOriginTimer = null;
+
       // Permanent WebVR security warning. This warning is shown near the top of
       // the field of view.
       this.webVrSecureWarning = new DomUiElement('#webvr-not-secure-permanent');
       let update = new api.UiElementUpdate();
       update.setScale(DISTANCE, DISTANCE, 1);
-      update.setTranslation(0, DISTANCE * Math.sin(ANGLE_UP),
-          -DISTANCE * Math.cos(ANGLE_UP));
+      update.setTranslation(
+          0, DISTANCE * Math.sin(ANGLE_UP), -DISTANCE * Math.cos(ANGLE_UP));
       update.setRotation(1.0, 0.0, 0.0, ANGLE_UP);
       update.setHitTestable(false);
       update.setVisible(false);
       update.setLockToFieldOfView(true);
-      scene.updateElement(this.webVrSecureWarning.uiElementId, update);
+      ui.updateElement(this.webVrSecureWarning.uiElementId, update);
 
       // Temporary WebVR security warning. This warning is shown in the center
       // of the field of view, for a limited period of time.
-      this.transientWarning = new DomUiElement(
-          '#webvr-not-secure-transient');
+      this.transientWarning = new DomUiElement('#webvr-not-secure-transient');
       update = new api.UiElementUpdate();
       update.setScale(DISTANCE, DISTANCE, 1);
       update.setTranslation(0, 0, -DISTANCE);
       update.setHitTestable(false);
       update.setVisible(false);
       update.setLockToFieldOfView(true);
-      scene.updateElement(this.transientWarning.uiElementId, update);
+      ui.updateElement(this.transientWarning.uiElementId, update);
     }
 
     setEnabled(enabled) {
@@ -211,22 +250,22 @@ var vrShellUi = (function() {
       this.updateState();
     }
 
-    setSecureOrigin(secure) {
-      this.isSecureOrigin = secure;
+    setSecure(secure) {
+      this.secure = secure;
       this.updateState();
     }
 
     updateState() {
       /** @const */ var TRANSIENT_TIMEOUT_MS = 30000;
 
-      let visible = (this.enabled && !this.isSecureOrigin);
+      let visible = (this.enabled && !this.secure);
       if (this.secureOriginTimer) {
         clearInterval(this.secureOriginTimer);
         this.secureOriginTimer = null;
       }
       if (visible) {
-        this.secureOriginTimer = setTimeout(
-            this.onTransientTimer.bind(this), TRANSIENT_TIMEOUT_MS);
+        this.secureOriginTimer =
+            setTimeout(this.onTransientTimer.bind(this), TRANSIENT_TIMEOUT_MS);
       }
       this.showOrHideWarnings(visible);
     }
@@ -234,42 +273,66 @@ var vrShellUi = (function() {
     showOrHideWarnings(visible) {
       let update = new api.UiElementUpdate();
       update.setVisible(visible);
-      scene.updateElement(this.webVrSecureWarning.uiElementId, update);
+      ui.updateElement(this.webVrSecureWarning.uiElementId, update);
       update = new api.UiElementUpdate();
       update.setVisible(visible);
-      scene.updateElement(this.transientWarning.uiElementId, update);
+      ui.updateElement(this.transientWarning.uiElementId, update);
     }
 
     onTransientTimer() {
       let update = new api.UiElementUpdate();
       update.setVisible(false);
-      scene.updateElement(this.transientWarning.uiElementId, update);
+      ui.updateElement(this.transientWarning.uiElementId, update);
       this.secureOriginTimer = null;
-      scene.flush();
+      ui.flush();
     }
   };
 
   class Omnibox {
-    constructor(contentQuadId) {
-      /** @const */ var VISIBILITY_TIMEOUT_MS = 3000;
-
-      this.domUiElement = new DomUiElement('#omni-container');
+    constructor() {
+      this.domUiElement = new DomUiElement('#omnibox-container');
       this.enabled = false;
-      this.secure = false;
-      this.visibilityTimeout = VISIBILITY_TIMEOUT_MS;
+      this.hidden = false;
+      this.loading = false;
+      this.loadProgress = 0;
+      this.level = 0;
+      this.visibilityTimeout = 0;
       this.visibilityTimer = null;
       this.nativeState = {};
 
       // Initially invisible.
       let update = new api.UiElementUpdate();
       update.setVisible(false);
-      scene.updateElement(this.domUiElement.uiElementId, update);
+      ui.updateElement(this.domUiElement.uiElementId, update);
       this.nativeState.visible = false;
 
-      // Listen to the end of transitions, so that the box can be natively
-      // hidden after it finishes hiding itself.
-      document.querySelector('#omni').addEventListener('transitionend',
-          this.onAnimationDone.bind(this));
+      // Pull some CSS properties so that Javascript can reconfigure the omnibox
+      // programmatically.
+      let border =
+          this.domUiElement.domElement.querySelector('#omnibox-border');
+      let style = window.getComputedStyle(border);
+      this.statusBarColor = getStyleString(style, '--statusBarColor');
+      this.backgroundColor = style.backgroundColor;
+      this.fadeTimeMs = getStyleFloat(style, '--fadeTimeMs');
+      this.fadeYOffset = getStyleFloat(style, '--fadeYOffset');
+      this.opacity = getStyleFloat(style, '--opacity');
+    }
+
+    getSecurityIconElementId(level) {
+      // See security_state.h and getSecurityIconResource() for this mapping.
+      switch (level) {
+        case 0:  // NONE
+        case 1:  // HTTP_SHOW_WARNING
+        case 4:  // SECURITY_WARNING
+          return '#omnibox-info-icon';
+        case 2:  // SECURE:
+        case 3:  // EV_SECURE:
+          return '#omnibox-lock-icon';
+        case 5:  // SECURE_WITH_POLICY_INSTALLED_CERT (ChromeOS only)
+        case 6:  // DANGEROUS
+        default:
+          return '#omnibox-warning-icon';
+      }
     }
 
     setEnabled(enabled) {
@@ -280,7 +343,13 @@ var vrShellUi = (function() {
 
     setLoading(loading) {
       this.loading = loading;
+      this.loadProgress = 0;
       this.resetVisibilityTimer();
+      this.updateState();
+    }
+
+    setLoadProgress(progress) {
+      this.loadProgress = progress;
       this.updateState();
     }
 
@@ -292,8 +361,13 @@ var vrShellUi = (function() {
       this.updateState();
     }
 
-    setSecureOrigin(secure) {
-      this.secure = secure;
+    setSecurityLevel(level) {
+      document.querySelector('#omnibox-warning-icon').style.display = 'none';
+      document.querySelector('#omnibox-info-icon').style.display = 'none';
+      document.querySelector('#omnibox-lock-icon').style.display = 'none';
+      let icon = this.getSecurityIconElementId(level);
+      document.querySelector(icon).style.display = 'block';
+
       this.resetVisibilityTimer();
       this.updateState();
     }
@@ -309,9 +383,9 @@ var vrShellUi = (function() {
         clearInterval(this.visibilityTimer);
         this.visibilityTimer = null;
       }
-      if (this.enabled && this.visibilityTimeout > 0) {
+      if (this.enabled && this.visibilityTimeout > 0 && !this.loading) {
         this.visibilityTimer = setTimeout(
-          this.onVisibilityTimer.bind(this), this.visibilityTimeout);
+            this.onVisibilityTimer.bind(this), this.visibilityTimeout);
       }
     }
 
@@ -320,34 +394,51 @@ var vrShellUi = (function() {
       this.updateState();
     }
 
-    onAnimationDone(e) {
-      if (e.propertyName == 'opacity' && !this.visibleAfterTransition) {
-        this.setNativeVisibility(false);
-      }
-    }
-
     updateState() {
+      this.setNativeVisibility(this.enabled);
+
       if (!this.enabled) {
-        this.setNativeVisibility(false);
         return;
       }
 
-      document.querySelector('#omni-secure-icon').style.display =
-          (this.secure ? 'block' : 'none');
-      document.querySelector('#omni-insecure-icon').style.display =
-          (this.secure ? 'none' : 'block');
-
-      let state = 'idle';
-      this.visibleAfterTransition = true;
-      if (this.visibilityTimeout > 0 && !this.visibilityTimer) {
-        state = 'hide';
-        this.visibleAfterTransition = false;
-      } else if (this.loading) {
-        state = 'loading';
+      let indicator = document.querySelector('#omnibox-border');
+      if (this.loading) {
+        // Remap load progress range 0-100 as 5-95 percent, to avoid the
+        // extremities of the rounded ends of the omnibox.
+        let percent = Math.round((this.loadProgress * 0.9 + 0.05) * 100);
+        let gradient = 'linear-gradient(to right, ' + this.statusBarColor +
+            ' 0%, ' + this.statusBarColor + ' ' + percent + '%, ' +
+            this.backgroundColor + ' ' + percent + '%, ' +
+            this.backgroundColor + ' 100%)';
+        indicator.style.background = gradient;
+      } else {
+        indicator.style.background = this.backgroundColor;
       }
-      document.querySelector('#omni').className = state;
 
-      this.setNativeVisibility(true);
+      let shouldBeHidden =
+          !this.loading && this.visibilityTimeout > 0 && !this.visibilityTimer;
+      if (shouldBeHidden != this.hidden) {
+        // Make the box fade away if it's disappearing.
+        this.hidden = shouldBeHidden;
+
+        // Fade-out or fade-in the box.
+        let opacityAnimation =
+            new api.Animation(this.domUiElement.uiElementId, this.fadeTimeMs);
+        opacityAnimation.setOpacity(this.hidden ? 0.0 : this.opacity);
+        ui.addAnimation(opacityAnimation);
+
+        // Drop the position as it fades, or raise the position if appearing.
+        let yOffset = this.hidden ? this.fadeYOffset : 0;
+        let positionAnimation =
+            new api.Animation(this.domUiElement.uiElementId, this.fadeTimeMs);
+        positionAnimation.setTranslation(
+            this.domUiElement.translationX,
+            this.domUiElement.translationY + yOffset,
+            this.domUiElement.translationZ);
+        ui.addAnimation(positionAnimation);
+      }
+
+      ui.flush();
     }
 
     setNativeVisibility(visible) {
@@ -357,34 +448,55 @@ var vrShellUi = (function() {
       this.nativeState.visible = visible;
       let update = new api.UiElementUpdate();
       update.setVisible(visible);
-      scene.updateElement(this.domUiElement.uiElementId, update);
-      scene.flush();
+      ui.updateElement(this.domUiElement.uiElementId, update);
+      ui.flush();
     }
   };
 
-  class SceneManager {
+  class UiManager {
     constructor() {
       this.mode = api.Mode.UNKNOWN;
+      this.menuMode = false;
+      this.fullscreen = false;
 
       this.contentQuad = new ContentQuad();
       let contentId = this.contentQuad.getElementId();
 
       this.controls = new Controls(contentId);
       this.secureOriginWarnings = new SecureOriginWarnings();
-      this.omnibox = new Omnibox(contentId);
+      this.omnibox = new Omnibox();
     }
 
-    setMode(mode) {
+    setMode(mode, menuMode, fullscreen) {
+      /** @const */ var OMNIBOX_VISIBILITY_TIMEOUT_MS = 5000;
+
       this.mode = mode;
-      this.contentQuad.setEnabled(mode == api.Mode.STANDARD);
-      this.controls.setEnabled(mode == api.Mode.STANDARD);
-      this.omnibox.setEnabled(mode == api.Mode.STANDARD);
+      this.menuMode = menuMode;
+      this.fullscreen = fullscreen;
+
+      this.contentQuad.setEnabled(mode == api.Mode.STANDARD && !menuMode);
+      this.contentQuad.setFullscreen(fullscreen);
+      // TODO(crbug/643815): Set aspect ratio on content quad when available.
+      // TODO(amp): Don't show controls in fullscreen once MENU mode lands.
+      this.controls.setEnabled(mode == api.Mode.STANDARD && !menuMode);
+      this.omnibox.setEnabled(mode == api.Mode.STANDARD && !menuMode);
+      // TODO(amp): Don't show controls in CINEMA mode once MENU mode lands.
+      this.omnibox.setVisibilityTimeout(
+          mode == api.Mode.STANDARD && !menuMode ?
+              0 :
+              OMNIBOX_VISIBILITY_TIMEOUT_MS);
       this.secureOriginWarnings.setEnabled(mode == api.Mode.WEB_VR);
+
+      api.setUiCssSize(
+          uiRootElement.clientWidth, uiRootElement.clientHeight, UI_DPR);
     }
 
-    setSecureOrigin(secure) {
-      this.secureOriginWarnings.setSecureOrigin(secure);
-      this.omnibox.setSecureOrigin(secure);
+    setSecurityLevel(level) {
+      this.omnibox.setSecurityLevel(level);
+    }
+
+    setWebVRSecureOrigin(secure) {
+      this.secureOriginWarnings.setSecure(secure);
     }
 
     setReloadUiEnabled(enabled) {
@@ -393,30 +505,36 @@ var vrShellUi = (function() {
   };
 
   function initialize() {
-    sceneManager = new SceneManager();
-    scene.flush();
+    uiManager = new UiManager();
+    ui.flush();
 
     api.domLoaded();
   }
 
   function command(dict) {
     if ('mode' in dict) {
-      sceneManager.setMode(dict['mode']);
+      uiManager.setMode(dict['mode'], dict['menuMode'], dict['fullscreen']);
     }
-    if ('secureOrigin' in dict) {
-      sceneManager.setSecureOrigin(dict['secureOrigin']);
+    if ('securityLevel' in dict) {
+      uiManager.setSecurityLevel(dict['securityLevel']);
+    }
+    if ('webVRSecureOrigin' in dict) {
+      uiManager.setWebVRSecureOrigin(dict['webVRSecureOrigin']);
     }
     if ('enableReloadUi' in dict) {
-      sceneManager.setReloadUiEnabled(dict['enableReloadUi']);
+      uiManager.setReloadUiEnabled(dict['enableReloadUi']);
     }
     if ('url' in dict) {
       let url = dict['url'];
-      sceneManager.omnibox.setURL(url['host'], url['path']);
+      uiManager.omnibox.setURL(url['host'], url['path']);
     }
     if ('loading' in dict) {
-      sceneManager.omnibox.setLoading(dict['loading']);
+      uiManager.omnibox.setLoading(dict['loading']);
     }
-    scene.flush();
+    if ('loadProgress' in dict) {
+      uiManager.omnibox.setLoadProgress(dict['loadProgress']);
+    }
+    ui.flush();
   }
 
   return {

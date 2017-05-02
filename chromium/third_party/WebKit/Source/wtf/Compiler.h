@@ -61,37 +61,11 @@
 
 /* ==== Compiler features ==== */
 
-/* NO_RETURN */
-
-#ifndef NO_RETURN
-#if COMPILER(GCC)
-#define NO_RETURN __attribute((__noreturn__))
-#elif COMPILER(MSVC)
-#define NO_RETURN __declspec(noreturn)
-#else
-#define NO_RETURN
-#endif
-#endif
-
 /* NEVER_INLINE */
 
 // TODO(palmer): Remove this and update callers to use NOINLINE from Chromium
 // base. https://bugs.chromium.org/p/chromium/issues/detail?id=632441
-//
-// For compatibility with callers in Blink:
 #define NEVER_INLINE NOINLINE
-
-/* WARN_UNUSED_RETURN */
-
-#if COMPILER(GCC)
-#define WARN_UNUSED_RETURN __attribute__((warn_unused_result))
-#else
-#define WARN_UNUSED_RETURN
-#endif
-
-/* ALLOW_UNUSED_LOCAL */
-
-#define ALLOW_UNUSED_LOCAL(x) false ? (void)x : (void)0
 
 /* OBJC_CLASS */
 
@@ -121,15 +95,6 @@
   __attribute__((no_sanitize("cfi-unrelated-cast", "vptr")))
 #else
 #define NO_SANITIZE_UNRELATED_CAST
-#endif
-
-/* WTF_NON_EXPORTED_BASE; similar NON_EXPORTED_BASE in base/compiler_specific.h
- */
-
-#if COMPILER(MSVC)
-#define WTF_NON_EXPORTED_BASE(code) __pragma(warning(suppress : 4275)) code
-#else
-#define WTF_NON_EXPORTED_BASE(code) code
 #endif
 
 #endif /* WTF_Compiler_h */

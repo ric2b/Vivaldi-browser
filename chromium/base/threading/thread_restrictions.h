@@ -14,9 +14,6 @@ class HistogramSynchronizer;
 class NativeBackendKWallet;
 class ScopedAllowWaitForLegacyWebViewApi;
 
-namespace blimp {
-class BlimpBrowserTest;
-}
 namespace cc {
 class CompletionEvent;
 class SingleThreadTaskGraphRunner;
@@ -55,6 +52,9 @@ class GpuChannelHost;
 }
 namespace mojo {
 class SyncCallRestrictions;
+namespace edk {
+class ScopedIPCSupport;
+}
 }
 namespace ui {
 class CommandBufferClientImpl;
@@ -135,20 +135,6 @@ class BASE_EXPORT ThreadRestrictions {
     DISALLOW_COPY_AND_ASSIGN(ScopedAllowIO);
   };
 
-  // Constructing a ScopedAllowSingleton temporarily allows accessing for the
-  // current thread.  Doing this is almost always incorrect.
-  class BASE_EXPORT ScopedAllowSingleton {
-   public:
-    ScopedAllowSingleton() { previous_value_ = SetSingletonAllowed(true); }
-    ~ScopedAllowSingleton() { SetSingletonAllowed(previous_value_); }
-   private:
-    // Whether singleton use is allowed when the ScopedAllowSingleton was
-    // constructed.
-    bool previous_value_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedAllowSingleton);
-  };
-
 #if DCHECK_IS_ON()
   // Set whether the current thread to make IO calls.
   // Threads start out in the *allowed* state.
@@ -188,7 +174,6 @@ class BASE_EXPORT ThreadRestrictions {
  private:
   // DO NOT ADD ANY OTHER FRIEND STATEMENTS, talk to jam or brettw first.
   // BEGIN ALLOWED USAGE.
-  friend class blimp::BlimpBrowserTest;
   friend class content::BrowserShutdownProfileDumper;
   friend class content::BrowserSurfaceViewManager;
   friend class content::BrowserTestBase;
@@ -211,6 +196,7 @@ class BASE_EXPORT ThreadRestrictions {
   friend class PlatformThread;
   friend class android::JavaHandlerThread;
   friend class mojo::SyncCallRestrictions;
+  friend class mojo::edk::ScopedIPCSupport;
   friend class ui::CommandBufferClientImpl;
   friend class ui::CommandBufferLocal;
   friend class ui::GpuState;

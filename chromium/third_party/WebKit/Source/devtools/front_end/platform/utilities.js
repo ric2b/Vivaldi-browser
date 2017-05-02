@@ -26,15 +26,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-// FIXME: This performance optimization should be moved to blink so that all developers could enjoy it.
-// console is retrieved with V8Window.getAttribute method which is slow. Here we copy it to a js variable for faster access.
-console = console;
-console.__originalAssert = console.assert;
-console.assert = function(value, message) {
-  if (value)
-    return;
-  console.__originalAssert(value, message);
-};
 
 /** @typedef {Array|NodeList|Arguments|{length: number}} */
 var ArrayLike;
@@ -727,6 +718,10 @@ Object.defineProperty(Uint32Array.prototype, 'lowerBound', {value: Array.prototy
 
 Object.defineProperty(Uint32Array.prototype, 'upperBound', {value: Array.prototype.upperBound});
 
+Object.defineProperty(Int32Array.prototype, 'lowerBound', {value: Array.prototype.lowerBound});
+
+Object.defineProperty(Int32Array.prototype, 'upperBound', {value: Array.prototype.upperBound});
+
 Object.defineProperty(Float64Array.prototype, 'lowerBound', {value: Array.prototype.lowerBound});
 
 Object.defineProperty(Array.prototype, 'binaryIndexOf', {
@@ -1372,7 +1367,8 @@ function suppressUnused(value) {
  * @return {number}
  */
 self.setImmediate = function(callback) {
-  Promise.resolve().then(callback);
+  const args = [...arguments].slice(1);
+  Promise.resolve().then(() => callback(...args));
   return 0;
 };
 
@@ -1445,3 +1441,23 @@ Map.prototype.diff = function(other, isEqual) {
   }
   return {added: added, removed: removed, equal: equal};
 };
+
+/**
+ * TODO: move into its own module
+ * @param {function()} callback
+ * @suppressGlobalPropertiesCheck
+ */
+function runOnWindowLoad(callback) {
+  /**
+   * @suppressGlobalPropertiesCheck
+   */
+  function windowLoaded() {
+    self.removeEventListener('DOMContentLoaded', windowLoaded, false);
+    callback();
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive')
+    callback();
+  else
+    self.addEventListener('DOMContentLoaded', windowLoaded, false);
+}

@@ -41,6 +41,9 @@ class UberClique(object):
     # A map of clique IDs to list of languages to indicate missing translations.
     self.missing_translations_ = {}
 
+    self.keep_additional_translations_ = False
+    self.additional_translations_ = {}
+
   def _AddMissingTranslation(self, lang, clique, is_error):
     tl = self.fallback_translations_
     if is_error:
@@ -111,7 +114,7 @@ class UberClique(object):
 
     return clique
 
-  def FindCliqueAndAddTranslation(self, translation, language):
+  def FindCliqueAndAddTranslation(self, translation, language, override_exisiting=False):
     '''Adds the specified translation to the clique with the source message
     it is a translation of.
 
@@ -124,7 +127,7 @@ class UberClique(object):
     '''
     if translation.GetId() in self.cliques_:
       for clique in self.cliques_[translation.GetId()]:
-        clique.AddTranslation(translation, language)
+        clique.AddTranslation(translation, language, override_exisiting=override_exisiting)
       return True
     else:
       return False
@@ -194,7 +197,7 @@ class UberClique(object):
       for c in cliques:
         yield c
 
-  def GenerateXtbParserCallback(self, lang, debug=False):
+  def GenerateXtbParserCallback(self, lang, debug=False, override_exisiting=False):
     '''Creates a callback function as required by grit.xtb_reader.Parse().
     This callback will create Translation objects for each message from
     the XTB that exists in this uberclique, and add them as translations for
@@ -207,6 +210,8 @@ class UberClique(object):
     '''
     def Callback(id, structure):
       if id not in self.cliques_:
+        if self.keep_additional_translations_:
+          self.additional_translations_.setdefault(lang, {})[id] = structure
         if debug: print "Ignoring translation #%s" % id
         return
 
@@ -232,7 +237,7 @@ class UberClique(object):
             raise exception.MismatchingPlaceholders(
               'Translation for message ID %s had <ph name="%s"/>, no match\n'
               'in original message' % (id, text))
-      self.FindCliqueAndAddTranslation(translation, lang)
+      self.FindCliqueAndAddTranslation(translation, lang, override_exisiting=override_exisiting)
     return Callback
 
 
@@ -438,7 +443,7 @@ class MessageClique(object):
 
     return matches
 
-  def AddTranslation(self, translation, language):
+  def AddTranslation(self, translation, language, override_exisiting=False):
     '''Add a translation to this clique.  The translation must have the same
     ID as the message that is the source for this clique.
 
@@ -458,7 +463,7 @@ class MessageClique(object):
       raise exception.InvalidTranslation(
         'Msg ID %s, transl ID %s' % (self.GetId(), translation.GetId()))
 
-    assert not language in self.clique
+    assert not language in self.clique or override_exisiting, "%s already loaded"% language
 
     # Because two messages can differ in the original content of their
     # placeholders yet share the same ID (because they are otherwise the

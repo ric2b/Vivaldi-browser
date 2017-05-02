@@ -1,6 +1,7 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-dropdown/iron-dropdown.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-input/iron-input.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
@@ -56,7 +57,7 @@
     </style>
     <paper-input-container no-label-float>
       <input is="iron-input" type="search" on-tap="onTap_"
-          on-search="onInputValueChanged_" on-blur="onBlur_" incremental>
+          on-search="onInputValueChanged_" on-change="onChange_" incremental>
       <paper-icon-button suffix id="searchIcon" icon="cr:search" hidden>
       </paper-icon-button>
       <paper-icon-button suffix id="dropdownIcon" icon="cr:arrow-drop-down">
@@ -77,10 +78,6 @@
 <dom-module id="add-printer-dialog">
   <template>
     <style include="settings-shared">
-      #dialog {
-        width: 525px;
-      }
-      
       #dialog .body {
         -webkit-padding-end: 0;
         -webkit-padding-start: 0;
@@ -94,7 +91,7 @@
       }
 
       #dialog .button-container ::content paper-button {
-        font-size: 14px;
+        font-size: 107.69%;  /* 14px / 13px */
         font-weight: bold;
       }
     </style>

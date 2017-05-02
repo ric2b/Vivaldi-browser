@@ -25,6 +25,16 @@ import javax.annotation.Nullable;
  * Contact information editor.
  */
 public class ContactEditor extends EditorBase<AutofillContact> {
+    public @interface CompletionStatus {}
+    /** Can be sent to the merchant as-is without editing first. */
+    public static final int COMPLETE = 0;
+    /** The contact name is missing. */
+    public static final int INVALID_NAME = 1 << 0;
+    /** The contact email is invalid or missing. */
+    public static final int INVALID_EMAIL = 1 << 1;
+    /** The contact phone number is invalid or missing. */
+    public static final int INVALID_PHONE_NUMBER = 1 << 2;
+
     private final boolean mRequestPayerName;
     private final boolean mRequestPayerPhone;
     private final boolean mRequestPayerEmail;
@@ -53,19 +63,52 @@ public class ContactEditor extends EditorBase<AutofillContact> {
     }
 
     /**
-     * Returns whether the following contact information can be sent to the merchant as-is without
-     * editing first.
+     * @return Whether this editor requires the payer name.
+     */
+    public boolean getRequestPayerName() {
+        return mRequestPayerName;
+    }
+
+    /**
+     * @return Whether this editor requires the payer phone.
+     */
+    public boolean getRequestPayerPhone() {
+        return mRequestPayerPhone;
+    }
+
+    /**
+     * @return Whether this editor requires the payer email.
+     */
+    public boolean getRequestPayerEmail() {
+        return mRequestPayerEmail;
+    }
+
+    /**
+     * Returns the contact completion status with the given name, phone and email.
      *
      * @param name  The payer name to check.
      * @param phone The phone number to check.
      * @param email The email address to check.
-     * @return Whether the contact information is complete.
+     * @return The completion status.
      */
-    public boolean isContactInformationComplete(
+    @CompletionStatus
+    public int checkContactCompletionStatus(
             @Nullable String name, @Nullable String phone, @Nullable String email) {
-        return (!mRequestPayerName || !TextUtils.isEmpty(name))
-                && (!mRequestPayerPhone || getPhoneValidator().isValid(phone))
-                && (!mRequestPayerEmail || getEmailValidator().isValid(email));
+        int completionStatus = COMPLETE;
+
+        if (mRequestPayerName && TextUtils.isEmpty(name)) {
+            completionStatus |= INVALID_NAME;
+        }
+
+        if (mRequestPayerPhone && !getPhoneValidator().isValid(phone)) {
+            completionStatus |= INVALID_PHONE_NUMBER;
+        }
+
+        if (mRequestPayerEmail && !getEmailValidator().isValid(email)) {
+            completionStatus |= INVALID_EMAIL;
+        }
+
+        return completionStatus;
     }
 
     /**
@@ -96,11 +139,15 @@ public class ContactEditor extends EditorBase<AutofillContact> {
     }
 
     @Override
-    public void edit(@Nullable AutofillContact toEdit, final Callback<AutofillContact> callback) {
+    public void edit(
+            @Nullable final AutofillContact toEdit, final Callback<AutofillContact> callback) {
         super.edit(toEdit, callback);
 
         final AutofillContact contact = toEdit == null
-                ? new AutofillContact(new AutofillProfile(), null, null, null, false) : toEdit;
+                ? new AutofillContact(mContext, new AutofillProfile(), null, null, null,
+                          INVALID_NAME | INVALID_PHONE_NUMBER | INVALID_EMAIL, mRequestPayerName,
+                          mRequestPayerPhone, mRequestPayerEmail)
+                : toEdit;
 
         final EditorFieldModel nameField = mRequestPayerName
                 ? EditorFieldModel.createTextInput(EditorFieldModel.INPUT_TYPE_HINT_PERSON_NAME,
@@ -128,17 +175,20 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                           contact.getPayerEmail())
                 : null;
 
-        EditorModel editor = new EditorModel(
-                mContext.getString(toEdit == null ? R.string.payments_add_contact_details_label
-                                                  : R.string.payments_edit_contact_details_label));
+        EditorModel editor = new EditorModel(toEdit == null
+                ? mContext.getString(R.string.payments_add_contact_details_label)
+                : toEdit.getEditTitle());
+
         if (nameField != null) editor.addField(nameField);
         if (phoneField != null) editor.addField(phoneField);
         if (emailField != null) editor.addField(emailField);
 
+        // If the user clicks [Cancel], send |toEdit| contact back to the caller, which was the
+        // original state (could be null, a complete contact, a partial contact).
         editor.setCancelCallback(new Runnable() {
             @Override
             public void run() {
-                callback.onResult(null);
+                callback.onResult(toEdit);
             }
         });
 
@@ -184,6 +234,11 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                             && PhoneNumberUtils.isGlobalPhoneNumber(
                                        PhoneNumberUtils.stripSeparators(value.toString()));
                 }
+
+                @Override
+                public boolean isLengthMaximum(@Nullable CharSequence value) {
+                    return false;
+                }
             };
         }
         return mPhoneValidator;
@@ -195,6 +250,11 @@ public class ContactEditor extends EditorBase<AutofillContact> {
                 @Override
                 public boolean isValid(@Nullable CharSequence value) {
                     return value != null && Patterns.EMAIL_ADDRESS.matcher(value).matches();
+                }
+
+                @Override
+                public boolean isLengthMaximum(@Nullable CharSequence value) {
+                    return false;
                 }
             };
         }

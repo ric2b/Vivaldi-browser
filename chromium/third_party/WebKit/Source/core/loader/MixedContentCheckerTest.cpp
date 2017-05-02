@@ -10,6 +10,8 @@
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebMixedContent.h"
+#include "public/platform/WebMixedContentContextType.h"
 #include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/RefPtr.h"
@@ -38,7 +40,6 @@ TEST(MixedContentCheckerTest, IsMixedContent) {
       {"https://example.com/foo", "blob:null/foo", false},
       {"https://example.com/foo", "filesystem:https://example.com/foo", false},
       {"https://example.com/foo", "filesystem:http://example.com/foo", false},
-      {"https://example.com/foo", "filesystem:null/foo", false},
 
       {"https://example.com/foo", "http://example.com/foo", true},
       {"https://example.com/foo", "http://google.com/foo", true},
@@ -69,20 +70,20 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
   ResourceRequest notMixedContent("https://example.test/foo.jpg");
   notMixedContent.setFrameType(WebURLRequest::FrameTypeAuxiliary);
   notMixedContent.setRequestContext(WebURLRequest::RequestContextScript);
-  EXPECT_EQ(WebMixedContent::ContextType::NotMixedContent,
+  EXPECT_EQ(WebMixedContentContextType::NotMixedContent,
             MixedContentChecker::contextTypeForInspector(
                 &dummyPageHolder->frame(), notMixedContent));
 
   dummyPageHolder->frame().document()->setSecurityOrigin(
       SecurityOrigin::createFromString("https://example.test"));
-  EXPECT_EQ(WebMixedContent::ContextType::NotMixedContent,
+  EXPECT_EQ(WebMixedContentContextType::NotMixedContent,
             MixedContentChecker::contextTypeForInspector(
                 &dummyPageHolder->frame(), notMixedContent));
 
   ResourceRequest blockableMixedContent("http://example.test/foo.jpg");
   blockableMixedContent.setFrameType(WebURLRequest::FrameTypeAuxiliary);
   blockableMixedContent.setRequestContext(WebURLRequest::RequestContextScript);
-  EXPECT_EQ(WebMixedContent::ContextType::Blockable,
+  EXPECT_EQ(WebMixedContentContextType::Blockable,
             MixedContentChecker::contextTypeForInspector(
                 &dummyPageHolder->frame(), blockableMixedContent));
 
@@ -90,7 +91,7 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
       "http://example.test/foo.jpg");
   blockableMixedContent.setFrameType(WebURLRequest::FrameTypeAuxiliary);
   blockableMixedContent.setRequestContext(WebURLRequest::RequestContextImage);
-  EXPECT_EQ(WebMixedContent::ContextType::OptionallyBlockable,
+  EXPECT_EQ(WebMixedContentContextType::OptionallyBlockable,
             MixedContentChecker::contextTypeForInspector(
                 &dummyPageHolder->frame(), blockableMixedContent));
 }
@@ -126,11 +127,12 @@ TEST(MixedContentCheckerTest, HandleCertificateError) {
   ResourceResponse response2;
   WebURLRequest::RequestContext requestContext =
       WebURLRequest::RequestContextImage;
-  ASSERT_EQ(WebMixedContent::ContextType::OptionallyBlockable,
-            WebMixedContent::contextTypeFromRequestContext(
-                requestContext, dummyPageHolder->frame()
-                                    .settings()
-                                    ->strictMixedContentCheckingForPlugin()));
+  ASSERT_EQ(
+      WebMixedContentContextType::OptionallyBlockable,
+      WebMixedContent::contextTypeFromRequestContext(
+          requestContext, dummyPageHolder->frame()
+                              .settings()
+                              ->getStrictMixedContentCheckingForPlugin()));
   response2.setURL(displayedUrl);
   EXPECT_CALL(*client, didDisplayContentWithCertificateErrors(displayedUrl));
   MixedContentChecker::handleCertificateError(

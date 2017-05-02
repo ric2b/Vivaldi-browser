@@ -32,13 +32,11 @@ import collections
 import errno
 import optparse
 import socket
-import unittest
 
-from webkitpy.common.system.executive_mock import MockExecutive, MockExecutive2
-from webkitpy.common.system.outputcapture import OutputCapture
-from webkitpy.common.system.platforminfo_mock import MockPlatformInfo
-from webkitpy.common.system.systemhost import SystemHost
-from webkitpy.common.system.systemhost_mock import MockSystemHost
+from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.system.log_testing import LoggingTestCase
+from webkitpy.common.system.system_host import SystemHost
+from webkitpy.common.system.system_host_mock import MockSystemHost
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port.base import Port
 
@@ -52,7 +50,7 @@ class FakePrinter(object):
         pass
 
 
-class PortTestCase(unittest.TestCase):
+class PortTestCase(LoggingTestCase):
     """Tests that all Port implementations must pass."""
     HTTP_PORTS = (8000, 8080, 8443)
     WEBSOCKET_PORTS = (8880,)
@@ -71,9 +69,6 @@ class PortTestCase(unittest.TestCase):
         port_name = self.port_maker.determine_full_port_name(host, options, port_name)
         return self.port_maker(host, port_name, options=options, **kwargs)
 
-    def make_wdiff_available(self, port):
-        port._wdiff_available = True
-
     def test_check_build(self):
         port = self.make_port()
         port._check_file_exists = lambda path, desc: True
@@ -82,26 +77,30 @@ class PortTestCase(unittest.TestCase):
         port._options.build = True
         port._check_driver_build_up_to_date = lambda config: True
         port.check_httpd = lambda: True
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
-                             test_run_results.OK_EXIT_STATUS)
-        finally:
-            _, _, logs = oc.restore_output()
-            self.assertIn('pretty patches', logs)         # We should get a warning about PrettyPatch being missing,
-            self.assertNotIn('build requirements', logs)  # but not the driver itself.
+        self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
+                         test_run_results.OK_EXIT_STATUS)
+        # We should get a warning about PrettyPatch being missing,
+        # but not the driver itself.
+        logs = ''.join(self.logMessages())
+        self.assertIn('pretty patches', logs)
+        self.assertNotIn('build requirements', logs)
+
+        self.assertLog([
+            'ERROR: \n',
+            'WARNING: Unable to find /mock-checkout/third_party/WebKit/Tools/Scripts/webkitruby/'
+            'PrettyPatch/prettify.rb; can\'t generate pretty patches.\n',
+            'WARNING: \n'
+        ])
 
         port._check_file_exists = lambda path, desc: False
         port._check_driver_build_up_to_date = lambda config: False
-        try:
-            oc.capture_output()
-            self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
-                             test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
-        finally:
-            _, _, logs = oc.restore_output()
-            self.assertIn('pretty patches', logs)        # And, here we should get warnings about both.
-            self.assertIn('build requirements', logs)
+        self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
+                         test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
+        # And, here we should get warnings about both.
+        logs = ''.join(self.logMessages())
+        self.assertIn('pretty patches', logs)
+        self.assertIn('build requirements', logs)
+
 
     def test_default_batch_size(self):
         port = self.make_port()
@@ -146,8 +145,8 @@ class PortTestCase(unittest.TestCase):
                 test_socket = socket.socket()
                 test_socket.connect((host, port))
                 self.fail()
-            except IOError as e:
-                self.assertTrue(e.errno in (errno.ECONNREFUSED, errno.ECONNRESET))
+            except IOError as error:
+                self.assertTrue(error.errno in (errno.ECONNREFUSED, errno.ECONNRESET))
             finally:
                 test_socket.close()
 
@@ -180,6 +179,7 @@ class PortTestCase(unittest.TestCase):
         self.assertEqual(port.diff_image('foo', ''), ('foo', None))
 
     def test_diff_image(self):
+
         def _path_to_image_diff():
             return "/path/to/image_diff"
 
@@ -193,15 +193,15 @@ class PortTestCase(unittest.TestCase):
             return 1
 
         # Images are different.
-        port._executive = MockExecutive2(run_command_fn=mock_run_command)
+        port._executive = MockExecutive(run_command_fn=mock_run_command)  # pylint: disable=protected-access
         self.assertEqual(mock_image_diff, port.diff_image("EXPECTED", "ACTUAL")[0])
 
         # Images are the same.
-        port._executive = MockExecutive2(exit_code=0)
+        port._executive = MockExecutive(exit_code=0)  # pylint: disable=protected-access
         self.assertEqual(None, port.diff_image("EXPECTED", "ACTUAL")[0])
 
         # There was some error running image_diff.
-        port._executive = MockExecutive2(exit_code=2)
+        port._executive = MockExecutive(exit_code=2)  # pylint: disable=protected-access
         exception_raised = False
         try:
             port.diff_image("EXPECTED", "ACTUAL")
@@ -211,37 +211,9 @@ class PortTestCase(unittest.TestCase):
 
     def test_diff_image_crashed(self):
         port = self.make_port()
-        port._executive = MockExecutive2(exit_code=2)
+        port._executive = MockExecutive(exit_code=2)  # pylint: disable=protected-access
         self.assertEqual(port.diff_image("EXPECTED", "ACTUAL"),
                          (None, 'Image diff returned an exit code of 2. See http://crbug.com/278596'))
-
-    def test_check_wdiff(self):
-        port = self.make_port()
-        port.check_wdiff()
-
-    def test_wdiff_text_fails(self):
-        host = MockSystemHost(os_name=self.os_name, os_version=self.os_version)
-        host.executive = MockExecutive(should_throw=True)
-        port = self.make_port(host=host)
-        port._executive = host.executive  # AndroidPortTest.make_port sets its own executive, so reset that as well.
-
-        # This should raise a ScriptError that gets caught and turned into the
-        # error text, and also mark wdiff as not available.
-        self.make_wdiff_available(port)
-        self.assertTrue(port.wdiff_available())
-        diff_txt = port.wdiff_text("/tmp/foo.html", "/tmp/bar.html")
-        self.assertEqual(diff_txt, port._wdiff_error_html)
-        self.assertFalse(port.wdiff_available())
-
-    def test_missing_symbol_to_skipped_tests(self):
-        # Test that we get the chromium skips and not the webkit default skips
-        port = self.make_port()
-        skip_dict = port._missing_symbol_to_skipped_tests()
-        if port.PORT_HAS_AUDIO_CODECS_BUILT_IN:
-            self.assertEqual(skip_dict, {})
-        else:
-            self.assertTrue('ff_mp3_decoder' in skip_dict)
-        self.assertFalse('WebGLShader' in skip_dict)
 
     def test_test_configuration(self):
         port = self.make_port()
@@ -302,9 +274,9 @@ class PortTestCase(unittest.TestCase):
 
     def test_check_sys_deps(self):
         port = self.make_port()
-        port._executive = MockExecutive2(exit_code=0)
+        port._executive = MockExecutive(exit_code=0)  # pylint: disable=protected-access
         self.assertEqual(port.check_sys_deps(needs_http=False), test_run_results.OK_EXIT_STATUS)
-        port._executive = MockExecutive2(exit_code=1, output='testing output failure')
+        port._executive = MockExecutive(exit_code=1, output='testing output failure')  # pylint: disable=protected-access
         self.assertEqual(port.check_sys_deps(needs_http=False), test_run_results.SYS_DEPS_EXIT_STATUS)
 
     def test_expectations_ordering(self):
@@ -321,30 +293,8 @@ class PortTestCase(unittest.TestCase):
         port.host.filesystem.write_text_file('/tmp/foo', 'foo')
         port.host.filesystem.write_text_file('/tmp/bar', 'bar')
         ordered_dict = port.expectations_dict()
-        self.assertEqual(ordered_dict.keys()[-2:], options.additional_expectations)  # pylint: disable=E1101
+        self.assertEqual(ordered_dict.keys()[-2:], options.additional_expectations)
         self.assertEqual(ordered_dict.values()[-2:], ['foo', 'bar'])
-
-    def test_skipped_directories_for_symbols(self):
-        # This first test confirms that the commonly found symbols result in the expected skipped directories.
-        port = self.make_port()
-        self.assertEqual(
-            set(port._skipped_tests_for_unsupported_features(test_list=['webaudio/codec-tests/mp3/foo.html'])),
-            set([
-                "webaudio/codec-tests/mp3",
-                "webaudio/codec-tests/aac",
-            ]))
-
-        self.make_port()
-        # Test that the nm string parsing actually works:
-        port._symbols_string = lambda: """
-000000000124f498 s __ZZN7WebCore13ff_mp3_decoder12replaceChildEPS0_S1_E19__PRETTY_FUNCTION__
-000000000124f500 s __ZZN7WebCore13ff_mp3_decoder13addChildAboveEPS0_S1_E19__PRETTY_FUNCTION__
-000000000124f670 s __ZZN7WebCore13ff_mp3_decoder13addChildBelowEPS0_S1_E19__PRETTY_FUNCTION__
-"""
-        # Note 'compositing' is not in the list of skipped directories (hence the parsing of GraphicsLayer worked):
-        self.assertEqual(
-            set(port._skipped_tests_for_unsupported_features(test_list=['webaudio/codec-tests/mp3/foo.html'])),
-            set(["webaudio/codec-tests/aac"]))
 
     def test_path_to_apache_config_file(self):
         # Specific behavior may vary by port, so unit test sub-classes may override this.

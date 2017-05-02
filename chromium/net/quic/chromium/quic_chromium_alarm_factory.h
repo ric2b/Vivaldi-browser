@@ -5,8 +5,8 @@
 // The Chrome-specific helper for QuicConnection which uses
 // a TaskRunner for alarms, and uses a DatagramClientSocket for writing data.
 
-#ifndef NET_QUIC_QUIC_CHROMIUM_ALARM_FACTORY_H_
-#define NET_QUIC_QUIC_CHROMIUM_ALARM_FACTORY_H_
+#ifndef NET_QUIC_CHROMIUM_QUIC_CHROMIUM_ALARM_FACTORY_H_
+#define NET_QUIC_CHROMIUM_QUIC_CHROMIUM_ALARM_FACTORY_H_
 
 #include <set>
 
@@ -14,9 +14,9 @@
 #include "base/memory/weak_ptr.h"
 #include "net/base/net_export.h"
 #include "net/quic/core/quic_alarm_factory.h"
-#include "net/quic/core/quic_clock.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_clock.h"
 
 namespace base {
 class TaskRunner;
@@ -46,4 +46,4 @@ class NET_EXPORT_PRIVATE QuicChromiumAlarmFactory : public QuicAlarmFactory {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_CHROMIUM_ALARM_FACTORY_H_
+#endif  // NET_QUIC_CHROMIUM_QUIC_CHROMIUM_ALARM_FACTORY_H_

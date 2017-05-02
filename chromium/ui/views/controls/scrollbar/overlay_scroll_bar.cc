@@ -6,7 +6,6 @@
 
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/background.h"
@@ -129,12 +128,25 @@ gfx::Rect OverlayScrollBar::GetTrackBounds() const {
   return local;
 }
 
-int OverlayScrollBar::GetLayoutSize() const {
-  return 0;
+int OverlayScrollBar::GetThickness() const {
+  return kThumbThickness;
 }
 
-int OverlayScrollBar::GetContentOverlapSize() const {
-  return kThumbThickness;
+bool OverlayScrollBar::OverlapsContent() const {
+  return true;
+}
+
+void OverlayScrollBar::Layout() {
+  gfx::Rect thumb_bounds = GetTrackBounds();
+  BaseScrollBarThumb* thumb = GetThumb();
+  if (IsHorizontal()) {
+    thumb_bounds.set_x(thumb->x());
+    thumb_bounds.set_width(thumb->width());
+  } else {
+    thumb_bounds.set_y(thumb->y());
+    thumb_bounds.set_height(thumb->height());
+  }
+  thumb->SetBoundsRect(thumb_bounds);
 }
 
 void OverlayScrollBar::OnMouseEntered(const ui::MouseEvent& event) {
@@ -162,19 +174,6 @@ void OverlayScrollBar::StartHideCountdown() {
   hide_timer_.Start(
       FROM_HERE, base::TimeDelta::FromSeconds(1),
       base::Bind(&OverlayScrollBar::Hide, base::Unretained(this)));
-}
-
-void OverlayScrollBar::Layout() {
-  gfx::Rect thumb_bounds = GetTrackBounds();
-  BaseScrollBarThumb* thumb = GetThumb();
-  if (IsHorizontal()) {
-    thumb_bounds.set_x(thumb->x());
-    thumb_bounds.set_width(thumb->width());
-  } else {
-    thumb_bounds.set_y(thumb->y());
-    thumb_bounds.set_height(thumb->height());
-  }
-  thumb->SetBoundsRect(thumb_bounds);
 }
 
 }  // namespace views

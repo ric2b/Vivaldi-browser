@@ -40,7 +40,6 @@ class HttpStream;
 class SpdySessionPool;
 class NetLog;
 struct SSLConfig;
-class QuicHttpStream;
 
 // An HttpStreamRequestImpl exists for each stream which is in progress of being
 // created for the StreamFactory.
@@ -52,9 +51,7 @@ class HttpStreamFactoryImpl::Job {
     virtual ~Delegate() {}
 
     // Invoked when |job| has an HttpStream ready.
-    virtual void OnStreamReady(Job* job,
-                               const SSLConfig& used_ssl_config,
-                               const ProxyInfo& used_proxy_info) = 0;
+    virtual void OnStreamReady(Job* job, const SSLConfig& used_ssl_config) = 0;
 
     // Invoked when |job| has a BidirectionalStream ready.
     virtual void OnBidirectionalStreamImplReady(
@@ -100,6 +97,10 @@ class HttpStreamFactoryImpl::Job {
                                   const SSLConfig& used_ssl_config,
                                   const ProxyInfo& used_proxy_info,
                                   HttpAuthController* auth_controller) = 0;
+
+    // Returns true if the connection initialization to the proxy server
+    // contained in |proxy_info| can be skipped.
+    virtual bool OnInitConnection(const ProxyInfo& proxy_info) = 0;
 
     // Invoked when |job| has completed proxy resolution. The delegate may
     // create an alternative proxy server job to fetch the request.

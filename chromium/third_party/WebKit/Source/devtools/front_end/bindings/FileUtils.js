@@ -33,20 +33,20 @@
 Bindings.OutputStreamDelegate = function() {};
 
 Bindings.OutputStreamDelegate.prototype = {
-  onTransferStarted: function() {},
+  onTransferStarted() {},
 
-  onTransferFinished: function() {},
+  onTransferFinished() {},
 
   /**
    * @param {!Bindings.ChunkedReader} reader
    */
-  onChunkTransferred: function(reader) {},
+  onChunkTransferred(reader) {},
 
   /**
    * @param {!Bindings.ChunkedReader} reader
    * @param {!Event} event
    */
-  onError: function(reader, event) {},
+  onError(reader, event) {},
 };
 
 /**
@@ -58,19 +58,19 @@ Bindings.ChunkedReader.prototype = {
   /**
    * @return {number}
    */
-  fileSize: function() {},
+  fileSize() {},
 
   /**
    * @return {number}
    */
-  loadedSize: function() {},
+  loadedSize() {},
 
   /**
    * @return {string}
    */
-  fileName: function() {},
+  fileName() {},
 
-  cancel: function() {}
+  cancel() {}
 };
 
 /**
@@ -173,22 +173,6 @@ Bindings.ChunkedFileReader = class {
     var nextPart = this._file.slice(chunkStart, chunkEnd);
     this._reader.readAsArrayBuffer(nextPart);
   }
-};
-
-/**
- * @param {function(!File)} callback
- * @return {!Node}
- */
-Bindings.createFileSelectorElement = function(callback) {
-  var fileSelectorElement = createElement('input');
-  fileSelectorElement.type = 'file';
-  fileSelectorElement.style.display = 'none';
-  fileSelectorElement.setAttribute('tabindex', -1);
-  fileSelectorElement.onchange = onChange;
-  function onChange(event) {
-    callback(fileSelectorElement.files[0]);
-  }
-  return fileSelectorElement;
 };
 
 /**

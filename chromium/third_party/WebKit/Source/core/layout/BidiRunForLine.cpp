@@ -86,7 +86,7 @@ TextDirection determinePlaintextDirectionality(LineLayoutItem root,
                       firstLayoutObject == current ? pos : 0);
   InlineBidiResolver observer;
   observer.setStatus(BidiStatus(root.style()->direction(),
-                                isOverride(root.style()->unicodeBidi())));
+                                isOverride(root.style()->getUnicodeBidi())));
   observer.setPositionIgnoringNestedIsolates(iter);
   return observer.determineParagraphDirectionality();
 }
@@ -118,7 +118,7 @@ void constructBidiRunsForLine(InlineBidiResolver& topResolver,
   while (!topResolver.isolatedRuns().isEmpty()) {
     // It does not matter which order we resolve the runs as long as we
     // resolve them all.
-    BidiIsolatedRun isolatedRun = topResolver.isolatedRuns().last();
+    BidiIsolatedRun isolatedRun = topResolver.isolatedRuns().back();
     topResolver.isolatedRuns().pop_back();
     currentRoot = isolatedRun.root;
 
@@ -140,13 +140,14 @@ void constructBidiRunsForLine(InlineBidiResolver& topResolver,
         isolatedResolver.midpointState();
     isolatedLineMidpointState =
         topResolver.midpointStateForIsolatedRun(isolatedRun.runToReplace);
-    EUnicodeBidi unicodeBidi = isolatedInline.style()->unicodeBidi();
+    UnicodeBidi unicodeBidi = isolatedInline.style()->getUnicodeBidi();
     TextDirection direction;
-    if (unicodeBidi == Plaintext) {
+    if (unicodeBidi == UnicodeBidi::kPlaintext) {
       direction = determinePlaintextDirectionality(
           isolatedInline, isNewUBAParagraph ? startObj : 0);
     } else {
-      ASSERT(unicodeBidi == Isolate || unicodeBidi == IsolateOverride);
+      DCHECK(unicodeBidi == UnicodeBidi::kIsolate ||
+             unicodeBidi == UnicodeBidi::kIsolateOverride);
       direction = isolatedInline.style()->direction();
     }
     isolatedResolver.setStatus(BidiStatus::createForIsolate(
@@ -178,13 +179,13 @@ void constructBidiRunsForLine(InlineBidiResolver& topResolver,
     // If we encountered any nested isolate runs, save them for later
     // processing.
     while (!isolatedResolver.isolatedRuns().isEmpty()) {
-      BidiIsolatedRun runWithContext = isolatedResolver.isolatedRuns().last();
+      BidiIsolatedRun runWithContext = isolatedResolver.isolatedRuns().back();
       isolatedResolver.isolatedRuns().pop_back();
       topResolver.setMidpointStateForIsolatedRun(
           runWithContext.runToReplace,
           isolatedResolver.midpointStateForIsolatedRun(
               runWithContext.runToReplace));
-      topResolver.isolatedRuns().append(runWithContext);
+      topResolver.isolatedRuns().push_back(runWithContext);
     }
   }
 }

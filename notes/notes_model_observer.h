@@ -16,7 +16,8 @@ class NotesModelObserver {
  public:
   // Invoked when the model has finished loading. |ids_reassigned| mirrors
   // that of NotesLoadDetails::ids_reassigned. See it for details.
-  virtual void Loaded(Notes_Model* model, bool ids_reassigned) {}
+  virtual void NotesModelLoaded(Notes_Model* model,
+                                bool ids_reassigned) {};
 
   // Invoked from the destructor of the Notes_Model.
   virtual void NotesModelBeingDeleted(Notes_Model* model) {}
@@ -59,9 +60,9 @@ class NotesModelObserver {
   // Invoked when the title or url of a node changes.
   virtual void NotesNodeChanged(Notes_Model *model, const Notes_Node *node) {}
 
-  // Invoked when a favicon has been loaded or changed.
-  virtual void NotesNodeFaviconChanged(Notes_Model *model,
-                                       const Notes_Node *node) {}
+  // Invoked when a attachment has been loaded or changed.
+  virtual void NotesNodeAttachmentChanged(Notes_Model* model,
+    const Notes_Node* node) {};
 
   // Invoked before the direct children of |node| have been reordered in some
   // way, such as sorted.
@@ -86,11 +87,14 @@ class NotesModelObserver {
   // update to finish.
   virtual void ExtensiveNotesChangesEnded(Notes_Model* model) {}
 
-  // Invoked before all non-permanent bookmark nodes are removed.
+  // Invoked before all non-permanent notes nodes are removed.
   virtual void OnWillRemoveAllNotes(Notes_Model* model) {}
 
-  // Invoked when all non-permanent bookmark nodes have been removed.
-  virtual void NotesAllNodesRemoved(Notes_Model* model) {}
+  // Invoked when all non-permanent notes nodes have been removed.
+  virtual void NotesAllNodesRemoved(Notes_Model* model) {};
+
+  virtual void GroupedNotesChangesBeginning(Notes_Model* model) {}
+  virtual void GroupedNotesChangesEnded(Notes_Model* model) {}
 
  protected:
   virtual ~NotesModelObserver() {}

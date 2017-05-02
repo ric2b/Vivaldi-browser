@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_PAGE_LOAD_METRICS_OBSERVER_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_PAGE_LOAD_METRICS_OBSERVER_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
@@ -65,19 +67,57 @@ struct FailedProvisionalLoadInfo {
   net::Error error;
 };
 
+// Information related to whether an associated action, such as a navigation or
+// an abort, was initiated by a user. Clicking a link or tapping on a UI
+// element are examples of user initiation actions.
+struct UserInitiatedInfo {
+  static UserInitiatedInfo NotUserInitiated() {
+    return UserInitiatedInfo(false, false, false);
+  }
+
+  static UserInitiatedInfo BrowserInitiated() {
+    return UserInitiatedInfo(true, false, false);
+  }
+
+  static UserInitiatedInfo RenderInitiated(bool user_gesture,
+                                           bool user_input_event) {
+    return UserInitiatedInfo(false, user_gesture, user_input_event);
+  }
+
+  // Whether the associated action was initiated from the browser process, as
+  // opposed to from the render process. We generally assume that all actions
+  // initiated from the browser process are user initiated.
+  bool browser_initiated;
+
+  // Whether the associated action was initiated by a user, according to user
+  // gesture tracking in content and Blink, as reported by NavigationHandle.
+  bool user_gesture;
+
+  // Whether the associated action was initiated by a user, based on our
+  // heuristic-driven implementation that tests to see if there was an input
+  // event that happened shortly before the given action.
+  bool user_input_event;
+
+ private:
+  UserInitiatedInfo(bool browser_initiated,
+                    bool user_gesture,
+                    bool user_input_event)
+      : browser_initiated(browser_initiated),
+        user_gesture(user_gesture),
+        user_input_event(user_input_event) {}
+};
+
 struct PageLoadExtraInfo {
   PageLoadExtraInfo(
       const base::Optional<base::TimeDelta>& first_background_time,
       const base::Optional<base::TimeDelta>& first_foreground_time,
       bool started_in_foreground,
-      bool user_initiated,
+      UserInitiatedInfo user_initiated_info,
       const GURL& committed_url,
       const GURL& start_url,
       UserAbortType abort_type,
-      bool abort_user_initiated,
+      UserInitiatedInfo abort_user_initiated_info,
       const base::Optional<base::TimeDelta>& time_to_abort,
-      int num_cache_requests,
-      int num_network_requests,
       const PageLoadMetadata& metadata);
 
   PageLoadExtraInfo(const PageLoadExtraInfo& other);
@@ -93,9 +133,8 @@ struct PageLoadExtraInfo {
   // True if the page load started in the foreground.
   const bool started_in_foreground;
 
-  // True if this is either a browser initiated navigation or the user_gesture
-  // bit is true in the renderer.
-  const bool user_initiated;
+  // Whether the page load was initiated by a user.
+  const UserInitiatedInfo user_initiated_info;
 
   // Committed URL. If the page load did not commit, |committed_url| will be
   // empty.
@@ -113,25 +152,44 @@ struct PageLoadExtraInfo {
   // that new navigation was user-initiated. This field is only useful if this
   // page load's abort type is a value other than ABORT_NONE. Note that this
   // value is currently experimental, and is subject to change. In particular,
-  // this field is never set to true for some abort types, such as stop and
+  // this field is not currently set for some abort types, such as stop and
   // close, since we don't yet have sufficient instrumentation to know if a stop
   // or close was caused by a user action.
   //
   // TODO(csharrison): If more metadata for aborts is needed we should provide a
   // better abstraction. Note that this is an approximation.
-  bool abort_user_initiated;
+  UserInitiatedInfo abort_user_initiated_info;
 
   const base::Optional<base::TimeDelta> time_to_abort;
-
-  // Note: these are only approximations, based on WebContents attribution from
-  // ResourceRequestInfo objects while this is the currently committed load in
-  // the WebContents.
-  int num_cache_requests;
-  int num_network_requests;
 
   // Extra information supplied to the page load metrics system from the
   // renderer.
   const PageLoadMetadata metadata;
+};
+
+// Container for various information about a request within a page load.
+struct ExtraRequestInfo {
+  ExtraRequestInfo(bool was_cached,
+                   int64_t raw_body_bytes,
+                   bool data_reduction_proxy_used,
+                   int64_t original_network_content_length);
+
+  ExtraRequestInfo(const ExtraRequestInfo& other);
+
+  ~ExtraRequestInfo();
+
+  // True if the resource was loaded from cache.
+  const bool was_cached;
+
+  // The number of body (not header) prefilter bytes.
+  const int64_t raw_body_bytes;
+
+  // Whether this request used Data Reduction Proxy.
+  const bool data_reduction_proxy_used;
+
+  // The number of body (not header) bytes that the data reduction proxy saw
+  // before it compressed the requests.
+  const int64_t original_network_content_length;
 };
 
 // Interface for PageLoadMetrics observers. All instances of this class are
@@ -151,14 +209,11 @@ class PageLoadMetricsObserver {
 
   virtual ~PageLoadMetricsObserver() {}
 
-  // The page load started, with the given navigation handle. Note that OnStart
-  // is called for same-page navigations. Implementers of OnStart that only want
-  // to process non-same-page navigations should also check to see that the page
-  // load committed via OnCommit or committed_url in
-  // PageLoadExtraInfo. currently_committed_url contains the URL of the
-  // committed page load at the time the navigation for navigation_handle was
-  // initiated, or the empty URL if there was no committed page load at the time
-  // the navigation was initiated.
+  // The page load started, with the given navigation handle.
+  // currently_committed_url contains the URL of the committed page load at the
+  // time the navigation for navigation_handle was initiated, or the empty URL
+  // if there was no committed page load at the time the navigation was
+  // initiated.
   virtual ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
                                 const GURL& currently_committed_url,
                                 bool started_in_foreground);
@@ -174,7 +229,6 @@ class PageLoadMetricsObserver {
   // first data for the request. The navigation handle holds relevant data for
   // the navigation, but will be destroyed soon after this call. Don't hold a
   // reference to it.
-  // Note that this does not get called for same-page navigations.
   // Observers that return STOP_OBSERVING will not receive any additional
   // callbacks, and will be deleted after invocation of this method returns.
   virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle);
@@ -188,6 +242,13 @@ class PageLoadMetricsObserver {
   // OnShown is triggered when a page is brought to the foreground. It does not
   // fire when the page first loads; for that, listen for OnStart instead.
   virtual ObservePolicy OnShown();
+
+  // Called before OnCommit. The observer should return whether it wishes to
+  // observe navigations whose main resource has MIME type |mine_type|. The
+  // default is to observe HTML and XHTML only. Note that PageLoadTrackers only
+  // track XHTML, HTML, and MHTML (related/multipart).
+  virtual ObservePolicy ShouldObserveMimeType(
+      const std::string& mime_type) const;
 
   // The callbacks below are only invoked after a navigation commits, for
   // tracked page loads. Page loads that don't meet the criteria for being
@@ -263,7 +324,8 @@ class PageLoadMetricsObserver {
   // OnComplete is invoked for tracked page loads that committed, immediately
   // before the observer is deleted. Observers that implement OnComplete may
   // also want to implement FlushMetricsOnAppEnterBackground, to avoid loss of
-  // data if the application is killed while in the background.
+  // data if the application is killed while in the background (this happens
+  // frequently on Android).
   virtual void OnComplete(const PageLoadTiming& timing,
                           const PageLoadExtraInfo& extra_info) {}
 
@@ -272,6 +334,9 @@ class PageLoadMetricsObserver {
   virtual void OnFailedProvisionalLoad(
       const FailedProvisionalLoadInfo& failed_provisional_load_info,
       const PageLoadExtraInfo& extra_info) {}
+
+  // Called whenever a request is loaded for this page load.
+  virtual void OnLoadedResource(const ExtraRequestInfo& extra_request_info) {}
 };
 
 }  // namespace page_load_metrics

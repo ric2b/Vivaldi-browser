@@ -7,20 +7,41 @@ package org.chromium.chrome.browser.payments;
 import android.content.Context;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Builds instances of payment apps.
  */
 public class PaymentAppFactory {
+    private static PaymentAppFactory sInstance;
+
     /**
      * Can be used to build additional types of payment apps without Chrome knowing about their
      * types.
      */
-    private static PaymentAppFactoryAddition sAdditionalFactory;
+    private final List<PaymentAppFactoryAddition> mAdditionalFactories;
+
+    /**
+     * Interface for receiving newly created apps.
+     */
+    public interface PaymentAppCreatedCallback {
+        /**
+         * Called when the factory has create a payment app. This method may be called
+         * zero, one, or many times before the app creation is finished.
+         */
+        void onPaymentAppCreated(PaymentApp paymentApp);
+
+        /**
+         * Called when the factory is finished creating payment apps.
+         */
+        void onAllPaymentAppsCreated();
+    }
 
     /**
      * The interface for additional payment app factories.
@@ -31,18 +52,41 @@ public class PaymentAppFactory {
          *
          * @param context     The application context.
          * @param webContents The web contents that invoked PaymentRequest.
+         * @param methods     The methods that the merchant supports.
+         * @param callback    The callback to invoke when apps are created.
          */
-        List<PaymentApp> create(Context context, WebContents webContents);
+        void create(Context context, WebContents webContents, Set<String> methods,
+                PaymentAppCreatedCallback callback);
+    }
+
+    private PaymentAppFactory() {
+        mAdditionalFactories = new ArrayList<>();
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_PAYMENT_APPS)) {
+            mAdditionalFactories.add(new AndroidPaymentAppFactory());
+        }
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SERVICE_WORKER_PAYMENT_APPS)) {
+            mAdditionalFactories.add(new ServiceWorkerPaymentAppBridge());
+        }
     }
 
     /**
-     * Sets the additional factory that can build instances of payment apps.
+     * @return The singleton PaymentAppFactory instance.
+     */
+    public static PaymentAppFactory getInstance() {
+        if (sInstance == null) sInstance = new PaymentAppFactory();
+        return sInstance;
+    }
+
+    /**
+     * Add an additional factory that can build instances of payment apps.
      *
      * @param additionalFactory Can build instances of payment apps.
      */
     @VisibleForTesting
-    public static void setAdditionalFactory(PaymentAppFactoryAddition additionalFactory) {
-        sAdditionalFactory = additionalFactory;
+    public void addAdditionalFactory(PaymentAppFactoryAddition additionalFactory) {
+        mAdditionalFactories.add(additionalFactory);
     }
 
     /**
@@ -50,14 +94,36 @@ public class PaymentAppFactory {
      *
      * @param context     The context.
      * @param webContents The web contents where PaymentRequest was invoked.
+     * @param methods     The methods that the merchant supports.
+     * @param callback    The callback to invoke when apps are created.
      */
-    public static List<PaymentApp> create(Context context, WebContents webContents) {
-        List<PaymentApp> result = new ArrayList<>(2);
-        result.add(new AutofillPaymentApp(context, webContents));
-        if (sAdditionalFactory != null) {
-            result.addAll(
-                    sAdditionalFactory.create(context, webContents));
+    public void create(Context context, WebContents webContents, Set<String> methods,
+            final PaymentAppCreatedCallback callback) {
+        callback.onPaymentAppCreated(new AutofillPaymentApp(context, webContents));
+
+        if (mAdditionalFactories.isEmpty()) {
+            callback.onAllPaymentAppsCreated();
+            return;
         }
-        return result;
+
+        final Set<PaymentAppFactoryAddition> mPendingTasks =
+                new HashSet<PaymentAppFactoryAddition>(mAdditionalFactories);
+
+        for (int i = 0; i < mAdditionalFactories.size(); i++) {
+            final PaymentAppFactoryAddition additionalFactory = mAdditionalFactories.get(i);
+            PaymentAppCreatedCallback cb = new PaymentAppCreatedCallback() {
+                @Override
+                public void onPaymentAppCreated(PaymentApp paymentApp) {
+                    callback.onPaymentAppCreated(paymentApp);
+                }
+
+                @Override
+                public void onAllPaymentAppsCreated() {
+                    mPendingTasks.remove(additionalFactory);
+                    if (mPendingTasks.isEmpty()) callback.onAllPaymentAppsCreated();
+                }
+            };
+            additionalFactory.create(context, webContents, methods, cb);
+        }
     }
 }

@@ -76,7 +76,7 @@ static inline void collectChildrenAndRemoveFromOldParent(
     fragment.removeChildren();
     return;
   }
-  nodes.append(&node);
+  nodes.push_back(&node);
   if (ContainerNode* oldParent = node.parentNode())
     oldParent->removeChild(&node, exceptionState);
 }
@@ -347,7 +347,8 @@ bool ContainerNode::checkParserAcceptChild(const Node& newChild) const {
     return true;
   // TODO(esprehn): Are there other conditions where the parser can create
   // invalid trees?
-  return toDocument(*this).canAcceptChild(newChild, nullptr, IGNORE_EXCEPTION);
+  return toDocument(*this).canAcceptChild(newChild, nullptr,
+                                          IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void ContainerNode::parserInsertBefore(Node* newChild, Node& nextChild) {
@@ -728,7 +729,7 @@ void ContainerNode::notifyNodeInsertedInternal(
       continue;
     if (Node::InsertionShouldCallDidNotifySubtreeInsertions ==
         node.insertedInto(this))
-      postInsertionNotificationTargets.append(&node);
+      postInsertionNotificationTargets.push_back(&node);
     for (ShadowRoot* shadowRoot = node.youngestShadowRoot(); shadowRoot;
          shadowRoot = shadowRoot->olderShadowRoot())
       notifyNodeInsertedInternal(*shadowRoot, postInsertionNotificationTargets);
@@ -785,6 +786,7 @@ void ContainerNode::detachLayoutTree(const AttachContext& context) {
 
 void ContainerNode::childrenChanged(const ChildrenChange& change) {
   document().incDOMTreeVersion();
+  document().notifyChangeChildren(*this);
   invalidateNodeListCachesInAncestors();
   if (change.isChildInsertion() && !childNeedsStyleRecalc()) {
     setChildNeedsStyleRecalc();
@@ -793,7 +795,7 @@ void ContainerNode::childrenChanged(const ChildrenChange& change) {
 }
 
 void ContainerNode::cloneChildNodes(ContainerNode* clone) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   for (Node* n = firstChild(); n && !exceptionState.hadException();
        n = n->nextSibling())
     clone->appendChild(n->cloneNode(true), exceptionState);

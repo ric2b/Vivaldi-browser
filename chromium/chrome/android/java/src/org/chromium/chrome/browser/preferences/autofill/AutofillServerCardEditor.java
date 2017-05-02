@@ -13,9 +13,8 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.EmbedContentViewActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
-import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
+import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 
 /**
  * Server credit card settings.
@@ -39,8 +38,8 @@ public class AutofillServerCardEditor extends AutofillCreditCardEditor {
         v.findViewById(R.id.edit_server_card).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                EmbedContentViewActivity.show(getActivity(), R.string.autofill_edit_credit_card,
-                        R.string.autofill_manage_wallet_cards_url);
+                CustomTabActivity.showInfoPage(getActivity(),
+                        getActivity().getString(R.string.autofill_manage_wallet_cards_url));
             }
         });
 
@@ -91,8 +90,7 @@ public class AutofillServerCardEditor extends AutofillCreditCardEditor {
 
     @Override
     protected boolean saveEntry() {
-        PersonalDataManager.getInstance().updateServerCardBillingAddress(mCard.getServerId(),
-                ((AutofillProfile) mBillingAddress.getSelectedItem()).getGUID());
+        PersonalDataManager.getInstance().updateServerCardBillingAddress(mCard);
         return true;
     }
 

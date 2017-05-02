@@ -24,8 +24,9 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/nacl/common/nacl.mojom.h"
 #include "components/nacl/common/nacl_messages.h"
-#include "components/nacl/common/nacl_renderer_messages.h"
+#include "components/nacl/common/nacl_service.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "components/nacl/loader/nacl_ipc_adapter.h"
 #include "components/nacl/loader/nacl_validation_db.h"
@@ -34,16 +35,10 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "native_client/src/public/chrome_main.h"
 #include "native_client/src/public/nacl_app.h"
 #include "native_client/src/public/nacl_desc.h"
-
-#if defined(OS_POSIX)
-#include "base/posix/global_descriptors.h"
-#include "content/public/common/content_descriptors.h"
-#endif
+#include "services/service_manager/public/cpp/service_context.h"
 
 #if defined(OS_LINUX)
 #include "content/public/common/child_process_sandbox_support_linux.h"
@@ -53,7 +48,6 @@
 #include <io.h>
 
 #include "content/public/common/sandbox_init.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
 #endif
 
 namespace {
@@ -76,9 +70,8 @@ void FatalLogHandler(const char* data, size_t bytes) {
 }
 
 void LoadStatusCallback(int load_status) {
-  g_listener->trusted_listener()->Send(
-      new NaClRendererMsg_ReportLoadStatus(
-          static_cast<NaClErrorCode>(load_status)));
+  g_listener->trusted_listener()->renderer_host()->ReportLoadStatus(
+      static_cast<NaClErrorCode>(load_status));
 }
 
 #if defined(OS_LINUX)
@@ -175,20 +168,6 @@ NaClListener::NaClListener()
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
   DCHECK(g_listener == NULL);
   g_listener = this;
-
-  mojo_ipc_support_ =
-      base::MakeUnique<mojo::edk::ScopedIPCSupport>(io_thread_.task_runner());
-#if defined(OS_WIN)
-  mojo::edk::ScopedPlatformHandle platform_channel(
-      mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
-          *base::CommandLine::ForCurrentProcess()));
-#else
-  mojo::edk::ScopedPlatformHandle platform_channel(
-      mojo::edk::PlatformHandle(
-          base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel)));
-#endif
-  DCHECK(platform_channel.is_valid());
-  mojo::edk::SetParentPipeHandle(std::move(platform_channel));
 }
 
 NaClListener::~NaClListener() {
@@ -237,17 +216,14 @@ class FileTokenMessageFilter : public IPC::MessageFilter {
 };
 
 void NaClListener::Listen() {
-  mojo::ScopedMessagePipeHandle handle(
-      mojo::edk::CreateChildMessagePipe(
-          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-              switches::kMojoChannelToken)));
-  DCHECK(handle.is_valid());
-
   channel_ = IPC::SyncChannel::Create(this, io_thread_.task_runner().get(),
                                       &shutdown_event_);
   filter_ = channel_->CreateSyncMessageFilter();
   channel_->AddFilter(new FileTokenMessageFilter());
-  channel_->Init(handle.release(), IPC::Channel::MODE_CLIENT, true);
+  mojo::ScopedMessagePipeHandle channel_handle;
+  std::unique_ptr<service_manager::ServiceContext> service_context =
+      CreateNaClServiceContext(io_thread_.task_runner(), &channel_handle);
+  channel_->Init(channel_handle.release(), IPC::Channel::MODE_CLIENT, true);
   main_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   base::RunLoop().Run();
 }
@@ -349,15 +325,15 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
       base::Bind(&NaClListener::ResolveFileToken, base::Unretained(this)),
       base::Bind(&NaClListener::OnOpenResource, base::Unretained(this)));
 
-  mojo::MessagePipe trusted_pipe;
-  trusted_listener_ =
-      new NaClTrustedListener(trusted_pipe.handle0.release(),
-                              io_thread_.task_runner().get(), &shutdown_event_);
+  nacl::mojom::NaClRendererHostPtr renderer_host;
   if (!Send(new NaClProcessHostMsg_PpapiChannelsCreated(
-          browser_handle, ppapi_renderer_handle, trusted_pipe.handle1.release(),
+          browser_handle, ppapi_renderer_handle,
+          MakeRequest(&renderer_host).PassMessagePipe().release(),
           manifest_service_handle)))
     LOG(FATAL) << "Failed to send IPC channel handle to NaClProcessHost.";
 
+  trusted_listener_ = base::MakeUnique<NaClTrustedListener>(
+      std::move(renderer_host), io_thread_.task_runner().get());
   struct NaClChromeMainArgs* args = NaClChromeMainArgsCreate();
   if (args == NULL) {
     LOG(FATAL) << "NaClChromeMainArgsCreate() failed";
@@ -446,7 +422,7 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
     NaClExit(1);
 
   // Report the plugin's exit status if the application started successfully.
-  trusted_listener_->Send(new NaClRendererMsg_ReportExitStatus(exit_status));
+  trusted_listener_->renderer_host()->ReportExitStatus(exit_status);
   NaClExit(exit_status);
 }
 

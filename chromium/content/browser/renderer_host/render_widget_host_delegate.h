@@ -26,8 +26,11 @@ class WebGestureEvent;
 
 namespace gfx {
 class Point;
-class Rect;
 class Size;
+}
+
+namespace rappor {
+class Sample;
 }
 
 namespace content {
@@ -37,6 +40,7 @@ class RenderWidgetHostImpl;
 class RenderWidgetHostInputEventRouter;
 class RenderViewHostDelegateView;
 class TextInputManager;
+class WebContents;
 struct ScreenInfo;
 struct NativeWebKeyboardEvent;
 
@@ -180,11 +184,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Returns true if |render_widget_host| holds the mouse lock.
   virtual bool HasMouseLock(RenderWidgetHostImpl* render_widget_host);
 
-  // Called when the widget has sent a compositor proto.  This is used in Btlimp
-  // mode with the RemoteChannel compositor.
-  virtual void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
-                                      const std::vector<uint8_t>& proto) {}
-
   // Called when the visibility of the RenderFrameProxyHost in outer
   // WebContents changes. This method is only called on an inner WebContents and
   // will eventually notify all the RenderWidgetHostViews belonging to that
@@ -236,10 +235,19 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual void FocusOwningWebContents(
       RenderWidgetHostImpl* render_widget_host) {}
 
+  // Augment a Rappor sample with eTLD+1 context. The caller is still
+  // responsible for logging the sample to the RapporService. Returns false
+  // if the eTLD+1 is not known for |render_widget_host|.
+  virtual bool AddDomainInfoToRapporSample(rappor::Sample* sample);
+
   // Notifies the delegate that a focused editable element has been touched
   // inside this RenderWidgetHost. If |editable| is true then the focused
   // element accepts text input.
   virtual void FocusedNodeTouched(bool editable) {}
+
+  // Return this object cast to a WebContents, if it is one. If the object is
+  // not a WebContents, returns nullptr.
+  virtual WebContents* GetAsWebContents();
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

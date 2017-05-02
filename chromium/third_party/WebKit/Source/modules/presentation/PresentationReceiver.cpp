@@ -18,7 +18,7 @@ namespace blink {
 
 PresentationReceiver::PresentationReceiver(LocalFrame* frame,
                                            WebPresentationClient* client)
-    : DOMWindowProperty(frame) {
+    : ContextClient(frame) {
   m_connectionList = new PresentationConnectionList(frame->document());
 
   if (client)
@@ -40,12 +40,10 @@ ScriptPromise PresentationReceiver::connectionList(ScriptState* scriptState) {
 }
 
 void PresentationReceiver::onReceiverConnectionAvailable(
-    WebPresentationConnectionClient* connectionClient) {
-  DCHECK(connectionClient);
+    const WebPresentationSessionInfo& sessionInfo) {
   // take() will call PresentationReceiver::registerConnection()
   // and register the connection.
-  auto connection =
-      PresentationConnection::take(this, wrapUnique(connectionClient));
+  auto connection = PresentationConnection::take(this, sessionInfo);
 
   // receiver.connectionList property not accessed
   if (!m_connectionListProperty)
@@ -68,6 +66,7 @@ void PresentationReceiver::registerConnection(
 DEFINE_TRACE(PresentationReceiver) {
   visitor->trace(m_connectionList);
   visitor->trace(m_connectionListProperty);
-  DOMWindowProperty::trace(visitor);
+  ContextClient::trace(visitor);
 }
+
 }  // namespace blink

@@ -31,14 +31,14 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerStackingNode.h"
 #include "core/paint/PaintLayerStackingNodeIterator.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
 class OverlapMapContainer {
  public:
   void add(const IntRect& bounds) {
-    m_layerRects.append(bounds);
+    m_layerRects.push_back(bounds);
     m_boundingBox.unite(bounds);
   }
 
@@ -106,12 +106,12 @@ class CompositingRequirementsUpdater::OverlapMap {
   }
 
   bool overlapsLayers(const IntRect& bounds, bool isClipped) const {
-    bool clippedOverlap = m_overlapStack.last().clipped.overlapsLayers(bounds);
+    bool clippedOverlap = m_overlapStack.back().clipped.overlapsLayers(bounds);
     if (isClipped)
       return clippedOverlap;
     // Unclipped is allowed to overlap clipped, but not vice-versa.
     return clippedOverlap ||
-           m_overlapStack.last().unclipped.overlapsLayers(bounds);
+           m_overlapStack.back().unclipped.overlapsLayers(bounds);
   }
 
   void beginNewOverlapTestingContext() {
@@ -130,9 +130,9 @@ class CompositingRequirementsUpdater::OverlapMap {
     // FIXME: we may be able to avoid this deep copy by rearranging how
     //        overlapMap state is managed.
     m_overlapStack[m_overlapStack.size() - 2].clipped.unite(
-        m_overlapStack.last().clipped);
+        m_overlapStack.back().clipped);
     m_overlapStack[m_overlapStack.size() - 2].unclipped.unite(
-        m_overlapStack.last().unclipped);
+        m_overlapStack.back().unclipped);
     m_overlapStack.pop_back();
   }
 
@@ -157,7 +157,7 @@ class CompositingRequirementsUpdater::RecursionData {
 };
 
 static bool requiresCompositingOrSquashing(CompositingReasons reasons) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool fastAnswer = reasons != CompositingReasonNone;
   bool slowAnswer = requiresCompositing(reasons) || requiresSquashing(reasons);
   DCHECK_EQ(slowAnswer, fastAnswer);
@@ -321,7 +321,7 @@ void CompositingRequirementsUpdater::updateRecursive(
       // while we're iterating, so we have to store it for later removal.
       if (unclippedDescendant->layoutObject()->containingBlock() ==
           layer->layoutObject()) {
-        unclippedDescendantsToRemove.append(i);
+        unclippedDescendantsToRemove.push_back(i);
         continue;
       }
       if (layer->scrollsWithRespectTo(unclippedDescendant))
@@ -339,7 +339,7 @@ void CompositingRequirementsUpdater::updateRecursive(
       // TODO(schenney): We only need to promote when the clipParent is not a
       // descendant of the ancestor scroller, which we do not check for here.
       // Hence we might be promoting needlessly.
-      unclippedDescendants.append(layer);
+      unclippedDescendants.push_back(layer);
     }
   }
 
@@ -379,7 +379,7 @@ void CompositingRequirementsUpdater::updateRecursive(
     childRecursionData.m_testingOverlap = true;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 

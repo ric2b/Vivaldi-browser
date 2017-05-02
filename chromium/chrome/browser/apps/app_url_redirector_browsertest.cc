@@ -4,10 +4,10 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -18,11 +18,16 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/page_transition_types.h"
 
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
+
 namespace extensions {
 
 class PlatformAppUrlRedirectorBrowserTest : public PlatformAppBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override;
+  void SetUpOnMainThread() override;
 
  protected:
   // Performs the following sequence:
@@ -118,8 +123,12 @@ void PlatformAppUrlRedirectorBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   PlatformAppBrowserTest::SetUpCommandLine(command_line);
   command_line->AppendSwitch(::switches::kDisablePopupBlocking);
-  command_line->AppendSwitchASCII(::switches::kPrerenderMode,
-                                  ::switches::kPrerenderModeSwitchValueEnabled);
+}
+
+void PlatformAppUrlRedirectorBrowserTest::SetUpOnMainThread() {
+  PlatformAppBrowserTest::SetUpOnMainThread();
+  prerender::PrerenderManager::SetMode(
+      prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
 }
 
 // TODO(sergeygs): Factor out common functionality from TestXyz,

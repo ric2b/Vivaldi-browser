@@ -5,6 +5,7 @@
 #include "content/browser/media/media_internals_ui.h"
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "content/browser/media/media_internals_handler.h"
 #include "content/grit/content_resources.h"
 #include "content/public/browser/web_contents.h"
@@ -24,7 +25,7 @@ WebUIDataSource* CreateMediaInternalsHTMLSource() {
 
   source->AddResourcePath("media_internals.js", IDR_MEDIA_INTERNALS_JS);
   source->SetDefaultResource(IDR_MEDIA_INTERNALS_HTML);
-  source->DisableI18nAndUseGzipForAllPaths();
+  source->UseGzip(std::unordered_set<std::string>());
   return source;
 }
 
@@ -38,7 +39,7 @@ WebUIDataSource* CreateMediaInternalsHTMLSource() {
 
 MediaInternalsUI::MediaInternalsUI(WebUI* web_ui)
     : WebUIController(web_ui) {
-  web_ui->AddMessageHandler(new MediaInternalsMessageHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<MediaInternalsMessageHandler>());
 
   BrowserContext* browser_context =
       web_ui->GetWebContents()->GetBrowserContext();

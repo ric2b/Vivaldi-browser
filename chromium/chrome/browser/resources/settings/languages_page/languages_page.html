@@ -1,3 +1,4 @@
+<link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
@@ -70,13 +71,15 @@
     </settings-languages>
     <settings-animated-pages id="pages" section="languages">
       <neon-animatable route-path="default">
-        <div class="settings-box first two-line">
+        <div class$="settings-box first [[getLanguageListTwoLine_()]]"
+            actionable on-tap="toggleExpandButton_">
           <div class="start">
             <div>$i18n{languagesListTitle}</div>
+<if expr="chromeos or is_win">
             <div class="secondary">
-              [[getProspectiveUILanguageName_(
-                    languages, prefs.intl.app_locale.value)]]
+              [[getProspectiveUILanguageName_(languages.prospectiveUILanguage)]]
             </div>
+</if>
           </div>
           <cr-expand-button expanded="{{languagesOpened_}}"
               alt="$i18n{languagesExpandA11yLabel}">
@@ -87,14 +90,15 @@
             <span class="list-item"
                 hidden="[[isHelpTextHidden_(languages.enabled.*)]]">
               <span>$i18n{orderLanguagesInstructions}</span>
+<if expr="chromeos">
               <a href="$i18n{languagesLearnMoreURL}" target="_blank">
                 $i18n{learnMore}
               </a>
+</if>
             </span>
             <template is="dom-repeat" items="[[languages.enabled]]">
               <div class$="list-item [[getLanguageItemClass_(
-                  item.language.code, prefs.intl.app_locale.value,
-                  item.language.supportsUI)]]">
+                  item.language.code, language.prospectiveUILanguage)]]">
                 <div class="start">
                   <div title="[[item.language.nativeDisplayName]]">
                     [[item.language.displayName]]
@@ -102,14 +106,15 @@
 <if expr="chromeos or is_win">
                   <div class="explain-selected"
                       hidden="[[!isProspectiveUILanguage_(
-                          item.language.code, prefs.intl.app_locale.value)]]">
+                          item.language.code,
+                          languages.prospectiveUILanguage)]]">
                     $i18n{isDisplayedInThisLanguage}
                   </div>
 </if>
                 </div>
 <if expr="chromeos or is_win">
                 <template is="dom-if" if="[[isRestartRequired_(
-                        item.language.code, prefs.intl.app_locale.value)]]">
+                        item.language.code, languages.prospectiveUILanguage)]]">
                   <paper-button on-tap="onRestartTap_">
                     $i18n{restart}
                   </paper-button>
@@ -121,13 +126,14 @@
               </div>
             </template>
             <div class="list-item list-button" on-tap="onAddLanguagesTap_">
-              $i18n{addLanguages}
+              <a is="action-link">$i18n{addLanguages}</a>
             </div>
           </div>
         </iron-collapse>
 <if expr="chromeos">
-        <div id="manage-input-methods-subpage-trigger"
-              class="settings-box two-line">
+        <div id="manageInputMethodsSubpageTrigger"
+            class="settings-box two-line" actionable
+            on-tap="toggleExpandButton_">
           <div class="start">
             <div>$i18n{inputMethodsListTitle}</div>
             <div class="secondary">
@@ -145,7 +151,8 @@
                 items="[[languages.inputMethods.enabled]]">
               <div class$="list-item [[getInputMethodItemClass_(
                       item.id, languages.inputMethods.currentId)]]"
-                  on-tap="onInputMethodTap_" actionable>
+                  on-tap="onInputMethodTap_" on-keypress="onInputMethodTap_"
+                  actionable tabindex="0">
                 <div class="start">
                   <div>[[item.displayName]]</div>
                   <div class="explain-selected"
@@ -162,18 +169,19 @@
             </template>
             <div class="list-item list-button"
                 on-tap="onManageInputMethodsTap_">
-              $i18n{manageInputMethods}
+              <a is="action-link">$i18n{manageInputMethods}</a>
             </div>
           </div>
         </iron-collapse>
 </if>
 <if expr="not is_macosx">
-        <div id="spellcheck-subpage-trigger" class="settings-box two-line">
+        <div id="spellCheckSubpageTrigger"
+            class$="settings-box [[getSpellCheckListTwoLine_(
+                spellCheckSecondaryText_)]]"
+            actionable on-tap="toggleExpandButton_">
           <div class="start">
             <div>$i18n{spellCheckListTitle}</div>
-            <div class="secondary">
-              [[getSpellCheckSecondaryText_(languages.enabled.*)]]
-            </div>
+            <div class="secondary">[[spellCheckSecondaryText_]]</div>
           </div>
           <cr-expand-button expanded="{{spellCheckOpened_}}"
               alt="$i18n{spellCheckExpandA11yLabel}">
@@ -192,7 +200,7 @@
               </label>
             </template>
             <div class="list-item list-button" on-tap="onEditDictionaryTap_">
-              $i18n{manageSpellCheck}
+              <a is="action-link">$i18n{manageSpellCheck}</a>
             </div>
           </div>
         </iron-collapse>
@@ -204,10 +212,10 @@
             <paper-checkbox id="uiLanguageItem" class="dropdown-item"
                 checked="[[isProspectiveUILanguage_(
                     detailLanguage_.language.code,
-                    prefs.intl.app_locale.value)]]"
+                    languages.prospectiveUILanguage)]]"
                 on-change="onUILanguageChange_"
                 disabled="[[disableUILanguageCheckbox_(
-                    detailLanguage_, prefs.intl.app_locale.value)]]">
+                    detailLanguage_, languages.prospectiveUILanguage)]]">
                 $i18n{displayInThisLanguage}
             </paper-checkbox>
 </if>
@@ -249,7 +257,7 @@
 <if expr="chromeos">
       <template is="dom-if" route-path="/inputMethods">
         <settings-subpage
-            associated-control="[[$$('#manage-input-methods-subpage-trigger')]]"
+            associated-control="[[$$('#manageInputMethodsSubpageTrigger')]]"
             page-title="$i18n{manageInputMethodsPageTitle}">
           <settings-manage-input-methods-page languages="{{languages}}"
               language-helper="[[languageHelper]]">
@@ -260,7 +268,7 @@
 <if expr="not is_macosx">
       <template is="dom-if" route-path="/editDictionary">
         <settings-subpage
-            associated-control="[[$$('#spellcheck-subpage-trigger')]]"
+            associated-control="[[$$('#spellCheckSubpageTrigger')]]"
             page-title="$i18n{editDictionaryPageTitle}">
           <settings-edit-dictionary-page></settings-edit-dictionary-page>
         </settings-subpage>

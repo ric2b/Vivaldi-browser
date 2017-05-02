@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.toolbar;
 import android.annotation.TargetApi;
 import android.graphics.Color;
 import android.os.Build;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.text.TextUtils;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -22,6 +22,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.ChromeRestriction;
@@ -71,41 +72,35 @@ public class BrandColorTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     private void checkForBrandColor(final int brandColor) {
-        try {
-            CriteriaHelper.pollUiThread(new Criteria(
-                    "The toolbar background doesn't contain the right color") {
-                @Override
-                public boolean isSatisfied() {
-                    if (mToolbarDataProvider.getPrimaryColor() != brandColor) return false;
-                    return mToolbarDataProvider.getPrimaryColor()
-                            == mToolbar.getBackgroundDrawable().getColor();
-                }
-            });
+        CriteriaHelper.pollUiThread(new Criteria(
+                "The toolbar background doesn't contain the right color") {
+            @Override
+            public boolean isSatisfied() {
+                if (mToolbarDataProvider.getPrimaryColor() != brandColor) return false;
+                return mToolbarDataProvider.getPrimaryColor()
+                        == mToolbar.getBackgroundDrawable().getColor();
+            }
+        });
+        CriteriaHelper.pollUiThread(
+                Criteria.equals(brandColor, new Callable<Integer>() {
+                    @Override
+                    public Integer call() {
+                        return mToolbar.getOverlayDrawable().getColor();
+                    }
+                }));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                && !SysUtils.isLowEndDevice()) {
+            final int expectedStatusBarColor = brandColor == mDefaultColor
+                    ? Color.BLACK
+                    : ColorUtils.getDarkenedColorForStatusBar(brandColor);
             CriteriaHelper.pollUiThread(
-                    Criteria.equals(brandColor, new Callable<Integer>() {
+                    Criteria.equals(expectedStatusBarColor, new Callable<Integer>() {
                         @Override
                         public Integer call() {
-                            return mToolbar.getOverlayDrawable().getColor();
+                            return getActivity().getWindow().getStatusBarColor();
                         }
                     }));
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                    && !SysUtils.isLowEndDevice()) {
-                final int expectedStatusBarColor = brandColor == mDefaultColor
-                        ? Color.BLACK
-                        : ColorUtils.getDarkenedColorForStatusBar(brandColor);
-                CriteriaHelper.pollUiThread(
-                        Criteria.equals(expectedStatusBarColor, new Callable<Integer>() {
-                            @Override
-                            public Integer call() {
-                                return getActivity().getWindow().getStatusBarColor();
-                            }
-                        }));
-            }
-
-        } catch (InterruptedException e) {
-            fail();
         }
-
     }
 
     @Override
@@ -173,7 +168,7 @@ public class BrandColorTest extends ChromeActivityTestCaseBase<ChromeActivity> {
             @Override
             public void run() {
                 Tab tab = getActivity().getActivityTab();
-                RewindableIterator<TabObserver> observers = tab.getTabObservers();
+                RewindableIterator<TabObserver> observers = TabTestUtils.getTabObservers(tab);
                 while (observers.hasNext()) {
                     observers.next().onLoadStarted(tab, true);
                 }

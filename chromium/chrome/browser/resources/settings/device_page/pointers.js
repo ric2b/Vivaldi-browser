@@ -10,21 +10,14 @@ Polymer({
   is: 'settings-pointers',
 
   properties: {
-    /** Preferences state. */
     prefs: {
       type: Object,
       notify: true,
     },
 
-    hasMouse: {
-      type: Boolean,
-      value: false,
-    },
+    hasMouse: Boolean,
 
-    hasTouchpad: {
-      type: Boolean,
-      value: false,
-    },
+    hasTouchpad: Boolean,
 
     /**
      * TODO(michaelpg): cr-slider should optionally take a min and max so we
@@ -48,8 +41,13 @@ Polymer({
     settings.DevicePageBrowserProxyImpl.getInstance().handleLinkEvent(e);
   },
 
-  // Mouse and touchpad sections are only subsections if they are both present.
-  getSectionClass_: function(hasMouse, hasTouchpad) {
+  /**
+   * Mouse and touchpad sections are only subsections if they are both present.
+   * @param {boolean} hasMouse
+   * @param {boolean} hasTouchpad
+   * @return {string}
+   */
+  getSubsectionClass_: function(hasMouse, hasTouchpad) {
     return hasMouse && hasTouchpad ? 'subsection' : '';
   },
 });

@@ -14,14 +14,13 @@
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
-#include "net/http/http_stream.h"
+#include "net/spdy/multiplexed_http_stream.h"
 #include "net/spdy/spdy_read_queue.h"
 #include "net/spdy/spdy_session.h"
 #include "net/spdy/spdy_stream.h"
 
 namespace net {
 
-class DrainableIOBuffer;
 struct HttpRequestInfo;
 class HttpResponseInfo;
 class IOBuffer;
@@ -30,7 +29,7 @@ class UploadDataStream;
 
 // The SpdyHttpStream is a HTTP-specific type of stream known to a SpdySession.
 class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
-                                          public HttpStream {
+                                          public MultiplexedHttpStream {
  public:
   static const size_t kRequestBodyBufferSize;
   // |spdy_session| must not be NULL.
@@ -57,15 +56,12 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
                        int buf_len,
                        const CompletionCallback& callback) override;
   void Close(bool not_reusable) override;
-  HttpStream* RenewStreamForAuth() override;
   bool IsResponseBodyComplete() const override;
 
   // Must not be called if a NULL SpdySession was pssed into the
   // constructor.
   bool IsConnectionReused() const override;
 
-  void SetConnectionReused() override;
-  bool CanReuseConnection() const override;
   // Total number of bytes received over the network of SPDY data, headers, and
   // push_promise frames associated with this stream, including the size of
   // frame headers, after SSL decryption and not including proxy overhead.
@@ -76,20 +72,13 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
   // not associated with any stream, and are not included in this value.
   int64_t GetTotalSentBytes() const override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
-  void GetSSLInfo(SSLInfo* ssl_info) override;
-  void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
-  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
-                                 TokenBindingType tb_type,
-                                 std::vector<uint8_t>* out) override;
-  void Drain(HttpNetworkSession* session) override;
   void PopulateNetErrorDetails(NetErrorDetails* details) override;
   void SetPriority(RequestPriority priority) override;
 
   // SpdyStream::Delegate implementation.
-  void OnRequestHeadersSent() override;
-  SpdyResponseHeadersStatus OnResponseHeadersUpdated(
-      const SpdyHeaderBlock& response_headers) override;
+  void OnHeadersSent() override;
+  void OnHeadersReceived(const SpdyHeaderBlock& response_headers) override;
   void OnDataReceived(std::unique_ptr<SpdyBuffer> buffer) override;
   void OnDataSent() override;
   void OnTrailers(const SpdyHeaderBlock& trailers) override;
@@ -168,9 +157,7 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
 
   std::unique_ptr<HttpResponseInfo> push_response_info_;
 
-  // We don't use SpdyStream's |response_header_status_| as we
-  // sometimes call back into our delegate before it is updated.
-  SpdyResponseHeadersStatus response_headers_status_;
+  bool response_headers_complete_;
 
   // We buffer the response body as it arrives asynchronously from the stream.
   SpdyReadQueue response_body_queue_;
@@ -195,7 +182,6 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
   // Is this spdy stream direct to the origin server (or to a proxy).
   bool direct_;
 
-  SSLInfo ssl_info_;
   bool was_alpn_negotiated_;
 
   base::WeakPtrFactory<SpdyHttpStream> weak_factory_;

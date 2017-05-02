@@ -10,17 +10,14 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
 #include "chrome/browser/ui/autofill/popup_view_common.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/native_theme/native_theme.h"
 
 namespace gfx {
-class Display;
-class Point;
-}
-
-namespace ui {
-class KeyEvent;
+class ImageSkia;
 }
 
 namespace autofill {
@@ -29,15 +26,25 @@ namespace autofill {
 // TODO(mathp): investigate moving ownership of this class to the view.
 class AutofillPopupLayoutModel {
  public:
-  explicit AutofillPopupLayoutModel(AutofillPopupViewDelegate* delegate);
+  AutofillPopupLayoutModel(AutofillPopupViewDelegate* delegate,
+                           bool is_credit_card_popup);
+
   ~AutofillPopupLayoutModel();
 
   // The minimum amount of padding between the Autofill name and subtext,
   // in pixels.
   static const int kNamePadding = 15;
 
-  // The amount of padding between icons in pixels.
+  // The minimum amount of padding between the Autofill http warning message
+  // name and subtext, in pixels.
+  static const int kHttpWarningNamePadding = 8;
+
+  // The amount of padding around icons in pixels.
   static const int kIconPadding = 5;
+
+  // The amount of horizontal padding around icons in pixels for HTTP warning
+  // message.
+  static const int kHttpWarningIconPadding = 8;
 
   // The amount of padding at the end of the popup in pixels.
   static const int kEndPadding = 8;
@@ -66,7 +73,13 @@ class AutofillPopupLayoutModel {
   // The same font can vary based on the type of data it is showing at the row
   // |index|.
   const gfx::FontList& GetValueFontListForRow(size_t index) const;
-  const gfx::FontList& GetLabelFontList() const;
+  const gfx::FontList& GetLabelFontListForRow(size_t index) const;
+
+  // Returns the value font color ID of the row item according to its |index|.
+  ui::NativeTheme::ColorId GetValueFontColorIDForRow(size_t index) const;
+
+  // Returns the icon image of the item at |index| in the popup.
+  gfx::ImageSkia GetIconImage(size_t index) const;
 #endif
 
   // Convert a y-coordinate to the closest line.
@@ -82,6 +95,31 @@ class AutofillPopupLayoutModel {
   // resource isn't recognized.
   int GetIconResourceID(const base::string16& resource_name) const;
 
+  // Returns whether |GetBackgroundColor, GetDividerColor| returns a custom
+  // color configured in an experiment to tweak autofill popup layout.
+  bool IsPopupLayoutExperimentEnabled() const;
+
+  // Returns the background color for the autofill popup, or
+  // |SK_ColorTRANSPARENT| if not in an experiment to tweak autofill popup
+  // layout.
+  SkColor GetBackgroundColor() const;
+
+  // Returns the divider color for the autofill popup, or
+  // |SK_ColorTRANSPARENT| if not in an experiment to tweak autofill popup
+  // layout.
+  SkColor GetDividerColor() const;
+
+  // Returns the dropdown item height, or 0 if the dropdown item height isn't
+  // configured in an experiment to tweak autofill popup layout.
+  unsigned int GetDropdownItemHeight() const;
+
+  // Returns true if suggestion icon must be displayed before suggestion text.
+  bool IsIconAtStart(int frontend_id) const;
+
+  // Returns the margin for icon, label and between icon and label, or 0 if the
+  // margin isn't configured in an experiment to tweak autofill popup layout.
+  unsigned int GetMargin() const;
+
  private:
   // Returns the enclosing rectangle for the element_bounds.
   const gfx::Rect RoundedElementBounds() const;
@@ -94,9 +132,6 @@ class AutofillPopupLayoutModel {
   gfx::FontList smaller_font_list_;
   // Bold version of the normal font.
   gfx::FontList bold_font_list_;
-  // Font used for the warning dialog, which may be italic or not depending on
-  // the platform.
-  gfx::FontList warning_font_list_;
 #endif
 
   // The bounds of the Autofill popup.
@@ -105,6 +140,8 @@ class AutofillPopupLayoutModel {
   PopupViewCommon view_common_;
 
   AutofillPopupViewDelegate* delegate_;  // Weak reference.
+
+  const bool is_credit_card_popup_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPopupLayoutModel);
 };

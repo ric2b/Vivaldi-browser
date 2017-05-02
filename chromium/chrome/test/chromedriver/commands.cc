@@ -20,7 +20,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -109,7 +108,6 @@ void ExecuteGetSessions(const Command& session_capabilities_command,
                         const base::DictionaryValue& params,
                         const std::string& session_id,
                         const CommandCallback& callback) {
-
   size_t get_remaining_count = session_thread_map->size();
   base::WeakPtrFactory<size_t> weak_ptr_factory(&get_remaining_count);
   std::unique_ptr<base::ListValue> session_list(new base::ListValue());
@@ -253,7 +251,8 @@ void ExecuteSessionCommandOnSessionThread(
         // Some commands, like clicking a button or link which closes the
         // window, may result in a kDisconnected error code.
         std::list<std::string> web_view_ids;
-        Status status_tmp = session->chrome->GetWebViewIds(&web_view_ids);
+        Status status_tmp = session->chrome->GetWebViewIds(
+          &web_view_ids, session->w3c_compliant);
         if (status_tmp.IsError() && status_tmp.code() != kChromeNotReachable) {
           status.AddDetails(
               "failed to check if window was closed: " + status_tmp.message());

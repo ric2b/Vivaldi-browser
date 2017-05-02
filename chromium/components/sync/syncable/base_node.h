@@ -27,17 +27,11 @@ class DictionaryValue;
 }
 
 namespace sync_pb {
-class AppSpecifics;
-class AutofillSpecifics;
-class AutofillProfileSpecifics;
 class BookmarkSpecifics;
+class NotesSpecifics;
 class EntitySpecifics;
-class ExtensionSpecifics;
-class SessionSpecifics;
 class NigoriSpecifics;
-class PreferenceSpecifics;
 class PasswordSpecificsData;
-class ThemeSpecifics;
 class TypedUrlSpecifics;
 }  // namespace sync_pb
 
@@ -120,6 +114,10 @@ class BaseNode {
   // Getter specific to the BOOKMARK datatype.  Returns protobuf
   // data.  Can only be called if GetModelType() == BOOKMARK.
   const sync_pb::BookmarkSpecifics& GetBookmarkSpecifics() const;
+
+  // Getter specific to the NOTES datatype.  Returns protobuf
+  // data.  Can only be called if GetModelType() == NOTES.
+  const sync_pb::NotesSpecifics& GetNotesSpecifics() const;
 
   // Getter specific to the NIGORI datatype.  Returns protobuf
   // data.  Can only be called if GetModelType() == NIGORI.

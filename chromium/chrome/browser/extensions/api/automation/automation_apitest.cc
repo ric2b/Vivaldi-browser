@@ -83,7 +83,7 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, TestRendererAccessibilityEnabled) {
   content::WebContents* const tab =
       browser()->tab_strip_model()->GetWebContentsAt(0);
   ASSERT_FALSE(tab->IsFullAccessibilityModeForTesting());
-  ASSERT_FALSE(tab->IsTreeOnlyAccessibilityModeForTesting());
+  ASSERT_FALSE(tab->IsWebContentsOnlyAccessibilityModeForTesting());
 
   base::FilePath extension_path =
       test_data_dir_.AppendASCII("automation/tests/basic");
@@ -92,7 +92,7 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, TestRendererAccessibilityEnabled) {
   ASSERT_TRUE(got_tree.WaitUntilSatisfied());
 
   ASSERT_FALSE(tab->IsFullAccessibilityModeForTesting());
-  ASSERT_TRUE(tab->IsTreeOnlyAccessibilityModeForTesting());
+  ASSERT_TRUE(tab->IsWebContentsOnlyAccessibilityModeForTesting());
 }
 
 IN_PROC_BROWSER_TEST_F(AutomationApiTest, SanityCheck) {
@@ -142,6 +142,12 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, LineStartOffsets) {
   StartEmbeddedTestServer();
   ASSERT_TRUE(
       RunExtensionSubtest("automation/tests/tabs", "line_start_offsets.html"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, ImageData) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(RunExtensionSubtest("automation/tests/tabs", "image_data.html"))
       << message_;
 }
 

@@ -11,7 +11,7 @@
 namespace blink {
 
 class NGConstraintSpace;
-class NGFragmentBase;
+class NGFragment;
 class NGLayoutAlgorithm;
 
 // Represents the input to a layout algorithm for a given node. The layout
@@ -20,14 +20,14 @@ class NGLayoutAlgorithm;
 class CORE_EXPORT NGLayoutInputNode
     : public GarbageCollectedFinalized<NGLayoutInputNode> {
  public:
-  enum NGLayoutInputNodeType { LegacyBlock = 0, LegacyInline = 1 };
+  enum NGLayoutInputNodeType { kLegacyBlock = 0, kLegacyInline = 1 };
 
   virtual ~NGLayoutInputNode(){};
 
   // Returns true when done; when this function returns false, it has to be
   // called again. The out parameter will only be set when this function
   // returns true. The same constraint space has to be passed each time.
-  virtual bool Layout(const NGConstraintSpace*, NGFragmentBase**) = 0;
+  virtual bool Layout(NGConstraintSpace*, NGFragment**) = 0;
 
   // Returns the next sibling.
   virtual NGLayoutInputNode* NextSibling() = 0;
@@ -37,7 +37,7 @@ class CORE_EXPORT NGLayoutInputNode
   }
 
   static NGLayoutAlgorithm* AlgorithmForInputNode(NGLayoutInputNode*,
-                                                  const NGConstraintSpace*);
+                                                  NGConstraintSpace*);
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
@@ -50,4 +50,4 @@ class CORE_EXPORT NGLayoutInputNode
 
 }  // namespace blink
 
-#endif  // NGInlineBox_h
+#endif  // NGLayoutInputNode_h

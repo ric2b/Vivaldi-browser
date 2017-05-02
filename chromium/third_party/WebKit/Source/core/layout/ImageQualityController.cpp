@@ -97,7 +97,7 @@ ImageQualityController::~ImageQualityController() {
 }
 
 ImageQualityController::ImageQualityController()
-    : m_timer(wrapUnique(new Timer<ImageQualityController>(
+    : m_timer(WTF::wrapUnique(new Timer<ImageQualityController>(
           this,
           &ImageQualityController::highQualityRepaintTimerFired))),
       m_frameTimeWhenTimerStarted(0.0) {}
@@ -181,7 +181,7 @@ bool ImageQualityController::shouldPaintAtLowQuality(
 
   if (LocalFrame* frame = object.frame()) {
     if (frame->settings() &&
-        frame->settings()->useDefaultImageInterpolationQuality())
+        frame->settings()->getUseDefaultImageInterpolationQuality())
       return false;
   }
 

@@ -24,7 +24,6 @@
 #include "url/origin.h"
 
 namespace content {
-class IndexedDBBlobInfo;
 class IndexedDBConnection;
 class IndexedDBCursor;
 class IndexedDBDatabase;
@@ -36,20 +35,12 @@ struct IndexedDBValue;
 class CONTENT_EXPORT IndexedDBCallbacks
     : public base::RefCounted<IndexedDBCallbacks> {
  public:
-  // Simple payload responses
-  IndexedDBCallbacks(IndexedDBDispatcherHost* dispatcher_host,
-                     int32_t ipc_thread_id,
-                     int32_t ipc_callbacks_id);
+  // Destructively converts an IndexedDBValue to a Mojo Value.
+  static ::indexed_db::mojom::ValuePtr ConvertAndEraseValue(
+      IndexedDBValue* value);
 
-  // IndexedDBCursor responses
-  IndexedDBCallbacks(IndexedDBDispatcherHost* dispatcher_host,
-                     int32_t ipc_thread_id,
-                     int32_t ipc_callbacks_id,
-                     int32_t ipc_cursor_id);
-
-  // Mojo-based responses
   IndexedDBCallbacks(
-      IndexedDBDispatcherHost* dispatcher_host,
+      scoped_refptr<IndexedDBDispatcherHost> dispatcher_host,
       const url::Origin& origin,
       ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks_info);
 
@@ -71,7 +62,7 @@ class CONTENT_EXPORT IndexedDBCallbacks
                          const content::IndexedDBDatabaseMetadata& metadata);
 
   // IndexedDBDatabase::OpenCursor
-  virtual void OnSuccess(scoped_refptr<IndexedDBCursor> cursor,
+  virtual void OnSuccess(std::unique_ptr<IndexedDBCursor> cursor,
                          const IndexedDBKey& key,
                          const IndexedDBKey& primary_key,
                          IndexedDBValue* value);
@@ -105,37 +96,20 @@ class CONTENT_EXPORT IndexedDBCallbacks
   // IndexedDBCursor::Continue / Advance (when complete)
   virtual void OnSuccess();
 
-  // Checks to see if the associated dispatcher host is still connected. If
-  // not this request can be dropped.
-  virtual bool IsValid() const;
-
   void SetConnectionOpenStartTime(const base::TimeTicks& start_time);
-
-  void set_host_transaction_id(int64_t host_transaction_id) {
-    host_transaction_id_ = host_transaction_id;
-  }
 
  protected:
   virtual ~IndexedDBCallbacks();
 
  private:
-  void RegisterBlobsAndSend(const std::vector<IndexedDBBlobInfo>& blob_info,
-                            const base::Closure& callback);
-
   friend class base::RefCounted<IndexedDBCallbacks>;
 
   class IOThreadHelper;
 
   // Originally from IndexedDBCallbacks:
   scoped_refptr<IndexedDBDispatcherHost> dispatcher_host_;
-  int32_t ipc_callbacks_id_;
-  int32_t ipc_thread_id_;
-
-  // IndexedDBCursor callbacks ------------------------
-  int32_t ipc_cursor_id_;
 
   // IndexedDBDatabase callbacks ------------------------
-  int64_t host_transaction_id_;
   url::Origin origin_;
   bool database_sent_ = false;
 

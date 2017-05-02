@@ -74,6 +74,11 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     callback.Run(v);
   }
 
+  void EchoGpuPreferences(const GpuPreferences& prefs,
+                          const EchoGpuPreferencesCallback& callback) override {
+    callback.Run(prefs);
+  }
+
   base::MessageLoop loop_;
   mojo::BindingSet<TraitsTestService> traits_test_bindings_;
 
@@ -148,6 +153,7 @@ TEST_F(StructTraitsTest, GpuInfo) {
   const bool sandboxed = true;
   const int process_crash_count = 0xdead;
   const bool in_process_gpu = true;
+  const bool passthrough_cmd_decoder = true;
   const gpu::CollectInfoResult basic_info_state =
       gpu::CollectInfoResult::kCollectInfoSuccess;
   const gpu::CollectInfoResult context_info_state =
@@ -197,6 +203,7 @@ TEST_F(StructTraitsTest, GpuInfo) {
   input.sandboxed = sandboxed;
   input.process_crash_count = process_crash_count;
   input.in_process_gpu = in_process_gpu;
+  input.passthrough_cmd_decoder = passthrough_cmd_decoder;
   input.basic_info_state = basic_info_state;
   input.context_info_state = context_info_state;
 #if defined(OS_WIN)
@@ -259,6 +266,7 @@ TEST_F(StructTraitsTest, GpuInfo) {
   EXPECT_EQ(sandboxed, output.sandboxed);
   EXPECT_EQ(process_crash_count, output.process_crash_count);
   EXPECT_EQ(in_process_gpu, output.in_process_gpu);
+  EXPECT_EQ(passthrough_cmd_decoder, output.passthrough_cmd_decoder);
   EXPECT_EQ(basic_info_state, output.basic_info_state);
   EXPECT_EQ(context_info_state, output.context_info_state);
 #if defined(OS_WIN)
@@ -386,11 +394,16 @@ TEST_F(StructTraitsTest, VideoDecodeAcceleratorCapabilities) {
 
   gpu::VideoDecodeAcceleratorCapabilities input;
   input.flags = flags;
+  input.supported_profiles.push_back(
+      gpu::VideoDecodeAcceleratorSupportedProfile());
+  input.supported_profiles.push_back(
+      gpu::VideoDecodeAcceleratorSupportedProfile());
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   gpu::VideoDecodeAcceleratorCapabilities output;
   proxy->EchoVideoDecodeAcceleratorCapabilities(input, &output);
   EXPECT_EQ(flags, output.flags);
+  EXPECT_EQ(input.supported_profiles.size(), output.supported_profiles.size());
 }
 
 TEST_F(StructTraitsTest, VideoEncodeAcceleratorSupportedProfile) {
@@ -413,6 +426,30 @@ TEST_F(StructTraitsTest, VideoEncodeAcceleratorSupportedProfile) {
   EXPECT_EQ(max_resolution, output.max_resolution);
   EXPECT_EQ(max_framerate_numerator, output.max_framerate_numerator);
   EXPECT_EQ(max_framerate_denominator, output.max_framerate_denominator);
+}
+
+TEST_F(StructTraitsTest, GpuPreferences) {
+  GpuPreferences prefs;
+  prefs.single_process = true;
+  prefs.in_process_gpu = true;
+  prefs.ui_prioritize_in_gpu_process = true;
+#if defined(OS_WIN)
+  const GpuPreferences::VpxDecodeVendors vendor =
+      GpuPreferences::VPX_VENDOR_AMD;
+  prefs.enable_accelerated_vpx_decode = vendor;
+#endif
+  prefs.enable_gpu_driver_debug_logging = true;
+
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  GpuPreferences echo;
+  proxy->EchoGpuPreferences(prefs, &echo);
+  EXPECT_TRUE(echo.single_process);
+  EXPECT_TRUE(echo.in_process_gpu);
+  EXPECT_TRUE(echo.ui_prioritize_in_gpu_process);
+  EXPECT_TRUE(echo.enable_gpu_driver_debug_logging);
+#if defined(OS_WIN)
+  EXPECT_EQ(vendor, echo.enable_accelerated_vpx_decode);
+#endif
 }
 
 }  // namespace gpu

@@ -1,47 +1,4 @@
 import("vivaldi_grit.gni")
 
-generate_files = generate_untranslated
-
 group("resources") {
-  if (generate_files) {
-    deps = [
-      ":ash_strings",
-      ":bluetooth_strings",
-      ":content_strings",
-      ":libaddressinput_strings",
-      ":platform_locale_settings",
-      ":policy_templates",
-      ":ui_strings",
-    ]
-  }
-}
-
-if (generate_files) {
-  vivaldi_extract_untranslated("ash_strings") {
-    source = "//ash/ash_strings.grd"
-  }
-
-  vivaldi_extract_untranslated("bluetooth_strings") {
-    source = "//device/bluetooth/bluetooth_strings.grd"
-  }
-
-  vivaldi_extract_untranslated("content_strings") {
-    source = "//content/app/strings/content_strings.grd"
-  }
-
-  vivaldi_extract_untranslated("libaddressinput_strings") {
-    source = "//chrome/app/address_input_strings.grd"
-  }
-
-  vivaldi_extract_untranslated("policy_templates") {
-    source = "//components/policy/resources/policy_templates.grd"
-  }
-
-  vivaldi_extract_untranslated("platform_locale_settings") {
-    source = "//chrome/app/resources/locale_settings.grd"
-  }
-
-  vivaldi_extract_untranslated("ui_strings") {
-    source = "//ui/strings/ui_strings.grd"
-  }
 }

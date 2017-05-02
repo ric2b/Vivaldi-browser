@@ -6,17 +6,25 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("interfaces") {
   sources = [
+    "accelerator_controller.mojom",
     "ash_window_type.mojom",
+    "cast_config.mojom",
     "locale.mojom",
+    "media.mojom",
     "new_window.mojom",
+    "session_controller.mojom",
     "shelf.mojom",
     "shutdown.mojom",
     "system_tray.mojom",
+    "touch_view.mojom",
+    "update.mojom",
     "volume.mojom",
+    "vpn_list.mojom",
     "wallpaper.mojom",
   ]
 
   public_deps = [
+    "//components/signin/public/interfaces",
     "//skia/public/interfaces",
   ]
 }

@@ -5,13 +5,15 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_mus.h"
 
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/app_launcher_id.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "extensions/grit/extensions_browser_resources.h"
-#include "mojo/common/common_type_converters.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/events/event_constants.h"
 
 class ChromeShelfItemDelegate : public ash::mojom::ShelfItemDelegate {
  public:
@@ -69,6 +71,17 @@ ash::ShelfID ChromeLauncherControllerMus::CreateAppLauncherItem(
   return ash::TYPE_UNDEFINED;
 }
 
+const ash::ShelfItem* ChromeLauncherControllerMus::GetItem(
+    ash::ShelfID id) const {
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
+void ChromeLauncherControllerMus::SetItemType(ash::ShelfID id,
+                                              ash::ShelfItemType type) {
+  NOTIMPLEMENTED();
+}
+
 void ChromeLauncherControllerMus::SetItemStatus(ash::ShelfID id,
                                                 ash::ShelfItemStatus status) {
   NOTIMPLEMENTED();
@@ -99,11 +112,6 @@ bool ChromeLauncherControllerMus::IsPinned(ash::ShelfID id) {
 
 void ChromeLauncherControllerMus::TogglePinned(ash::ShelfID id) {
   NOTIMPLEMENTED();
-}
-
-bool ChromeLauncherControllerMus::IsPinnable(ash::ShelfID id) const {
-  NOTIMPLEMENTED();
-  return false;
 }
 
 void ChromeLauncherControllerMus::LockV1AppWithID(const std::string& app_id) {
@@ -138,27 +146,9 @@ void ChromeLauncherControllerMus::ActivateApp(const std::string& app_id,
   NOTIMPLEMENTED();
 }
 
-extensions::LaunchType ChromeLauncherControllerMus::GetLaunchType(
-    ash::ShelfID id) {
-  NOTIMPLEMENTED();
-  return extensions::LAUNCH_TYPE_INVALID;
-}
-
 void ChromeLauncherControllerMus::SetLauncherItemImage(
     ash::ShelfID shelf_id,
     const gfx::ImageSkia& image) {
-  NOTIMPLEMENTED();
-}
-
-bool ChromeLauncherControllerMus::IsWindowedAppInLauncher(
-    const std::string& app_id) {
-  NOTIMPLEMENTED();
-  return false;
-}
-
-void ChromeLauncherControllerMus::SetLaunchType(
-    ash::ShelfID id,
-    extensions::LaunchType launch_type) {
   NOTIMPLEMENTED();
 }
 
@@ -211,7 +201,7 @@ ChromeLauncherControllerMus::GetV1ApplicationsFromAppId(
 }
 
 void ChromeLauncherControllerMus::ActivateShellApp(const std::string& app_id,
-                                                   int index) {
+                                                   int window_index) {
   NOTIMPLEMENTED();
 }
 
@@ -292,12 +282,12 @@ void ChromeLauncherControllerMus::PinAppsFromPrefs() {
 
   for (const auto& app_launcher_id : pinned_apps) {
     const std::string app_id = app_launcher_id.app_id();
-    if (app_launcher_id.ToString() == ash::launcher::kPinnedAppsPlaceholder)
+    if (app_launcher_id.app_id() == ash::launcher::kPinnedAppsPlaceholder)
       continue;
 
     ash::mojom::ShelfItemPtr item(ash::mojom::ShelfItem::New());
     item->app_id = app_id;
-    item->app_title = mojo::String::From(
+    item->app_title = base::UTF16ToUTF8(
         launcher_controller_helper()->GetAppTitle(profile(), app_id));
     ResourceBundle& rb = ResourceBundle::GetSharedInstance();
     const gfx::Image& image = rb.GetImageNamed(IDR_APP_DEFAULT_ICON);

@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
@@ -27,6 +28,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/proxy/proxy_config.h"
@@ -218,13 +220,14 @@ TestDataReductionProxyIOData::TestDataReductionProxyIOData(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     std::unique_ptr<DataReductionProxyConfig> config,
     std::unique_ptr<DataReductionProxyEventCreator> event_creator,
-    std::unique_ptr<DataReductionProxyRequestOptions> request_options,
+    std::unique_ptr<TestDataReductionProxyRequestOptions> request_options,
     std::unique_ptr<DataReductionProxyConfigurator> configurator,
     net::NetLog* net_log,
     bool enabled)
     : DataReductionProxyIOData(),
       service_set_(false),
-      pingback_reporting_fraction_(0.0f) {
+      pingback_reporting_fraction_(0.0f),
+      test_request_options_(request_options.get()) {
   io_task_runner_ = task_runner;
   ui_task_runner_ = task_runner;
   config_ = std::move(config);
@@ -284,9 +287,7 @@ DataStore::Status TestDataStore::Delete(base::StringPiece key) {
 }
 
 DataReductionProxyTestContext::Builder::Builder()
-    : params_flags_(DataReductionProxyParams::kAllowed |
-                    DataReductionProxyParams::kFallbackAllowed |
-                    DataReductionProxyParams::kPromoAllowed),
+    : params_flags_(DataReductionProxyParams::kPromoAllowed),
       params_definitions_(TestDataReductionProxyParams::HAS_EVERYTHING),
       client_(Client::UNKNOWN),
       request_context_(nullptr),
@@ -297,6 +298,8 @@ DataReductionProxyTestContext::Builder::Builder()
       use_config_client_(false),
       use_test_config_client_(false),
       skip_settings_initialization_(false) {}
+
+DataReductionProxyTestContext::Builder::~Builder() {}
 
 DataReductionProxyTestContext::Builder&
 DataReductionProxyTestContext::Builder::WithParamsFlags(int params_flags) {
@@ -368,6 +371,14 @@ DataReductionProxyTestContext::Builder::SkipSettingsInitialization() {
   return *this;
 }
 
+DataReductionProxyTestContext::Builder&
+DataReductionProxyTestContext::Builder::WithProxiesForHttp(
+    const std::vector<DataReductionProxyServer>& proxy_servers) {
+  DCHECK(!proxy_servers.empty());
+  proxy_servers_ = proxy_servers;
+  return *this;
+}
+
 std::unique_ptr<DataReductionProxyTestContext>
 DataReductionProxyTestContext::Builder::Build() {
   // Check for invalid builder combinations.
@@ -412,6 +423,9 @@ DataReductionProxyTestContext::Builder::Build() {
     test_context_flags |= USE_CONFIG_CLIENT;
     std::unique_ptr<DataReductionProxyMutableConfigValues> mutable_config =
         DataReductionProxyMutableConfigValues::CreateFromParams(params.get());
+    if (!proxy_servers_.empty()) {
+      mutable_config->UpdateValues(proxy_servers_);
+    }
     raw_mutable_config = mutable_config.get();
     config.reset(new TestDataReductionProxyConfig(
         std::move(mutable_config), task_runner, net_log.get(),
@@ -422,19 +436,23 @@ DataReductionProxyTestContext::Builder::Build() {
         std::move(params), task_runner, net_log.get(), configurator.get(),
         event_creator.get()));
   } else {
+    if (!proxy_servers_.empty()) {
+      params->SetProxiesForHttp(proxy_servers_);
+    }
     config.reset(new TestDataReductionProxyConfig(
         std::move(params), task_runner, net_log.get(), configurator.get(),
         event_creator.get()));
   }
 
-  std::unique_ptr<DataReductionProxyRequestOptions> request_options;
+  std::unique_ptr<TestDataReductionProxyRequestOptions> request_options;
+
   if (use_mock_request_options_) {
     test_context_flags |= USE_MOCK_REQUEST_OPTIONS;
     request_options.reset(
         new MockDataReductionProxyRequestOptions(client_, config.get()));
   } else {
-    request_options.reset(
-        new DataReductionProxyRequestOptions(client_, config.get()));
+    request_options.reset(new TestDataReductionProxyRequestOptions(
+        client_, "1.2.3.4", config.get()));
   }
 
   std::unique_ptr<DataReductionProxySettings> settings(
@@ -475,6 +493,10 @@ DataReductionProxyTestContext::Builder::Build() {
                    base::Unretained(config_storer.get()))));
   }
   io_data->set_config_client(std::move(config_client));
+
+  io_data->set_proxy_delegate(base::WrapUnique(new DataReductionProxyDelegate(
+      io_data->config(), io_data->configurator(), io_data->event_creator(),
+      io_data->bypass_stats(), net_log.get())));
 
   std::unique_ptr<DataReductionProxyTestContext> test_context(
       new DataReductionProxyTestContext(
@@ -593,13 +615,15 @@ DataReductionProxyTestContext::CreateDataReductionProxyServiceInternal(
 }
 
 void DataReductionProxyTestContext::AttachToURLRequestContext(
-      net::URLRequestContextStorage* request_context_storage) const {
+    net::URLRequestContextStorage* request_context_storage) const {
   DCHECK(request_context_storage);
 
   // |request_context_storage| takes ownership of the network delegate.
-  request_context_storage->set_network_delegate(
+  std::unique_ptr<DataReductionProxyNetworkDelegate> network_delegate =
       io_data()->CreateNetworkDelegate(
-          base::MakeUnique<net::TestNetworkDelegate>(), true));
+          base::MakeUnique<net::TestNetworkDelegate>(), true);
+
+  request_context_storage->set_network_delegate(std::move(network_delegate));
 
   request_context_storage->set_job_factory(
       base::MakeUnique<net::URLRequestInterceptingJobFactory>(

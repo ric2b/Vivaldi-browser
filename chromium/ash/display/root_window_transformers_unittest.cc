@@ -20,7 +20,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/display/display.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
@@ -60,7 +60,7 @@ class TestEventHandler : public ui::EventHandler {
     aura::Window* target = static_cast<aura::Window*>(event->target());
     // Only record when the target is the wallpaper, which covers the entire
     // root window.
-    if (target->name() != kWallpaperView)
+    if (target->GetName() != kWallpaperView)
       return;
     touch_radius_x_ = event->pointer_details().radius_x;
     touch_radius_y_ = event->pointer_details().radius_y;
@@ -71,7 +71,7 @@ class TestEventHandler : public ui::EventHandler {
     aura::Window* target = static_cast<aura::Window*>(event->target());
     // Only record when the target is the wallpaper, which covers the entire
     // root window.
-    if (target->name() != kWallpaperView)
+    if (target->GetName() != kWallpaperView)
       return;
 
     if (event->type() == ui::ET_SCROLL) {

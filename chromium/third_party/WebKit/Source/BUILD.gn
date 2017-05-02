@@ -24,6 +24,11 @@ declare_args() {
   # a class has an empty destructor which would be unnecessarily invoked
   # when finalized.
   blink_gc_plugin_option_warn_unneeded_finalizer = false
+
+  # Set to true to have the clang Blink GC plugin use Chromium-style naming
+  # rather than legacy Blink name.
+  # TODO(https://crbug.com/675879): Remove this option after the Blink rename.
+  blink_gc_plugin_option_use_chromium_style_naming = false
 }
 
 # features ---------------------------------------------------------------------
@@ -39,6 +44,33 @@ config("inside_blink") {
     "BLINK_IMPLEMENTATION=1",
     "INSIDE_BLINK",
   ]
+}
+
+# blink_pch --------------------------------------------------------------------
+
+# Precompiled headers can save a lot of time compiling since Blink has
+# a lot of source in header files.
+
+import("//build/config/pch.gni")
+
+config("blink_pch") {
+  if (enable_precompiled_headers) {
+    if (is_win) {
+      # This is a string rather than a file GN knows about. It has to match
+      # exactly what's in the /FI flag below, and what might appear in the
+      # source code in quotes for an #include directive.
+      precompiled_header = "build/win/Precompile.h"
+
+      # This is a file that GN will compile with the above header. It will be
+      # implicitly added to the sources (potentially multiple times, with one
+      # variant for each language used in the target).
+      precompiled_source =
+          "//third_party/WebKit/Source/build/win/Precompile.cpp"
+
+      # Force include the header.
+      cflags = [ "/FI$precompiled_header" ]
+    }
+  }
 }
 
 # config -----------------------------------------------------------------------
@@ -109,6 +141,14 @@ config("config") {
         "-plugin-arg-blink-gc-plugin",
         "-Xclang",
         "warn-unneeded-finalizer",
+      ]
+    }
+    if (blink_gc_plugin_option_use_chromium_style_naming) {
+      cflags += [
+        "-Xclang",
+        "-plugin-arg-blink-gc-plugin",
+        "-Xclang",
+        "use-chromium-style-naming",
       ]
     }
   }

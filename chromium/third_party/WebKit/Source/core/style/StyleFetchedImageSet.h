@@ -26,24 +26,23 @@
 #ifndef StyleFetchedImageSet_h
 #define StyleFetchedImageSet_h
 
-#include "core/fetch/ResourceClient.h"
+#include "core/loader/resource/ImageResourceObserver.h"
 #include "core/style/StyleImage.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/weborigin/KURL.h"
 
 namespace blink {
 
-class ImageResource;
 class CSSImageSetValue;
 
 // This class keeps one cached image and has access to a set of alternatives.
 
-class StyleFetchedImageSet final : public StyleImage, private ResourceClient {
+class StyleFetchedImageSet final : public StyleImage,
+                                   public ImageResourceObserver {
   USING_PRE_FINALIZER(StyleFetchedImageSet, dispose);
-  USING_GARBAGE_COLLECTED_MIXIN(StyleFetchedImageSet);
 
  public:
-  static StyleFetchedImageSet* create(ImageResource* image,
+  static StyleFetchedImageSet* create(ImageResourceContent* image,
                                       float imageScaleFactor,
                                       CSSImageSetValue* value,
                                       const KURL& url) {
@@ -74,12 +73,12 @@ class StyleFetchedImageSet final : public StyleImage, private ResourceClient {
                           float) const override;
   float imageScaleFactor() const override { return m_imageScaleFactor; }
   bool knownToBeOpaque(const LayoutObject&) const override;
-  ImageResource* cachedImage() const override;
+  ImageResourceContent* cachedImage() const override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  StyleFetchedImageSet(ImageResource*,
+  StyleFetchedImageSet(ImageResourceContent*,
                        float imageScaleFactor,
                        CSSImageSetValue*,
                        const KURL&);
@@ -88,7 +87,7 @@ class StyleFetchedImageSet final : public StyleImage, private ResourceClient {
 
   String debugName() const override { return "StyleFetchedImageSet"; }
 
-  Member<ImageResource> m_bestFitImage;
+  Member<ImageResourceContent> m_bestFitImage;
   float m_imageScaleFactor;
 
   Member<CSSImageSetValue> m_imageSetValue;  // Not retained; it owns us.

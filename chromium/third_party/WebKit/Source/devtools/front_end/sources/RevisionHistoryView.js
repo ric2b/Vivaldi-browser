@@ -36,7 +36,7 @@ Sources.RevisionHistoryView = class extends UI.VBox {
     super();
     this._uiSourceCodeItems = new Map();
 
-    this._treeOutline = new TreeOutlineInShadow();
+    this._treeOutline = new UI.TreeOutlineInShadow();
     this._treeOutline.registerRequiredCSS('sources/revisionHistory.css');
     this._treeOutline.makeDense();
     this.element.appendChild(this._treeOutline.element);
@@ -46,7 +46,7 @@ Sources.RevisionHistoryView = class extends UI.VBox {
      * @this {Sources.RevisionHistoryView}
      */
     function populateRevisions(uiSourceCode) {
-      if (uiSourceCode.history.length)
+      if (uiSourceCode.history().length)
         this._createUISourceCodeItem(uiSourceCode);
     }
 
@@ -72,7 +72,7 @@ Sources.RevisionHistoryView = class extends UI.VBox {
    * @param {!Workspace.UISourceCode} uiSourceCode
    */
   _createUISourceCodeItem(uiSourceCode) {
-    var uiSourceCodeItem = new TreeElement(uiSourceCode.displayName(), true);
+    var uiSourceCodeItem = new UI.TreeElement(uiSourceCode.displayName(), true);
     uiSourceCodeItem.selectable = false;
 
     // Insert in sorted order
@@ -88,15 +88,15 @@ Sources.RevisionHistoryView = class extends UI.VBox {
 
     this._uiSourceCodeItems.set(uiSourceCode, uiSourceCodeItem);
 
-    var revisionCount = uiSourceCode.history.length;
+    var history = uiSourceCode.history();
+    var revisionCount = history.length;
     for (var i = revisionCount - 1; i >= 0; --i) {
-      var revision = uiSourceCode.history[i];
-      var historyItem =
-          new Sources.RevisionHistoryTreeElement(revision, uiSourceCode.history[i - 1], i !== revisionCount - 1);
+      var revision = history[i];
+      var historyItem = new Sources.RevisionHistoryTreeElement(revision, history[i - 1], i !== revisionCount - 1);
       uiSourceCodeItem.appendChild(historyItem);
     }
 
-    var linkItem = new TreeElement();
+    var linkItem = new UI.TreeElement();
     linkItem.selectable = false;
     uiSourceCodeItem.appendChild(linkItem);
 
@@ -133,9 +133,9 @@ Sources.RevisionHistoryView = class extends UI.VBox {
       return;
     }
 
-    var historyLength = uiSourceCode.history.length;
-    var historyItem = new Sources.RevisionHistoryTreeElement(
-        uiSourceCode.history[historyLength - 1], uiSourceCode.history[historyLength - 2], false);
+    var history = uiSourceCode.history();
+    var historyItem =
+        new Sources.RevisionHistoryTreeElement(history[history.length - 1], history[history.length - 2], false);
     if (uiSourceCodeItem.firstChild())
       uiSourceCodeItem.firstChild().allowRevert();
     uiSourceCodeItem.insertChild(historyItem, 0);
@@ -178,7 +178,7 @@ Sources.RevisionHistoryView = class extends UI.VBox {
 /**
  * @unrestricted
  */
-Sources.RevisionHistoryTreeElement = class extends TreeElement {
+Sources.RevisionHistoryTreeElement = class extends UI.TreeElement {
   /**
    * @param {!Workspace.Revision} revision
    * @param {!Workspace.Revision} baseRevision
@@ -274,7 +274,7 @@ Sources.RevisionHistoryTreeElement = class extends TreeElement {
    * @param {string} changeType
    */
   _createLine(baseLineNumber, newLineNumber, lineContent, changeType) {
-    var child = new TreeElement();
+    var child = new UI.TreeElement();
     child.selectable = false;
     this.appendChild(child);
 

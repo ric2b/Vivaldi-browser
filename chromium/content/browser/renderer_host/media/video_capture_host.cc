@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
@@ -93,9 +94,9 @@ void VideoCaptureHost::OnBufferReady(
   if (!base::ContainsKey(device_id_to_observer_map_, controller_id))
     return;
 
-  mojom::VideoFrameInfoPtr info = mojom::VideoFrameInfo::New();
+  media::mojom::VideoFrameInfoPtr info = media::mojom::VideoFrameInfo::New();
   info->timestamp = video_frame->timestamp();
-  video_frame->metadata()->MergeInternalValuesInto(&info->metadata);
+  info->metadata = video_frame->metadata()->CopyInternalValues();
 
   DCHECK(media::PIXEL_FORMAT_I420 == video_frame->format() ||
          media::PIXEL_FORMAT_Y16 == video_frame->format());
@@ -211,7 +212,6 @@ void VideoCaptureHost::RequestRefreshFrame(int32_t device_id) {
 
 void VideoCaptureHost::ReleaseBuffer(int32_t device_id,
                                      int32_t buffer_id,
-                                     const gpu::SyncToken& sync_token,
                                      double consumer_resource_utilization) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -222,7 +222,7 @@ void VideoCaptureHost::ReleaseBuffer(int32_t device_id,
 
   const base::WeakPtr<VideoCaptureController>& controller = it->second;
   if (controller) {
-    controller->ReturnBuffer(controller_id, this, buffer_id, sync_token,
+    controller->ReturnBuffer(controller_id, this, buffer_id,
                              consumer_resource_utilization);
   }
 }

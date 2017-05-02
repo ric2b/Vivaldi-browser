@@ -31,6 +31,12 @@ std::string GetEffectiveConnectionTypeAlgorithm(
 double GetWeightMultiplierPerSecond(
     const std::map<std::string, std::string>& variation_params);
 
+// Returns the factor by which the weight of an observation reduces for every
+// dBm difference between the current signal strength (in dBm), and the signal
+// strength at the time when the observation was taken.
+double GetWeightMultiplierPerDbm(
+    const std::map<std::string, std::string>& variation_params);
+
 // Returns a descriptive name corresponding to |connection_type|.
 const char* GetNameForConnectionType(
     net::NetworkChangeNotifier::ConnectionType connection_type);
@@ -42,6 +48,10 @@ const char* GetNameForConnectionType(
 void ObtainDefaultObservations(
     const std::map<std::string, std::string>& variation_params,
     nqe::internal::NetworkQuality default_observations[]);
+
+// Sets |typical_network_quality| to typical network quality for different
+// effective connection types.
+void ObtainTypicalNetworkQuality(NetworkQuality typical_network_quality[]);
 
 // Parses the variation paramaters and sets the thresholds for different
 // effective connection types in |connection_thresholds|.
@@ -61,6 +71,16 @@ bool forced_effective_connection_type_set(
 // Returns the effective connection type that was configured by variation
 // parameters.
 EffectiveConnectionType forced_effective_connection_type(
+    const std::map<std::string, std::string>& variation_params);
+
+// Returns true if reading from the persistent cache has been enabled via field
+// trial.
+bool persistent_cache_reading_enabled(
+    const std::map<std::string, std::string>& variation_params);
+
+// Returns the the minimum interval betweeen consecutive notifications to a
+// single socket watcher.
+base::TimeDelta GetMinSocketWatcherNotificationInterval(
     const std::map<std::string, std::string>& variation_params);
 
 }  // namespace internal

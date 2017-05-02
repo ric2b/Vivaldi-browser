@@ -60,19 +60,10 @@ enum {
   // lists. Rationale: The allocation of large textures for canvas
   // tends to starve the compositor, and increase the probability of
   // failure of subsequent allocations required for double buffering.
-  PreferDisplayListOverGpuSizeThreshold = 4096 * 4096,
+  PreferDisplayListOverGpuSizeThreshold = 8096 * 4096,
 
   // Disable Acceleration heuristic parameters
   //===========================================
-
-  GetImageDataForcesNoAcceleration = 1,
-
-  // When a canvas is used as a source image, if its destination is
-  // non-accelerated and the source canvas is accelerated, a readback
-  // from the gpu is necessary. This option causes the source canvas to
-  // switch to non-accelerated when this situation is encountered to
-  // prevent future canvas-to-canvas draws from requiring a readback.
-  DisableAccelerationToAvoidReadbacks = 1,
 
   // When drawing very large images to canvases, there is a point where
   // GPU acceleration becomes inefficient due to texture upload overhead,
@@ -83,6 +74,27 @@ enum {
   DrawImageTextureUploadSoftSizeLimit = 4096 * 4096,
   DrawImageTextureUploadSoftSizeLimitScaleThreshold = 4,
   DrawImageTextureUploadHardSizeLimit = 8192 * 8192,
+
+  // GPU readback prevention heuristics
+  //====================================
+
+  GetImageDataForcesNoAcceleration = 1,
+
+  // When a canvas is used as a source image, if its destination is
+  // non-accelerated and the source canvas is accelerated, a readback
+  // from the gpu is necessary. This option causes the source canvas to
+  // switch to non-accelerated when this situation is encountered to
+  // prevent future canvas-to-canvas draws from requiring a readback.
+  DisableAccelerationToAvoidReadbacks = 0,
+
+  // See description of DisableAccelerationToAvoidReadbacks. This is the
+  // opposite strategy : accelerate the destination canvas. If both
+  // EnableAccelerationToAvoidReadbacks and
+  // DisableAccelerationToAvoidReadbacks are specified, we try to enable
+  // acceleration on the destination first. If that does not succeed,
+  // we disable acceleration on the source canvas. Either way, future
+  // readbacks are prevented.
+  EnableAccelerationToAvoidReadbacks = 0,
 
 };  // enum
 
@@ -95,79 +107,81 @@ enum {
 // third_party/WebKit/Source/modules/canvas2d/performance_analysis directory.
 
 // The RenderingModeCostIndex enum is used to access the heuristic coefficients
-// that correspond to a given rendering mode. For exmaple,
+// that correspond to a given rendering mode. For example,
 // FillRectFixedCost[RecordingModeIndex] is the estimated fixed cost for
 // FillRect in recording mode.
 enum RenderingModeCostIndex {
   RecordingModeIndex = 0,
   AcceleratedModeIndex = 1,
-  NumRederingModesCostIdexes = 2
+  NumRenderingModesCostIndexes = 2
 };
 
-const float FillRectFixedCost[NumRederingModesCostIdexes] = {6.190e-03f,
-                                                             7.715e-03f};
-const float FillConvexPathFixedCost[NumRederingModesCostIdexes] = {1.251e-02f,
-                                                                   1.231e-02f};
-const float FillNonConvexPathFixedCost[NumRederingModesCostIdexes] = {
+const float FillRectFixedCost[NumRenderingModesCostIndexes] = {6.190e-03f,
+                                                               7.715e-03f};
+const float FillConvexPathFixedCost[NumRenderingModesCostIndexes] = {
+    1.251e-02f, 1.231e-02f};
+const float FillNonConvexPathFixedCost[NumRenderingModesCostIndexes] = {
     1.714e-02f, 4.497e-02f};
-const float FillTextFixedCost[NumRederingModesCostIdexes] = {1.119e-02f,
-                                                             2.203e-02f};
+const float FillTextFixedCost[NumRenderingModesCostIndexes] = {1.119e-02f,
+                                                               2.203e-02f};
 
-const float StrokeRectFixedCost[NumRederingModesCostIdexes] = {1.485e-02f,
-                                                               7.287e-03f};
-const float StrokePathFixedCost[NumRederingModesCostIdexes] = {2.390e-02f,
-                                                               5.125e-02f};
-const float StrokeTextFixedCost[NumRederingModesCostIdexes] = {1.149e-02f,
-                                                               1.742e-02f};
+const float StrokeRectFixedCost[NumRenderingModesCostIndexes] = {1.485e-02f,
+                                                                 7.287e-03f};
+const float StrokePathFixedCost[NumRenderingModesCostIndexes] = {2.390e-02f,
+                                                                 5.125e-02f};
+const float StrokeTextFixedCost[NumRenderingModesCostIndexes] = {1.149e-02f,
+                                                                 1.742e-02f};
 
-const float FillRectVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float FillRectVariableCostPerArea[NumRenderingModesCostIndexes] = {
     2.933e-07f, 2.188e-09f};
-const float FillConvexPathVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float FillConvexPathVariableCostPerArea[NumRenderingModesCostIndexes] = {
     7.871e-07f, 1.608e-07f};
-const float FillNonConvexPathVariableCostPerArea[NumRederingModesCostIdexes] = {
-    8.336e-07f, 1.384e-06f};
-const float FillTextVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float FillNonConvexPathVariableCostPerArea[NumRenderingModesCostIndexes] =
+    {8.336e-07f, 1.384e-06f};
+const float FillTextVariableCostPerArea[NumRenderingModesCostIndexes] = {
     1.411e-06f, 0.0f};
 
-const float StrokeRectVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float StrokeRectVariableCostPerArea[NumRenderingModesCostIndexes] = {
     9.882e-07f, 0.0f};
-const float StrokePathVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float StrokePathVariableCostPerArea[NumRenderingModesCostIndexes] = {
     1.583e-06f, 2.401e-06f};
-const float StrokeTextVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float StrokeTextVariableCostPerArea[NumRenderingModesCostIndexes] = {
     1.530e-06f, 6.699e-07f};
 
-const float PatternFillTypeFixedCost[NumRederingModesCostIdexes] = {1.377e-02f,
-                                                                    1.035e-02f};
-const float LinearGradientFillTypeFixedCost[NumRederingModesCostIdexes] = {
+const float PatternFillTypeFixedCost[NumRenderingModesCostIndexes] = {
+    1.377e-02f, 1.035e-02f};
+const float LinearGradientFillTypeFixedCost[NumRenderingModesCostIndexes] = {
     7.694e-03f, 6.900e-03f};
-const float RadialGradientFillTypeFixedCost[NumRederingModesCostIdexes] = {
+const float RadialGradientFillTypeFixedCost[NumRenderingModesCostIndexes] = {
     2.260e-02f, 7.193e-03f};
 
-const float PatternFillTypeVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float PatternFillTypeVariableCostPerArea[NumRenderingModesCostIndexes] = {
     6.080e-07f, 0.0f};
-const float LinearGradientFillVariableCostPerArea[NumRederingModesCostIdexes] =
-    {9.635e-07f, 0.0f};
-const float RadialGradientFillVariableCostPerArea[NumRederingModesCostIdexes] =
-    {6.662e-06f, 0.0f};
+const float
+    LinearGradientFillVariableCostPerArea[NumRenderingModesCostIndexes] = {
+        9.635e-07f, 0.0f};
+const float
+    RadialGradientFillVariableCostPerArea[NumRenderingModesCostIndexes] = {
+        6.662e-06f, 0.0f};
 
-const float ShadowFixedCost[NumRederingModesCostIdexes] = {2.502e-02f,
-                                                           2.274e-02f};
+const float ShadowFixedCost[NumRenderingModesCostIndexes] = {2.502e-02f,
+                                                             2.274e-02f};
 const float ShadowVariableCostPerAreaTimesShadowBlurSquared
-    [NumRederingModesCostIdexes] = {6.856e-09f, 0.0f};
+    [NumRenderingModesCostIndexes] = {6.856e-09f, 0.0f};
 
-const float PutImageDataFixedCost[NumRederingModesCostIdexes] = {1.209e-03f,
-                                                                 1.885e-02f};
-const float PutImageDataVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float PutImageDataFixedCost[NumRenderingModesCostIndexes] = {1.209e-03f,
+                                                                   1.885e-02f};
+const float PutImageDataVariableCostPerArea[NumRenderingModesCostIndexes] = {
     6.231e-06f, 4.116e-06f};
 
-const float DrawSVGImageFixedCost[NumRederingModesCostIdexes] = {1.431e-01f,
-                                                                 2.958e-01f};
-const float DrawPNGImageFixedCost[NumRederingModesCostIdexes] = {1.278e-02f,
-                                                                 1.306e-02f};
+const float DrawSVGImageFixedCost[NumRenderingModesCostIndexes] = {1.431e-01f,
+                                                                   2.958e-01f};
+const float DrawPNGImageFixedCost[NumRenderingModesCostIndexes] = {1.278e-02f,
+                                                                   1.306e-02f};
 
-const float DrawSVGImageVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float DrawSVGImageVariableCostPerArea[NumRenderingModesCostIndexes] = {
     1.030e-05f, 4.463e-06f};
-const float DrawPNGImageVariableCostPerArea[NumRederingModesCostIdexes] = {
+const float DrawPNGImageVariableCostPerArea[NumRenderingModesCostIndexes] = {
     1.727e-06f, 0.0f};
 
 // Two conditions must be met before the isAccelerationOptimalForCanvasContent

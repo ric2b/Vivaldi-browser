@@ -53,6 +53,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -90,18 +91,6 @@ static const char kTestFormString[] =
     " </select><br>"
     "<label for=\"phone\">Phone number:</label>"
     " <input type=\"text\" id=\"phone\"><br>"
-    "</form>";
-static const char kTestPasswordFormString[] =
-    "<form>"
-    "<label for=\"user\">User:</label>"
-    " <input id=\"user\" type=\"text\" name=\"name\""
-             "onfocus=\"domAutomationController.send(true)\">"
-    "<br>"
-    "<label for=\"password\">Password:</label>"
-    " <input id=\"password\" type=\"password\" name=\"password\""
-             "onfocus=\"domAutomationController.send(true)\">"
-    "<br>"
-    "<input type=\"submit\" value=\"Submit\">"
     "</form>";
 
 // TODO(crbug.com/609861): Remove the autocomplete attribute from the textarea
@@ -466,11 +455,12 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
                              ui::DomCode code,
                              ui::KeyboardCode key_code) {
     // Route popup-targeted key presses via the render view host.
-    content::NativeWebKeyboardEvent event;
+    content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::RawKeyDown,
+                                          blink::WebInputEvent::NoModifiers,
+                                          ui::EventTimeForNow());
     event.windowsKeyCode = key_code;
     event.domCode = static_cast<int>(code);
     event.domKey = key;
-    event.type = blink::WebKeyboardEvent::RawKeyDown;
     test_delegate_.Reset();
     // Install the key press event sink to ensure that any events that are not
     // handled by the installed callbacks do not end up crashing the test.
@@ -494,11 +484,12 @@ class AutofillInteractiveTest : public InProcessBrowserTest {
                               ui::DomCode code,
                               ui::KeyboardCode key_code) {
     // Route popup-targeted key presses via the render view host.
-    content::NativeWebKeyboardEvent event;
+    content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::RawKeyDown,
+                                          blink::WebInputEvent::NoModifiers,
+                                          ui::EventTimeForNow());
     event.windowsKeyCode = key_code;
     event.domCode = static_cast<int>(code);
     event.domKey = key;
-    event.type = blink::WebKeyboardEvent::RawKeyDown;
     // Install the key press event sink to ensure that any events that are not
     // handled by the installed callbacks do not end up crashing the test.
     GetRenderViewHost()->GetWidget()->AddKeyPressEventCallback(
@@ -1276,7 +1267,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillAfterReload) {
 
   // Reload the page.
   content::WebContents* web_contents = GetWebContents();
-  web_contents->GetController().Reload(false);
+  web_contents->GetController().Reload(content::ReloadType::NORMAL, false);
   content::WaitForLoadStop(web_contents);
 
   // Invoke Autofill.
@@ -1724,8 +1715,19 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
                        PastedPasswordIsSaved) {
-  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(browser(),
-      GURL(std::string(kDataURIPrefix) + kTestPasswordFormString)));
+  // Serve test page from a HTTPS server so that Form Not Secure warnings do not
+  // interfere with the test.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::NO_CLIENT_CERT;
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(https_server.Start());
+
+  GURL url = https_server.GetURL("/autofill/autofill_password_form.html");
+  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(browser(), url));
+
   ASSERT_TRUE(content::ExecuteScript(
       GetRenderViewHost(),
       "document.getElementById('user').value = 'user';"));

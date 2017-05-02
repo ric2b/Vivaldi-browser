@@ -14,10 +14,6 @@
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 
-namespace extensions {
-class Extension;
-}
-
 class Profile;
 
 namespace apps {
@@ -41,10 +37,6 @@ class AppLifetimeMonitor : public KeyedService,
     }
     // Called when the app stops running.
     virtual void OnAppStop(Profile* profile, const std::string& app_id) {}
-    // Called when chrome is about to terminate. This gives observers a chance
-    // to do something before the apps shut down. This is a system-wide event
-    // so there is no associated profile and app id.
-    virtual void OnChromeTerminating() {}
 
    protected:
     virtual ~Observer() {}
@@ -77,7 +69,6 @@ class AppLifetimeMonitor : public KeyedService,
   void NotifyAppActivated(const std::string& app_id);
   void NotifyAppDeactivated(const std::string& app_id);
   void NotifyAppStop(const std::string& app_id);
-  void NotifyChromeTerminating();
 
   content::NotificationRegistrar registrar_;
   Profile* profile_;

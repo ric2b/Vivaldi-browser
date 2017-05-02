@@ -102,7 +102,5 @@ cr.define('cr.ui', function() {
     return manager;
   };
 
-  return {
-    FocusOutlineManager: FocusOutlineManager
-  };
+  return {FocusOutlineManager: FocusOutlineManager};
 });

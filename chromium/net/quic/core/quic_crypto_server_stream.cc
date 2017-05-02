@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/base64.h"
 #include "crypto/secure_hash.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/crypto/crypto_utils.h"
@@ -15,8 +14,10 @@
 #include "net/quic/core/proto/cached_network_parameters.pb.h"
 #include "net/quic/core/quic_config.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_session.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_text_utils.h"
 
 using base::StringPiece;
 using std::string;
@@ -28,7 +29,8 @@ class QuicCryptoServerStream::ProcessClientHelloCallback
  public:
   ProcessClientHelloCallback(
       QuicCryptoServerStream* stream,
-      const scoped_refptr<ValidateClientHelloResultCallback::Result>& result)
+      const QuicReferenceCountedPointer<
+          ValidateClientHelloResultCallback::Result>& result)
       : stream_(stream), result_(result) {}
 
   void Run(QuicErrorCode error,
@@ -57,7 +59,8 @@ class QuicCryptoServerStream::ProcessClientHelloCallback
 
  private:
   QuicCryptoServerStream* stream_;
-  scoped_refptr<ValidateClientHelloResultCallback::Result> result_;
+  QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+      result_;
 };
 
 QuicCryptoServerStreamBase::QuicCryptoServerStreamBase(QuicSession* session)
@@ -92,7 +95,7 @@ QuicCryptoServerStream::QuicCryptoServerStream(
     : QuicCryptoServerStreamBase(session),
       crypto_config_(crypto_config),
       compressed_certs_cache_(compressed_certs_cache),
-      crypto_proof_(new QuicCryptoProof),
+      signed_config_(new QuicSignedServerConfig),
       validate_client_hello_cb_(nullptr),
       helper_(helper),
       num_handshake_messages_(0),
@@ -161,13 +164,14 @@ void QuicCryptoServerStream::OnHandshakeMessage(
   std::unique_ptr<ValidateCallback> cb(new ValidateCallback(this));
   validate_client_hello_cb_ = cb.get();
   crypto_config_->ValidateClientHello(
-      message, session()->connection()->peer_address().address(),
-      session()->connection()->self_address().address(), version(),
-      session()->connection()->clock(), crypto_proof_, std::move(cb));
+      message, session()->connection()->peer_address().host(),
+      session()->connection()->self_address(), version(),
+      session()->connection()->clock(), signed_config_, std::move(cb));
 }
 
 void QuicCryptoServerStream::FinishProcessingHandshakeMessage(
-    scoped_refptr<ValidateClientHelloResultCallback::Result> result,
+    QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+        result,
     std::unique_ptr<ProofSource::Details> details) {
   const CryptoHandshakeMessage& message = result->client_hello;
 
@@ -214,9 +218,9 @@ void QuicCryptoServerStream::
       DCHECK(use_stateless_rejects_if_peer_supported_);
       DCHECK(peer_supports_stateless_rejects_);
       DCHECK(!handshake_confirmed());
-      DVLOG(1) << "Closing connection "
-               << session()->connection()->connection_id()
-               << " because of a stateless reject.";
+      QUIC_DLOG(INFO) << "Closing connection "
+                      << session()->connection()->connection_id()
+                      << " because of a stateless reject.";
       session()->connection()->CloseConnection(
           QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT, "stateless reject",
           ConnectionCloseBehavior::SILENT_CLOSE);
@@ -255,9 +259,7 @@ void QuicCryptoServerStream::
   session()->connection()->SetDecrypter(
       ENCRYPTION_INITIAL,
       crypto_negotiated_params_->initial_crypters.decrypter.release());
-  if (version() > QUIC_VERSION_32) {
-    session()->connection()->SetDiversificationNonce(*diversification_nonce);
-  }
+  session()->connection()->SetDiversificationNonce(*diversification_nonce);
 
   SendHandshakeMessage(*reply);
 
@@ -282,9 +284,9 @@ void QuicCryptoServerStream::SendServerConfigUpdate(
     return;
   }
 
-  if (FLAGS_enable_async_get_proof) {
+  if (FLAGS_quic_reloadable_flag_enable_async_get_proof) {
     if (send_server_config_update_cb_ != nullptr) {
-      DVLOG(1)
+      QUIC_DVLOG(1)
           << "Skipped server config update since one is already in progress";
       return;
     }
@@ -296,8 +298,8 @@ void QuicCryptoServerStream::SendServerConfigUpdate(
     crypto_config_->BuildServerConfigUpdateMessage(
         session()->connection()->version(), chlo_hash_,
         previous_source_address_tokens_,
-        session()->connection()->self_address().address(),
-        session()->connection()->peer_address().address(),
+        session()->connection()->self_address(),
+        session()->connection()->peer_address().host(),
         session()->connection()->clock(),
         session()->connection()->random_generator(), compressed_certs_cache_,
         *crypto_negotiated_params_, cached_network_params,
@@ -312,8 +314,8 @@ void QuicCryptoServerStream::SendServerConfigUpdate(
   if (!crypto_config_->BuildServerConfigUpdateMessage(
           session()->connection()->version(), chlo_hash_,
           previous_source_address_tokens_,
-          session()->connection()->self_address().address(),
-          session()->connection()->peer_address().address(),
+          session()->connection()->self_address(),
+          session()->connection()->peer_address().host(),
           session()->connection()->clock(),
           session()->connection()->random_generator(), compressed_certs_cache_,
           *crypto_negotiated_params_, cached_network_params,
@@ -321,12 +323,12 @@ void QuicCryptoServerStream::SendServerConfigUpdate(
                ? session()->config()->ReceivedConnectionOptions()
                : QuicTagVector()),
           &server_config_update_message)) {
-    DVLOG(1) << "Server: Failed to build server config update (SCUP)!";
+    QUIC_DVLOG(1) << "Server: Failed to build server config update (SCUP)!";
     return;
   }
 
-  DVLOG(1) << "Server: Sending server config update: "
-           << server_config_update_message.DebugString();
+  QUIC_DVLOG(1) << "Server: Sending server config update: "
+                << server_config_update_message.DebugString();
   const QuicData& data = server_config_update_message.GetSerialized();
   WriteOrBufferData(StringPiece(data.data(), data.length()), false, nullptr);
 
@@ -359,19 +361,16 @@ void QuicCryptoServerStream::FinishSendServerConfigUpdate(
   send_server_config_update_cb_ = nullptr;
 
   if (!ok) {
-    DVLOG(1) << "Server: Failed to build server config update (SCUP)!";
+    QUIC_DVLOG(1) << "Server: Failed to build server config update (SCUP)!";
     return;
   }
 
-  DVLOG(1) << "Server: Sending server config update: " << message.DebugString();
+  QUIC_DVLOG(1) << "Server: Sending server config update: "
+                << message.DebugString();
   const QuicData& data = message.GetSerialized();
   WriteOrBufferData(StringPiece(data.data(), data.length()), false, nullptr);
 
   ++num_server_config_update_messages_sent_;
-}
-
-void QuicCryptoServerStream::OnServerHelloAcked() {
-  session()->connection()->OnHandshakeComplete();
 }
 
 uint8_t QuicCryptoServerStream::NumHandshakeMessages() const {
@@ -424,24 +423,13 @@ bool QuicCryptoServerStream::GetBase64SHA256ClientChannelID(
   uint8_t digest[32];
   hash->Finish(digest, sizeof(digest));
 
-  base::Base64Encode(
-      string(reinterpret_cast<const char*>(digest), sizeof(digest)), output);
-  // Remove padding.
-  size_t len = output->size();
-  if (len >= 2) {
-    if ((*output)[len - 1] == '=') {
-      len--;
-      if ((*output)[len - 1] == '=') {
-        len--;
-      }
-      output->resize(len);
-    }
-  }
+  QuicTextUtils::Base64Encode(digest, arraysize(digest), output);
   return true;
 }
 
 void QuicCryptoServerStream::ProcessClientHello(
-    scoped_refptr<ValidateClientHelloResultCallback::Result> result,
+    QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+        result,
     std::unique_ptr<ProofSource::Details> proof_source_details,
     std::unique_ptr<ProcessClientHelloResultCallback> done_cb) {
   const CryptoHandshakeMessage& message = result->client_hello;
@@ -471,11 +459,11 @@ void QuicCryptoServerStream::ProcessClientHello(
       GenerateConnectionIdForReject(use_stateless_rejects_in_crypto_config);
   crypto_config_->ProcessClientHello(
       result, /*reject_only=*/false, connection->connection_id(),
-      connection->self_address().address(), connection->peer_address(),
-      version(), connection->supported_versions(),
-      use_stateless_rejects_in_crypto_config, server_designated_connection_id,
-      connection->clock(), connection->random_generator(),
-      compressed_certs_cache_, crypto_negotiated_params_, crypto_proof_,
+      connection->self_address(), connection->peer_address(), version(),
+      connection->supported_versions(), use_stateless_rejects_in_crypto_config,
+      server_designated_connection_id, connection->clock(),
+      connection->random_generator(), compressed_certs_cache_,
+      crypto_negotiated_params_, signed_config_,
       QuicCryptoStream::CryptoMessageFramingOverhead(version()),
       chlo_packet_size_, std::move(done_cb));
 }
@@ -491,7 +479,7 @@ void QuicCryptoServerStream::ValidateCallback::Cancel() {
 }
 
 void QuicCryptoServerStream::ValidateCallback::Run(
-    scoped_refptr<Result> result,
+    QuicReferenceCountedPointer<Result> result,
     std::unique_ptr<ProofSource::Details> details) {
   if (parent_ != nullptr) {
     parent_->FinishProcessingHandshakeMessage(std::move(result),

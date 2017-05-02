@@ -7,7 +7,9 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
+#include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -105,20 +107,28 @@ void ExternalProtocolHandler::RunExternalProtocolDialog(
       NOTREACHED();
   }
 
-  // Set the "don't warn me again" info.
-  if ([[alert_ suppressionButton] state] == NSOnState) {
-    ExternalProtocolHandler::SetBlockState(url_.scheme(), blockState);
-    ExternalProtocolHandler::RecordMetrics(true);
-  } else {
-    ExternalProtocolHandler::RecordMetrics(false);
-  }
+  content::WebContents* web_contents =
+      tab_util::GetWebContentsByID(render_process_host_id_, routing_id_);
 
-  if (blockState == ExternalProtocolHandler::DONT_BLOCK) {
-    UMA_HISTOGRAM_LONG_TIMES("clickjacking.launch_url",
-                             base::Time::Now() - creation_time_);
+  if (web_contents) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    bool isChecked = [[alert_ suppressionButton] state] == NSOnState;
+    // Set the "don't warn me again" info.
+    if (isChecked)
+      ExternalProtocolHandler::SetBlockState(url_.scheme(), blockState,
+                                             profile);
 
-    ExternalProtocolHandler::LaunchUrlWithoutSecurityCheck(
-        url_, render_process_host_id_, routing_id_);
+    ExternalProtocolHandler::RecordCheckboxStateMetrics(isChecked);
+    ExternalProtocolHandler::RecordHandleStateMetrics(isChecked, blockState);
+
+    if (blockState == ExternalProtocolHandler::DONT_BLOCK) {
+      UMA_HISTOGRAM_LONG_TIMES("clickjacking.launch_url",
+                               base::Time::Now() - creation_time_);
+
+      ExternalProtocolHandler::LaunchUrlWithoutSecurityCheck(url_,
+                                                             web_contents);
+    }
   }
 
   [self autorelease];

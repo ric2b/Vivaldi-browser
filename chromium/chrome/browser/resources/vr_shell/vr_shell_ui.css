@@ -7,13 +7,11 @@ html {
 }
 
 #ui {
-  --scaleFactor: 4;
   left: 0;
+  max-width: 1920px;
   position: absolute;
   top: 0;
-  transform: scale(0.25, 0.25);
   transform-origin: left top;
-  width: 400%;
 }
 
 /* This class manages the position of elements on the texture page.
@@ -30,12 +28,6 @@ html {
   justify-content: center;
 }
 
-/* Permanent security warning for WebVR. */
-#webvr-not-secure-permanent {
-  height: 128px;
-  width: 512px;
-}
-
 #webvr-not-secure-permanent .webvr-not-secure-icon {
   display: inline-block;
   margin: 20px 0;
@@ -48,11 +40,9 @@ html {
   vertical-align: middle;
 }
 
-/* This is a single-line (nowrap) short message. The width has some elasticity
- * for translations, and the underlying string had a request to translators
- * to keep it short. The maximum is based on the fixed-size container DIV,
- * excess will be clipped. There's space for about twice the length of the
- * English "Not secure" message. */
+/* This is a single-line (nowrap) short message. The width is elastic for
+ * translations, and the underlying string had a request to translators
+ * to keep it short. */
 #webvr-not-secure-permanent .webvr-box {
   background-color: white;
   border-radius: 6px;
@@ -61,22 +51,13 @@ html {
   color: #444;
   font-size: 26px;
   height: 78px;
-  max-width: 472px;
   min-width: 226px;
   overflow: hidden;
   padding: 0 20px;
   white-space: nowrap;
 }
 
-/* Transient security warning for WebVR. */
-#webvr-not-secure-transient {
-  height: 256px;
-  width: 512px;
-}
-
-/* This uses fixed width but the height has some elasticity for translations.
- * The maximum is based on the fixed-size container DIV, excess will be
- * clipped. */
+/* This uses fixed width but the height is elastic for translations. */
 #webvr-not-secure-transient > div {
   background-color: rgba(26, 26, 26, 0.8);
   border-radius: 6px;
@@ -87,7 +68,6 @@ html {
   font-size: 26px;
   justify-content: center;
   line-height: 1.4;
-  max-height: 210px;
   min-height: 160px;
   overflow: hidden;
   padding: 20px;
@@ -119,7 +99,8 @@ html {
   white-space: nowrap;
 }
 
-#back .button {
+#back .button,
+#forward .button {
   background-image: url(../../../../ui/webui/resources/images/vr_back.svg);
 }
 
@@ -128,7 +109,6 @@ html {
 }
 
 #forward .button {
-  background-image: url(../../../../ui/webui/resources/images/vr_back.svg);
   transform: scaleX(-1);
 }
 
@@ -139,65 +119,73 @@ html {
   padding: 12px;
 }
 
-#omni-container {
+#omnibox-container {
   --tranX: 0;
   --tranY: -0.65;
   --tranZ: -1.2;
 }
 
-#omni {
+#omnibox-border {
+  --fadeTimeMs: 500;
+  --fadeYOffset: -0.1;
+  --opacity: 0.9;
+  --statusBarColor: rgb(66, 133, 244);
+  background-color: #ececec;
+  border-radius: 200px;
+  padding: 6px;
+}
+
+#omnibox {
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 100px;
+  background-color: #ececec;
+  border-radius: 200px;
   box-sizing: border-box;
   display: flex;
   height: 104px;
   justify-content: center;
-  margin-bottom: 60px;
-  margin-top: 0;
-  opacity: 1;
-  transition: opacity 500ms ease, margin-top 500ms ease;
+  overflow: hidden;
   white-space: nowrap;
   width: 512px;
 }
 
-#omni-content {
+#omnibox-content {
   align-items: center;
   display: flex;
   max-width: 448px;
 }
 
-#omni .connection-security {
+.omnibox-icon {
+  -webkit-mask-size: 50px;
+  display: none;
+  flex: none;
   height: 50px;
   margin-right: 10px;
   width: 50px;
 }
 
-#omni #url {
+#omnibox-info-icon {
+  -webkit-mask-image: url(../../../../ui/webui/resources/images/i_circle.svg);
+  background-color: rgb(90, 90, 90);
+}
+
+#omnibox-lock-icon {
+  -webkit-mask-image: url(../../../../ui/webui/resources/images/lock.svg);
+  background-color: rgb(11, 128, 67);
+}
+
+#omnibox-warning-icon {
+  -webkit-mask-image: url(../../../../ui/webui/resources/images/warning.svg);
+  background-color: rgb(199, 56, 33);
+}
+
+#omnibox #url {
   color: #252525;
   font-size: 34px;
   overflow: hidden;
   white-space: nowrap;
 }
 
-#omni #path {
+#omnibox #path {
   color: #868686;
 }
 
-#omni.hide {
-  margin-bottom: 0;
-  margin-top: 60px;
-  opacity: 0;
-}
-
-#omni.loading {
-  border: 4px solid rgb(86, 203, 255);
-}
-
-#omni.idle {
-  background-color: #ececec;
-}
-
-#omni.idle #domain {
-  color: black;
-}

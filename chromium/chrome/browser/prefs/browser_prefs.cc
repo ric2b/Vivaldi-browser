@@ -44,6 +44,7 @@
 #include "chrome/browser/prefs/origin_trial_prefs.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/chrome_version_service.h"
+#include "chrome/browser/profiles/net_http_session_params_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
@@ -64,7 +65,6 @@
 #include "chrome/browser/ui/webui/flags_ui.h"
 #include "chrome/browser/ui/webui/instant_ui.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
-#include "chrome/browser/ui/webui/plugins/plugins_ui.h"
 #include "chrome/browser/ui/webui/print_preview/sticky_settings.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -79,10 +79,12 @@
 #include "components/network_time/network_time_tracker.h"
 #include "components/ntp_snippets/bookmarks/bookmark_suggestions_provider.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
-#include "components/ntp_snippets/remote/remote_suggestions_provider.h"
+#include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
 #include "components/ntp_snippets/remote/request_throttler.h"
+#include "components/ntp_snippets/remote/scheduling_remote_suggestions_provider.h"
 #include "components/ntp_snippets/sessions/foreign_sessions_suggestions_provider.h"
 #include "components/ntp_snippets/user_classifier.h"
+#include "components/ntp_tiles/most_visited_sites.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager.h"
@@ -93,7 +95,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -108,6 +110,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/features/features.h"
 #include "net/http/http_server_properties_manager.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
 #if BUILDFLAG(ENABLE_APP_LIST)
@@ -151,28 +154,28 @@
 #include "chrome/browser/ui/webui/local_discovery/local_discovery_ui.h"
 #endif
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
-#include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
-#include "chrome/browser/android/ntp/new_tab_page_prefs.h"
-#include "components/ntp_tiles/most_visited_sites.h"
-#include "components/ntp_tiles/popular_sites.h"
-#else
-#include "chrome/browser/ui/startup/startup_browser_creator.h"
-#include "chrome/browser/upgrade_detector.h"
-#endif
-
 #if defined(OS_ANDROID)
+#include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
+#include "chrome/browser/android/ntp/content_suggestions_notifier_service.h"
+#include "chrome/browser/android/ntp/recent_tabs_page_prefs.h"
 #include "chrome/browser/android/preferences/browser_prefs_android.h"
+#include "chrome/browser/ntp_snippets/download_suggestions_provider.h"
+#include "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
+#include "components/ntp_snippets/offline_pages/recent_tab_suggestions_provider.h"
+#include "components/ntp_snippets/physical_web_pages/physical_web_page_suggestions_provider.h"
+#include "components/ntp_tiles/popular_sites_impl.h"
 #else
 #include "chrome/browser/services/gcm/gcm_product_util.h"
 #include "chrome/browser/signin/signin_promo.h"
+#include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/webui/foreign_session_handler.h"
+#include "chrome/browser/upgrade_detector.h"
 #endif
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/display/display_preferences.h"
@@ -195,6 +198,7 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
+#include "chrome/browser/chromeos/policy/dm_token_storage.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/power/power_prefs.h"
 #include "chrome/browser/chromeos/preferences.h"
@@ -362,7 +366,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   PrefProxyConfigTrackerImpl::RegisterPrefs(registry);
   ProfileInfoCache::RegisterPrefs(registry);
   profiles::RegisterPrefs(registry);
-  rappor::RapporService::RegisterPrefs(registry);
+  rappor::RapporServiceImpl::RegisterPrefs(registry);
   RegisterScreenshotPrefs(registry);
   SigninManagerFactory::RegisterPrefs(registry);
   ssl_config::SSLConfigServiceManager::RegisterPrefs(registry);
@@ -377,7 +381,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   EasyUnlockService::RegisterPrefs(registry);
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   PluginFinder::RegisterPrefs(registry);
 #endif
 
@@ -385,9 +389,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   PluginsResourceService::RegisterPrefs(registry);
 #endif
 
-#if defined(ENABLE_TASK_MANAGER)
+#if !defined(OS_ANDROID)
   task_manager::TaskManagerInterface::RegisterPrefs(registry);
-#endif  // defined(ENABLE_TASK_MANAGER)
+#endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
   BackgroundModeManager::RegisterPrefs(registry);
@@ -428,6 +432,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::SigninScreenHandler::RegisterPrefs(registry);
   chromeos::StartupUtils::RegisterPrefs(registry);
   chromeos::system::AutomaticRebootManager::RegisterPrefs(registry);
+  chromeos::system::InputDeviceSettings::RegisterPrefs(registry);
   chromeos::TimeZoneResolver::RegisterPrefs(registry);
   chromeos::UserImageManager::RegisterPrefs(registry);
   chromeos::UserSessionManager::RegisterPrefs(registry);
@@ -440,6 +445,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   policy::BrowserPolicyConnectorChromeOS::RegisterPrefs(registry);
   policy::DeviceCloudPolicyManagerChromeOS::RegisterPrefs(registry);
   policy::DeviceStatusCollector::RegisterPrefs(registry);
+  policy::DMTokenStorage::RegisterPrefs(registry);
   policy::PolicyCertServiceFactory::RegisterPrefs(registry);
   quirks::QuirksManager::RegisterPrefs(registry);
 
@@ -488,13 +494,18 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   MediaCaptureDevicesDispatcher::RegisterProfilePrefs(registry);
   MediaDeviceIDSalt::RegisterProfilePrefs(registry);
   MediaStreamDevicesController::RegisterProfilePrefs(registry);
+  NetHttpSessionParamsObserver::RegisterProfilePrefs(registry);
+  NotifierStateTracker::RegisterProfilePrefs(registry);
   ntp_snippets::BookmarkSuggestionsProvider::RegisterProfilePrefs(registry);
+  ntp_snippets::ContentSuggestionsService::RegisterProfilePrefs(registry);
   ntp_snippets::ForeignSessionsSuggestionsProvider::RegisterProfilePrefs(
       registry);
-  ntp_snippets::RemoteSuggestionsProvider::RegisterProfilePrefs(registry);
-  ntp_snippets::ContentSuggestionsService::RegisterProfilePrefs(registry);
+  ntp_snippets::RemoteSuggestionsProviderImpl::RegisterProfilePrefs(registry);
   ntp_snippets::RequestThrottler::RegisterProfilePrefs(registry);
+  ntp_snippets::SchedulingRemoteSuggestionsProvider::RegisterProfilePrefs(
+      registry);
   ntp_snippets::UserClassifier::RegisterProfilePrefs(registry);
+  ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
   password_bubble_experiment::RegisterPrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
@@ -527,19 +538,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   extensions::RuntimeAPI::RegisterPrefs(registry);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#if defined(ENABLE_NOTIFICATIONS)
-  NotifierStateTracker::RegisterProfilePrefs(registry);
-#endif
-
-#if defined(ENABLE_NOTIFICATIONS) && BUILDFLAG(ENABLE_EXTENSIONS) && \
-    !defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_EXTENSIONS) && !defined(OS_ANDROID)
   // The extension welcome notification requires a build that enables extensions
   // and notifications, and uses the UI message center.
   ExtensionWelcomeNotification::RegisterProfilePrefs(registry);
-#endif
-
-#if defined(ENABLE_PLUGINS)
-  PluginsUI::RegisterProfilePrefs(registry);
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -560,12 +562,11 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   SupervisedUserWhitelistService::RegisterProfilePrefs(registry);
 #endif
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
+  ntp_tiles::PopularSitesImpl::RegisterProfilePrefs(registry);
   variations::VariationsService::RegisterProfilePrefs(registry);
-  ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
-  ntp_tiles::PopularSites::RegisterProfilePrefs(registry);
-  NewTabPagePrefs::RegisterProfilePrefs(registry);
   PartnerBookmarksShim::RegisterProfilePrefs(registry);
+  RecentTabsPagePrefs::RegisterProfilePrefs(registry);
 #else
   AppShortcutManager::RegisterProfilePrefs(registry);
   DeviceIDFetcher::RegisterProfilePrefs(registry);
@@ -584,6 +585,15 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   signin::RegisterProfilePrefs(registry);
 #endif
 
+#if defined(OS_ANDROID)
+  ContentSuggestionsNotifierService::RegisterProfilePrefs(registry);
+  DownloadSuggestionsProvider::RegisterProfilePrefs(registry);
+  ntp_snippets::ClickBasedCategoryRanker::RegisterProfilePrefs(registry);
+  ntp_snippets::PhysicalWebPageSuggestionsProvider::RegisterProfilePrefs(
+      registry);
+  ntp_snippets::RecentTabSuggestionsProvider::RegisterProfilePrefs(registry);
+#endif  // defined(OS_ANDROID)
+
 #if !defined(OS_ANDROID)
   browser_sync::ForeignSessionHandler::RegisterProfilePrefs(registry);
   gcm::GCMChannelStatusSyncer::RegisterProfilePrefs(registry);
@@ -596,7 +606,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 #endif
 
 #if defined(OS_CHROMEOS)
-  arc::ArcAuthService::RegisterProfilePrefs(registry);
+  arc::ArcSessionManager::RegisterProfilePrefs(registry);
   arc::ArcPolicyBridge::RegisterProfilePrefs(registry);
   chromeos::first_run::RegisterProfilePrefs(registry);
   chromeos::file_system_provider::RegisterProfilePrefs(registry);
@@ -706,8 +716,8 @@ void RegisterLoginProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 void MigrateObsoleteBrowserPrefs(Profile* profile, PrefService* local_state) {
 #if defined(OS_CHROMEOS)
   // Added 11/2016
-  local_state->ClearPref(prefs::kTouchScreenEnabled);
-  local_state->ClearPref(prefs::kTouchPadEnabled);
+  local_state->ClearPref(prefs::kTouchscreenEnabled);
+  local_state->ClearPref(prefs::kTouchpadEnabled);
 #endif  // defined(OS_CHROMEOS)
 }
 

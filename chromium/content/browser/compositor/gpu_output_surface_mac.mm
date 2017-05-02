@@ -7,9 +7,9 @@
 #include "cc/output/output_surface_client.h"
 #include "cc/output/output_surface_frame.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/ipc/client/gpu_process_hosted_ca_layer_tree_params.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/base/cocoa/remote_layer_api.h"
 #include "ui/compositor/compositor.h"
@@ -50,18 +50,16 @@ struct GpuOutputSurfaceMac::RemoteLayers {
 
 GpuOutputSurfaceMac::GpuOutputSurfaceMac(
     gfx::AcceleratedWidget widget,
-    scoped_refptr<ContextProviderCommandBuffer> context,
+    scoped_refptr<ui::ContextProviderCommandBuffer> context,
     gpu::SurfaceHandle surface_handle,
-    scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-    cc::SyntheticBeginFrameSource* begin_frame_source,
+    const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
         overlay_candidate_validator,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
     : GpuSurfacelessBrowserCompositorOutputSurface(
           std::move(context),
           surface_handle,
-          std::move(vsync_manager),
-          begin_frame_source,
+          update_vsync_parameters_callback,
           std::move(overlay_candidate_validator),
           GL_TEXTURE_RECTANGLE_ARB,
           GL_RGBA,

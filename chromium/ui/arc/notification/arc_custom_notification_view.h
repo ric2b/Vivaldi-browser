@@ -12,6 +12,7 @@
 #include "ui/arc/notification/arc_custom_notification_item.h"
 #include "ui/arc/notification/arc_notification_surface_manager.h"
 #include "ui/aura/window_observer.h"
+#include "ui/message_center/views/custom_notification_content_view_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/native/native_view_host.h"
 
@@ -20,6 +21,7 @@ class NotificationSurface;
 }
 
 namespace views {
+class FocusTraversable;
 class ImageButton;
 class Widget;
 }
@@ -36,7 +38,12 @@ class ArcCustomNotificationView
   explicit ArcCustomNotificationView(ArcCustomNotificationItem* item);
   ~ArcCustomNotificationView() override;
 
+  std::unique_ptr<message_center::CustomNotificationContentViewDelegate>
+  CreateContentViewDelegate();
+
  private:
+  class ContentViewDelegate;
+  class CloseButton;
   class EventForwarder;
   class SlideHelper;
 
@@ -57,6 +64,9 @@ class ArcCustomNotificationView
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
+  void OnFocus() override;
+  void OnBlur() override;
+  views::FocusTraversable* GetFocusTraversable() override;
 
   // views::ButtonListener
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;

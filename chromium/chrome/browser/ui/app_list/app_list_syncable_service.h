@@ -46,7 +46,6 @@ class PrefRegistrySyncable;
 
 namespace app_list {
 
-class AppListFolderItem;
 class AppListItem;
 class AppListModel;
 
@@ -85,6 +84,8 @@ class AppListSyncableService : public syncer::SyncableService,
                          extensions::ExtensionSystem* extension_system);
 
   ~AppListSyncableService() override;
+
+  static const char kOemFolderId[];
 
   // Registers prefs to support local storage.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

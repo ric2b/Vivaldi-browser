@@ -28,7 +28,7 @@
 
 #include "modules/webdatabase/InspectorDatabaseAgent.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/VoidCallback.h"
 #include "core/loader/DocumentLoader.h"
@@ -177,7 +177,7 @@ class TransactionCallback final : public SQLTransactionCallback {
     SQLStatementErrorCallback* errorCallback =
         StatementErrorCallback::create(m_requestCallback);
     transaction->executeSQL(m_sqlStatement, sqlValues, callback, errorCallback,
-                            IGNORE_EXCEPTION);
+                            IGNORE_EXCEPTION_FOR_TESTING);
     return true;
   }
 

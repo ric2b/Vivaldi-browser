@@ -6,8 +6,8 @@
 #define ScreenOrientation_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
-#include "core/frame/DOMWindowProperty.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 #include "wtf/text/AtomicString.h"
@@ -19,10 +19,10 @@ class ExecutionContext;
 class LocalFrame;
 class ScriptPromise;
 class ScriptState;
-class ScreenOrientationController;
+class ScreenOrientationControllerImpl;
 
 class ScreenOrientation final : public EventTargetWithInlineData,
-                                public DOMWindowProperty {
+                                public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(ScreenOrientation);
 
@@ -54,7 +54,7 @@ class ScreenOrientation final : public EventTargetWithInlineData,
  private:
   explicit ScreenOrientation(LocalFrame*);
 
-  ScreenOrientationController* controller();
+  ScreenOrientationControllerImpl* controller();
 
   WebScreenOrientationType m_type;
   unsigned short m_angle;

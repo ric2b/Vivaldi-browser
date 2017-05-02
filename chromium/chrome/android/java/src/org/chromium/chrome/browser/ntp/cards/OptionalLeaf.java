@@ -6,7 +6,10 @@ package org.chromium.chrome.browser.ntp.cards;
 
 import android.support.annotation.CallSuper;
 
+import org.chromium.base.Callback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+
+import java.util.List;
 
 /**
  * An optional leaf (i.e. single item) in the tree. Depending on its internal state (see
@@ -18,14 +21,6 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
  */
 public abstract class OptionalLeaf extends ChildNode {
     private boolean mVisible;
-
-    /**
-     * Constructor for {@link OptionalLeaf}.
-     * By default it is not visible. See {@link #setVisible(boolean)} to update the visibility.
-     */
-    public OptionalLeaf(NodeParent parent) {
-        super(parent);
-    }
 
     @Override
     public int getItemCount() {
@@ -39,7 +34,7 @@ public abstract class OptionalLeaf extends ChildNode {
     }
 
     @Override
-    public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
+    public void onBindViewHolder(NewTabPageViewHolder holder, int position, List<Object> payload) {
         checkIndex(position);
         onBindViewHolder(holder);
     }
@@ -51,11 +46,16 @@ public abstract class OptionalLeaf extends ChildNode {
     }
 
     @Override
+    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
+        checkIndex(position);
+        dismiss(itemRemovedCallback);
+    }
+
+    @Override
     public int getDismissSiblingPosDelta(int position) {
         checkIndex(position);
         return 0;
     }
-
 
     /** @return Whether the optional item is currently visible. */
     public final boolean isVisible() {
@@ -82,7 +82,7 @@ public abstract class OptionalLeaf extends ChildNode {
     /**
      * Display the data for this item.
      * @param holder The view holder that should be updated.
-     * @see #onBindViewHolder(NewTabPageViewHolder, int)
+     * @see #onBindViewHolder(NewTabPageViewHolder, int, List)
      * @see android.support.v7.widget.RecyclerView.Adapter#onBindViewHolder
      */
     protected abstract void onBindViewHolder(NewTabPageViewHolder holder);
@@ -94,9 +94,14 @@ public abstract class OptionalLeaf extends ChildNode {
     @ItemViewType
     protected abstract int getItemViewType();
 
-    protected void checkIndex(int position) {
-        if (position < 0 || position >= getItemCount()) {
-            throw new IndexOutOfBoundsException(position + "/" + getItemCount());
-        }
+    /**
+     * Dismiss this item. The default implementation asserts, as by default items can't be
+     * dismissed.
+     * @param itemRemovedCallback Should be called with the title of the dismissed item, to announce
+     * it for accessibility purposes.
+     * @see TreeNode#dismissItem
+     */
+    protected void dismiss(Callback<String> itemRemovedCallback) {
+        assert false;
     }
 }

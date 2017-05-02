@@ -62,11 +62,13 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
                                         const ResourceRequest&,
                                         ThreadableLoaderClient&,
                                         const ThreadableLoaderOptions&,
-                                        const ResourceLoaderOptions&);
+                                        const ResourceLoaderOptions&,
+                                        ThreadableLoader::ClientSpec);
   static DocumentThreadableLoader* create(Document&,
                                           ThreadableLoaderClient*,
                                           const ThreadableLoaderOptions&,
-                                          const ResourceLoaderOptions&);
+                                          const ResourceLoaderOptions&,
+                                          ThreadableLoader::ClientSpec);
   ~DocumentThreadableLoader() override;
 
   void start(const ResourceRequest&) override;
@@ -85,7 +87,8 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
                            ThreadableLoaderClient*,
                            BlockingBehavior,
                            const ThreadableLoaderOptions&,
-                           const ResourceLoaderOptions&);
+                           const ResourceLoaderOptions&,
+                           ClientSpec);
 
   void clear();
 
@@ -109,8 +112,6 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   void redirectBlocked() override;
   void dataDownloaded(Resource*, int) override;
   void didReceiveResourceTiming(Resource*, const ResourceTimingInfo&) override;
-
-  void cancelWithError(const ResourceError&);
 
   // Notify Inspector and log to console about resource response. Use this
   // method if response is not going to be finished normally.
@@ -142,7 +143,9 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // Investigates the response for the preflight request. If successful,
   // the actual request will be made later in handleSuccessfulFinish().
   void handlePreflightResponse(const ResourceResponse&);
-  void handleError(const ResourceError&);
+
+  void dispatchDidFailAccessControlCheck(const ResourceError&);
+  void dispatchDidFail(const ResourceError&);
 
   void loadRequestAsync(const ResourceRequest&, ResourceLoaderOptions);
   void loadRequestSync(const ResourceRequest&, ResourceLoaderOptions);
@@ -185,6 +188,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   Document& document() const;
 
   ThreadableLoaderClient* m_client;
+  const ClientSpec m_clientSpec;
   Member<Document> m_document;
 
   const ThreadableLoaderOptions m_options;
@@ -199,8 +203,6 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // True while the initial URL and all the URLs of the redirects this object
   // has followed, if any, are same-origin to getSecurityOrigin().
   bool m_sameOriginRequest;
-  // Set to true if the current request is cross-origin and not simple.
-  bool m_crossOriginNonSimpleRequest;
 
   // Set to true when the response data is given to a data consumer handle.
   bool m_isUsingDataConsumerHandle;
@@ -219,10 +221,10 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   ResourceRequest m_actualRequest;
   ResourceLoaderOptions m_actualOptions;
 
-  // stores simple request headers in case of a cross-origin redirect.
-  HTTPHeaderMap m_simpleRequestHeaders;
+  // stores request headers in case of a cross-origin redirect.
+  HTTPHeaderMap m_requestHeaders;
 
-  Timer<DocumentThreadableLoader> m_timeoutTimer;
+  TaskRunnerTimer<DocumentThreadableLoader> m_timeoutTimer;
   double
       m_requestStartedSeconds;  // Time an asynchronous fetch request is started
 

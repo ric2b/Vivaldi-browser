@@ -62,7 +62,7 @@ void RunAllBlockingPoolTasksUntilIdle();
 
 // Get task to quit the given RunLoop. It allows a few generations of pending
 // tasks to run as opposed to run_loop->QuitClosure().
-base::Closure GetQuitTaskForRunLoop(base::RunLoop* run_loop);
+base::Closure GetDeferredQuitTaskForRunLoop(base::RunLoop* run_loop);
 
 // Executes the specified JavaScript in the specified frame, and runs a nested
 // MessageLoop. When the result is available, it is returned.
@@ -81,6 +81,9 @@ bool AreAllSitesIsolatedForTesting();
 // the test; the flag will be read on the first real navigation.
 void IsolateAllSitesForTesting(base::CommandLine* command_line);
 
+// Resets the internal secure schemes/origins whitelist.
+void ResetSchemesAndOriginsWhitelist();
+
 #if defined(OS_ANDROID)
 // Registers content/browser JNI bindings necessary for some types of tests.
 bool RegisterJniForTesting(JNIEnv* env);
@@ -89,9 +92,25 @@ bool RegisterJniForTesting(JNIEnv* env);
 // Helper class to Run and Quit the message loop. Run and Quit can only happen
 // once per instance. Make a new instance for each use. Calling Quit after Run
 // has returned is safe and has no effect.
+// Note that by default Quit does not quit immediately. If that is not what you
+// really need, pass QuitMode::IMMEDIATE in the constructor.
+//
+// DEPRECATED. Consider using base::RunLoop, in most cases MessageLoopRunner is
+// not needed.  If you need to defer quitting the loop, use
+// GetDeferredQuitTaskForRunLoop directly.
+// If you found a case where base::RunLoop is inconvenient or can not be used at
+// all, please post details in a comment on https://crbug.com/668707.
 class MessageLoopRunner : public base::RefCounted<MessageLoopRunner> {
  public:
-  MessageLoopRunner();
+  enum class QuitMode {
+    // Message loop stops after finishing the current task.
+    IMMEDIATE,
+
+    // Several generations of posted tasks are executed before stopping.
+    DEFERRED,
+  };
+
+  MessageLoopRunner(QuitMode mode = QuitMode::DEFERRED);
 
   // Run the current MessageLoop unless the quit closure
   // has already been called.
@@ -112,6 +131,8 @@ class MessageLoopRunner : public base::RefCounted<MessageLoopRunner> {
  private:
   friend class base::RefCounted<MessageLoopRunner>;
   ~MessageLoopRunner();
+
+  QuitMode quit_mode_;
 
   // True when the message loop is running.
   bool loop_running_;
@@ -241,7 +262,7 @@ class InProcessUtilityThreadHelper : public BrowserChildProcessObserver {
       const ChildProcessData& data) override;
 
   int child_thread_count_;
-  scoped_refptr<MessageLoopRunner> runner_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   std::unique_ptr<TestServiceManagerContext> shell_context_;
 
   DISALLOW_COPY_AND_ASSIGN(InProcessUtilityThreadHelper);
@@ -282,7 +303,7 @@ class WebContentsDestroyedWatcher : public WebContentsObserver {
   // Overridden WebContentsObserver methods.
   void WebContentsDestroyed() override;
 
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+  base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsDestroyedWatcher);
 };

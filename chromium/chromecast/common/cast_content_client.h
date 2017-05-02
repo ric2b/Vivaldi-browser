@@ -17,9 +17,7 @@ class CastContentClient : public content::ContentClient {
   ~CastContentClient() override;
 
   // content::ContentClient implementation:
-  void AddAdditionalSchemes(std::vector<url::SchemeWithType>* standard_schemes,
-                            std::vector<url::SchemeWithType>* referrer_schemes,
-                            std::vector<std::string>* saveable_shemes) override;
+  void AddAdditionalSchemes(Schemes* schemes) override;
   std::string GetUserAgent() const override;
   base::string16 GetLocalizedString(int message_id) const override;
   base::StringPiece GetDataResource(
@@ -29,7 +27,7 @@ class CastContentClient : public content::ContentClient {
       int resource_id) const override;
   gfx::Image& GetNativeImageNamed(int resource_id) const override;
 #if defined(OS_ANDROID)
-  media::MediaClientAndroid* GetMediaClientAndroid() override;
+  ::media::MediaClientAndroid* GetMediaClientAndroid() override;
 #endif  // OS_ANDROID
 };
 

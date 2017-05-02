@@ -229,15 +229,15 @@ cr.define('cr.ui', function() {
         // |anchorIndex| has been actually changed in the batch.
         this.leadIndex_ = this.adjustIndex_(this.leadIndex_);
         if (this.leadIndex_ != this.oldLeadIndex_) {
-          cr.dispatchPropertyChange(this, 'leadIndex',
-                                    this.leadIndex_, this.oldLeadIndex_);
+          cr.dispatchPropertyChange(
+              this, 'leadIndex', this.leadIndex_, this.oldLeadIndex_);
         }
         this.oldLeadIndex_ = null;
 
         this.anchorIndex_ = this.adjustIndex_(this.anchorIndex_);
         if (this.anchorIndex_ != this.oldAnchorIndex_) {
-          cr.dispatchPropertyChange(this, 'anchorIndex',
-                                    this.anchorIndex_, this.oldAnchorIndex_);
+          cr.dispatchPropertyChange(
+              this, 'anchorIndex', this.anchorIndex_, this.oldAnchorIndex_);
         }
         this.oldAnchorIndex_ = null;
 
@@ -331,11 +331,13 @@ cr.define('cr.ui', function() {
       var oldAnchorIndex = this.anchorIndex;
       var oldSelectedItemsCount = this.selectedIndexes.length;
 
-      this.selectedIndexes = this.selectedIndexes.map(function(oldIndex) {
-        return permutation[oldIndex];
-      }).filter(function(index) {
-        return index != -1;
-      });
+      this.selectedIndexes = this.selectedIndexes
+                                 .map(function(oldIndex) {
+                                   return permutation[oldIndex];
+                                 })
+                                 .filter(function(index) {
+                                   return index != -1;
+                                 });
 
       // Will be adjusted in endChange.
       if (oldLeadIndex != -1)
@@ -362,7 +364,5 @@ cr.define('cr.ui', function() {
     }
   };
 
-  return {
-    ListSelectionModel: ListSelectionModel
-  };
+  return {ListSelectionModel: ListSelectionModel};
 });

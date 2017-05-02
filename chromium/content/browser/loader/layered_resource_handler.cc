@@ -43,8 +43,9 @@ bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,
                                                bool* defer) {
   // Vivaldi specific save info override.
   ResourceRequestInfoImpl* info = GetRequestInfo();
-  return OnResponseStarted(response, defer, info->open_when_downloaded(),
-                           info->ask_for_save_target());
+  return OnResponseStarted(response, defer,
+                           info != nullptr && info->open_when_downloaded(),
+                           info != nullptr && info->ask_for_save_target());
 }
 
 bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,

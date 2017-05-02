@@ -29,7 +29,6 @@ import HTMLParser
 import logging
 import re
 
-from webkitpy.common.host import Host
 from webkitpy.thirdparty.BeautifulSoup import BeautifulSoup
 
 
@@ -57,6 +56,9 @@ class TestParser(object):
             except HTMLParser.HTMLParseError:
                 # FIXME: Figure out what to do if we can't parse the file.
                 _log.error("HTMLParseError: Failed to parse %s", filename)
+                doc = None
+            except UnicodeEncodeError:
+                _log.error("UnicodeEncodeError while reading %s", filename)
                 doc = None
         else:
             if self.filesystem.isdir(filename):

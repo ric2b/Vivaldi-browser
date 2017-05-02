@@ -23,12 +23,10 @@ namespace content {
 
 SoftwareBrowserCompositorOutputSurface::SoftwareBrowserCompositorOutputSurface(
     std::unique_ptr<cc::SoftwareOutputDevice> software_device,
-    const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-    cc::SyntheticBeginFrameSource* begin_frame_source,
+    const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : BrowserCompositorOutputSurface(std::move(software_device),
-                                     vsync_manager,
-                                     begin_frame_source),
+                                     update_vsync_parameters_callback),
       task_runner_(std::move(task_runner)),
       weak_factory_(this) {}
 
@@ -60,7 +58,8 @@ void SoftwareBrowserCompositorOutputSurface::Reshape(
     const gfx::Size& size,
     float device_scale_factor,
     const gfx::ColorSpace& color_space,
-    bool has_alpha) {
+    bool has_alpha,
+    bool use_stencil) {
   software_device()->Resize(size, device_scale_factor);
 }
 
@@ -80,11 +79,8 @@ void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
                                     frame.latency_info));
 
   gfx::VSyncProvider* vsync_provider = software_device()->GetVSyncProvider();
-  if (vsync_provider) {
-    vsync_provider->GetVSyncParameters(base::Bind(
-        &BrowserCompositorOutputSurface::OnUpdateVSyncParametersFromGpu,
-        weak_factory_.GetWeakPtr()));
-  }
+  if (vsync_provider)
+    vsync_provider->GetVSyncParameters(update_vsync_parameters_callback_);
 
   task_runner_->PostTask(
       FROM_HERE,

@@ -15,8 +15,11 @@ prefix_name = os.path.split(sourcedir)[1]
 workdir = os.path.abspath(os.path.join(sourcedir,".."))
 extra_subprocess_flags = {}
 if platform.system() == "Windows":
-  import win32con
-  extra_subprocess_flags["creationflags"] = win32con.NORMAL_PRIORITY_CLASS
+  try:
+    import win32con
+    extra_subprocess_flags["creationflags"] = win32con.NORMAL_PRIORITY_CLASS
+  except:
+    pass
 
 def fix_action(str):
   if str.startswith("vivaldi/") or str.startswith("vivaldi\\"):

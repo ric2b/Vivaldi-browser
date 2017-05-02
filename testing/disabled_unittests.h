@@ -12,25 +12,12 @@
 
   DISABLE_ALL(EncryptedMediaSupportedTypesWidevineTest)
 
-  DISABLE(NTPSnippetsServiceWithSyncTest, SyncStateCompatibility)
+  //DISABLE(NTPSnippetsServiceWithSyncTest, SyncStateCompatibility)
 
-  // Failing media tests since proprietary media code was imported
-  DISABLE(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video)
-  DISABLE(AudioVideoMetadataExtractorTest, AudioMP3)
-  DISABLE(MediaGalleriesPlatformAppBrowserTest, GetMetadata)
-  DISABLE_MULTI(MediaTest, VideoBearMovPcmS16be)
-  DISABLE_MULTI(MediaTest, VideoBearMovPcmS24be)
-  DISABLE_MULTI(MediaTest, VideoBearMp4)
-  DISABLE_MULTI(MediaTest, VideoBearSilentMp4)
-  DISABLE_MULTI(MediaTest, VideoBearHighBitDepthMp4)
-  DISABLE(MediaTest, VideoBearRotated0)
-  DISABLE(MediaTest, VideoBearRotated180)
-  DISABLE(MediaColorTest, Yuv420pHighBitDepth)
-  DISABLE(MediaColorTest, Yuv422pH264)
-  DISABLE(MediaColorTest, Yuv444pH264)
-  DISABLE(MediaColorTest, Yuvj420pH264)
+  // Broken for media after 57
+  DISABLE_MULTI(MediaTest, VideoBearMp4Vp9)
 
-  DISABLE_ALL(FirefoxProfileImporterBrowserTest)
+  //DISABLE_ALL(FirefoxProfileImporterBrowserTest)
 
   // Assume these fails due to switches::kExtensionActionRedesign being disabled
   DISABLE_MULTI(ToolbarActionsBarUnitTest, ExtensionActionContextMenu)
@@ -44,10 +31,11 @@
           ActivateOverflowedToolbarActionWithKeyboard)
 
   // Seems to have broken on all the testers
-  DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
+  //DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
 
   // Seems to be disabled in Google Chrome mode and the feature is default disabled
-  DISABLE(PrintPreviewWebUITest, ScalingUnchecksFitToPage)
+  //DISABLE(PrintPreviewWebUITest, ScalingUnchecksFitToPage)
 
-  // Disable just for v56
-  DISABLE(PipelineIntegrationTest, BasicPlaybackLive)
+  // Sync related tests that fail due to changes in Vivaldi sync, which will
+  // not be propagated into the chromium specfic code
+  //DISABLE(SyncSetupWebUITestAsync, RestoreSyncDataTypes)

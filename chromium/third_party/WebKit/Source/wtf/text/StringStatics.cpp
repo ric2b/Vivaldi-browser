@@ -48,19 +48,21 @@ StringImpl* StringImpl::empty16Bit() {
   return &emptyString;
 }
 
-WTF_EXPORT DEFINE_GLOBAL(AtomicString, nullAtom) WTF_EXPORT
-    DEFINE_GLOBAL(AtomicString, emptyAtom) WTF_EXPORT
-    DEFINE_GLOBAL(AtomicString, starAtom) WTF_EXPORT
-    DEFINE_GLOBAL(AtomicString, xmlAtom) WTF_EXPORT
-    DEFINE_GLOBAL(AtomicString, xmlnsAtom) WTF_EXPORT
-    DEFINE_GLOBAL(AtomicString, xlinkAtom)
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, nullAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, emptyAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, starAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, xmlAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, xmlnsAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, xlinkAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, httpAtom);
+WTF_EXPORT DEFINE_GLOBAL(AtomicString, httpsAtom);
 
-    // This is not an AtomicString because it is unlikely to be used as an
-    // event/element/attribute name, so it shouldn't pollute the AtomicString
-    // hash table.
-    WTF_EXPORT DEFINE_GLOBAL(String, xmlnsWithColon)
+// This is not an AtomicString because it is unlikely to be used as an
+// event/element/attribute name, so it shouldn't pollute the AtomicString hash
+// table.
+WTF_EXPORT DEFINE_GLOBAL(String, xmlnsWithColon);
 
-        NEVER_INLINE unsigned StringImpl::hashSlowCase() const {
+NEVER_INLINE unsigned StringImpl::hashSlowCase() const {
   if (is8Bit())
     setHash(StringHasher::computeHashAndMaskTop8Bits(characters8(), m_length));
   else
@@ -69,7 +71,7 @@ WTF_EXPORT DEFINE_GLOBAL(AtomicString, nullAtom) WTF_EXPORT
 }
 
 void AtomicString::init() {
-  ASSERT(isMainThread());
+  DCHECK(isMainThread());
 
   new (NotNull, (void*)&nullAtom) AtomicString;
   new (NotNull, (void*)&emptyAtom) AtomicString("");
@@ -85,7 +87,7 @@ PassRefPtr<StringImpl> addStaticASCIILiteral(
 }
 
 void StringStatics::init() {
-  ASSERT(isMainThread());
+  DCHECK(isMainThread());
 
   // FIXME: These should be allocated at compile time.
   new (NotNull, (void*)&starAtom) AtomicString("*");
@@ -93,6 +95,8 @@ void StringStatics::init() {
   new (NotNull, (void*)&xmlnsAtom) AtomicString(addStaticASCIILiteral("xmlns"));
   new (NotNull, (void*)&xlinkAtom) AtomicString(addStaticASCIILiteral("xlink"));
   new (NotNull, (void*)&xmlnsWithColon) String("xmlns:");
+  new (NotNull, (void*)&httpAtom) AtomicString(addStaticASCIILiteral("http"));
+  new (NotNull, (void*)&httpsAtom) AtomicString(addStaticASCIILiteral("https"));
 }
 
 }  // namespace WTF

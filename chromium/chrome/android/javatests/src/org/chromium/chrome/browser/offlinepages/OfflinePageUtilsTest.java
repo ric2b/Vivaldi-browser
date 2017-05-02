@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.offlinepages;
 
 import android.content.Context;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
@@ -103,18 +103,14 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
         }
 
         public void waitForSnackbarControllerToFinish() {
-            try {
-                CriteriaHelper.pollUiThread(
-                        new Criteria("Failed while waiting for snackbar calls to complete.") {
-                            @Override
-                            public boolean isSatisfied() {
-                                return mDismissed;
-                            }
-                        },
-                        SNACKBAR_TIMEOUT, POLLING_INTERVAL);
-            } catch (InterruptedException e) {
-                fail("Failed while waiting for snackbar calls to complete." + e);
-            }
+            CriteriaHelper.pollUiThread(
+                    new Criteria("Failed while waiting for snackbar calls to complete.") {
+                        @Override
+                        public boolean isSatisfied() {
+                            return mDismissed;
+                        }
+                    },
+                    SNACKBAR_TIMEOUT, POLLING_INTERVAL);
         }
 
         @Override
@@ -173,6 +169,7 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
             @Override
             public void run() {
                 OfflinePageTabObserver.init(getActivity().getBaseContext(),
+                        getActivity().getTabModelSelector().getModel(false),
                         getActivity().getSnackbarManager(), mockSnackbarController);
                 OfflinePageUtils.showOfflineSnackbarIfNecessary(getActivity().getActivityTab());
 
@@ -313,16 +310,12 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
             }
         });
 
-        try {
-            CriteriaHelper.pollInstrumentationThread(
-                    new Criteria("Failed while waiting for file operation to complete.") {
-                        @Override
-                        public boolean isSatisfied() {
-                            return !offlineSharingDir.exists();
-                        }
-                    });
-        } catch (InterruptedException e) {
-            fail("Failed while waiting for file operation to complete." + e);
-        }
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Failed while waiting for file operation to complete.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return !offlineSharingDir.exists();
+                    }
+                });
     }
 }

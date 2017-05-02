@@ -230,7 +230,9 @@ void ProcessUpdate(const sync_pb::SyncEntity& update,
 
   bool position_matches = false;
   if (target_entry.ShouldMaintainPosition() && !update.deleted()) {
-    std::string update_tag = GetUniqueBookmarkTagFromUpdate(update);
+    std::string update_tag = target_entry.GetModelType() == BOOKMARKS ?
+                             GetUniqueBookmarkTagFromUpdate(update) :
+                             GetUniqueNotesTagFromUpdate(update);
     if (UniquePosition::IsValidSuffix(update_tag)) {
       position_matches = GetUpdatePosition(update, update_tag)
                              .Equals(target_entry.GetServerUniquePosition());

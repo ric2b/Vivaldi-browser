@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "platform/MIMETypeRegistry.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 
 #include "base/files/file_path.h"
 #include "base/strings/string_util.h"
@@ -24,7 +24,7 @@ struct MimeRegistryPtrHolder {
  public:
   MimeRegistryPtrHolder() {
     Platform::current()->interfaceProvider()->getInterface(
-        mojo::GetProxy(&mimeRegistry));
+        mojo::MakeRequest(&mimeRegistry));
   }
   ~MimeRegistryPtrHolder() {}
 
@@ -170,9 +170,10 @@ bool MIMETypeRegistry::isJavaAppletMIMEType(const String& mimeType) {
   // followed by any number of specific versions of the JVM, which is why we use
   // startsWith()
   return mimeType.startsWith("application/x-java-applet",
-                             TextCaseInsensitive) ||
-         mimeType.startsWith("application/x-java-bean", TextCaseInsensitive) ||
-         mimeType.startsWith("application/x-java-vm", TextCaseInsensitive);
+                             TextCaseASCIIInsensitive) ||
+         mimeType.startsWith("application/x-java-bean",
+                             TextCaseASCIIInsensitive) ||
+         mimeType.startsWith("application/x-java-vm", TextCaseASCIIInsensitive);
 }
 
 bool MIMETypeRegistry::isSupportedStyleSheetMIMEType(const String& mimeType) {
@@ -181,7 +182,7 @@ bool MIMETypeRegistry::isSupportedStyleSheetMIMEType(const String& mimeType) {
 
 bool MIMETypeRegistry::isSupportedFontMIMEType(const String& mimeType) {
   static const unsigned fontLen = 5;
-  if (!mimeType.startsWith("font/", TextCaseInsensitive))
+  if (!mimeType.startsWith("font/", TextCaseASCIIInsensitive))
     return false;
   String subType = mimeType.substring(fontLen).lower();
   return subType == "woff" || subType == "woff2" || subType == "otf" ||

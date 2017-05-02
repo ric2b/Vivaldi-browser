@@ -47,6 +47,11 @@ namespace blink {
 
 namespace MediaConstraintsImpl {
 
+// A naked value is treated as an "ideal" value in the basic constraints,
+// but as an exact value in "advanced" constraints.
+// https://w3c.github.io/mediacapture-main/#constrainable-interface
+enum class NakedValueDisposition { kTreatAsIdeal, kTreatAsExact };
+
 // Old type/value form of constraint. Used in parsing old-style constraints.
 struct NameValueStringConstraint {
   NameValueStringConstraint() {}
@@ -151,32 +156,34 @@ const char kTestConstraint2[] = "valid_and_supported_2";
 static bool parseMandatoryConstraintsDictionary(
     const Dictionary& mandatoryConstraintsDictionary,
     Vector<NameValueStringConstraint>& mandatory) {
-  HashMap<String, String> mandatoryConstraintsHashMap;
-  bool ok = mandatoryConstraintsDictionary.getOwnPropertiesAsStringHashMap(
-      mandatoryConstraintsHashMap);
-  if (!ok)
+  DummyExceptionStateForTesting exceptionState;
+  const HashMap<String, String>& mandatoryConstraintsHashMap =
+      mandatoryConstraintsDictionary.getOwnPropertiesAsStringHashMap(
+          exceptionState);
+  if (exceptionState.hadException())
     return false;
 
   for (const auto& iter : mandatoryConstraintsHashMap)
-    mandatory.append(NameValueStringConstraint(iter.key, iter.value));
+    mandatory.push_back(NameValueStringConstraint(iter.key, iter.value));
   return true;
 }
 
 static bool parseOptionalConstraintsVectorElement(
     const Dictionary& constraint,
     Vector<NameValueStringConstraint>& optionalConstraintsVector) {
-  Vector<String> localNames;
-  bool ok = constraint.getPropertyNames(localNames);
-  if (!ok)
+  DummyExceptionStateForTesting exceptionState;
+  const Vector<String>& localNames =
+      constraint.getPropertyNames(exceptionState);
+  if (exceptionState.hadException())
     return false;
   if (localNames.size() != 1)
     return false;
   const String& key = localNames[0];
   String value;
-  ok = DictionaryHelper::get(constraint, key, value);
+  bool ok = DictionaryHelper::get(constraint, key, value);
   if (!ok)
     return false;
-  optionalConstraintsVector.append(NameValueStringConstraint(key, value));
+  optionalConstraintsVector.push_back(NameValueStringConstraint(key, value));
   return true;
 }
 
@@ -187,16 +194,17 @@ static bool parse(const Dictionary& constraintsDictionary,
   if (constraintsDictionary.isUndefinedOrNull())
     return true;
 
-  Vector<String> names;
-  bool ok = constraintsDictionary.getPropertyNames(names);
-  if (!ok)
+  DummyExceptionStateForTesting exceptionState;
+  const Vector<String>& names =
+      constraintsDictionary.getPropertyNames(exceptionState);
+  if (exceptionState.hadException())
     return false;
 
   String mandatoryName("mandatory");
   String optionalName("optional");
 
-  for (Vector<String>::iterator it = names.begin(); it != names.end(); ++it) {
-    if (*it != mandatoryName && *it != optionalName)
+  for (const auto& name : names) {
+    if (name != mandatoryName && name != optionalName)
       return false;
   }
 
@@ -461,7 +469,7 @@ static WebMediaConstraints createFromNamedConstraints(
     parseOldStyleNames(context, elementAsList, false, advancedElement,
                        ignoredErrorState);
     if (!advancedElement.isEmpty())
-      advancedVector.append(advancedElement);
+      advancedVector.push_back(advancedElement);
   }
   constraints.initialize(basic, advancedVector);
   return constraints;
@@ -482,9 +490,17 @@ WebMediaConstraints create(ExecutionContext* context,
 }
 
 void copyLongConstraint(const LongOrConstrainLongRange& blinkUnionForm,
+                        NakedValueDisposition nakedTreatment,
                         LongConstraint& webForm) {
   if (blinkUnionForm.isLong()) {
-    webForm.setIdeal(blinkUnionForm.getAsLong());
+    switch (nakedTreatment) {
+      case NakedValueDisposition::kTreatAsIdeal:
+        webForm.setIdeal(blinkUnionForm.getAsLong());
+        break;
+      case NakedValueDisposition::kTreatAsExact:
+        webForm.setExact(blinkUnionForm.getAsLong());
+        break;
+    }
     return;
   }
   const auto& blinkForm = blinkUnionForm.getAsConstrainLongRange();
@@ -503,9 +519,17 @@ void copyLongConstraint(const LongOrConstrainLongRange& blinkUnionForm,
 }
 
 void copyDoubleConstraint(const DoubleOrConstrainDoubleRange& blinkUnionForm,
+                          NakedValueDisposition nakedTreatment,
                           DoubleConstraint& webForm) {
   if (blinkUnionForm.isDouble()) {
-    webForm.setIdeal(blinkUnionForm.getAsDouble());
+    switch (nakedTreatment) {
+      case NakedValueDisposition::kTreatAsIdeal:
+        webForm.setIdeal(blinkUnionForm.getAsDouble());
+        break;
+      case NakedValueDisposition::kTreatAsExact:
+        webForm.setExact(blinkUnionForm.getAsDouble());
+        break;
+    }
     return;
   }
   const auto& blinkForm = blinkUnionForm.getAsConstrainDoubleRange();
@@ -525,13 +549,29 @@ void copyDoubleConstraint(const DoubleOrConstrainDoubleRange& blinkUnionForm,
 
 void copyStringConstraint(
     const StringOrStringSequenceOrConstrainDOMStringParameters& blinkUnionForm,
+    NakedValueDisposition nakedTreatment,
     StringConstraint& webForm) {
   if (blinkUnionForm.isString()) {
-    webForm.setIdeal(Vector<String>(1, blinkUnionForm.getAsString()));
+    switch (nakedTreatment) {
+      case NakedValueDisposition::kTreatAsIdeal:
+        webForm.setIdeal(Vector<String>(1, blinkUnionForm.getAsString()));
+        break;
+      case NakedValueDisposition::kTreatAsExact:
+        webForm.setExact(Vector<String>(1, blinkUnionForm.getAsString()));
+
+        break;
+    }
     return;
   }
   if (blinkUnionForm.isStringSequence()) {
-    webForm.setIdeal(blinkUnionForm.getAsStringSequence());
+    switch (nakedTreatment) {
+      case NakedValueDisposition::kTreatAsIdeal:
+        webForm.setIdeal(blinkUnionForm.getAsStringSequence());
+        break;
+      case NakedValueDisposition::kTreatAsExact:
+        webForm.setExact(blinkUnionForm.getAsStringSequence());
+        break;
+    }
     return;
   }
   const auto& blinkForm = blinkUnionForm.getAsConstrainDOMStringParameters();
@@ -553,9 +593,17 @@ void copyStringConstraint(
 
 void copyBooleanConstraint(
     const BooleanOrConstrainBooleanParameters& blinkUnionForm,
+    NakedValueDisposition nakedTreatment,
     BooleanConstraint& webForm) {
   if (blinkUnionForm.isBoolean()) {
-    webForm.setIdeal(blinkUnionForm.getAsBoolean());
+    switch (nakedTreatment) {
+      case NakedValueDisposition::kTreatAsIdeal:
+        webForm.setIdeal(blinkUnionForm.getAsBoolean());
+        break;
+      case NakedValueDisposition::kTreatAsExact:
+        webForm.setExact(blinkUnionForm.getAsBoolean());
+        break;
+    }
     return;
   }
   const auto& blinkForm = blinkUnionForm.getAsConstrainBooleanParameters();
@@ -568,49 +616,59 @@ void copyBooleanConstraint(
 }
 
 void copyConstraintSet(const MediaTrackConstraintSet& constraintsIn,
+                       NakedValueDisposition nakedTreatment,
                        WebMediaTrackConstraintSet& constraintBuffer) {
   if (constraintsIn.hasWidth()) {
-    copyLongConstraint(constraintsIn.width(), constraintBuffer.width);
+    copyLongConstraint(constraintsIn.width(), nakedTreatment,
+                       constraintBuffer.width);
   }
   if (constraintsIn.hasHeight()) {
-    copyLongConstraint(constraintsIn.height(), constraintBuffer.height);
+    copyLongConstraint(constraintsIn.height(), nakedTreatment,
+                       constraintBuffer.height);
   }
   if (constraintsIn.hasAspectRatio()) {
-    copyDoubleConstraint(constraintsIn.aspectRatio(),
+    copyDoubleConstraint(constraintsIn.aspectRatio(), nakedTreatment,
                          constraintBuffer.aspectRatio);
   }
   if (constraintsIn.hasFrameRate()) {
-    copyDoubleConstraint(constraintsIn.frameRate(), constraintBuffer.frameRate);
+    copyDoubleConstraint(constraintsIn.frameRate(), nakedTreatment,
+                         constraintBuffer.frameRate);
   }
   if (constraintsIn.hasFacingMode()) {
-    copyStringConstraint(constraintsIn.facingMode(),
+    copyStringConstraint(constraintsIn.facingMode(), nakedTreatment,
                          constraintBuffer.facingMode);
   }
   if (constraintsIn.hasVolume()) {
-    copyDoubleConstraint(constraintsIn.volume(), constraintBuffer.volume);
+    copyDoubleConstraint(constraintsIn.volume(), nakedTreatment,
+                         constraintBuffer.volume);
   }
   if (constraintsIn.hasSampleRate()) {
-    copyLongConstraint(constraintsIn.sampleRate(), constraintBuffer.sampleRate);
+    copyLongConstraint(constraintsIn.sampleRate(), nakedTreatment,
+                       constraintBuffer.sampleRate);
   }
   if (constraintsIn.hasSampleSize()) {
-    copyLongConstraint(constraintsIn.sampleSize(), constraintBuffer.sampleSize);
+    copyLongConstraint(constraintsIn.sampleSize(), nakedTreatment,
+                       constraintBuffer.sampleSize);
   }
   if (constraintsIn.hasEchoCancellation()) {
-    copyBooleanConstraint(constraintsIn.echoCancellation(),
+    copyBooleanConstraint(constraintsIn.echoCancellation(), nakedTreatment,
                           constraintBuffer.echoCancellation);
   }
   if (constraintsIn.hasLatency()) {
-    copyDoubleConstraint(constraintsIn.latency(), constraintBuffer.latency);
+    copyDoubleConstraint(constraintsIn.latency(), nakedTreatment,
+                         constraintBuffer.latency);
   }
   if (constraintsIn.hasChannelCount()) {
-    copyLongConstraint(constraintsIn.channelCount(),
+    copyLongConstraint(constraintsIn.channelCount(), nakedTreatment,
                        constraintBuffer.channelCount);
   }
   if (constraintsIn.hasDeviceId()) {
-    copyStringConstraint(constraintsIn.deviceId(), constraintBuffer.deviceId);
+    copyStringConstraint(constraintsIn.deviceId(), nakedTreatment,
+                         constraintBuffer.deviceId);
   }
   if (constraintsIn.hasGroupId()) {
-    copyStringConstraint(constraintsIn.groupId(), constraintBuffer.groupId);
+    copyStringConstraint(constraintsIn.groupId(), nakedTreatment,
+                         constraintBuffer.groupId);
   }
 }
 
@@ -619,12 +677,14 @@ WebMediaConstraints convertConstraintsToWeb(
   WebMediaConstraints constraints;
   WebMediaTrackConstraintSet constraintBuffer;
   Vector<WebMediaTrackConstraintSet> advancedBuffer;
-  copyConstraintSet(constraintsIn, constraintBuffer);
+  copyConstraintSet(constraintsIn, NakedValueDisposition::kTreatAsIdeal,
+                    constraintBuffer);
   if (constraintsIn.hasAdvanced()) {
     for (const auto& element : constraintsIn.advanced()) {
       WebMediaTrackConstraintSet advancedElement;
-      copyConstraintSet(element, advancedElement);
-      advancedBuffer.append(advancedElement);
+      copyConstraintSet(element, NakedValueDisposition::kTreatAsExact,
+                        advancedElement);
+      advancedBuffer.push_back(advancedElement);
     }
   }
   constraints.initialize(constraintBuffer, advancedBuffer);
@@ -662,9 +722,56 @@ WebMediaConstraints create() {
   return constraints;
 }
 
-LongOrConstrainLongRange convertLong(const LongConstraint& input) {
+template <class T>
+bool useNakedNumeric(T input, NakedValueDisposition which) {
+  switch (which) {
+    case NakedValueDisposition::kTreatAsIdeal:
+      return input.hasIdeal() &&
+             !(input.hasExact() || input.hasMin() || input.hasMax());
+      break;
+    case NakedValueDisposition::kTreatAsExact:
+      return input.hasExact() &&
+             !(input.hasIdeal() || input.hasMin() || input.hasMax());
+      break;
+  }
+  NOTREACHED();
+  return false;
+};
+
+template <class T>
+bool useNakedNonNumeric(T input, NakedValueDisposition which) {
+  switch (which) {
+    case NakedValueDisposition::kTreatAsIdeal:
+      return input.hasIdeal() && !input.hasExact();
+      break;
+    case NakedValueDisposition::kTreatAsExact:
+      return input.hasExact() && !input.hasIdeal();
+      break;
+  }
+  NOTREACHED();
+  return false;
+};
+
+template <typename U, class T>
+U getNakedValue(T input, NakedValueDisposition which) {
+  switch (which) {
+    case NakedValueDisposition::kTreatAsIdeal:
+      return input.ideal();
+      break;
+    case NakedValueDisposition::kTreatAsExact:
+      return input.exact();
+      break;
+  }
+  NOTREACHED();
+  return input.exact();
+};
+
+LongOrConstrainLongRange convertLong(const LongConstraint& input,
+                                     NakedValueDisposition nakedTreatment) {
   LongOrConstrainLongRange outputUnion;
-  if (input.hasExact() || input.hasMin() || input.hasMax()) {
+  if (useNakedNumeric(input, nakedTreatment)) {
+    outputUnion.setLong(getNakedValue<long>(input, nakedTreatment));
+  } else if (!input.isEmpty()) {
     ConstrainLongRange output;
     if (input.hasExact())
       output.setExact(input.exact());
@@ -675,17 +782,17 @@ LongOrConstrainLongRange convertLong(const LongConstraint& input) {
     if (input.hasIdeal())
       output.setIdeal(input.ideal());
     outputUnion.setConstrainLongRange(output);
-  } else {
-    if (input.hasIdeal()) {
-      outputUnion.setLong(input.ideal());
-    }
   }
   return outputUnion;
 }
 
-DoubleOrConstrainDoubleRange convertDouble(const DoubleConstraint& input) {
+DoubleOrConstrainDoubleRange convertDouble(
+    const DoubleConstraint& input,
+    NakedValueDisposition nakedTreatment) {
   DoubleOrConstrainDoubleRange outputUnion;
-  if (input.hasExact() || input.hasMin() || input.hasMax()) {
+  if (useNakedNumeric(input, nakedTreatment)) {
+    outputUnion.setDouble(getNakedValue<double>(input, nakedTreatment));
+  } else if (!input.isEmpty()) {
     ConstrainDoubleRange output;
     if (input.hasExact())
       output.setExact(input.exact());
@@ -696,10 +803,6 @@ DoubleOrConstrainDoubleRange convertDouble(const DoubleConstraint& input) {
     if (input.hasMax())
       output.setMax(input.max());
     outputUnion.setConstrainDoubleRange(output);
-  } else {
-    if (input.hasIdeal()) {
-      outputUnion.setDouble(input.ideal());
-    }
   }
   return outputUnion;
 }
@@ -710,7 +813,7 @@ StringOrStringSequence convertStringSequence(
   if (input.size() > 1) {
     Vector<String> buffer;
     for (const auto& scanner : input)
-      buffer.append(scanner);
+      buffer.push_back(scanner);
     theStrings.setStringSequence(buffer);
   } else if (input.size() > 0) {
     theStrings.setString(input[0]);
@@ -719,72 +822,79 @@ StringOrStringSequence convertStringSequence(
 }
 
 StringOrStringSequenceOrConstrainDOMStringParameters convertString(
-    const StringConstraint& input) {
+    const StringConstraint& input,
+    NakedValueDisposition nakedTreatment) {
   StringOrStringSequenceOrConstrainDOMStringParameters outputUnion;
-  if (input.hasExact()) {
-    ConstrainDOMStringParameters output;
-    output.setExact(convertStringSequence(input.exact()));
-    if (input.hasIdeal()) {
-      output.setIdeal(convertStringSequence(input.ideal()));
-    }
-    outputUnion.setConstrainDOMStringParameters(output);
-  } else if (input.hasIdeal()) {
-    if (input.ideal().size() > 1) {
+  if (useNakedNonNumeric(input, nakedTreatment)) {
+    WebVector<WebString> inputBuffer(
+        getNakedValue<WebVector<WebString>>(input, nakedTreatment));
+    if (inputBuffer.size() > 1) {
       Vector<String> buffer;
-      for (const auto& scanner : input.ideal())
-        buffer.append(scanner);
+      for (const auto& scanner : inputBuffer)
+        buffer.push_back(scanner);
       outputUnion.setStringSequence(buffer);
-    } else if (input.ideal().size() == 1) {
-      outputUnion.setString(input.ideal()[0]);
+    } else if (inputBuffer.size() > 0) {
+      outputUnion.setString(inputBuffer[0]);
     }
+  } else if (!input.isEmpty()) {
+    ConstrainDOMStringParameters output;
+    if (input.hasExact())
+      output.setExact(convertStringSequence(input.exact()));
+    if (input.hasIdeal())
+      output.setIdeal(convertStringSequence(input.ideal()));
+    outputUnion.setConstrainDOMStringParameters(output);
   }
   return outputUnion;
 }
 
 BooleanOrConstrainBooleanParameters convertBoolean(
-    const BooleanConstraint& input) {
+    const BooleanConstraint& input,
+    NakedValueDisposition nakedTreatment) {
   BooleanOrConstrainBooleanParameters outputUnion;
-  if (input.hasExact()) {
+  if (useNakedNonNumeric(input, nakedTreatment)) {
+    outputUnion.setBoolean(getNakedValue<bool>(input, nakedTreatment));
+  } else if (!input.isEmpty()) {
     ConstrainBooleanParameters output;
     if (input.hasExact())
       output.setExact(input.exact());
     if (input.hasIdeal())
       output.setIdeal(input.ideal());
     outputUnion.setConstrainBooleanParameters(output);
-  } else if (input.hasIdeal()) {
-    outputUnion.setBoolean(input.ideal());
   }
   return outputUnion;
 }
 
 void convertConstraintSet(const WebMediaTrackConstraintSet& input,
+                          NakedValueDisposition nakedTreatment,
                           MediaTrackConstraintSet& output) {
   if (!input.width.isEmpty())
-    output.setWidth(convertLong(input.width));
+    output.setWidth(convertLong(input.width, nakedTreatment));
   if (!input.height.isEmpty())
-    output.setHeight(convertLong(input.height));
+    output.setHeight(convertLong(input.height, nakedTreatment));
   if (!input.aspectRatio.isEmpty())
-    output.setAspectRatio(convertDouble(input.aspectRatio));
+    output.setAspectRatio(convertDouble(input.aspectRatio, nakedTreatment));
   if (!input.frameRate.isEmpty())
-    output.setFrameRate(convertDouble(input.frameRate));
+    output.setFrameRate(convertDouble(input.frameRate, nakedTreatment));
   if (!input.facingMode.isEmpty())
-    output.setFacingMode(convertString(input.facingMode));
+    output.setFacingMode(convertString(input.facingMode, nakedTreatment));
   if (!input.volume.isEmpty())
-    output.setVolume(convertDouble(input.volume));
+    output.setVolume(convertDouble(input.volume, nakedTreatment));
   if (!input.sampleRate.isEmpty())
-    output.setSampleRate(convertLong(input.sampleRate));
+    output.setSampleRate(convertLong(input.sampleRate, nakedTreatment));
   if (!input.sampleSize.isEmpty())
-    output.setSampleSize(convertLong(input.sampleSize));
-  if (!input.echoCancellation.isEmpty())
-    output.setEchoCancellation(convertBoolean(input.echoCancellation));
+    output.setSampleSize(convertLong(input.sampleSize, nakedTreatment));
+  if (!input.echoCancellation.isEmpty()) {
+    output.setEchoCancellation(
+        convertBoolean(input.echoCancellation, nakedTreatment));
+  }
   if (!input.latency.isEmpty())
-    output.setLatency(convertDouble(input.latency));
+    output.setLatency(convertDouble(input.latency, nakedTreatment));
   if (!input.channelCount.isEmpty())
-    output.setChannelCount(convertLong(input.channelCount));
+    output.setChannelCount(convertLong(input.channelCount, nakedTreatment));
   if (!input.deviceId.isEmpty())
-    output.setDeviceId(convertString(input.deviceId));
+    output.setDeviceId(convertString(input.deviceId, nakedTreatment));
   if (!input.groupId.isEmpty())
-    output.setGroupId(convertString(input.groupId));
+    output.setGroupId(convertString(input.groupId, nakedTreatment));
   // TODO(hta): Decide the future of the nonstandard constraints.
   // If they go forward, they need to be added here.
   // https://crbug.com/605673
@@ -794,12 +904,13 @@ void convertConstraints(const WebMediaConstraints& input,
                         MediaTrackConstraints& output) {
   if (input.isNull())
     return;
-  convertConstraintSet(input.basic(), output);
+  convertConstraintSet(input.basic(), NakedValueDisposition::kTreatAsIdeal,
+                       output);
   HeapVector<MediaTrackConstraintSet> advancedVector;
   for (const auto& it : input.advanced()) {
     MediaTrackConstraintSet element;
-    convertConstraintSet(it, element);
-    advancedVector.append(element);
+    convertConstraintSet(it, NakedValueDisposition::kTreatAsExact, element);
+    advancedVector.push_back(element);
   }
   if (!advancedVector.isEmpty())
     output.setAdvanced(advancedVector);

@@ -108,6 +108,9 @@ TEST_F(ModelTypeTest, ModelTypeHistogramMapping) {
     // UMA_HISTOGRAM that use this mapping specify MODEL_TYPE_COUNT as the
     // maximum possible value.  If you break this assumption, you should update
     // those histograms.
+    if (it.Get() == NOTES)
+      continue;
+
     EXPECT_LT(histogram_value, MODEL_TYPE_COUNT);
   }
 }
@@ -149,6 +152,9 @@ TEST_F(ModelTypeTest, ModelTypeToRootTagValues) {
     std::string root_tag = ModelTypeToRootTag(model_type);
     if (IsProxyType(model_type)) {
       EXPECT_EQ(root_tag, std::string());
+    } else if (model_type == NOTES) {
+      EXPECT_FALSE(base::StartsWith(root_tag, "google_chrome_",
+                                   base::CompareCase::INSENSITIVE_ASCII));
     } else if (IsRealDataType(model_type)) {
       EXPECT_TRUE(base::StartsWith(root_tag, "google_chrome_",
                                    base::CompareCase::INSENSITIVE_ASCII));

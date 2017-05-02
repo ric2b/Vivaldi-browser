@@ -5,16 +5,15 @@
 package org.chromium.chrome.browser.tabmodel;
 
 import android.app.Activity;
+import android.support.test.filters.SmallTest;
 import android.test.InstrumentationTestCase;
 import android.test.UiThreadTest;
-import android.test.suitebuilder.annotation.SmallTest;
-import android.test.suitebuilder.annotation.Smoke;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.EmbedContentViewActivity;
+import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager.TabModelSelectorFactory;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
@@ -34,7 +33,7 @@ public class TabWindowManagerTest extends InstrumentationTestCase {
     };
 
     private ChromeActivity buildActivity() {
-        ChromeActivity activity = new EmbedContentViewActivity();
+        ChromeActivity activity = new CustomTabActivity();
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.CREATED);
         return activity;
     }
@@ -48,7 +47,7 @@ public class TabWindowManagerTest extends InstrumentationTestCase {
     /**
      * Test that a single {@link Activity} can request a {@link TabModelSelector}.
      */
-    @Smoke
+    @SmallTest
     @Feature({"Multiwindow"})
     @UiThreadTest
     public void testSingleActivity() {

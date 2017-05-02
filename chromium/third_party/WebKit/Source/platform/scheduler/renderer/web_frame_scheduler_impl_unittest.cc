@@ -57,23 +57,29 @@ class WebFrameSchedulerImplTest : public testing::Test {
 };
 
 namespace {
-class RepeatingTask : public blink::WebTaskRunner::Task {
- public:
-  RepeatingTask(blink::WebTaskRunner* web_task_runner, int* run_count)
-      : web_task_runner_(web_task_runner), run_count_(run_count) {}
 
-  ~RepeatingTask() override {}
+void runRepeatingTask(RefPtr<WebTaskRunner> task_runner, int* run_count);
 
-  void run() override {
-    (*run_count_)++;
-    web_task_runner_->postDelayedTask(
-        BLINK_FROM_HERE, new RepeatingTask(web_task_runner_, run_count_), 1.0);
-  }
+std::unique_ptr<WTF::Closure> makeRepeatingTask(
+    RefPtr<blink::WebTaskRunner> task_runner,
+    int* run_count) {
+  return WTF::bind(&runRepeatingTask, WTF::passed(std::move(task_runner)),
+                   WTF::unretained(run_count));
+}
 
- private:
-  blink::WebTaskRunner* web_task_runner_;  // NOT OWNED
-  int* run_count_;                         // NOT OWNED
-};
+void runRepeatingTask(RefPtr<WebTaskRunner> task_runner, int* run_count) {
+  ++*run_count;
+
+  WebTaskRunner* task_runner_ptr = task_runner.get();
+  task_runner_ptr->postDelayedTask(
+      BLINK_FROM_HERE, makeRepeatingTask(std::move(task_runner), run_count),
+      1.0);
+}
+
+void IncrementCounter(int* counter) {
+  ++*counter;
+}
+
 }  // namespace
 
 TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInForeground) {
@@ -82,7 +88,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInForeground) {
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -96,9 +102,17 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInBackground) {
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
+  mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(1000, run_count);
+
+  // The task queue isn't throttled at all until it's been in the background for
+  // a 10 second grace period.
+  clock_->Advance(base::TimeDelta::FromSeconds(10));
+
+  run_count = 0;
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
   EXPECT_EQ(1, run_count);
 }
@@ -110,7 +124,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_SameOrigin) {
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -125,7 +139,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameVisible_CrossOrigin) {
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -140,7 +154,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_CrossOrigin) {
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -154,14 +168,23 @@ TEST_F(WebFrameSchedulerImplTest, PageInBackground_ThrottlingDisabled) {
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
+  mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
+  EXPECT_EQ(1000, run_count);
+
+  // The task queue isn't throttled at all until it's been in the background for
+  // a 10 second grace period.
+  clock_->Advance(base::TimeDelta::FromSeconds(10));
+
+  run_count = 0;
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
   EXPECT_EQ(1, run_count);
 }
 
-TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_CrossOrigin_ThrottlingDisabled) {
+TEST_F(WebFrameSchedulerImplTest,
+       RepeatingTimer_FrameHidden_CrossOrigin_ThrottlingDisabled) {
   RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(false);
   web_frame_scheduler_->setFrameVisible(false);
   web_frame_scheduler_->setCrossOrigin(true);
@@ -169,11 +192,33 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_CrossOrigin_Throttl
   int run_count = 0;
   web_frame_scheduler_->timerTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE,
-      new RepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
+      makeRepeatingTask(web_frame_scheduler_->timerTaskRunner(), &run_count),
       1.0);
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
   EXPECT_EQ(1000, run_count);
+}
+
+TEST_F(WebFrameSchedulerImplTest, SuspendAndResume) {
+  int counter = 0;
+  web_frame_scheduler_->loadingTaskRunner()->postTask(
+      BLINK_FROM_HERE, WTF::bind(&IncrementCounter, WTF::unretained(&counter)));
+  web_frame_scheduler_->timerTaskRunner()->postTask(
+      BLINK_FROM_HERE, WTF::bind(&IncrementCounter, WTF::unretained(&counter)));
+  web_frame_scheduler_->unthrottledTaskRunner()->postTask(
+      BLINK_FROM_HERE, WTF::bind(&IncrementCounter, WTF::unretained(&counter)));
+
+  web_frame_scheduler_->setSuspended(true);
+
+  EXPECT_EQ(0, counter);
+  mock_task_runner_->RunUntilIdle();
+  EXPECT_EQ(1, counter);
+
+  web_frame_scheduler_->setSuspended(false);
+
+  EXPECT_EQ(1, counter);
+  mock_task_runner_->RunUntilIdle();
+  EXPECT_EQ(3, counter);
 }
 
 }  // namespace scheduler

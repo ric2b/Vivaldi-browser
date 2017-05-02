@@ -95,7 +95,7 @@ enum RTCIceConnectionState {
 
     // https://w3c.github.io/webrtc-pc/#legacy-interface-extensions
     // These methods return Promise<void> because having Promise-based versions requires that all overloads return Promises.
-    [CallWith=ScriptState] Promise<void> createOffer(RTCSessionDescriptionCallback successCallback, RTCPeerConnectionErrorCallback failureCallback, optional Dictionary rtcOfferOptions);
+    [CallWith=ScriptState, RaisesException] Promise<void> createOffer(RTCSessionDescriptionCallback successCallback, RTCPeerConnectionErrorCallback failureCallback, optional Dictionary rtcOfferOptions);
     // TODO(guidou): There should be no mediaConstraints argument.
     [CallWith=ScriptState] Promise<void> createAnswer(RTCSessionDescriptionCallback successCallback, RTCPeerConnectionErrorCallback failureCallback, optional Dictionary mediaConstraints);
     [CallWith=ScriptState] Promise<void> setLocalDescription(RTCSessionDescriptionInit description, VoidCallback successCallback, [Default=Undefined] optional RTCPeerConnectionErrorCallback failureCallback);
@@ -107,7 +107,10 @@ enum RTCIceConnectionState {
     // non-optional) argument, and there should be a third failureCallback
     // argument.
     [CallWith=ScriptState, LegacyInterfaceTypeChecking] Promise<void> getStats(RTCStatsCallback successCallback, optional MediaStreamTrack? selector);
-    [CallWith=ScriptState, RuntimeEnabled=RTCPeerConnectionNewGetStats] Promise<RTCStatsReport> getStats(optional MediaStreamTrack? selector);
+    // TODO(hbos): The spec has an optional |selector| argument that is not
+    // supported yet. There is a discussion about what to do with it (clarify
+    // spec, remove it or change it?): https://github.com/w3c/webrtc-stats/issues/116
+    [CallWith=ScriptState, RuntimeEnabled=RTCPeerConnectionNewGetStats] Promise<RTCStatsReport> getStats();
 
     // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
     // TODO(guidou): The label argument should have [TreatNullAs=EmptyString]

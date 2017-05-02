@@ -11,8 +11,7 @@
 #include "cc/playback/display_item_list.h"
 #include "third_party/WebKit/public/platform/WebDisplayItemList.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/skia/include/core/SkRegion.h"
-#include "third_party/skia/include/core/SkXfermode.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "ui/gfx/geometry/point_f.h"
 
 class SkColorFilter;
@@ -48,7 +47,6 @@ class WebDisplayItemListImpl : public blink::WebDisplayItemList {
       const blink::WebVector<SkRRect>& rounded_clip_rects) override;
   void appendEndClipItem() override;
   void appendClipPathItem(const SkPath& clip_path,
-                          SkRegion::Op clip_op,
                           bool antialias) override;
   void appendEndClipPathItem() override;
   void appendFloatClipItem(const blink::WebFloatRect& clip_rect) override;
@@ -56,7 +54,7 @@ class WebDisplayItemListImpl : public blink::WebDisplayItemList {
   void appendTransformItem(const SkMatrix44& matrix) override;
   void appendEndTransformItem() override;
   void appendCompositingItem(float opacity,
-                             SkXfermode::Mode,
+                             SkBlendMode,
                              SkRect* bounds,
                              SkColorFilter*) override;
   void appendEndCompositingItem() override;
@@ -69,6 +67,8 @@ class WebDisplayItemListImpl : public blink::WebDisplayItemList {
   void appendEndScrollItem() override;
 
   void setIsSuitableForGpuRasterization(bool isSuitable) override;
+
+  void setImpliedColorSpace(const gfx::ColorSpace& color_space) override;
 
  private:
   scoped_refptr<cc::DisplayItemList> display_item_list_;

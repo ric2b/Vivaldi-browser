@@ -17,26 +17,19 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread.h"
+#include "base/threading/thread_checker.h"
 #include "components/invalidation/public/invalidation_handler.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/weak_handle.h"
-#include "components/sync/driver/backend_data_type_configurer.h"
-#include "components/sync/driver/glue/sync_backend_host.h"
 #include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
+#include "components/sync/engine/model_type_configurer.h"
+#include "components/sync/engine/sync_engine.h"
 #include "components/sync/engine/sync_manager.h"
 #include "components/sync/protocol/encryption.pb.h"
 #include "components/sync/protocol/sync_protocol_error.h"
-
-class GURL;
-
-namespace base {
-class MessageLoop;
-}  // base
 
 namespace invalidation {
 class InvalidationService;
@@ -48,47 +41,23 @@ class ChangeProcessor;
 class SyncBackendHostCore;
 class SyncBackendRegistrar;
 class SyncClient;
-class SyncManagerFactory;
 class SyncPrefs;
-class UnrecoverableErrorHandler;
-struct DoInitializeOptions;
 
-// The only real implementation of the SyncBackendHost.  See that interface's
+// The only real implementation of the SyncEngine. See that interface's
 // definition for documentation of public methods.
-class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
+class SyncBackendHostImpl : public SyncEngine, public InvalidationHandler {
  public:
   typedef SyncStatus Status;
 
-  // Create a SyncBackendHost with a reference to the |frontend| that
-  // it serves and communicates to via the SyncFrontend interface (on
-  // the same thread it used to call the constructor).  Must outlive
-  // |sync_prefs|.
-  SyncBackendHostImpl(
-      const std::string& name,
-      SyncClient* sync_client,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      invalidation::InvalidationService* invalidator,
-      const base::WeakPtr<SyncPrefs>& sync_prefs,
-      const base::FilePath& sync_folder);
+  SyncBackendHostImpl(const std::string& name,
+                      SyncClient* sync_client,
+                      invalidation::InvalidationService* invalidator,
+                      const base::WeakPtr<SyncPrefs>& sync_prefs,
+                      const base::FilePath& sync_data_folder);
   ~SyncBackendHostImpl() override;
 
-  // SyncBackendHost implementation.
-  void Initialize(
-      SyncFrontend* frontend,
-      base::Thread* sync_thread,
-      const WeakHandle<JsEventHandler>& event_handler,
-      const GURL& service_url,
-      const std::string& sync_user_agent,
-      const SyncCredentials& credentials,
-      bool delete_sync_data_folder,
-      bool enable_local_sync_backend,
-      const base::FilePath& local_sync_backend_folder,
-      std::unique_ptr<SyncManagerFactory> sync_manager_factory,
-      const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
-      const base::Closure& report_unrecoverable_error_function,
-      const HttpPostProviderFactoryGetter& http_post_provider_factory_getter,
-      std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state)
-      override;
+  // SyncEngine implementation.
+  void Initialize(InitParams params) override;
   void TriggerRefresh(const ModelTypeSet& types) override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
   void StartSyncingWithServer() override;
@@ -98,12 +67,7 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
       WARN_UNUSED_RESULT;
   void StopSyncingForShutdown() override;
   void Shutdown(ShutdownReason reason) override;
-  void UnregisterInvalidationIds() override;
-  ModelTypeSet ConfigureDataTypes(
-      ConfigureReason reason,
-      const DataTypeConfigStateMap& config_state_map,
-      const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task,
-      const base::Callback<void()>& retry_callback) override;
+  void ConfigureDataTypes(ConfigureParams params) override;
   void ActivateDirectoryDataType(ModelType type,
                                  ModelSafeGroup group,
                                  ChangeProcessor* change_processor) override;
@@ -114,7 +78,6 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   void EnableEncryptEverything() override;
   UserShare* GetUserShare() const override;
   Status GetDetailedStatus() override;
-  SyncCycleSnapshot GetLastCycleSnapshot() const override;
   bool HasUnsyncedItems() const override;
   bool IsNigoriEnabled() const override;
   PassphraseType GetPassphraseType() const override;
@@ -141,22 +104,6 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   // The types and functions below are protected so that test
   // subclasses can use them.
 
-  // Allows tests to perform alternate core initialization work.
-  virtual void InitCore(std::unique_ptr<DoInitializeOptions> options);
-
-  // Request the syncer to reconfigure with the specfied params.
-  // Virtual for testing.
-  virtual void RequestConfigureSyncer(
-      ConfigureReason reason,
-      ModelTypeSet to_download,
-      ModelTypeSet to_purge,
-      ModelTypeSet to_journal,
-      ModelTypeSet to_unapply,
-      ModelTypeSet to_ignore,
-      const ModelSafeRoutingInfo& routing_info,
-      const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task,
-      const base::Closure& retry_callback);
-
   // Called when the syncer has finished performing a configuration.
   void FinishConfigureDataTypesOnFrontendLoop(
       const ModelTypeSet enabled_types,
@@ -170,14 +117,15 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   // |model_type_connector| is our ModelTypeConnector, which is owned because in
   // production it is a proxy object to the real ModelTypeConnector.
   virtual void HandleInitializationSuccessOnFrontendLoop(
+      ModelTypeSet initial_types,
       const WeakHandle<JsBackend> js_backend,
       const WeakHandle<DataTypeDebugInfoListener> debug_info_listener,
       std::unique_ptr<ModelTypeConnector> model_type_connector,
       const std::string& cache_guid);
 
-  // Forwards a ProtocolEvent to the frontend.  Will not be called unless a
-  // call to SetForwardProtocolEvents() explicitly requested that we start
-  // forwarding these events.
+  // Forwards a ProtocolEvent to the host. Will not be called unless a call to
+  // SetForwardProtocolEvents() explicitly requested that we start forwarding
+  // these events.
   void HandleProtocolEventOnFrontendLoop(std::unique_ptr<ProtocolEvent> event);
 
   // Forwards a directory commit counter update to the frontend loop.  Will not
@@ -206,7 +154,11 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   void UpdateInvalidationVersions(
       const std::map<ModelType, int64_t>& invalidation_versions);
 
-  SyncFrontend* frontend() { return frontend_; }
+  SyncEngineHost* host() { return host_; }
+
+  // Forwards an invalidation to the sync manager.
+  void DoOnIncomingInvalidation(
+      const syncer::ObjectIdInvalidationMap& invalidation_map) override;
 
  private:
   friend class SyncBackendHostCore;
@@ -292,17 +244,10 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   void ClearServerDataDoneOnFrontendLoop(
       const SyncManager::ClearServerDataCallback& frontend_callback);
 
-  // A reference to the TaskRUnner used to construct |this|, so we know how to
-  // safely talk back to the SyncFrontend.
-  scoped_refptr<base::SingleThreadTaskRunner> const frontend_task_runner_;
-
   SyncClient* const sync_client_;
 
-  // A pointer to the sync thread.
-  base::Thread* sync_thread_;
-
-  // The UI thread's task runner.
-  const scoped_refptr<base::SingleThreadTaskRunner> ui_thread_;
+  // The task runner where all the sync engine operations happen.
+  scoped_refptr<base::SingleThreadTaskRunner> sync_task_runner_;
 
   // Name used for debugging (set from profile_->GetDebugName()).
   const std::string name_;
@@ -316,14 +261,16 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   // object is owned because in production code it is a proxy object.
   std::unique_ptr<ModelTypeConnector> model_type_connector_;
 
-  bool initialized_;
+  bool initialized_ = false;
 
   const base::WeakPtr<SyncPrefs> sync_prefs_;
 
-  std::unique_ptr<SyncBackendRegistrar> registrar_;
+  // The host which we serve (and are owned by). Set in Initialize() and nulled
+  // out in StopSyncingForShutdown().
+  SyncEngineHost* host_ = nullptr;
 
-  // The frontend which we serve (and are owned by).
-  SyncFrontend* frontend_;
+  // A pointer to the registrar; owned by |core_|.
+  SyncBackendRegistrar* registrar_ = nullptr;
 
   // We cache the cryptographer's pending keys whenever NotifyPassphraseRequired
   // is called. This way, before the UI calls SetDecryptionPassphrase on the
@@ -339,17 +286,17 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   // in the nigori node. Updated whenever a new nigori node arrives or the user
   // manually changes their passphrase state. Cached so we can synchronously
   // check it from the UI thread.
-  PassphraseType cached_passphrase_type_;
+  PassphraseType cached_passphrase_type_ = PassphraseType::IMPLICIT_PASSPHRASE;
 
   // If an explicit passphrase is in use, the time at which the passphrase was
   // first set (if available).
   base::Time cached_explicit_passphrase_time_;
 
-  // UI-thread cache of the last SyncCycleSnapshot received from syncapi.
-  SyncCycleSnapshot last_snapshot_;
-
   invalidation::InvalidationService* invalidator_;
-  bool invalidation_handler_registered_;
+  bool invalidation_handler_registered_ = false;
+
+  // Checks that we're on the same thread this was constructed on (UI thread).
+  base::ThreadChecker thread_checker_;
 
   base::WeakPtrFactory<SyncBackendHostImpl> weak_ptr_factory_;
 

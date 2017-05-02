@@ -30,7 +30,6 @@ class ScriptWrappable;
   X(MessageEvent, CachedData)           \
   X(MutationObserver, Callback)         \
   X(PerformanceObserver, Callback)      \
-  X(PrivateScriptRunner, IsInitialized) \
   X(SameObject, NotificationActions)    \
   X(SameObject, NotificationData)       \
   X(SameObject, NotificationVibrate)    \
@@ -125,7 +124,7 @@ class CORE_EXPORT V8PrivateProperty {
   };
 
   static std::unique_ptr<V8PrivateProperty> create() {
-    return wrapUnique(new V8PrivateProperty());
+    return WTF::wrapUnique(new V8PrivateProperty());
   }
 
 #define V8_PRIVATE_PROPERTY_DEFINE_GETTER(InterfaceName, KeyName)              \

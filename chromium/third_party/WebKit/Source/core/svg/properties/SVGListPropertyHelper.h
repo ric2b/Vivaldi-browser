@@ -32,7 +32,7 @@
 #define SVGListPropertyHelper_h
 
 #include "bindings/core/v8/ExceptionMessages.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/svg/SVGAnimationElement.h"
 #include "core/svg/properties/SVGPropertyHelper.h"
@@ -100,7 +100,7 @@ class SVGListPropertyHelper : public SVGPropertyHelper<Derived> {
 
   void append(ItemPropertyType* newItem) {
     ASSERT(newItem);
-    m_values.append(newItem);
+    m_values.push_back(newItem);
     newItem->setOwnerList(this);
   }
 

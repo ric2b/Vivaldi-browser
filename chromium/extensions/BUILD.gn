@@ -128,8 +128,8 @@ static_library("test_support") {
     "//base",
     "//components/cast_certificate:test_support",
     "//components/guest_view/browser:test_support",
-    "//components/pref_registry:test_support",
     "//components/prefs:test_support",
+    "//components/sync_preferences:test_support",
     "//content/public/common",
     "//content/test:test_support",
     "//extensions/browser",
@@ -210,7 +210,6 @@ test("extensions_unittests") {
     "//extensions/renderer:unit_tests",
     "//extensions/shell:unit_tests",
     "//extensions/utility:unit_tests",
-    "//mojo/edk/test:test_support",
     "//ui/gl:test_support",
   ]
 
@@ -270,7 +269,6 @@ source_set("chrome_extensions_browsertests") {
     "//base:i18n",
     "//base/test:test_support",
     "//chrome/browser",
-    "//chrome/browser/resources:extension_resource_demo",
     "//chrome/common/extensions/api",
     "//chrome/renderer",
     "//components/autofill/content/browser:risk_proto",

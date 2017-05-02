@@ -6,34 +6,27 @@
 #define SERVICES_UI_WS_FRAME_GENERATOR_H_
 
 #include <memory>
-#include <unordered_map>
 
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "cc/ipc/display_compositor.mojom.h"
 #include "cc/surfaces/frame_sink_id.h"
-#include "cc/surfaces/local_frame_id.h"
-#include "cc/surfaces/surface_sequence.h"
-#include "cc/surfaces/surface_sequence_generator.h"
+#include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/surface_id_allocator.h"
+#include "cc/surfaces/surface_reference.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "services/ui/ws/ids.h"
+#include "services/ui/ws/server_window_delegate.h"
 #include "services/ui/ws/server_window_tracker.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace cc {
-class CompositorFrame;
 class RenderPass;
 class SurfaceId;
 }
 
-namespace gpu {
-class GpuChannelHost;
-}
-
 namespace ui {
-
-class DisplayCompositor;
-
 namespace ws {
 
 namespace test {
@@ -51,10 +44,16 @@ class FrameGenerator : public ServerWindowTracker,
   FrameGenerator(FrameGeneratorDelegate* delegate, ServerWindow* root_window);
   ~FrameGenerator() override;
 
-  void OnGpuChannelEstablished(scoped_refptr<gpu::GpuChannelHost> gpu_channel);
+  void set_device_scale_factor(float device_scale_factor) {
+    device_scale_factor_ = device_scale_factor;
+  }
 
   // Schedules a redraw for the provided region.
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget);
+
+  // If |window| corresponds to the active WM for the display then update
+  // |window_manager_surface_id_|.
+  void OnSurfaceCreated(const cc::SurfaceId& surface_id, ServerWindow* window);
 
  private:
   friend class ui::ws::test::FrameGeneratorTest;
@@ -63,59 +62,29 @@ class FrameGenerator : public ServerWindowTracker,
   void DidReceiveCompositorFrameAck() override;
   void OnBeginFrame(const cc::BeginFrameArgs& begin_frame_arags) override;
   void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
+  void WillDrawSurface() override;
 
   // Generates the CompositorFrame.
   cc::CompositorFrame GenerateCompositorFrame(const gfx::Rect& output_rect);
 
-  // DrawWindowTree recursively visits ServerWindows, creating a SurfaceDrawQuad
-  // for each that lacks one.
-  void DrawWindowTree(cc::RenderPass* pass,
-                      ServerWindow* window,
-                      const gfx::Vector2d& parent_to_root_origin_offset,
-                      float opacity);
-
-  // Adds a reference to the current cc::Surface of the provided
-  // |window_compositor_frame_sink|. If an existing reference is held with a
-  // different LocalFrameId then release that reference first. This is called on
-  // each ServerWindowCompositorFrameSink as FrameGenerator walks the window
-  // tree to generate a CompositorFrame. This is done to make sure that the
-  // window surfaces are retained for the entirety of the time between
-  // submission of the top-level frame to drawing the frame to screen.
-  // TODO(fsamuel, kylechar): This will go away once we get surface lifetime
-  // management.
-  void AddOrUpdateSurfaceReference(mojom::CompositorFrameSinkType type,
-                                   ServerWindow* window);
-
-  // Releases any retained references for the provided FrameSink.
-  // TODO(fsamuel, kylechar): This will go away once we get surface lifetime
-  // management.
-  void ReleaseFrameSinkReference(const cc::FrameSinkId& frame_sink_id);
-
-  // Releases all retained references to surfaces.
-  // TODO(fsamuel, kylechar): This will go away once we get surface lifetime
-  // management.
-  void ReleaseAllSurfaceReferences();
-
-  ui::DisplayCompositor* GetDisplayCompositor();
+  // DrawWindow creates SurfaceDrawQuad for the provided ServerWindow and
+  // appends it to the provided cc::RenderPass.
+  void DrawWindow(cc::RenderPass* pass, ServerWindow* window);
 
   // ServerWindowObserver implementation.
   void OnWindowDestroying(ServerWindow* window) override;
 
   FrameGeneratorDelegate* delegate_;
-  cc::FrameSinkId frame_sink_id_;
   ServerWindow* const root_window_;
-  cc::SurfaceSequenceGenerator surface_sequence_generator_;
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
+  float device_scale_factor_ = 1.f;
 
+  gfx::Size last_submitted_frame_size_;
+  cc::LocalFrameId local_frame_id_;
+  cc::SurfaceIdAllocator id_allocator_;
   cc::mojom::MojoCompositorFrameSinkPtr compositor_frame_sink_;
-  gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
+  cc::mojom::DisplayPrivatePtr display_private_;
 
-  struct SurfaceDependency {
-    cc::LocalFrameId local_frame_id;
-    cc::SurfaceSequence sequence;
-  };
-  std::unordered_map<cc::FrameSinkId, SurfaceDependency, cc::FrameSinkIdHash>
-      dependencies_;
+  cc::SurfaceId window_manager_surface_id_;
 
   mojo::Binding<cc::mojom::MojoCompositorFrameSinkClient> binding_;
 

@@ -37,10 +37,8 @@
 
 #include "platform/image-decoders/jpeg/JPEGImageDecoder.h"
 
-#include "platform/Histogram.h"
 #include "platform/PlatformInstrumentation.h"
 #include "wtf/PtrUtil.h"
-#include "wtf/Threading.h"
 #include <memory>
 
 extern "C" {
@@ -430,15 +428,6 @@ class JPEGImageReader final {
 
         m_state = JPEG_START_DECOMPRESS;
 
-        {
-          DEFINE_THREAD_SAFE_STATIC_LOCAL(
-              blink::CustomCountHistogram, dimensionsLocationHistogram,
-              new blink::CustomCountHistogram(
-                  "Blink.DecodedImage.EffectiveDimensionsLocation.JPEG", 0,
-                  50000, 50));
-          dimensionsLocationHistogram.count(m_nextReadPosition -
-                                            m_info.src->bytes_in_buffer - 1);
-        }
         // We can fill in the size now that the header is available.
         if (!m_decoder->setSize(m_info.image_width, m_info.image_height))
           return false;
@@ -463,8 +452,8 @@ class JPEGImageReader final {
           JOCTET* profile = nullptr;
           unsigned profileLength = 0;
           if (read_icc_profile(info(), &profile, &profileLength)) {
-            decoder()->setColorProfileAndComputeTransform(
-                reinterpret_cast<char*>(profile), profileLength);
+            decoder()->setEmbeddedColorProfile(reinterpret_cast<char*>(profile),
+                                               profileLength);
             free(profile);
           }
           if (decoder()->colorTransform()) {
@@ -721,9 +710,9 @@ void term_source(j_decompress_ptr jd) {
 }
 
 JPEGImageDecoder::JPEGImageDecoder(AlphaOption alphaOption,
-                                   ColorSpaceOption colorOptions,
+                                   const ColorBehavior& colorBehavior,
                                    size_t maxDecodedBytes)
-    : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes) {}
+    : ImageDecoder(alphaOption, colorBehavior, maxDecodedBytes) {}
 
 JPEGImageDecoder::~JPEGImageDecoder() {}
 
@@ -945,7 +934,7 @@ bool JPEGImageDecoder::outputScanlines() {
            static_cast<JDIMENSION>(m_decodedSize.height()));
 
     if (!buffer.setSizeAndColorSpace(info->output_width, info->output_height,
-                                     colorSpace()))
+                                     colorSpaceForSkImages()))
       return setFailed();
 
     // The buffer is transparent outside the decoded area while the image is
@@ -1008,7 +997,7 @@ void JPEGImageDecoder::decode(bool onlySize) {
     return;
 
   if (!m_reader) {
-    m_reader = makeUnique<JPEGImageReader>(this);
+    m_reader = WTF::makeUnique<JPEGImageReader>(this);
     m_reader->setData(m_data.get());
   }
 

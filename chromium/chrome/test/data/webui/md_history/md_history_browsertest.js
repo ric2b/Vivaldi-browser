@@ -66,7 +66,6 @@ MaterialHistoryBrowserServiceTest.prototype = {
 };
 
 TEST_F('MaterialHistoryBrowserServiceTest', 'All', function() {
-  md_history.browser_service_test.registerTests();
   mocha.run();
 });
 
@@ -81,7 +80,6 @@ MaterialHistoryDrawerTest.prototype = {
 };
 
 TEST_F('MaterialHistoryDrawerTest', 'All', function() {
-  md_history.history_drawer_test.registerTests();
   mocha.run();
 });
 
@@ -96,7 +94,6 @@ MaterialHistoryGroupedListTest.prototype = {
 };
 
 TEST_F('MaterialHistoryGroupedListTest', 'All', function() {
-  md_history.history_grouped_list_test.registerTests();
   mocha.run();
 });
 
@@ -111,7 +108,6 @@ MaterialHistoryItemTest.prototype = {
 };
 
 TEST_F('MaterialHistoryItemTest', 'All', function() {
-  md_history.history_item_test.registerTests();
   mocha.run();
 });
 
@@ -126,7 +122,6 @@ MaterialHistoryListTest.prototype = {
 };
 
 TEST_F('MaterialHistoryListTest', 'All', function() {
-  md_history.history_list_test.registerTests();
   mocha.run();
 });
 
@@ -141,7 +136,6 @@ MaterialHistoryMetricsTest.prototype = {
 };
 
 TEST_F('MaterialHistoryMetricsTest', 'All', function() {
-  md_history.history_metrics_test.registerTests();
   mocha.run();
 });
 
@@ -156,7 +150,6 @@ MaterialHistoryOverflowMenuTest.prototype = {
 };
 
 TEST_F('MaterialHistoryOverflowMenuTest', 'All', function() {
-  md_history.history_overflow_menu_test.registerTests();
   mocha.run();
 });
 
@@ -218,9 +211,7 @@ MaterialHistorySyncedTabsTest.prototype = {
   ]),
 };
 
-// Fails on Mac, http://crbug.com/640862
-TEST_F('MaterialHistorySyncedTabsTest', 'DISABLED_All', function() {
-  md_history.history_synced_tabs_test.registerTests();
+TEST_F('MaterialHistorySyncedTabsTest', 'All', function() {
   mocha.run();
 });
 
@@ -241,7 +232,6 @@ MaterialHistorySupervisedUserTest.prototype = {
 };
 
 TEST_F('MaterialHistorySupervisedUserTest', 'All', function() {
-  md_history.history_supervised_user_test.registerTests();
   mocha.run();
 });
 
@@ -255,12 +245,6 @@ MaterialHistoryToolbarTest.prototype = {
   ]),
 };
 
-TEST_F('MaterialHistoryToolbarTest', 'Basic', function() {
-  md_history.history_toolbar_test.registerTests();
-  mocha.run();
-});
-
-TEST_F('MaterialHistoryToolbarTest', 'Focus', function() {
-  md_history.history_toolbar_focus_test.registerTests();
+TEST_F('MaterialHistoryToolbarTest', 'All', function() {
   mocha.run();
 });

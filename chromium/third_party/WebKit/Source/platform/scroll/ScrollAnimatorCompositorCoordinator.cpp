@@ -26,7 +26,6 @@ ScrollAnimatorCompositorCoordinator::ScrollAnimatorCompositorCoordinator()
       m_compositorAnimationId(0),
       m_compositorAnimationGroupId(0),
       m_implOnlyAnimationTakeover(false) {
-  ThreadState::current()->registerPreFinalizer(this);
   m_compositorPlayer = CompositorAnimationPlayer::create();
   ASSERT(m_compositorPlayer);
   m_compositorPlayer->setAnimationDelegate(this);
@@ -256,18 +255,17 @@ void ScrollAnimatorCompositorCoordinator::updateImplOnlyCompositorAnimations() {
     return;
 
   GraphicsLayer* layer = getScrollableArea()->layerForScrolling();
-  CompositorAnimationTimeline* timeline =
-      getScrollableArea()->compositorAnimationTimeline();
-  if (layer && timeline && !timeline->compositorAnimationHost().isNull()) {
-    CompositorAnimationHost host = timeline->compositorAnimationHost();
-    cc::ElementId elementId = layer->platformLayer()->elementId();
+  CompositorAnimationHost* host =
+      getScrollableArea()->compositorAnimationHost();
+  if (layer && host) {
+    CompositorElementId elementId = layer->platformLayer()->elementId();
     if (!m_implOnlyAnimationAdjustment.isZero()) {
-      host.adjustImplOnlyScrollOffsetAnimation(
+      host->adjustImplOnlyScrollOffsetAnimation(
           elementId, gfx::Vector2dF(m_implOnlyAnimationAdjustment.width(),
                                     m_implOnlyAnimationAdjustment.height()));
     }
     if (m_implOnlyAnimationTakeover)
-      host.takeOverImplOnlyScrollOffsetAnimation(elementId);
+      host->takeOverImplOnlyScrollOffsetAnimation(elementId);
   }
   m_implOnlyAnimationAdjustment = IntSize();
   m_implOnlyAnimationTakeover = false;

@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -41,7 +42,8 @@
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
@@ -186,9 +188,7 @@ PushMessagingServiceImpl::PushMessagingServiceImpl(Profile* profile)
     : profile_(profile),
       push_subscription_count_(0),
       pending_push_subscription_count_(0),
-#if defined(ENABLE_NOTIFICATIONS)
       notification_manager_(profile),
-#endif
       push_messaging_service_observer_(PushMessagingServiceObserver::Create()),
       weak_factory_(this) {
   DCHECK(profile);
@@ -375,7 +375,7 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
     // notifications).
     case content::PUSH_DELIVERY_STATUS_SUCCESS:
     case content::PUSH_DELIVERY_STATUS_EVENT_WAITUNTIL_REJECTED:
-#if defined(ENABLE_NOTIFICATIONS)
+    case content::PUSH_DELIVERY_STATUS_TIMEOUT:
       // Only enforce the user visible requirements if this is currently running
       // as the delivery callback for the last in-flight message, and silent
       // push has not been enabled through a command line flag.
@@ -386,7 +386,6 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
             requesting_origin, service_worker_registration_id,
             completion_closure_runner.Release());
       }
-#endif
       break;
     case content::PUSH_DELIVERY_STATUS_SERVICE_WORKER_ERROR:
       // Do nothing, and hope the error is transient.
@@ -776,7 +775,8 @@ void PushMessagingServiceImpl::DidClearPushSubscriptionId(
                               was_subscribed, callback));
 #if defined(OS_ANDROID)
     // On Android the backend is different, and requires the original sender_id.
-    // UnsubscribeBecausePermissionRevoked sometimes calls us with an empty one.
+    // UnsubscribeBecausePermissionRevoked and
+    // DidDeleteServiceWorkerRegistration sometimes call us with an empty one.
     if (sender_id.empty()) {
       unregister_callback.Run(gcm::GCMClient::INVALID_PARAMETER);
     } else {
@@ -821,6 +821,37 @@ void PushMessagingServiceImpl::DidUnsubscribe(
     callback.Run(
         content::PUSH_UNREGISTRATION_STATUS_SUCCESS_WAS_NOT_REGISTERED);
   }
+}
+
+// DidDeleteServiceWorkerRegistration methods ----------------------------------
+
+void PushMessagingServiceImpl::DidDeleteServiceWorkerRegistration(
+    const GURL& origin,
+    int64_t service_worker_registration_id) {
+  const PushMessagingAppIdentifier& app_identifier =
+      PushMessagingAppIdentifier::FindByServiceWorker(
+          profile_, origin, service_worker_registration_id);
+  if (app_identifier.is_null()) {
+    if (!service_worker_unregistered_callback_for_testing_.is_null())
+      service_worker_unregistered_callback_for_testing_.Run();
+    return;
+  }
+  // Note this will not fully unsubscribe pre-InstanceID subscriptions on
+  // Android from GCM, as that requires a sender_id. (Ideally we'd fetch it
+  // from the SWDB in some "before_unregistered" SWObserver event.)
+  UnsubscribeInternal(
+      content::PUSH_UNREGISTRATION_REASON_SERVICE_WORKER_UNREGISTERED, origin,
+      service_worker_registration_id, app_identifier.app_id(),
+      std::string() /* sender_id */,
+      base::Bind(&UnregisterCallbackToClosure,
+                 service_worker_unregistered_callback_for_testing_.is_null()
+                     ? base::Bind(&base::DoNothing)
+                     : service_worker_unregistered_callback_for_testing_));
+}
+
+void PushMessagingServiceImpl::SetServiceWorkerUnregisteredCallbackForTesting(
+    const base::Closure& callback) {
+  service_worker_unregistered_callback_for_testing_ = callback;
 }
 
 // OnContentSettingChanged methods ---------------------------------------------

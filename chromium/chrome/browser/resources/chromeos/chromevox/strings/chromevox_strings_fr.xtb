@@ -74,6 +74,7 @@
 <translation id="1680732992526857724"><ph name="NAME" />, interrupteur activé</translation>
 <translation id="1692077714702418899">ligne de structure</translation>
 <translation id="1700517974991662022">Consulté</translation>
+<translation id="1714116687360794776">Outil de mesure</translation>
 <translation id="1722567105086139392">Lien</translation>
 <translation id="1727806147743597030">conclusion</translation>
 <translation id="174268867904053074">Élément graphique suivant</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">Commande relative à la date et à l'heure</translation>
 <translation id="2347456970887948350">Un lien</translation>
 <translation id="2359897517538099099">Vous n'utilisez pas le mode Tableau.</translation>
+<translation id="2390264819538553347">Pour avancer, appuyez sur Entrée. Pour revenir en arrière, appuyez sur Retour arrière.</translation>
 <translation id="241124561063364910">suivi de</translation>
 <translation id="2416512023405990736">Une case décochée</translation>
 <translation id="2417569100218200841">Infos sur le contenu</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{accolade gauche}one{# accolade gauche}other{# accolades gauches}}</translation>
 <translation id="2911433807131383493">Ouvrir le didacticiel ChromeVox</translation>
 <translation id="2932083475399492303">Changer de type de ligne (ligne de structure et ligne de mise en page)</translation>
+<translation id="2944762337049891859">Lire la page automatiquement après son chargement.</translation>
 <translation id="2964026537669811554">Titre de groupe</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{tabulation}one{# tabulation}other{# tabulations}}</translation>
 <translation id="2972078295414139404">Aucun lien consulté précédent</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">Aucune section précédente</translation>
 <translation id="3030432017085518523">Case d'option d'élément de menu</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrophe}one{# apostrophe}other{# apostrophes}}</translation>
+<translation id="3040901448410802366">Indicateur de progression</translation>
 <translation id="3046838483509668188">Options ChromeVox</translation>
 <translation id="3047143736589213134">Mappage expérimental du clavier</translation>
 <translation id="3060756054951570867">menu <ph name="TITLE" /> ouvert</translation>
@@ -230,7 +234,7 @@ Une fois le didacticiel terminé, utilisez ChromeVox pour accéder au bouton de 
 <translation id="3321460131042519426">Enable word wrap</translation>
 <translation id="3322936298410871309">En-tête précédent de niveau 1</translation>
 <translation id="3323447499041942178">Zone de saisie</translation>
-<translation id="3329854757664111426">Pour avancer, appuyez sur Entrée.</translation>
+<translation id="3338224621010291843">Curseur <ph name="NAME" /> <ph name="VALUE" /></translation>
 <translation id="3353420241558113817">{"ar": "Arabe",
         "bg": "Bulgare",
         "ca": "Catalan",
@@ -307,6 +311,7 @@ Une fois le didacticiel terminé, utilisez ChromeVox pour accéder au bouton de 
 <translation id="3712520970944678024">Contrôle de la voix</translation>
 <translation id="3716845769494773620">Multiligne</translation>
 <translation id="3731746171184829332">Aucun titre précédent</translation>
+<translation id="3735039640698208086">Lors de la lecture audio…</translation>
 <translation id="3762198587642264450">Aller à la fin de la ligne actuelle</translation>
 <translation id="3777255250339039212">h1</translation>
 <translation id="3793710123303304873">Vous avez quitté la boîte de dialogue.</translation>
@@ -547,6 +552,7 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="5876817486144482042">Diminuer le volume de la voix</translation>
 <translation id="5887397643266327462">Sous-titres braille activés</translation>
 <translation id="5891934789323004067">Tableau</translation>
+<translation id="5899860758576822363">Lire le contenu à un volume sonore moins élevé pendant la diffusion des commentaires audio ChromeVox</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{signe égal}one{# signe égal}other{# signes égal}}</translation>
 <translation id="5939518447894949180">Réinitialiser</translation>
 <translation id="5948123859135882163">Passer de l'interprétation structurelle à l'interprétation sémantique des expressions mathématiques et vice versa</translation>
@@ -569,6 +575,7 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="6132506484792346370">Une zone de liste ou une liste déroulante</translation>
 <translation id="6138576064440631958">Accord $1</translation>
 <translation id="6142308968191113180">Titre 4</translation>
+<translation id="6164829606128959761">outil de mesure</translation>
 <translation id="6169420925157477918">Image avec une description longue</translation>
 <translation id="6186305613600865047">Aller au bas de la page</translation>
 <translation id="6193330012414963395">matin soir</translation>
@@ -579,6 +586,7 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="6281876499889881039">Élément similaire suivant</translation>
 <translation id="6282062888058716985">nav.</translation>
 <translation id="6290434000785343030">Aucune liste déroulante suivante</translation>
+<translation id="6305702903308659374">Lire le contenu à un volume sonore normal, même pendant la diffusion des commentaires audio ChromeVox</translation>
 <translation id="6307969636681130414">Élément sur lequel vous avez appuyé</translation>
 <translation id="6322856989298155004">Sons</translation>
 <translation id="6324551002951139333">erreur grammaticale détectée</translation>
@@ -691,7 +699,6 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="7492049978501397201">Boîte de dialogue ouverte</translation>
 <translation id="7518543783849163354">Pour arrêter temporairement les commentaires audio ChromeVox, appuyez sur la touche Ctrl.</translation>
 <translation id="7532613204005497612">Juin</translation>
-<translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, curseur</translation>
 <translation id="7552432549459840808">Raccourcis Chrome utiles</translation>
 <translation id="7579911500627256166">point <ph name="DOT" /></translation>
 <translation id="7596919493010894443">sélection effacée</translation>
@@ -769,6 +776,7 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="8455868257606149352">max. <ph name="X" /></translation>
 <translation id="84575901236241018">dispose d'une clé d'accès, <ph name="KEY" /></translation>
 <translation id="847154984256717791">occupé</translation>
+<translation id="8476408756881832830">Interrompre la lecture pendant la diffusion des commentaires audio ChromeVox</translation>
 <translation id="8476508772960940536">vue d'ensemble des fenêtres</translation>
 <translation id="8503360654911991865">Diminuer la granularité de la navigation</translation>
 <translation id="8520472399088452386">Bouton Toupie</translation>
@@ -845,6 +853,6 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="948171205378458592">Ralentir la cadence de la voix</translation>
 <translation id="955917170449423694">Basculement vers ChromeVox classique effectué</translation>
 <translation id="962913030769097253">En-tête suivant de niveau 1</translation>
-<translation id="973955474346881951">Activer/Désactiver le mode autocollant</translation>
+<translation id="973955474346881951">Activer/Désactiver le mode permanent</translation>
 <translation id="976849232629612000">Aucun élément</translation>
 </translationbundle>

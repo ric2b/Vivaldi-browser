@@ -25,7 +25,7 @@
 
 #include "core/editing/commands/InsertListCommand.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -410,10 +410,11 @@ bool InsertListCommand::doApplyForSingleParagraph(
       // inside listNode because moveParagraphWithClones could have removed
       // them.
       if (rangeStartIsInList && newList)
-        currentSelection.setStart(newList, 0, IGNORE_EXCEPTION);
-      if (rangeEndIsInList && newList)
+        currentSelection.setStart(newList, 0, IGNORE_EXCEPTION_FOR_TESTING);
+      if (rangeEndIsInList && newList) {
         currentSelection.setEnd(newList, Position::lastOffsetInNode(newList),
-                                IGNORE_EXCEPTION);
+                                IGNORE_EXCEPTION_FOR_TESTING);
+      }
 
       setEndingSelection(SelectionInDOMTree::Builder()
                              .collapse(Position::firstPositionInNode(newList))
@@ -594,6 +595,8 @@ void InsertListCommand::listifyParagraph(const VisiblePosition& originalStart,
       return;
     startPos = Position::beforeNode(placeholder);
   }
+
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   // Insert the list at a position visually equivalent to start of the
   // paragraph that is being moved into the list.

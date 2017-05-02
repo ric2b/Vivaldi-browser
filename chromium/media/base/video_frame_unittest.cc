@@ -454,6 +454,7 @@ TEST(VideoFrame, AllocationSize_OddSize) {
       case PIXEL_FORMAT_UYVY:
       case PIXEL_FORMAT_YUY2:
       case PIXEL_FORMAT_YV16:
+      case PIXEL_FORMAT_I422:
         EXPECT_EQ(48u, allocation_size) << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_YV12:
@@ -544,7 +545,7 @@ TEST(VideoFrameMetadata, SetAndThenGetAllKeysForAllTypes) {
     EXPECT_TRUE(metadata.HasKey(key));
     const base::Value* const null_value = metadata.GetValue(key);
     EXPECT_TRUE(null_value);
-    EXPECT_EQ(base::Value::TYPE_NULL, null_value->GetType());
+    EXPECT_EQ(base::Value::Type::NONE, null_value->GetType());
     metadata.Clear();
   }
 }

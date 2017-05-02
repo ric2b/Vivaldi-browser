@@ -9,18 +9,6 @@
 #include "content/public/common/manifest.h"
 #include "url/gurl.h"
 
-namespace content {
-class WebContents;
-}  // namespace content
-
-namespace IPC {
-class Message;
-}  // namespace IPC
-
-namespace gfx {
-class Screen;
-}
-
 // Selects the icon most closely matching the size constraints.  This follows
 // very basic heuristics -- improvements are welcome.
 class ManifestIconSelector {
@@ -28,21 +16,16 @@ class ManifestIconSelector {
   // Runs the algorithm to find the best matching icon in the icons listed in
   // the Manifest.
   //
-  // Size is defined in Android's density-independent pixels (dp):
-  // http://developer.android.com/guide/practices/screens_support.html
-  // If/when this class is generalized, it may be a good idea to switch this to
-  // taking in pixels, instead.
+  // Size is defined in pixels.
   //
-  // Any icon returned will be close as possible to |ideal_icon_size_in_dp|
-  // with a size not less than |minimum_icon_size_in_dp|.
+  // Any icon returned will be close as possible to |ideal_icon_size_in_px|
+  // with a size not less than |minimum_icon_size_in_px|.
   //
   // Returns the icon url if a suitable icon is found. An empty URL otherwise.
   static GURL FindBestMatchingIcon(
       const std::vector<content::Manifest::Icon>& icons,
-      int ideal_icon_size_in_dp,
-      int minimum_icon_size_in_dp);
-
-  static int ConvertIconSizeFromDpToPx(int icon_size_in_dp);
+      int ideal_icon_size_in_px,
+      int minimum_icon_size_in_px);
 
  private:
   ManifestIconSelector(int ideal_icon_size_in_px,

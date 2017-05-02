@@ -5,15 +5,16 @@
 package org.chromium.net.urlconnection;
 
 import android.os.Build;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
+import org.chromium.net.CronetEngine;
+import org.chromium.net.CronetException;
 import org.chromium.net.CronetTestBase;
 import org.chromium.net.CronetTestFramework;
 import org.chromium.net.MockUrlRequestJobFactory;
 import org.chromium.net.NativeTestServer;
-import org.chromium.net.UrlRequestException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
@@ -41,6 +42,7 @@ import java.util.regex.Pattern;
  * See {@link CronetTestBase#runTest()} for details.
  */
 public class CronetHttpURLConnectionTest extends CronetTestBase {
+    private CronetEngine mCronetEngine;
 
     @Override
     protected void setUp() throws Exception {
@@ -50,7 +52,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 CronetTestFramework.LIBRARY_INIT_KEY,
                 CronetTestFramework.LibraryInitType.HTTP_URL_CONNECTION,
         };
-        startCronetTestFrameworkWithUrlAndCommandLineArgs(null, commandLineArgs);
+        mCronetEngine = startCronetTestFrameworkWithUrlAndCommandLineArgs(null,
+                commandLineArgs).mCronetEngine;
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
@@ -109,7 +112,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
     @OnlyRunCronetHttpURLConnection
     public void testReadTimeout() throws Exception {
         // Add url interceptors.
-        MockUrlRequestJobFactory.setUp();
+        MockUrlRequestJobFactory mockUrlRequestJobFactory =
+                new MockUrlRequestJobFactory(mCronetEngine);
         URL url = new URL(MockUrlRequestJobFactory.getMockUrlForHangingRead());
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setReadTimeout(1000);
@@ -121,6 +125,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         } catch (SocketTimeoutException e) {
             // Expected
         }
+        mockUrlRequestJobFactory.shutdown();
     }
 
     @SmallTest
@@ -266,8 +271,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             secondConnection.getResponseCode();
             fail();
         } catch (IOException e) {
-            assertTrue(e instanceof java.net.ConnectException
-                    || e instanceof UrlRequestException);
+            assertTrue(e instanceof java.net.ConnectException || e instanceof CronetException);
             assertTrue((e.getMessage().contains("ECONNREFUSED")
                     || (e.getMessage().contains("Connection refused"))
                     || e.getMessage().contains("net::ERR_CONNECTION_REFUSED")));
@@ -292,8 +296,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             urlConnection.getResponseCode();
             fail();
         } catch (IOException e) {
-            assertTrue(e instanceof java.net.ConnectException
-                    || e instanceof UrlRequestException);
+            assertTrue(e instanceof java.net.ConnectException || e instanceof CronetException);
             assertTrue((e.getMessage().contains("ECONNREFUSED")
                     || (e.getMessage().contains("Connection refused"))
                     || e.getMessage().contains("net::ERR_CONNECTION_REFUSED")));
@@ -317,7 +320,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             fail();
         } catch (java.net.UnknownHostException e) {
             // Expected.
-        } catch (UrlRequestException e) {
+        } catch (CronetException e) {
             // Expected.
         }
         checkExceptionsAreThrown(urlConnection);
@@ -707,7 +710,8 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         String data = "MyBigFunkyData";
         int dataLength = data.length();
         int repeatCount = 100000;
-        MockUrlRequestJobFactory.setUp();
+        MockUrlRequestJobFactory mockUrlRequestJobFactory =
+                new MockUrlRequestJobFactory(mCronetEngine);
         URL url = new URL(MockUrlRequestJobFactory.getMockUrlForData(data, repeatCount));
         HttpURLConnection connection =
                 (HttpURLConnection) url.openConnection();
@@ -738,6 +742,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         }
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
+        mockUrlRequestJobFactory.shutdown();
     }
 
     @SmallTest

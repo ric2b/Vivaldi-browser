@@ -7,7 +7,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -403,7 +402,7 @@ class ExtensionWebstoreGetWebGLStatusTest : public InProcessBrowserTest {
     std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
         function.get(), kEmptyArgs, browser()));
     ASSERT_TRUE(result);
-    EXPECT_EQ(base::Value::TYPE_STRING, result->GetType());
+    EXPECT_EQ(base::Value::Type::STRING, result->GetType());
     std::string webgl_status;
     EXPECT_TRUE(result->GetAsString(&webgl_status));
     EXPECT_STREQ(webgl_allowed ? kWebGLStatusAllowed : kWebGLStatusBlocked,

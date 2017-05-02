@@ -179,7 +179,8 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
 - (void)setTabTrackingAreasEnabled:(BOOL)enabled;
 - (void)droppingURLsAt:(NSPoint)point
             givesIndex:(NSInteger*)index
-           disposition:(WindowOpenDisposition*)disposition;
+           disposition:(WindowOpenDisposition*)disposition
+           activateTab:(BOOL)activateTab;
 - (void)setNewTabButtonHoverState:(BOOL)showHover;
 - (void)themeDidChangeNotification:(NSNotification*)notification;
 - (BOOL)doesAnyOtherWebContents:(content::WebContents*)selected
@@ -2038,7 +2039,8 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
 // to the left, it inserts to the left, and similarly for the right.
 - (void)droppingURLsAt:(NSPoint)point
             givesIndex:(NSInteger*)index
-           disposition:(WindowOpenDisposition*)disposition {
+           disposition:(WindowOpenDisposition*)disposition
+           activateTab:(BOOL)activateTab {
   // Proportion of the tab which is considered the "middle" (and causes things
   // to drop on that tab).
   const double kMiddleProportion = 0.5;
@@ -2069,7 +2071,11 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     // Drop in a new tab before  tab |i|?
     if (isRTL ? point.x > rightEdge : point.x < leftEdge) {
       *index = i;
-      *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+      if (activateTab) {
+        *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+      } else {
+        *disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+      }
       return;
     }
 
@@ -2087,10 +2093,17 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
 
   // If we've made it here, we want to append a new tab to the end.
   *index = -1;
-  *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  if (activateTab) {
+    *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  } else {
+    *disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  }
 }
 
-- (void)openURL:(GURL*)url inView:(NSView*)view at:(NSPoint)point {
+- (void)openURL:(GURL*)url
+         inView:(NSView*)view
+             at:(NSPoint)point
+    activateTab:(BOOL)activateTab {
   // Security: Block JavaScript to prevent self-XSS.
   if (url->SchemeIs(url::kJavaScriptScheme))
     return;
@@ -2100,11 +2113,13 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
   WindowOpenDisposition disposition;
   [self droppingURLsAt:point
             givesIndex:&index
-           disposition:&disposition];
+           disposition:&disposition
+           activateTab:activateTab];
 
   // Either insert a new tab or open in a current tab.
   switch (disposition) {
-    case WindowOpenDisposition::NEW_FOREGROUND_TAB: {
+    case WindowOpenDisposition::NEW_FOREGROUND_TAB:
+    case WindowOpenDisposition::NEW_BACKGROUND_TAB: {
       content::RecordAction(UserMetricsAction("Tab_DropURLBetweenTabs"));
       chrome::NavigateParams params(browser_, *url,
                                     ui::PAGE_TRANSITION_TYPED);
@@ -2137,19 +2152,22 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     return;
   }
 
-  //TODO(viettrungluu): dropping multiple URLs.
-  if ([urls count] > 1)
-    NOTIMPLEMENTED();
+  for (NSInteger index = [urls count] - 1; index >= 0; index--) {
+    // Refactor this code.
+    // https://crbug.com/665261.
+    GURL url = url_formatter::FixupURL(
+        base::SysNSStringToUTF8([urls objectAtIndex:index]), std::string());
 
-  // Get the first URL and fix it up.
-  GURL url(GURL(url_formatter::FixupURL(
-      base::SysNSStringToUTF8([urls objectAtIndex:0]), std::string())));
+    // If the URL isn't valid, don't bother.
+    if (!url.is_valid())
+      continue;
 
-  // If the URL isn't valid, don't bother.
-  if (!url.is_valid())
-    return;
-
-  [self openURL:&url inView:view at:point];
+    if (index == static_cast<NSInteger>([urls count]) - 1) {
+      [self openURL:&url inView:view at:point activateTab:YES];
+    } else {
+      [self openURL:&url inView:view at:point activateTab:NO];
+    }
+  }
 }
 
 // (URLDropTargetController protocol)
@@ -2163,7 +2181,7 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
       metrics::OmniboxEventProto::BLANK, &match, NULL);
   GURL url(match.destination_url);
 
-  [self openURL:&url inView:view at:point];
+  [self openURL:&url inView:view at:point activateTab:YES];
 }
 
 // (URLDropTargetController protocol)
@@ -2178,7 +2196,8 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
   WindowOpenDisposition disposition;
   [self droppingURLsAt:point
             givesIndex:&index
-           disposition:&disposition];
+           disposition:&disposition
+           activateTab:YES];
 
   NSPoint arrowPos = NSMakePoint(0, arrowBaseY);
   if (index == -1) {
@@ -2251,25 +2270,33 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
 }
 
 - (void)addCustomWindowControls {
-  BOOL isRTL = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
+  BOOL shouldFlipWindowControls =
+      cocoa_l10n_util::ShouldFlipWindowControlsInRTL();
   if (!customWindowControls_) {
     // Make the container view.
     CGFloat height = NSHeight([tabStripView_ frame]);
     CGFloat width = [self leadingIndentForControls];
-    CGFloat xOrigin = isRTL ? NSWidth([tabStripView_ frame]) - width : 0;
+    if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout() &&
+        !shouldFlipWindowControls)
+      // The trailing indent is correct in this case, since the controls should
+      // stay on the left.
+      width = [self trailingIndentForControls];
+    CGFloat xOrigin =
+        shouldFlipWindowControls ? NSWidth([tabStripView_ frame]) - width : 0;
     NSRect frame = NSMakeRect(xOrigin, 0, width, height);
     customWindowControls_.reset(
         [[CustomWindowControlsView alloc] initWithFrame:frame]);
     [customWindowControls_
-        setAutoresizingMask:isRTL ? NSViewMinXMargin | NSViewHeightSizable
-                                  : NSViewMaxXMargin | NSViewHeightSizable];
+        setAutoresizingMask:shouldFlipWindowControls
+                                ? NSViewMinXMargin | NSViewHeightSizable
+                                : NSViewMaxXMargin | NSViewHeightSizable];
 
     // Add the traffic light buttons. The horizontal layout was determined by
     // manual inspection on Yosemite.
     CGFloat closeButtonX = 11;
     CGFloat pinnedButtonX = 31;
     CGFloat zoomButtonX = 51;
-    if (isRTL)
+    if (shouldFlipWindowControls)
       std::swap(closeButtonX, zoomButtonX);
 
     NSUInteger styleMask = [[tabStripView_ window] styleMask];
@@ -2302,7 +2329,7 @@ NSRect FlipRectInView(NSView* view, NSRect rect) {
     [customWindowControls_
         addTrackingArea:customWindowControlsTrackingArea_.get()];
   }
-  if (isRTL &&
+  if (shouldFlipWindowControls &&
       NSMaxX([customWindowControls_ frame]) != NSMaxX([tabStripView_ frame])) {
     NSRect frame = [customWindowControls_ frame];
     frame.origin.x =

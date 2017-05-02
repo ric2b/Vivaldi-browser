@@ -14,9 +14,13 @@
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/translate/core/language_detection/language_detection_util.h"
 #import "components/translate/ios/browser/js_language_detection_manager.h"
-#include "ios/web/public/string_util.h"
+#include "components/translate/ios/browser/string_clipping_util.h"
 #import "ios/web/public/url_scheme_util.h"
 #include "ios/web/public/web_state/web_state.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace translate {
 
@@ -33,7 +37,7 @@ LanguageDetectionController::LanguageDetectionController(
     JsLanguageDetectionManager* manager,
     PrefService* prefs)
     : web::WebStateObserver(web_state),
-      js_manager_([manager retain]),
+      js_manager_(manager),
       weak_method_factory_(this) {
   DCHECK(web::WebStateObserver::web_state());
   DCHECK(js_manager_);
@@ -87,8 +91,8 @@ bool LanguageDetectionController::OnTextCaptured(
     return false;
   }
 
-  int capture_text_time = 0;
-  command.GetInteger("captureTextTime", &capture_text_time);
+  double capture_text_time = 0;
+  command.GetDouble("captureTextTime", &capture_text_time);
   UMA_HISTOGRAM_TIMES(kTranslateCaptureText,
                       base::TimeDelta::FromMillisecondsD(capture_text_time));
   std::string html_lang;
@@ -112,8 +116,8 @@ void LanguageDetectionController::OnTextRetrieved(
     const base::string16& text_content) {
   std::string language = translate::DeterminePageLanguage(
       http_content_language, html_lang,
-      web::GetStringByClippingLastWord(text_content,
-                                       language_detection::kMaxIndexChars),
+      GetStringByClippingLastWord(text_content,
+                                  language_detection::kMaxIndexChars),
       nullptr /* cld_language */, nullptr /* is_cld_reliable */);
   if (language.empty())
     return;  // No language detected.

@@ -9,7 +9,8 @@
 namespace media {
 
 VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor()
-    : capture_api(VideoCaptureApi::UNKNOWN),
+    : facing(VideoFacingMode::MEDIA_VIDEO_FACING_NONE),
+      capture_api(VideoCaptureApi::UNKNOWN),
       transport_type(VideoCaptureTransportType::OTHER_TRANSPORT) {}
 
 VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
@@ -19,6 +20,7 @@ VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     VideoCaptureTransportType transport_type)
     : display_name(display_name),
       device_id(device_id),
+      facing(VideoFacingMode::MEDIA_VIDEO_FACING_NONE),
       capture_api(capture_api),
       transport_type(transport_type) {}
 
@@ -27,10 +29,12 @@ VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     const std::string& device_id,
     const std::string& model_id,
     VideoCaptureApi capture_api,
-    VideoCaptureTransportType transport_type)
+    VideoCaptureTransportType transport_type,
+    VideoFacingMode facing)
     : display_name(display_name),
       device_id(device_id),
       model_id(model_id),
+      facing(facing),
       capture_api(capture_api),
       transport_type(transport_type) {}
 
@@ -38,6 +42,22 @@ VideoCaptureDeviceDescriptor::~VideoCaptureDeviceDescriptor() {}
 
 VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     const VideoCaptureDeviceDescriptor& other) = default;
+
+bool VideoCaptureDeviceDescriptor::operator<(
+    const VideoCaptureDeviceDescriptor& other) const {
+  static constexpr int kFacingMapping[NUM_MEDIA_VIDEO_FACING_MODE] = {0, 2, 1};
+  static_assert(kFacingMapping[MEDIA_VIDEO_FACING_NONE] == 0,
+                "FACING_NONE has a wrong value");
+  static_assert(kFacingMapping[MEDIA_VIDEO_FACING_ENVIRONMENT] == 1,
+                "FACING_ENVIRONMENT has a wrong value");
+  static_assert(kFacingMapping[MEDIA_VIDEO_FACING_USER] == 2,
+                "FACING_USER has a wrong value");
+  if (kFacingMapping[facing] > kFacingMapping[other.facing])
+    return true;
+  if (device_id < other.device_id)
+    return true;
+  return capture_api < other.capture_api;
+}
 
 const char* VideoCaptureDeviceDescriptor::GetCaptureApiTypeString() const {
   switch (capture_api) {

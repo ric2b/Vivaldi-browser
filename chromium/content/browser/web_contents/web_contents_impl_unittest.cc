@@ -827,6 +827,9 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
   DeleteContents();
   EXPECT_EQ(orig_rvh_delete_count, 1);
   EXPECT_EQ(pending_rvh_delete_count, 1);
+  // Since the ChromeBlobStorageContext posts a task to the BrowserThread, we
+  // must run out the loop so the thread bundle is destroyed after this happens.
+  base::RunLoop().RunUntilIdle();
 }
 
 // Regression test for http://crbug.com/386542 - variation of
@@ -874,6 +877,9 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
 
   // Cleanup.
   DeleteContents();
+  // Since the ChromeBlobStorageContext posts a task to the BrowserThread, we
+  // must run out the loop so the thread bundle is destroyed after this happens.
+  base::RunLoop().RunUntilIdle();
 }
 
 // Complement for NavigateFromRestoredSitelessUrl, verifying that when a regular
@@ -919,6 +925,9 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
 
   // Cleanup.
   DeleteContents();
+  // Since the ChromeBlobStorageContext posts a task to the BrowserThread, we
+  // must run out the loop so the thread bundle is destroyed after this happens.
+  base::RunLoop().RunUntilIdle();
 }
 
 // Test that we can find an opener RVH even if it's pending.
@@ -2617,14 +2626,32 @@ TEST_F(WebContentsImplTest, FilterURLs) {
 
 // Test that if a pending contents is deleted before it is shown, we don't
 // crash.
-TEST_F(WebContentsImplTest, PendingContents) {
+TEST_F(WebContentsImplTest, PendingContentsDestroyed) {
   std::unique_ptr<TestWebContents> other_contents(
       static_cast<TestWebContents*>(CreateTestWebContents()));
   contents()->AddPendingContents(other_contents.get());
-  int process_id = other_contents->GetRenderViewHost()->GetProcess()->GetID();
-  int route_id = other_contents->GetRenderViewHost()->GetRoutingID();
+  RenderWidgetHost* widget =
+      other_contents->GetMainFrame()->GetRenderWidgetHost();
+  int process_id = widget->GetProcess()->GetID();
+  int widget_id = widget->GetRoutingID();
   other_contents.reset();
-  EXPECT_EQ(nullptr, contents()->GetCreatedWindow(process_id, route_id));
+  EXPECT_EQ(nullptr, contents()->GetCreatedWindow(process_id, widget_id));
+}
+
+TEST_F(WebContentsImplTest, PendingContentsShown) {
+  std::unique_ptr<TestWebContents> other_contents(
+      static_cast<TestWebContents*>(CreateTestWebContents()));
+  contents()->AddPendingContents(other_contents.get());
+  RenderWidgetHost* widget =
+      other_contents->GetMainFrame()->GetRenderWidgetHost();
+  int process_id = widget->GetProcess()->GetID();
+  int widget_id = widget->GetRoutingID();
+
+  // The first call to GetCreatedWindow pops it off the pending list.
+  EXPECT_EQ(other_contents.get(),
+            contents()->GetCreatedWindow(process_id, widget_id));
+  // A second call should return nullptr, verifying that it's been forgotten.
+  EXPECT_EQ(nullptr, contents()->GetCreatedWindow(process_id, widget_id));
 }
 
 TEST_F(WebContentsImplTest, CapturerOverridesPreferredSize) {
@@ -3307,8 +3334,7 @@ TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
 
   // Theme color changes should not propagate past the WebContentsImpl before
   // the first visually non-empty paint has occurred.
-  RenderViewHostTester::TestOnMessageReceived(
-      test_rvh(),
+  rfh->OnMessageReceived(
       FrameHostMsg_DidChangeThemeColor(rfh->GetRoutingID(), SK_ColorRED));
 
   EXPECT_EQ(SK_ColorRED, contents()->GetThemeColor());
@@ -3318,14 +3344,13 @@ TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
   // propagate the current theme color to the delegates.
   RenderViewHostTester::TestOnMessageReceived(
       test_rvh(),
-      ViewHostMsg_DidFirstVisuallyNonEmptyPaint(rfh->GetRoutingID()));
+      ViewHostMsg_DidFirstVisuallyNonEmptyPaint(test_rvh()->GetRoutingID()));
 
   EXPECT_EQ(SK_ColorRED, contents()->GetThemeColor());
   EXPECT_EQ(SK_ColorRED, observer.last_theme_color());
 
   // Additional changes made by the web contents should propagate as well.
-  RenderViewHostTester::TestOnMessageReceived(
-      test_rvh(),
+  rfh->OnMessageReceived(
       FrameHostMsg_DidChangeThemeColor(rfh->GetRoutingID(), SK_ColorGREEN));
 
   EXPECT_EQ(SK_ColorGREEN, contents()->GetThemeColor());

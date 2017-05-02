@@ -33,7 +33,7 @@ class TestAutofillClient : public AutofillClient {
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
-  rappor::RapporService* GetRapporService() override;
+  rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -67,24 +67,31 @@ class TestAutofillClient : public AutofillClient {
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
-  bool IsContextSecure(const GURL& form_origin) override;
+  // By default, TestAutofillClient will report that the context is
+  // secure. This can be adjusted by calling set_form_origin() with an
+  // http:// URL.
+  bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
   void StartSigninFlow() override;
+  void ShowHttpNotSecureExplanation() override;
 
   void SetPrefs(std::unique_ptr<PrefService> prefs) {
     prefs_ = std::move(prefs);
   }
 
-  rappor::TestRapporService* test_rappor_service() {
+  rappor::TestRapporServiceImpl* test_rappor_service() {
     return rappor_service_.get();
   }
+
+  void set_form_origin(const GURL& url) { form_origin_ = url; }
 
  private:
   // NULL by default.
   std::unique_ptr<PrefService> prefs_;
   std::unique_ptr<FakeOAuth2TokenService> token_service_;
   std::unique_ptr<FakeIdentityProvider> identity_provider_;
-  std::unique_ptr<rappor::TestRapporService> rappor_service_;
+  std::unique_ptr<rappor::TestRapporServiceImpl> rappor_service_;
+  GURL form_origin_;
 
   DISALLOW_COPY_AND_ASSIGN(TestAutofillClient);
 };

@@ -46,14 +46,14 @@ namespace bookmarks {
 
 class BookmarkCodecTest;
 class BookmarkExpandedStateTracker;
-class BookmarkIndex;
 class BookmarkLoadDetails;
 class BookmarkModelObserver;
 class BookmarkStorage;
 class BookmarkUndoDelegate;
 class ScopedGroupBookmarkActions;
 class TestBookmarkClient;
-struct BookmarkMatch;
+class TitledUrlIndex;
+struct TitledUrlMatch;
 
 // BookmarkModel --------------------------------------------------------------
 
@@ -253,11 +253,11 @@ class BookmarkModel : public BookmarkUndoProvider,
       const GURL& url,
       const base::Time& creation_time,
       const BookmarkNode::MetaInfoMap* meta_info,
-      const base::string16& nickname = NULL,
-      const base::string16& description = NULL,
-      const base::string16 &thumbnail = NULL,
+      const base::string16& nickname = {},
+      const base::string16& description = {},
+      const base::string16 &thumbnail = {},
       const bool speeddial = false,
-      const base::Time *visited_time = NULL);
+      const base::Time *visited_time = nullptr);
 
   // Sorts the children of |parent|, notifying observers by way of the
   // BookmarkNodeChildrenReordered method.
@@ -282,14 +282,14 @@ class BookmarkModel : public BookmarkUndoProvider,
   // in either the title or the URL. It uses default matching algorithm.
   void GetBookmarksMatching(const base::string16& text,
                             size_t max_count,
-                            std::vector<BookmarkMatch>* matches);
+                            std::vector<TitledUrlMatch>* matches);
 
   // Returns up to |max_count| of bookmarks containing each term from |text|
   // in either the title or the URL.
   void GetBookmarksMatching(const base::string16& text,
                             size_t max_count,
                             query_parser::MatchingAlgorithm matching_algorithm,
-                            std::vector<BookmarkMatch>* matches);
+                            std::vector<TitledUrlMatch>* matches);
 
   // Sets the store to NULL, making it so the BookmarkModel does not persist
   // any changes to disk. This is only useful during testing to speed up
@@ -490,7 +490,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Reads/writes bookmarks to disk.
   std::unique_ptr<BookmarkStorage> store_;
 
-  std::unique_ptr<BookmarkIndex> index_;
+  std::unique_ptr<TitledUrlIndex> index_;
 
   base::WaitableEvent loaded_signal_;
 

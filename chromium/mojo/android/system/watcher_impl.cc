@@ -24,25 +24,60 @@ using base::android::JavaParamRef;
 
 namespace {
 
-class JavaWatcherCallback {
+class WatcherImpl {
  public:
-  JavaWatcherCallback(JNIEnv* env, const JavaParamRef<jobject>& java_watcher) {
-    java_watcher_.Reset(env, java_watcher);
+  WatcherImpl() {}
+
+  ~WatcherImpl() = default;
+
+  jint Start(JNIEnv* env,
+             const JavaParamRef<jobject>& jcaller,
+             jint mojo_handle,
+             jint signals) {
+    java_watcher_.Reset(env, jcaller);
+
+    auto ready_callback =
+        base::Bind(&WatcherImpl::OnHandleReady, base::Unretained(this));
+
+    MojoResult result =
+        watcher_.Start(mojo::Handle(static_cast<MojoHandle>(mojo_handle)),
+                       static_cast<MojoHandleSignals>(signals), ready_callback);
+
+    if (result != MOJO_RESULT_OK)
+      java_watcher_.Reset();
+
+    return result;
   }
 
-  void OnHandleReady(MojoResult result) {
-    Java_WatcherImpl_onHandleReady(base::android::AttachCurrentThread(),
-                                   java_watcher_, result);
+  void Cancel() {
+    java_watcher_.Reset();
+    watcher_.Cancel();
   }
 
  private:
+  void OnHandleReady(MojoResult result) {
+    DCHECK(!java_watcher_.is_null());
+
+    base::android::ScopedJavaGlobalRef<jobject> java_watcher_preserver;
+    if (result == MOJO_RESULT_CANCELLED)
+      java_watcher_preserver = std::move(java_watcher_);
+
+    Java_WatcherImpl_onHandleReady(
+        base::android::AttachCurrentThread(),
+        java_watcher_.is_null() ? java_watcher_preserver : java_watcher_,
+        result);
+  }
+
+  Watcher watcher_;
   base::android::ScopedJavaGlobalRef<jobject> java_watcher_;
+
+  DISALLOW_COPY_AND_ASSIGN(WatcherImpl);
 };
 
 }  // namespace
 
 static jlong CreateWatcher(JNIEnv* env, const JavaParamRef<jobject>& jcaller) {
-  return reinterpret_cast<jlong>(new Watcher);
+  return reinterpret_cast<jlong>(new WatcherImpl);
 }
 
 static jint Start(JNIEnv* env,
@@ -50,24 +85,20 @@ static jint Start(JNIEnv* env,
                   jlong watcher_ptr,
                   jint mojo_handle,
                   jint signals) {
-  Watcher* watcher = reinterpret_cast<Watcher*>(watcher_ptr);
-  return watcher->Start(
-      mojo::Handle(static_cast<MojoHandle>(mojo_handle)),
-      static_cast<MojoHandleSignals>(signals),
-      base::Bind(&JavaWatcherCallback::OnHandleReady,
-                 base::Owned(new JavaWatcherCallback(env, jcaller))));
+  auto watcher = reinterpret_cast<WatcherImpl*>(watcher_ptr);
+  return watcher->Start(env, jcaller, mojo_handle, signals);
 }
 
 static void Cancel(JNIEnv* env,
                    const JavaParamRef<jobject>& jcaller,
                    jlong watcher_ptr) {
-  reinterpret_cast<Watcher*>(watcher_ptr)->Cancel();
+  reinterpret_cast<WatcherImpl*>(watcher_ptr)->Cancel();
 }
 
 static void Delete(JNIEnv* env,
                    const JavaParamRef<jobject>& jcaller,
                    jlong watcher_ptr) {
-  delete reinterpret_cast<Watcher*>(watcher_ptr);
+  delete reinterpret_cast<WatcherImpl*>(watcher_ptr);
 }
 
 bool RegisterWatcherImpl(JNIEnv* env) {

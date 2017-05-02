@@ -10,6 +10,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <unordered_set>
 
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -87,8 +88,8 @@ int Clamp(int value, int min, int max) {
 // Returns an array of devices as retrieved through the new method of
 // enumerating serial devices (SetupDi).  This new method gives more information
 // about the devices than the old method.
-mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
-  mojo::Array<serial::DeviceInfoPtr> devices;
+std::vector<serial::DeviceInfoPtr> GetDevicesNew() {
+  std::vector<serial::DeviceInfoPtr> devices;
 
   // Make a device interface query to find all serial devices.
   HDEVINFO dev_info =
@@ -139,10 +140,10 @@ mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
 // Returns an array of devices as retrieved through the old method of
 // enumerating serial devices (searching the registry). This old method gives
 // less information about the devices than the new method.
-mojo::Array<serial::DeviceInfoPtr> GetDevicesOld() {
+std::vector<serial::DeviceInfoPtr> GetDevicesOld() {
   base::win::RegistryValueIterator iter_key(
       HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM\\");
-  mojo::Array<serial::DeviceInfoPtr> devices;
+  std::vector<serial::DeviceInfoPtr> devices;
   for (; iter_key.Valid(); ++iter_key) {
     serial::DeviceInfoPtr info(serial::DeviceInfo::New());
     info->path = base::UTF16ToASCII(iter_key.Value());
@@ -163,31 +164,28 @@ SerialDeviceEnumeratorWin::SerialDeviceEnumeratorWin() {}
 
 SerialDeviceEnumeratorWin::~SerialDeviceEnumeratorWin() {}
 
-mojo::Array<serial::DeviceInfoPtr> SerialDeviceEnumeratorWin::GetDevices() {
-  mojo::Array<serial::DeviceInfoPtr> newDevices = GetDevicesNew();
-  mojo::Array<serial::DeviceInfoPtr> oldDevices = GetDevicesOld();
+std::vector<serial::DeviceInfoPtr> SerialDeviceEnumeratorWin::GetDevices() {
+  std::vector<serial::DeviceInfoPtr> devices = GetDevicesNew();
+  std::vector<serial::DeviceInfoPtr> old_devices = GetDevicesOld();
 
   UMA_HISTOGRAM_SPARSE_SLOWLY(
       "Hardware.Serial.NewMinusOldDeviceListSize",
-      Clamp((int)newDevices.size() - (int)oldDevices.size(), -10, 10));
+      Clamp(devices.size() - old_devices.size(), -10, 10));
 
   // Add devices found from both the new and old methods of enumeration. If a
   // device is found using both the new and the old enumeration method, then we
   // take the device from the new enumeration method because it's able to
   // collect more information. We do this by inserting the new devices first,
   // because insertions are ignored if the key already exists.
-  mojo::Map<mojo::String, serial::DeviceInfoPtr> deviceMap;
-  for (unsigned long i = 0; i < newDevices.size(); i++) {
-    deviceMap.insert(newDevices[i]->path, newDevices[i].Clone());
+  std::unordered_set<std::string> devices_seen;
+  for (const auto& device : devices) {
+    bool inserted = devices_seen.insert(device->path).second;
+    DCHECK(inserted);
   }
-  for (unsigned long i = 0; i < oldDevices.size(); i++) {
-    deviceMap.insert(oldDevices[i]->path, oldDevices[i].Clone());
+  for (auto& device : old_devices) {
+    if (devices_seen.insert(device->path).second)
+      devices.push_back(std::move(device));
   }
-
-  mojo::Array<mojo::String> paths;
-  mojo::Array<serial::DeviceInfoPtr> devices;
-  deviceMap.DecomposeMapTo(&paths, &devices);
-
   return devices;
 }
 

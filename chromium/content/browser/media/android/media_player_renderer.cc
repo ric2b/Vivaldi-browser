@@ -16,6 +16,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "media/base/android/media_service_throttler.h"
+#include "media/base/timestamp_constants.h"
 
 // TODO(tguilbert): Remove this ID once MediaPlayerManager has been deleted
 // and MediaPlayerBridge updated. See comment in header file.
@@ -31,6 +32,7 @@ media::MediaUrlInterceptor* g_media_url_interceptor = nullptr;
 
 MediaPlayerRenderer::MediaPlayerRenderer(RenderFrameHost* render_frame_host)
     : render_frame_host_(render_frame_host),
+      duration_(media::kInfiniteDuration),
       has_error_(false),
       weak_factory_(this) {}
 
@@ -107,8 +109,8 @@ void MediaPlayerRenderer::StartPlayingFrom(base::TimeDelta time) {
   if (has_error_)
     return;
 
-  media_player_->Start();
   media_player_->SeekTo(time);
+  media_player_->Start();
 
   // WMPI needs to receive a BUFFERING_HAVE_ENOUGH data before sending a
   // playback_rate > 0. The MediaPlayer manages its own buffering and will pause
@@ -167,20 +169,10 @@ base::TimeDelta MediaPlayerRenderer::GetMediaTime() {
   return media_player_->GetCurrentTime();
 }
 
-bool MediaPlayerRenderer::HasAudio() {
-  return media_player_->HasAudio();
-}
-
-bool MediaPlayerRenderer::HasVideo() {
-  return media_player_->HasVideo();
-}
-
 media::MediaResourceGetter* MediaPlayerRenderer::GetMediaResourceGetter() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!media_resource_getter_.get()) {
-    WebContents* web_contents =
-        WebContents::FromRenderFrameHost(render_frame_host_);
-    RenderProcessHost* host = web_contents->GetRenderProcessHost();
+    RenderProcessHost* host = render_frame_host_->GetProcess();
     BrowserContext* context = host->GetBrowserContext();
     StoragePartition* partition = host->GetStoragePartition();
     storage::FileSystemContext* file_system_context =
@@ -207,6 +199,11 @@ void MediaPlayerRenderer::OnMediaMetadataChanged(int player_id,
                                                  bool success) {
   if (video_size_ != gfx::Size(width, height))
     OnVideoSizeChanged(kUnusedAndIrrelevantPlayerId, width, height);
+
+  // For HLS streams, the reported duration may be zero for infinite streams.
+  // See http://crbug.com/501213.
+  if (duration.is_zero())
+    duration = media::kInfiniteDuration;
 
   if (duration_ != duration) {
     duration_ = duration;
@@ -257,17 +254,12 @@ media::MediaPlayerAndroid* MediaPlayerRenderer::GetPlayer(int player_id) {
 bool MediaPlayerRenderer::RequestPlay(int player_id,
                                       base::TimeDelta duration,
                                       bool has_audio) {
-  // TODO(tguilbert): Throttle requests, via exponential backoff.
-  // See crbug.com/636615.
   return true;
 }
 
 void MediaPlayerRenderer::OnDecoderResourcesReleased(int player_id) {
   // Since we are not using a pool of MediaPlayerAndroid instances, this
   // function is not relevant.
-
-  // TODO(tguilbert): Throttle requests, via exponential backoff.
-  // See crbug.com/636615.
 }
 
 // static

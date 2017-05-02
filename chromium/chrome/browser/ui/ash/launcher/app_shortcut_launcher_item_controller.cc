@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "ash/wm/window_util.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -79,10 +80,8 @@ AppShortcutLauncherItemController::AppShortcutLauncherItemController(
     const std::string& app_id,
     const std::string& launch_id,
     ChromeLauncherController* controller)
-    : LauncherItemController(TYPE_SHORTCUT, app_id, launch_id, controller),
-      chrome_launcher_controller_(controller),
-      app_id_(app_id),
-      launch_id_(launch_id) {
+    : LauncherItemController(app_id, launch_id, controller),
+      chrome_launcher_controller_(controller) {
   // To detect V1 applications we use their domain and match them against the
   // used URL. This will also work with applications like Google Drive.
   const Extension* extension =
@@ -97,21 +96,13 @@ AppShortcutLauncherItemController::AppShortcutLauncherItemController(
 AppShortcutLauncherItemController::~AppShortcutLauncherItemController() {
 }
 
-bool AppShortcutLauncherItemController::IsVisible() const {
-  // Return true if any browser window associated with the app is visible.
-  std::vector<content::WebContents*> content =
-      chrome_launcher_controller_->GetV1ApplicationsFromAppId(app_id());
-  for (size_t i = 0; i < content.size(); i++) {
-    Browser* browser = chrome::FindBrowserWithWebContents(content[i]);
-    if (browser && browser->window()->GetNativeWindow()->IsVisible())
-      return true;
-  }
-  return false;
-}
-
 void AppShortcutLauncherItemController::Launch(ash::LaunchSource source,
                                                int event_flags) {
-  launcher_controller()->LaunchApp(std::string(app_id()), source, event_flags);
+  // Launching an app replaces shortcut item controller to app controller. As
+  // result app_id_, launch_id_ are deleted during this call. Use local copies
+  // to prevent crash condition.
+  launcher_controller()->LaunchAppWithLaunchId(
+      std::string(app_id()), std::string(launch_id()), source, event_flags);
 }
 
 ash::ShelfItemDelegate::PerformedAction
@@ -153,7 +144,10 @@ ChromeLauncherAppMenuItems
 AppShortcutLauncherItemController::GetApplicationList(int event_flags) {
   ChromeLauncherAppMenuItems items;
   // Add the application name to the menu.
-  items.push_back(new ChromeLauncherAppMenuItem(GetTitle(), NULL, false));
+  base::string16 app_title = LauncherControllerHelper::GetAppTitle(
+      launcher_controller()->profile(), app_id());
+  items.push_back(
+      base::MakeUnique<ChromeLauncherAppMenuItem>(app_title, nullptr, false));
 
   std::vector<content::WebContents*> content_list = GetRunningApplications();
 
@@ -162,7 +156,7 @@ AppShortcutLauncherItemController::GetApplicationList(int event_flags) {
     // Get the icon.
     gfx::Image app_icon = launcher_controller()->GetAppListIcon(web_contents);
     base::string16 title = launcher_controller()->GetAppListTitle(web_contents);
-    items.push_back(new ChromeLauncherAppMenuItemTab(
+    items.push_back(base::MakeUnique<ChromeLauncherAppMenuItemTab>(
         title, &app_icon, web_contents, i == 0));
   }
   return items;
@@ -212,27 +206,9 @@ AppShortcutLauncherItemController::ItemSelected(const ui::Event& event) {
   return Activate(ash::LAUNCH_FROM_UNKNOWN);
 }
 
-base::string16 AppShortcutLauncherItemController::GetTitle() {
-  return LauncherControllerHelper::GetAppTitle(launcher_controller()->profile(),
-                                               app_id());
-}
-
 ash::ShelfMenuModel* AppShortcutLauncherItemController::CreateApplicationMenu(
     int event_flags) {
   return new LauncherApplicationMenuItemModel(GetApplicationList(event_flags));
-}
-
-bool AppShortcutLauncherItemController::IsDraggable() {
-  return true;
-}
-
-bool AppShortcutLauncherItemController::CanPin() const {
-  return GetPinnableForAppID(app_id(), launcher_controller()->profile()) ==
-         AppListControllerDelegate::PIN_EDITABLE;
-}
-
-bool AppShortcutLauncherItemController::ShouldShowTooltip() {
-  return true;
 }
 
 content::WebContents* AppShortcutLauncherItemController::GetLRUApplication() {

@@ -24,7 +24,6 @@
 
 class ExternalProcessImporterClient;
 class FirefoxProfileLock;
-class Importer;
 class Profile;
 
 namespace importer {

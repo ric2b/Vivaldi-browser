@@ -13,6 +13,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "extensions/common/extension_id.h"
 
 namespace content {
 class BrowserContext;
@@ -32,6 +33,9 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
   ExternalInstallManager(content::BrowserContext* browser_context,
                          bool is_first_run);
   ~ExternalInstallManager() override;
+
+  // Returns true if prompting for external extensions is enabled.
+  static bool IsPromptingEnabled();
 
   // Removes the error associated with a given extension.
   void RemoveExternalInstallError(const std::string& extension_id);
@@ -83,7 +87,7 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
 
   // Returns true if this extension is an external one that has yet to be
   // marked as acknowledged.
-  bool IsUnacknowledgedExternalExtension(const Extension* extension) const;
+  bool IsUnacknowledgedExternalExtension(const Extension& extension) const;
 
   // The associated BrowserContext.
   content::BrowserContext* browser_context_;
@@ -97,7 +101,13 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
   // The collection of ExternalInstallErrors.
   std::map<std::string, std::unique_ptr<ExternalInstallError>> errors_;
 
-  std::set<std::string> shown_ids_;
+  // The set of ids of unacknowledged external extensions. Populated at
+  // initialization, and then updated as extensions are added, removed,
+  // acknowledged, etc.
+  std::set<ExtensionId> unacknowledged_ids_;
+
+  // The set of ids of extensions that we have warned about in this session.
+  std::set<ExtensionId> shown_ids_;
 
   // The error that is currently showing an alert dialog/bubble.
   ExternalInstallError* currently_visible_install_alert_;

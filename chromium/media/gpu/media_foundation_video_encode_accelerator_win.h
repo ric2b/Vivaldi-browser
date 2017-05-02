@@ -76,6 +76,10 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // Initializes encoder parameters for real-time use.
   bool SetEncoderModes();
 
+  // Returns true if we can initialize input and output samples with the given
+  // frame size, otherwise false.
+  bool IsResolutionSupported(const gfx::Size& size);
+
   // Helper function to notify the client of an error on
   // |main_client_task_runner_|.
   void NotifyError(VideoEncodeAccelerator::Error error);
@@ -115,13 +119,16 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
 
   gfx::Size input_visible_size_;
   size_t bitstream_buffer_size_;
-  int32_t frame_rate_;
-  int32_t target_bitrate_;
+  uint32_t frame_rate_;
+  uint32_t target_bitrate_;
   size_t u_plane_offset_;
   size_t v_plane_offset_;
 
   base::win::ScopedComPtr<IMFTransform> encoder_;
   base::win::ScopedComPtr<ICodecAPI> codec_api_;
+
+  DWORD input_stream_id_;
+  DWORD output_stream_id_;
 
   base::win::ScopedComPtr<IMFMediaType> imf_input_media_type_;
   base::win::ScopedComPtr<IMFMediaType> imf_output_media_type_;

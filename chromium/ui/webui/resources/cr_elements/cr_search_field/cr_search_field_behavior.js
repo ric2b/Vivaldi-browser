@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 /**
- * Implements an incremental search field which can be shown and hidden.
- * Canonical implementation is <cr-search-field>.
+ * Helper functions for implementing an incremental search field. See
+ * <settings-subpage-search> for a simple implementation.
  * @polymerBehavior
  */
 var CrSearchFieldBehavior = {
@@ -19,12 +19,10 @@ var CrSearchFieldBehavior = {
       value: '',
     },
 
-    showingSearch: {
+    hasSearchText: {
       type: Boolean,
+      reflectToAttribute: true,
       value: false,
-      notify: true,
-      observer: 'showingSearchChanged_',
-      reflectToAttribute: true
     },
 
     /** @private */
@@ -57,25 +55,22 @@ var CrSearchFieldBehavior = {
   setValue: function(value, opt_noEvent) {
     var searchInput = this.getSearchInput();
     searchInput.value = value;
-    // If the input is an iron-input, ensure that the new value propagates as
-    // expected.
-    if (searchInput.bindValue != undefined)
-      searchInput.bindValue = value;
+
+    this.onSearchTermInput();
     this.onValueChanged_(value, !!opt_noEvent);
-  },
-
-  showAndFocus: function() {
-    this.showingSearch = true;
-    this.focus_();
-  },
-
-  /** @private */
-  focus_: function() {
-    this.getSearchInput().focus();
   },
 
   onSearchTermSearch: function() {
     this.onValueChanged_(this.getValue(), false);
+  },
+
+  /**
+   * Update the state of the search field whenever the underlying input value
+   * changes. Unlike onsearch or onkeypress, this is reliably called immediately
+   * after any change, whether the result of user input or JS modification.
+   */
+  onSearchTermInput: function() {
+    this.hasSearchText = this.$.searchInput.value != '';
   },
 
   /**
@@ -95,28 +90,4 @@ var CrSearchFieldBehavior = {
     if (!noEvent)
       this.fire('search-changed', newValue);
   },
-
-  onSearchTermKeydown: function(e) {
-    if (e.key == 'Escape')
-      this.showingSearch = false;
-  },
-
-  /**
-   * @param {boolean} current
-   * @param {boolean|undefined} previous
-   * @private
-   */
-  showingSearchChanged_: function(current, previous) {
-    // Prevent unnecessary 'search-changed' event from firing on startup.
-    if (previous == undefined)
-      return;
-
-    if (this.showingSearch) {
-      this.focus_();
-      return;
-    }
-
-    this.setValue('');
-    this.getSearchInput().blur();
-  }
 };

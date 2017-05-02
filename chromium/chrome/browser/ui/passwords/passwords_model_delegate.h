@@ -49,10 +49,6 @@ class PasswordsModelDelegate {
   virtual const std::vector<std::unique_ptr<autofill::PasswordForm>>&
   GetCurrentForms() const = 0;
 
-  // Returns possible identity provider's credentials for the current site.
-  virtual const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-  GetFederatedForms() const = 0;
-
   // For PENDING_PASSWORD_STATE state returns the current statistics for
   // the pending username.
   virtual const password_manager::InteractionsStats*
@@ -64,8 +60,8 @@ class PasswordsModelDelegate {
   // Called from the model when the bubble is hidden.
   virtual void OnBubbleHidden() = 0;
 
-  // Called when the user didn't interact with the Update UI.
-  virtual void OnNoInteractionOnUpdate() = 0;
+  // Called when the user didn't interact with UI.
+  virtual void OnNoInteraction() = 0;
 
   // Called when the user chose not to update password.
   virtual void OnNopeUpdateClicked() = 0;
@@ -85,8 +81,6 @@ class PasswordsModelDelegate {
       const autofill::PasswordForm& form,
       password_manager::CredentialType credential_type) = 0;
 
-  // Open a new tab pointing to passwords.google.com.
-  virtual void NavigateToExternalPasswordManager() = 0;
   // Open a new tab, pointing to the Smart Lock help article.
   virtual void NavigateToSmartLockHelpPage() = 0;
   // Open a new tab, pointing to the password manager settings page.

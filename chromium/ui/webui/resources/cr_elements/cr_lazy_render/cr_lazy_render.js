@@ -18,9 +18,7 @@ Polymer({
   is: 'cr-lazy-render',
   extends: 'template',
 
-  behaviors: [
-    Polymer.Templatizer
-  ],
+  behaviors: [Polymer.Templatizer],
 
   /** @private {TemplatizerNode} */
   child_: null,

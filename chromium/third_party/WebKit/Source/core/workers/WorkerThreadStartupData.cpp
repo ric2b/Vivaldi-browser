@@ -49,7 +49,7 @@ WorkerThreadStartupData::WorkerThreadStartupData(
     WebAddressSpace addressSpace,
     const Vector<String>* originTrialTokens,
     std::unique_ptr<WorkerSettings> workerSettings,
-    V8CacheOptions v8CacheOptions)
+    WorkerV8Settings workerV8Settings)
     : m_scriptURL(scriptURL.copy()),
       m_userAgent(userAgent.isolatedCopy()),
       m_sourceCode(sourceCode.isolatedCopy()),
@@ -61,19 +61,19 @@ WorkerThreadStartupData::WorkerThreadStartupData(
       m_workerClients(workerClients),
       m_addressSpace(addressSpace),
       m_workerSettings(std::move(workerSettings)),
-      m_v8CacheOptions(v8CacheOptions) {
-  m_contentSecurityPolicyHeaders = makeUnique<Vector<CSPHeaderAndType>>();
+      m_workerV8Settings(workerV8Settings) {
+  m_contentSecurityPolicyHeaders = WTF::makeUnique<Vector<CSPHeaderAndType>>();
   if (contentSecurityPolicyHeaders) {
     for (const auto& header : *contentSecurityPolicyHeaders) {
       CSPHeaderAndType copiedHeader(header.first.isolatedCopy(), header.second);
-      m_contentSecurityPolicyHeaders->append(copiedHeader);
+      m_contentSecurityPolicyHeaders->push_back(copiedHeader);
     }
   }
 
   m_originTrialTokens = std::unique_ptr<Vector<String>>(new Vector<String>());
   if (originTrialTokens) {
     for (const String& token : *originTrialTokens)
-      m_originTrialTokens->append(token.isolatedCopy());
+      m_originTrialTokens->push_back(token.isolatedCopy());
   }
 }
 

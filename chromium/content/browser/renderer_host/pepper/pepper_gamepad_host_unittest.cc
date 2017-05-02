@@ -13,9 +13,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
-#include "content/browser/gamepad/gamepad_service_test_helpers.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_test.h"
-#include "content/common/gamepad_hardware_buffer.h"
+#include "device/gamepad/gamepad_shared_buffer.h"
 #include "device/gamepad/gamepad_test_helpers.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/host/host_message_context.h"
@@ -36,13 +35,15 @@ class PepperGamepadHostTest : public testing::Test,
   ~PepperGamepadHostTest() override {}
 
   void ConstructService(const blink::WebGamepads& test_data) {
-    service_.reset(new GamepadServiceTestConstructor(test_data));
+    service_.reset(new device::GamepadServiceTestConstructor(test_data));
   }
 
-  GamepadService* gamepad_service() { return service_->gamepad_service(); }
+  device::GamepadService* gamepad_service() {
+    return service_->gamepad_service();
+  }
 
  protected:
-  std::unique_ptr<GamepadServiceTestConstructor> service_;
+  std::unique_ptr<device::GamepadServiceTestConstructor> service_;
 
   DISALLOW_COPY_AND_ASSIGN(PepperGamepadHostTest);
 };
@@ -59,13 +60,13 @@ inline ptrdiff_t AddressDiff(const void* a, const void* b) {
 TEST_F(PepperGamepadHostTest, ValidateHardwareBuffersMatch) {
   // Hardware buffer.
   static_assert(sizeof(ppapi::ContentGamepadHardwareBuffer) ==
-                    sizeof(GamepadHardwareBuffer),
+                    sizeof(device::GamepadHardwareBuffer),
                 "gamepad hardware buffers must match");
   ppapi::ContentGamepadHardwareBuffer ppapi_buf;
-  GamepadHardwareBuffer content_buf;
-  EXPECT_EQ(AddressDiff(&content_buf.sequence, &content_buf),
+  device::GamepadHardwareBuffer content_buf;
+  EXPECT_EQ(AddressDiff(&content_buf.seqlock, &content_buf),
             AddressDiff(&ppapi_buf.sequence, &ppapi_buf));
-  EXPECT_EQ(AddressDiff(&content_buf.buffer, &content_buf),
+  EXPECT_EQ(AddressDiff(&content_buf.data, &content_buf),
             AddressDiff(&ppapi_buf.buffer, &ppapi_buf));
 }
 
@@ -75,8 +76,6 @@ TEST_F(PepperGamepadHostTest, ValidateGamepadsMatch) {
                 "gamepads data must match");
   ppapi::WebKitGamepads ppapi_gamepads;
   blink::WebGamepads web_gamepads;
-  EXPECT_EQ(AddressDiff(&web_gamepads.length, &web_gamepads),
-            AddressDiff(&ppapi_gamepads.length, &ppapi_gamepads));
 
   // See comment below on storage & the EXPECT macro.
   size_t webkit_items_length_cap = blink::WebGamepads::itemsLengthCap;
@@ -127,16 +126,9 @@ TEST_F(PepperGamepadHostTest, ValidateGamepadMatch) {
             AddressDiff(&ppapi_gamepad.buttons, &ppapi_gamepad));
 }
 
-// crbug.com/147549
-#if defined(OS_ANDROID)
-#define MAYBE_WaitForReply DISABLED_WaitForReply
-#else
-#define MAYBE_WaitForReply WaitForReply
-#endif
-TEST_F(PepperGamepadHostTest, MAYBE_WaitForReply) {
+TEST_F(PepperGamepadHostTest, WaitForReply) {
   blink::WebGamepads default_data;
   memset(&default_data, 0, sizeof(blink::WebGamepads));
-  default_data.length = 1;
   default_data.items[0].connected = true;
   default_data.items[0].buttonsLength = 1;
   ConstructService(default_data);
@@ -184,7 +176,6 @@ TEST_F(PepperGamepadHostTest, MAYBE_WaitForReply) {
   const ppapi::ContentGamepadHardwareBuffer* buffer =
       static_cast<const ppapi::ContentGamepadHardwareBuffer*>(
           shared_memory.memory());
-  EXPECT_EQ(button_down_data.length, buffer->buffer.length);
   EXPECT_EQ(button_down_data.items[0].buttonsLength,
             buffer->buffer.items[0].buttons_length);
   for (size_t i = 0; i < ppapi::WebKitGamepad::kButtonsLengthCap; i++) {

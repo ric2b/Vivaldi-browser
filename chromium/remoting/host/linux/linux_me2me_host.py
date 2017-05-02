@@ -37,6 +37,27 @@ import uuid
 
 LOG_FILE_ENV_VAR = "CHROME_REMOTE_DESKTOP_LOG_FILE"
 
+ENV_VARS_FORWARDED_TO_CHILD_ENV = [
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "USER",
+    "USERNAME",
+    LOG_FILE_ENV_VAR,
+    "GOOGLE_CLIENT_ID_REMOTING",
+    "GOOGLE_CLIENT_ID_REMOTING_HOST",
+    "GOOGLE_CLIENT_SECRET_REMOTING",
+    "GOOGLE_CLIENT_SECRET_REMOTING_HOST"
+]
+
+# If this env var is defined, extra host params will be loaded from this env var
+# as a list of strings separated by space (\s+). Note that param that contains
+# space is currently NOT supported and will be broken down into two params at
+# the space character.
+HOST_EXTRA_PARAMS_ENV_VAR = "CHROME_REMOTE_DESKTOP_HOST_EXTRA_PARAMS"
+
 # This script has a sensible default for the initial and maximum desktop size,
 # which can be overridden either on the command-line, or via a comma-separated
 # list of sizes in this environment variable.
@@ -359,54 +380,54 @@ class Desktop:
       display += 1
     return display
 
-  def _init_child_env(self):
-    # Create clean environment for new session, so it is cleanly separated from
-    # the user's console X session.
-    self.child_env = {}
+  def _init_child_env(self, keep_env):
+    if keep_env:
+      self.child_env = dict(os.environ)
+    else:
+      # Create clean environment for new session, so it is cleanly separated
+      # from the user's console X session.
+      self.child_env = {}
 
-    for key in [
-        "HOME",
-        "LANG",
-        "LOGNAME",
-        "PATH",
-        "SHELL",
-        "USER",
-        "USERNAME",
-        LOG_FILE_ENV_VAR]:
-      if key in os.environ:
-        self.child_env[key] = os.environ[key]
+      for key in ENV_VARS_FORWARDED_TO_CHILD_ENV:
+        if key in os.environ:
+          self.child_env[key] = os.environ[key]
+
+      # Initialize the environment from files that would normally be read in a
+      # PAM-authenticated session.
+      for env_filename in [
+        "/etc/environment",
+        "/etc/default/locale",
+        os.path.expanduser("~/.pam_environment")]:
+        if not os.path.exists(env_filename):
+          continue
+        try:
+          with open(env_filename, "r") as env_file:
+            for line in env_file:
+              line = line.rstrip("\n")
+              # Split at the first "=", leaving any further instances in the
+              # value.
+              key_value_pair = line.split("=", 1)
+              if len(key_value_pair) == 2:
+                key, value = tuple(key_value_pair)
+                # The file stores key=value assignments, but the value may be
+                # quoted, so strip leading & trailing quotes from it.
+                value = value.strip("'\"")
+                self.child_env[key] = value
+        except IOError:
+          logging.error("Failed to read file: %s" % env_filename)
 
     # Ensure that the software-rendering GL drivers are loaded by the desktop
     # session, instead of any hardware GL drivers installed on the system.
-    self.child_env["LD_LIBRARY_PATH"] = (
+    library_path = (
         "/usr/lib/%(arch)s-linux-gnu/mesa:"
         "/usr/lib/%(arch)s-linux-gnu/dri:"
         "/usr/lib/%(arch)s-linux-gnu/gallium-pipe" %
         { "arch": platform.machine() })
 
-    # Initialize the environment from files that would normally be read in a
-    # PAM-authenticated session.
-    for env_filename in [
-      "/etc/environment",
-      "/etc/default/locale",
-      os.path.expanduser("~/.pam_environment")]:
-      if not os.path.exists(env_filename):
-        continue
-      try:
-        with open(env_filename, "r") as env_file:
-          for line in env_file:
-            line = line.rstrip("\n")
-            # Split at the first "=", leaving any further instances in the
-            # value.
-            key_value_pair = line.split("=", 1)
-            if len(key_value_pair) == 2:
-              key, value = tuple(key_value_pair)
-              # The file stores key=value assignments, but the value may be
-              # quoted, so strip leading & trailing quotes from it.
-              value = value.strip("'\"")
-              self.child_env[key] = value
-      except IOError:
-        logging.error("Failed to read file: %s" % env_filename)
+    if "LD_LIBRARY_PATH" in self.child_env:
+      library_path += ":" + self.child_env["LD_LIBRARY_PATH"]
+
+    self.child_env["LD_LIBRARY_PATH"] = library_path
 
   def _setup_pulseaudio(self):
     self.pulseaudio_pipe = None
@@ -462,6 +483,18 @@ class Desktop:
     self.ssh_auth_sockname = ("/tmp/chromoting.%s.ssh_auth_sock" %
                               os.environ["USER"])
 
+  # Returns child environment not containing TMPDIR.
+  # Certain values of TMPDIR can break the X server (crbug.com/672684), so we
+  # want to make sure it isn't set in the envirionment we use to start the
+  # server.
+  def _x_env(self):
+    if "TMPDIR" not in self.child_env:
+      return self.child_env
+    else:
+      env_copy = dict(self.child_env)
+      del env_copy["TMPDIR"]
+      return env_copy
+
   def _wait_for_x(self):
     # Wait for X to be active.
     with open(os.devnull, "r+") as devnull:
@@ -492,7 +525,7 @@ class Desktop:
          "-nolisten", "tcp",
          "-noreset",
          "-screen", "0", screen_option
-        ] + extra_x_args, env=self.child_env)
+        ] + extra_x_args, env=self._x_env())
     if not self.x_proc.pid:
       raise Exception("Could not start Xvfb.")
 
@@ -535,7 +568,7 @@ class Desktop:
          "-logfile", "/dev/null",
          "-verbose", "3",
          "-config", config_file.name
-        ] + extra_x_args, env=self.child_env)
+        ] + extra_x_args, env=self._x_env())
     if not self.x_proc.pid:
       raise Exception("Could not start Xorg.")
     self._wait_for_x()
@@ -649,14 +682,14 @@ class Desktop:
     if not self.session_proc.pid:
       raise Exception("Could not start X session")
 
-  def launch_session(self, x_args):
-    self._init_child_env()
+  def launch_session(self, keep_env, x_args):
+    self._init_child_env(keep_env)
     self._setup_pulseaudio()
     self._setup_gnubby()
     self._launch_x_server(x_args)
     self._launch_x_session()
 
-  def launch_host(self, host_config):
+  def launch_host(self, host_config, extra_start_host_args):
     # Start remoting host
     args = [HOST_BINARY_PATH, "--host-config=-"]
     if self.pulseaudio_pipe:
@@ -665,6 +698,8 @@ class Desktop:
       args.append("--server-supports-exact-resize")
     if self.ssh_auth_sockname:
       args.append("--ssh-auth-sockname=%s" % self.ssh_auth_sockname)
+
+    args.extend(extra_start_host_args)
 
     # Have the host process use SIGUSR1 to signal a successful start.
     def sigusr1_handler(signum, frame):
@@ -862,11 +897,11 @@ class ParentProcessLogger(object):
       false otherwise.
     """
     # If Ctrl-C is pressed, inform the user that the daemon is still running.
-    # This signal will cause the read loop below to stop with an EINTR IOError.
     def sigint_handler(signum, frame):
       _ = signum, frame
       print("Interrupted. The daemon is still running in the background.",
             file=sys.stderr)
+      sys.exit(1)
 
     signal.signal(signal.SIGINT, sigint_handler)
 
@@ -889,17 +924,13 @@ class ParentProcessLogger(object):
     # Print lines as they're logged to the pipe until EOF is reached or readline
     # is interrupted by one of the signal handlers above.
     host_ready = False
-    try:
-      for line in iter(self._read_file.readline, ''):
-        if line[:4] == "MSG:":
-          sys.stderr.write(line[4:])
-        elif line == "READY\n":
-          host_ready = True
-        else:
-          sys.stderr.write("Unrecognized command: " + line)
-    except IOError as e:
-      if e.errno != errno.EINTR:
-        raise
+    for line in iter(self._read_file.readline, ''):
+      if line[:4] == "MSG:":
+        sys.stderr.write(line[4:])
+      elif line == "READY\n":
+        host_ready = True
+      else:
+        sys.stderr.write("Unrecognized command: " + line)
     print("Log file: %s" % os.environ[LOG_FILE_ENV_VAR], file=sys.stderr)
     return host_ready
 
@@ -1236,6 +1267,9 @@ Web Store: https://chrome.google.com/remotedesktop"""
                     action="store", metavar="USER",
                     help="Adds the specified user to the chrome-remote-desktop "
                     "group (must be run as root).")
+  parser.add_option("", "--keep-parent-env", dest="keep_env", default=False,
+                    action="store_true",
+                    help=optparse.SUPPRESS_HELP)
   parser.add_option("", "--watch-resolution", dest="watch_resolution",
                     type="int", nargs=2, default=False, action="store",
                     help=optparse.SUPPRESS_HELP)
@@ -1469,7 +1503,7 @@ Web Store: https://chrome.google.com/remotedesktop"""
           relaunch_times.append(x_server_inhibitor.earliest_relaunch_time)
         else:
           logging.info("Launching X server and X session.")
-          desktop.launch_session(args)
+          desktop.launch_session(options.keep_env, args)
           x_server_inhibitor.record_started(MINIMUM_PROCESS_LIFETIME,
                                             backoff_time)
           allow_relaunch_self = True
@@ -1480,7 +1514,13 @@ Web Store: https://chrome.google.com/remotedesktop"""
         relaunch_times.append(host_inhibitor.earliest_relaunch_time)
       else:
         logging.info("Launching host process")
-        desktop.launch_host(host_config)
+
+        extra_start_host_args = []
+        if HOST_EXTRA_PARAMS_ENV_VAR in os.environ:
+            extra_start_host_args = \
+                re.split('\s+', os.environ[HOST_EXTRA_PARAMS_ENV_VAR].strip())
+        desktop.launch_host(host_config, extra_start_host_args)
+
         host_inhibitor.record_started(MINIMUM_PROCESS_LIFETIME,
                                       backoff_time)
 

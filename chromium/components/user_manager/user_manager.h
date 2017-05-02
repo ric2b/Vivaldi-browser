@@ -17,17 +17,8 @@
 class AccountId;
 class PrefService;
 
-namespace base {
-class DictionaryValue;
-}
-
 namespace chromeos {
-class LoginState;
 class ScopedUserManagerEnabler;
-}
-
-namespace cryptohome {
-class AsyncMethodCaller;
 }
 
 namespace user_manager {
@@ -47,6 +38,18 @@ class USER_MANAGER_EXPORT UserManager {
    public:
     // Called when the local state preferences is changed.
     virtual void LocalStateChanged(UserManager* user_manager);
+
+    // Called when the image of the given user is changed.
+    virtual void OnUserImageChanged(const User& user);
+
+    // Called when the profile image download for the given user fails or
+    // user has the default profile image or no porfile image at all.
+    virtual void OnUserProfileImageUpdateFailed(const User& user);
+
+    // Called when the profile image for the given user is downloaded.
+    // |profile_image| contains the downloaded profile image.
+    virtual void OnUserProfileImageUpdated(const User& user,
+                                           const gfx::ImageSkia& profile_image);
 
    protected:
     virtual ~Observer();
@@ -309,6 +312,11 @@ class USER_MANAGER_EXPORT UserManager {
   virtual void RemoveSessionStateObserver(UserSessionStateObserver* obs) = 0;
 
   virtual void NotifyLocalStateChanged() = 0;
+  virtual void NotifyUserImageChanged(const User& user) = 0;
+  virtual void NotifyUserProfileImageUpdateFailed(const User& user) = 0;
+  virtual void NotifyUserProfileImageUpdated(
+      const User& user,
+      const gfx::ImageSkia& profile_image) = 0;
 
   // Changes the child status and notifies observers.
   virtual void ChangeUserChildStatus(User* user, bool is_child) = 0;

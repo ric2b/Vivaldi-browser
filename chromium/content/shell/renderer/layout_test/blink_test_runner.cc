@@ -57,6 +57,7 @@
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_parameters.h"
 #include "media/capture/video_capturer_source.h"
+#include "media/media_features.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -241,7 +242,7 @@ WebURL RewriteAbsolutePathInWPT(const std::string& utf8_url) {
   base::FilePath new_path =
       LayoutTestRenderThreadObserver::GetInstance()
           ->webkit_source_dir()
-          .Append(FILE_PATH_LITERAL("LayoutTests/imported/wpt/"))
+          .Append(FILE_PATH_LITERAL("LayoutTests/external/wpt/"))
           .AppendASCII(path);
   return WebURL(net::FilePathToFileURL(new_path));
 }
@@ -712,7 +713,7 @@ void BlinkTestRunner::DispatchBeforeInstallPromptEvent(
   service_manager::InterfaceRegistry::TestApi test_api(
       render_view()->GetMainRenderFrame()->GetInterfaceRegistry());
   test_api.GetLocalInterface(
-      mojo::GetProxy(&app_banner_service_->controller()));
+      mojo::MakeRequest(&app_banner_service_->controller()));
 
   app_banner_service_->SendBannerPromptRequest(event_platforms, callback);
 }
@@ -751,7 +752,7 @@ void BlinkTestRunner::ForceTextInputStateUpdate(WebFrame* frame) {
 bool BlinkTestRunner::AddMediaStreamVideoSourceAndTrack(
     blink::WebMediaStream* stream) {
   DCHECK(stream);
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   return AddVideoTrackToMediaStream(base::MakeUnique<MockVideoCapturerSource>(),
                                     false,  // is_remote
                                     false,  // is_readonly
@@ -764,7 +765,7 @@ bool BlinkTestRunner::AddMediaStreamVideoSourceAndTrack(
 bool BlinkTestRunner::AddMediaStreamAudioSourceAndTrack(
     blink::WebMediaStream* stream) {
   DCHECK(stream);
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   return AddAudioTrackToMediaStream(
       make_scoped_refptr(new MockAudioCapturerSource()),
       48000,  // sample rate
@@ -941,7 +942,7 @@ mojom::LayoutTestBluetoothFakeAdapterSetter&
 BlinkTestRunner::GetBluetoothFakeAdapterSetter() {
   if (!bluetooth_fake_adapter_setter_) {
     RenderThread::Get()->GetRemoteInterfaces()->GetInterface(
-        mojo::GetProxy(&bluetooth_fake_adapter_setter_));
+        mojo::MakeRequest(&bluetooth_fake_adapter_setter_));
   }
   return *bluetooth_fake_adapter_setter_;
 }

@@ -8,14 +8,13 @@
 #include <stdint.h>
 
 #include <memory>
-#include <set>
-#include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/util_constants.h"
+
+class BrowserDistribution;
 
 namespace base {
 class CommandLine;
@@ -23,8 +22,6 @@ class CommandLine;
 
 namespace installer {
 
-class ChannelInfo;
-class MasterPreferences;
 class Product;
 class ProductOperations;
 
@@ -43,43 +40,8 @@ class Product {
 
   ~Product();
 
-  void InitializeFromPreferences(const MasterPreferences& prefs);
-
-  void InitializeFromUninstallCommand(
-      const base::CommandLine& uninstall_command);
-
   BrowserDistribution* distribution() const {
     return distribution_;
-  }
-
-  bool is_type(BrowserDistribution::Type type) const {
-    return distribution_->GetType() == type;
-  }
-
-  bool is_chrome() const {
-    return distribution_->GetType() == BrowserDistribution::CHROME_BROWSER;
-  }
-
-#ifndef OMIT_CHROME_FRAME
-  bool is_chrome_frame() const {
-    return distribution_->GetType() == BrowserDistribution::CHROME_FRAME;
-  }
-#endif
-
-  bool is_chrome_binaries() const {
-    return distribution_->GetType() == BrowserDistribution::CHROME_BINARIES;
-  }
-
-  bool HasOption(const std::wstring& option) const {
-    return options_.find(option) != options_.end();
-  }
-
-  // Returns true if the set of options is mutated by this operation.
-  bool SetOption(const std::wstring& option, bool set) {
-    if (set)
-      return options_.insert(option).second;
-    else
-      return options_.erase(option) != 0;
   }
 
   // Launches Chrome without waiting for it to exit.
@@ -100,24 +62,14 @@ class Product {
   // ClientState key.
   bool SetMsiMarker(bool system_install, bool set) const;
 
-  // Returns true if setup should create an entry in the Add/Remove list
-  // of installed applications.
-  bool ShouldCreateUninstallEntry() const;
-
   // See ProductOperations::AddKeyFiles.
   void AddKeyFiles(std::vector<base::FilePath>* key_files) const;
-
-  // See ProductOperations::AddComDllList.
-  void AddComDllList(std::vector<base::FilePath>* com_dll_list) const;
 
   // See ProductOperations::AppendProductFlags.
   void AppendProductFlags(base::CommandLine* command_line) const;
 
   // See ProductOperations::AppendRenameFlags.
   void AppendRenameFlags(base::CommandLine* command_line) const;
-
-  // See Productoperations::SetChannelFlags.
-  bool SetChannelFlags(bool set, ChannelInfo* channel_info) const;
 
   // See ProductOperations::AddDefaultShortcutProperties.
   void AddDefaultShortcutProperties(
@@ -133,9 +85,8 @@ class Product {
     MSI_STATE = 0x01
   };
 
-  BrowserDistribution* distribution_;
-  std::unique_ptr<ProductOperations> operations_;
-  std::set<std::wstring> options_;
+  BrowserDistribution* const distribution_;
+  const std::unique_ptr<ProductOperations> operations_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Product);

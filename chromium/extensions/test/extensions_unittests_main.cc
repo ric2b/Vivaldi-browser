@@ -16,19 +16,11 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_paths.h"
 #include "extensions/test/test_extensions_client.h"
-#include "mojo/edk/test/scoped_ipc_support.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 #include "url/url_util.h"
 
 namespace {
-
-const int kNumExtensionStandardURLSchemes = 2;
-const url::SchemeWithType kExtensionStandardURLSchemes[
-    kNumExtensionStandardURLSchemes] = {
-  {extensions::kExtensionScheme, url::SCHEME_WITHOUT_PORT},
-  {extensions::kExtensionResourceScheme, url::SCHEME_WITHOUT_PORT},
-};
 
 // Content client that exists only to register chrome-extension:// scheme with
 // the url module.
@@ -40,15 +32,9 @@ class ExtensionsContentClient : public content::ContentClient {
   ~ExtensionsContentClient() override {}
 
   // content::ContentClient overrides:
-  void AddAdditionalSchemes(
-      std::vector<url::SchemeWithType>* standard_schemes,
-      std::vector<url::SchemeWithType>* referrer_schemes,
-      std::vector<std::string>* savable_schemes) override {
-    for (int i = 0; i < kNumExtensionStandardURLSchemes; i++)
-      standard_schemes->push_back(kExtensionStandardURLSchemes[i]);
-
-    savable_schemes->push_back(extensions::kExtensionScheme);
-    savable_schemes->push_back(extensions::kExtensionResourceScheme);
+  void AddAdditionalSchemes(Schemes* schemes) override {
+    schemes->standard_schemes.push_back(extensions::kExtensionScheme);
+    schemes->savable_schemes.push_back(extensions::kExtensionScheme);
   }
 
  private:
@@ -113,10 +99,6 @@ void ExtensionsTestSuite::Shutdown() {
 
 int main(int argc, char** argv) {
   content::UnitTestTestSuite test_suite(new ExtensionsTestSuite(argc, argv));
-
-  base::TestIOThread test_io_thread(base::TestIOThread::kAutoStart);
-  mojo::edk::test::ScopedIPCSupport ipc_support(test_io_thread.task_runner());
-
   return base::LaunchUnitTests(argc,
                                argv,
                                base::Bind(&content::UnitTestTestSuite::Run,

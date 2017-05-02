@@ -1,11 +1,16 @@
-source_set("notes") {
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+static_library("notes") {
   sources = [
     "notes_attachment.cpp",
     "notes_attachment.h",
+    "notes_codec.cpp",
+    "notes_codec.h",
     "notes_factory.cpp",
     "notes_factory.h",
     "notes_model.cpp",
     "notes_model.h",
+    "notes_model_observer.h",
     "notes_model_loaded_observer.cpp",
     "notes_model_loaded_observer.h",
     "notes_model_observer.h",
@@ -15,14 +20,38 @@ source_set("notes") {
     "notes_submenu_observer.h",
     "notesnode.cpp",
     "notesnode.h",
+    "scoped_group_notes_actions.cpp",
+    "scoped_group_notes_actions.h",
   ]
   deps = [
     "//base:base",
     "//components/keyed_service/core:core",
     "//components/renderer_context_menu:renderer_context_menu",
     "//skia",
+    "//third_party/icu",
     "//url:url",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+  public_deps = [
+    #"//chrome/browser",
+    "//components/bookmarks/browser",
+    "//components/renderer_context_menu",
+    "//components/sync/protocol",
+    #"//vivaldi/sync",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "notes_codec_unittest.cpp"
+  ]
+  deps = [
+    "//testing/gtest",
+  ]
+  public_deps = [
+    ":notes",
+    "tests:notes",
   ]
 }

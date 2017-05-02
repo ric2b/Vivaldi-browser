@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_SENT_PACKET_MANAGER_H_
-#define NET_QUIC_QUIC_SENT_PACKET_MANAGER_H_
+#ifndef NET_QUIC_CORE_QUIC_SENT_PACKET_MANAGER_H_
+#define NET_QUIC_CORE_QUIC_SENT_PACKET_MANAGER_H_
 
 #include <stddef.h>
 
@@ -15,15 +15,16 @@
 
 #include "base/macros.h"
 #include "net/base/linked_hash_map.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/congestion_control/general_loss_algorithm.h"
 #include "net/quic/core/congestion_control/loss_detection_interface.h"
 #include "net/quic/core/congestion_control/pacing_sender.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
-#include "net/quic/core/quic_protocol.h"
-#include "net/quic/core/quic_sent_packet_manager_interface.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/core/quic_pending_retransmission.h"
+#include "net/quic/core/quic_sustained_bandwidth_recorder.h"
 #include "net/quic/core/quic_unacked_packet_map.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -41,60 +42,73 @@ struct QuicConnectionStats;
 // retransmittable data associated with each packet. If a packet is
 // retransmitted, it will keep track of each version of a packet so that if a
 // previous transmission is acked, the data will not be retransmitted.
-class NET_EXPORT_PRIVATE QuicSentPacketManager
-    : public QuicSentPacketManagerInterface {
+class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
  public:
-  // A delegate interface which manages pending retransmissions.
-  class MultipathDelegateInterface {
+  // Interface which gets callbacks from the QuicSentPacketManager at
+  // interesting points.  Implementations must not mutate the state of
+  // the packet manager or connection as a result of these callbacks.
+  class QUIC_EXPORT_PRIVATE DebugDelegate {
    public:
-    virtual ~MultipathDelegateInterface() {}
+    virtual ~DebugDelegate() {}
 
-    // Called when unencrypted |packet_number| is requested to be neutered.
-    virtual void OnUnencryptedPacketsNeutered(
-        QuicPathId path_id,
-        QuicPacketNumber packet_number) = 0;
-    // Called when |packet_number| is requested to be retransmitted.
-    virtual void OnRetransmissionMarked(QuicPathId path_id,
-                                        QuicPacketNumber packet_number,
-                                        TransmissionType transmission_type) = 0;
-    // Called when |packet_number| is marked as not retransmittable.
-    virtual void OnPacketMarkedNotRetransmittable(
-        QuicPathId path_id,
-        QuicPacketNumber packet_number,
-        QuicTime::Delta delta_largest_observed) = 0;
-    // Called when any transmission of |packet_number| is handled.
-    virtual void OnPacketMarkedHandled(
-        QuicPathId path_id,
-        QuicPacketNumber packet_number,
-        QuicTime::Delta delta_largest_observed) = 0;
+    // Called when a spurious retransmission is detected.
+    virtual void OnSpuriousPacketRetransmission(
+        TransmissionType transmission_type,
+        QuicByteCount byte_size) {}
+
+    virtual void OnIncomingAck(const QuicAckFrame& ack_frame,
+                               QuicTime ack_receive_time,
+                               QuicPacketNumber largest_observed,
+                               bool rtt_updated,
+                               QuicPacketNumber least_unacked_sent_packet) {}
+
+    virtual void OnPacketLoss(QuicPacketNumber lost_packet_number,
+                              TransmissionType transmission_type,
+                              QuicTime detection_time) {}
+  };
+
+  // Interface which gets callbacks from the QuicSentPacketManager when
+  // network-related state changes. Implementations must not mutate the
+  // state of the packet manager as a result of these callbacks.
+  class QUIC_EXPORT_PRIVATE NetworkChangeVisitor {
+   public:
+    virtual ~NetworkChangeVisitor() {}
+
+    // Called when congestion window or RTT may have changed.
+    virtual void OnCongestionChange() = 0;
+
+    // Called with the path may be degrading. Note that the path may only be
+    // temporarily degrading.
+    // TODO(jri): With multipath, this method should probably have a path_id
+    // parameter, and should maybe result in the path being marked as inactive.
+    virtual void OnPathDegrading() = 0;
+
+    // Called when the Path MTU may have increased.
+    virtual void OnPathMtuIncreased(QuicPacketLength packet_size) = 0;
   };
 
   QuicSentPacketManager(Perspective perspective,
-                        QuicPathId path_id,
                         const QuicClock* clock,
                         QuicConnectionStats* stats,
                         CongestionControlType congestion_control_type,
-                        LossDetectionType loss_type,
-                        MultipathDelegateInterface* delegate);
-  ~QuicSentPacketManager() override;
+                        LossDetectionType loss_type);
+  virtual ~QuicSentPacketManager();
 
-  // Start implementation of QuicSentPacketManagerInterface.
-  void SetFromConfig(const QuicConfig& config) override;
+  virtual void SetFromConfig(const QuicConfig& config);
 
   // Pass the CachedNetworkParameters to the send algorithm.
   void ResumeConnectionState(
       const CachedNetworkParameters& cached_network_params,
-      bool max_bandwidth_resumption) override;
+      bool max_bandwidth_resumption);
 
-  void SetNumOpenStreams(size_t num_streams) override;
+  void SetNumOpenStreams(size_t num_streams);
 
-  void SetMaxPacingRate(QuicBandwidth max_pacing_rate) override;
+  void SetMaxPacingRate(QuicBandwidth max_pacing_rate);
 
-  void SetHandshakeConfirmed() override;
+  void SetHandshakeConfirmed();
 
   // Processes the incoming ack.
-  void OnIncomingAck(const QuicAckFrame& ack_frame,
-                     QuicTime ack_receive_time) override;
+  void OnIncomingAck(const QuicAckFrame& ack_frame, QuicTime ack_receive_time);
 
   // Requests retransmission of all unacked packets of |retransmission_type|.
   // The behavior of this method depends on the value of |retransmission_type|:
@@ -104,109 +118,109 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
   // ALL_INITIAL_RETRANSMISSION - Only initially encrypted packets will be
   // retransmitted. This can happen, for example, when a CHLO has been rejected
   // and the previously encrypted data needs to be encrypted with a new key.
-  void RetransmitUnackedPackets(TransmissionType retransmission_type) override;
+  void RetransmitUnackedPackets(TransmissionType retransmission_type);
 
   // Retransmits the oldest pending packet there is still a tail loss probe
   // pending.  Invoked after OnRetransmissionTimeout.
-  bool MaybeRetransmitTailLossProbe() override;
+  bool MaybeRetransmitTailLossProbe();
 
   // Removes the retransmittable frames from all unencrypted packets to ensure
   // they don't get retransmitted.
-  void NeuterUnencryptedPackets() override;
+  void NeuterUnencryptedPackets();
 
   // Returns true if there are pending retransmissions.
   // Not const because retransmissions may be cancelled before returning.
-  bool HasPendingRetransmissions() const override;
+  bool HasPendingRetransmissions() const;
 
   // Retrieves the next pending retransmission.  You must ensure that
   // there are pending retransmissions prior to calling this function.
-  PendingRetransmission NextPendingRetransmission() override;
+  QuicPendingRetransmission NextPendingRetransmission();
 
-  bool HasUnackedPackets() const override;
+  bool HasUnackedPackets() const;
 
   // Returns the smallest packet number of a serialized packet which has not
   // been acked by the peer.
-  QuicPacketNumber GetLeastUnacked(QuicPathId) const override;
+  QuicPacketNumber GetLeastUnacked() const;
 
   // Called when we have sent bytes to the peer.  This informs the manager both
   // the number of bytes sent and if they were retransmitted.  Returns true if
   // the sender should reset the retransmission timer.
   bool OnPacketSent(SerializedPacket* serialized_packet,
-                    QuicPathId /*original_path_id*/,
                     QuicPacketNumber original_packet_number,
                     QuicTime sent_time,
                     TransmissionType transmission_type,
-                    HasRetransmittableData has_retransmittable_data) override;
+                    HasRetransmittableData has_retransmittable_data);
 
   // Called when the retransmission timer expires.
-  void OnRetransmissionTimeout() override;
+  void OnRetransmissionTimeout();
 
   // Calculate the time until we can send the next packet to the wire.
   // Note 1: When kUnknownWaitTime is returned, there is no need to poll
   // TimeUntilSend again until we receive an OnIncomingAckFrame event.
   // Note 2: Send algorithms may or may not use |retransmit| in their
   // calculations.
-  QuicTime::Delta TimeUntilSend(QuicTime now, QuicPathId* path_id) override;
+  QuicTime::Delta TimeUntilSend(QuicTime now);
 
   // Returns the current delay for the retransmission timer, which may send
   // either a tail loss probe or do a full RTO.  Returns QuicTime::Zero() if
   // there are no retransmittable packets.
-  const QuicTime GetRetransmissionTime() const override;
+  const QuicTime GetRetransmissionTime() const;
 
-  const RttStats* GetRttStats() const override;
+  const RttStats* GetRttStats() const;
 
   // Returns the estimated bandwidth calculated by the congestion algorithm.
-  QuicBandwidth BandwidthEstimate() const override;
+  QuicBandwidth BandwidthEstimate() const;
 
-  const QuicSustainedBandwidthRecorder* SustainedBandwidthRecorder()
-      const override;
+  const QuicSustainedBandwidthRecorder* SustainedBandwidthRecorder() const;
 
   // Returns the size of the current congestion window in number of
   // kDefaultTCPMSS-sized segments. Note, this is not the *available* window.
   // Some send algorithms may not use a congestion window and will return 0.
-  QuicPacketCount GetCongestionWindowInTcpMss() const override;
+  QuicPacketCount GetCongestionWindowInTcpMss() const;
 
   // Returns the number of packets of length |max_packet_length| which fit in
   // the current congestion window. More packets may end up in flight if the
   // congestion window has been recently reduced, of if non-full packets are
   // sent.
   QuicPacketCount EstimateMaxPacketsInFlight(
-      QuicByteCount max_packet_length) const override;
+      QuicByteCount max_packet_length) const;
 
   // Returns the size of the current congestion window size in bytes.
-  QuicByteCount GetCongestionWindowInBytes() const override;
+  QuicByteCount GetCongestionWindowInBytes() const;
 
   // Returns the size of the slow start congestion window in nume of 1460 byte
   // TCP segments, aka ssthresh.  Some send algorithms do not define a slow
   // start threshold and will return 0.
-  QuicPacketCount GetSlowStartThresholdInTcpMss() const override;
+  QuicPacketCount GetSlowStartThresholdInTcpMss() const;
 
   // Returns debugging information about the state of the congestion controller.
-  std::string GetDebugState() const override;
+  std::string GetDebugState() const;
 
   // No longer retransmit data for |stream_id|.
-  void CancelRetransmissionsForStream(QuicStreamId stream_id) override;
+  void CancelRetransmissionsForStream(QuicStreamId stream_id);
 
   // Called when peer address changes and the connection migrates.
-  void OnConnectionMigration(QuicPathId, PeerAddressChangeType type) override;
+  void OnConnectionMigration(PeerAddressChangeType type);
 
-  void SetDebugDelegate(DebugDelegate* debug_delegate) override;
+  void SetDebugDelegate(DebugDelegate* debug_delegate);
 
-  QuicPacketNumber GetLargestObserved(QuicPathId) const override;
+  QuicPacketNumber GetLargestObserved() const;
 
-  QuicPacketNumber GetLargestSentPacket(QuicPathId) const override;
+  QuicPacketNumber GetLargestSentPacket() const;
 
-  QuicPacketNumber GetLeastPacketAwaitedByPeer(QuicPathId) const override;
+  QuicPacketNumber GetLeastPacketAwaitedByPeer() const;
 
-  void SetNetworkChangeVisitor(NetworkChangeVisitor* visitor) override;
+  void SetNetworkChangeVisitor(NetworkChangeVisitor* visitor);
 
-  bool InSlowStart() const override;
+  bool InSlowStart() const;
 
-  size_t GetConsecutiveRtoCount() const override;
+  size_t GetConsecutiveRtoCount() const;
 
-  size_t GetConsecutiveTlpCount() const override;
+  size_t GetConsecutiveTlpCount() const;
 
-  void OnApplicationLimited() override;
+  void OnApplicationLimited();
+
+  const SendAlgorithmInterface* GetSendAlgorithm() const;
 
  private:
   friend class test::QuicConnectionPeer;
@@ -257,7 +271,7 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
   // Returns the newest transmission associated with a packet.
   QuicPacketNumber GetNewestRetransmission(
       QuicPacketNumber packet_number,
-      const TransmissionInfo& transmission_info) const;
+      const QuicTransmissionInfo& transmission_info) const;
 
   // Update the RTT if the ack is for the largest acked packet number.
   // Returns true if the rtt was updated.
@@ -277,21 +291,10 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
                                   QuicByteCount prior_in_flight,
                                   QuicTime event_time);
 
-  // Called when frames of |packet_number| has been received but the packet
-  // itself has not been received by the peer. Currently, this method is not
-  // used.
-  // TODO(fayang): Update the comment when multipath sent packet manager is
-  // landed.
-  // The packet needs no longer to be retransmitted, but the packet remains
-  // pending if it is and the congestion control does not consider the packet
-  // acked.
-  void MarkPacketNotRetransmittable(QuicPacketNumber packet_number,
-                                    QuicTime::Delta ack_delay_time);
-
   // Removes the retransmittability and in flight properties from the packet at
   // |info| due to receipt by the peer.
   void MarkPacketHandled(QuicPacketNumber packet_number,
-                         TransmissionInfo* info,
+                         QuicTransmissionInfo* info,
                          QuicTime::Delta ack_delay_time);
 
   // Request that |packet_number| be retransmitted after the other pending
@@ -300,24 +303,16 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
   void MarkForRetransmission(QuicPacketNumber packet_number,
                              TransmissionType transmission_type);
 
-  // Notify observers that packet with TransmissionInfo |info| is a spurious
+  // Notify observers that packet with QuicTransmissionInfo |info| is a spurious
   // retransmission. It is caller's responsibility to guarantee the packet with
-  // TransmissionInfo |info| is a spurious retransmission before calling this
-  // function.
-  void RecordOneSpuriousRetransmission(const TransmissionInfo& info);
+  // QuicTransmissionInfo |info| is a spurious retransmission before calling
+  // this function.
+  void RecordOneSpuriousRetransmission(const QuicTransmissionInfo& info);
 
-  // Notify observers about spurious retransmits of packet with TransmissionInfo
-  // |info|.
-  void RecordSpuriousRetransmissions(const TransmissionInfo& info,
+  // Notify observers about spurious retransmits of packet with
+  // QuicTransmissionInfo |info|.
+  void RecordSpuriousRetransmissions(const QuicTransmissionInfo& info,
                                      QuicPacketNumber acked_packet_number);
-
-  // Returns mutable TransmissionInfo associated with |packet_number|, which
-  // must be unacked.
-  TransmissionInfo* GetMutableTransmissionInfo(QuicPacketNumber packet_number);
-
-  // Remove any packets no longer needed for retransmission, congestion, or
-  // RTT measurement purposes.
-  void RemoveObsoletePackets();
 
   // Sets the send algorithm to the given congestion control type and points the
   // pacing sender at |send_algorithm_|. Can be called any number of times.
@@ -344,13 +339,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
   // Tracks if the connection was created by the server or the client.
   Perspective perspective_;
 
-  QuicPathId path_id_;
-
   const QuicClock* clock_;
   QuicConnectionStats* stats_;
-
-  // Pending retransmissions are managed by delegate_ if it is not null.
-  MultipathDelegateInterface* delegate_;  // Not owned.
 
   DebugDelegate* debug_delegate_;
   NetworkChangeVisitor* network_change_visitor_;
@@ -361,9 +351,6 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
   LossDetectionInterface* loss_algorithm_;
   GeneralLossAlgorithm general_loss_algorithm_;
   bool n_connection_simulation_;
-
-  // Receiver side buffer in bytes.
-  QuicByteCount receive_buffer_bytes_;
 
   // Least packet number which the peer is still waiting for.
   QuicPacketNumber least_packet_awaited_by_peer_;
@@ -420,4 +407,4 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_SENT_PACKET_MANAGER_H_
+#endif  // NET_QUIC_CORE_QUIC_SENT_PACKET_MANAGER_H_

@@ -20,19 +20,16 @@
 namespace blink {
 class WebBlobInfo;
 class WebIDBCallbacks;
-class WebIDBObserver;
 class WebString;
 }
 
 namespace content {
-class ThreadSafeSender;
 
 class CONTENT_EXPORT WebIDBDatabaseImpl
     : public NON_EXPORTED_BASE(blink::WebIDBDatabase) {
  public:
   WebIDBDatabaseImpl(indexed_db::mojom::DatabaseAssociatedPtrInfo database,
-                     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
-                     scoped_refptr<ThreadSafeSender> thread_safe_sender);
+                     scoped_refptr<base::SingleThreadTaskRunner> io_runner);
   ~WebIDBDatabaseImpl() override;
 
   // blink::WebIDBDatabase
@@ -53,8 +50,13 @@ class CONTENT_EXPORT WebIDBDatabaseImpl
   void close() override;
   void versionChangeIgnored() override;
 
-  int32_t addObserver(std::unique_ptr<blink::WebIDBObserver>,
-                      long long transactionId) override;
+  void addObserver(long long transaction_id,
+                   int32_t observer_id,
+                   bool include_transaction,
+                   bool no_records,
+                   bool values,
+                   const std::bitset<blink::WebIDBOperationTypeCount>&
+                       operation_types) override;
   void removeObservers(
       const blink::WebVector<int32_t>& observer_ids_to_remove) override;
 
@@ -142,7 +144,6 @@ class CONTENT_EXPORT WebIDBDatabaseImpl
   IOThreadHelper* helper_;
   std::set<int32_t> observer_ids_;
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
-  scoped_refptr<ThreadSafeSender> thread_safe_sender_;
 };
 
 }  // namespace content

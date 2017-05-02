@@ -40,11 +40,14 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/DOMSelection.h"
 #include "core/events/EventPath.h"
+#include "core/frame/Deprecation.h"
+#include "core/frame/FrameConsole.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLMapElement.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/page/FocusController.h"
@@ -54,6 +57,21 @@
 namespace blink {
 
 using namespace HTMLNames;
+
+namespace {
+
+void addSingletonDeprecationMessageForImageMap(const LocalFrame* frame,
+                                               UseCounter::Feature feature,
+                                               const String& usemap,
+                                               const AtomicString& name) {
+  if (!frame)
+    return;
+  frame->console().addSingletonMessage(ConsoleMessage::create(
+      DeprecationMessageSource, WarningMessageLevel,
+      Deprecation::deprecationMessage(feature) + " Comparing usemap=" + usemap +
+          " and name=" + name));
+}
+}
 
 TreeScope::TreeScope(ContainerNode& rootNode, Document& document)
     : m_rootNode(&rootNode),
@@ -186,11 +204,11 @@ HTMLMapElement* TreeScope::getImageMap(const String& url) const {
   size_t hashPos = url.find('#');
   String name = hashPos == kNotFound ? url : url.substring(hashPos + 1);
   HTMLMapElement* map = toHTMLMapElement(
-      rootNode().document().isHTMLDocument()
+      document().isHTMLDocument()
           ? m_imageMapsByName->getElementByLowercasedMapName(
                 AtomicString(name.lower()), this)
           : m_imageMapsByName->getElementByMapName(AtomicString(name), this));
-  if (!map || !rootNode().document().isHTMLDocument())
+  if (!map || !document().isHTMLDocument())
     return map;
   const AtomicString& nameValue = map->fastGetAttribute(nameAttr);
   if (nameValue.isNull())
@@ -198,14 +216,17 @@ HTMLMapElement* TreeScope::getImageMap(const String& url) const {
   String strippedName = nameValue;
   if (strippedName.startsWith('#'))
     strippedName = strippedName.substring(1);
-  if (strippedName == name)
-    UseCounter::count(rootNode().document(), UseCounter::MapNameMatchingStrict);
-  else if (equalIgnoringASCIICase(strippedName, name))
-    UseCounter::count(rootNode().document(),
-                      UseCounter::MapNameMatchingASCIICaseless);
-  else
-    UseCounter::count(rootNode().document(),
-                      UseCounter::MapNameMatchingUnicodeLower);
+  if (strippedName == name) {
+    UseCounter::count(document(), UseCounter::MapNameMatchingStrict);
+  } else if (equalIgnoringASCIICase(strippedName, name)) {
+    addSingletonDeprecationMessageForImageMap(
+        document().frame(), UseCounter::MapNameMatchingASCIICaseless, url,
+        nameValue);
+  } else {
+    addSingletonDeprecationMessageForImageMap(
+        document().frame(), UseCounter::MapNameMatchingUnicodeLower, url,
+        nameValue);
+  }
   return map;
 }
 
@@ -220,7 +241,7 @@ static bool pointWithScrollAndZoomIfPossible(const Document& document,
 
   FloatPoint pointInDocument(point);
   pointInDocument.scale(frame->pageZoomFactor(), frame->pageZoomFactor());
-  pointInDocument.move(frameView->scrollOffset());
+  pointInDocument.move(frameView->getScrollOffset());
   IntPoint roundedPointInDocument = roundedIntPoint(pointInDocument);
 
   if (!frameView->visibleContentRect().contains(roundedPointInDocument))
@@ -287,15 +308,15 @@ HeapVector<Member<Element>> TreeScope::elementsFromHitTestResult(
       continue;
 
     if (node && node->isElementNode()) {
-      elements.append(toElement(node));
+      elements.push_back(toElement(node));
       lastNode = node;
     }
   }
 
   if (rootNode().isDocumentNode()) {
     if (Element* rootElement = toDocument(rootNode()).documentElement()) {
-      if (elements.isEmpty() || elements.last() != rootElement)
-        elements.append(rootElement);
+      if (elements.isEmpty() || elements.back() != rootElement)
+        elements.push_back(rootElement);
     }
   }
 
@@ -389,14 +410,14 @@ Element* TreeScope::adjustedFocusedElement() const {
   }
 
   EventPath* eventPath = new EventPath(*element);
-  for (size_t i = 0; i < eventPath->size(); ++i) {
-    if (eventPath->at(i).node() == rootNode()) {
-      // eventPath->at(i).target() is one of the followings:
+  for (const auto& context : eventPath->nodeEventContexts()) {
+    if (context.node() == rootNode()) {
+      // context.target() is one of the followings:
       // - InsertionPoint
       // - shadow host
       // - Document::focusedElement()
       // So, it's safe to do toElement().
-      return toElement(eventPath->at(i).target()->toNode());
+      return toElement(context.target()->toNode());
     }
   }
   return nullptr;
@@ -427,9 +448,9 @@ unsigned short TreeScope::comparePosition(const TreeScope& otherScope) const {
   HeapVector<Member<const TreeScope>, 16> chain2;
   const TreeScope* current;
   for (current = this; current; current = current->parentTreeScope())
-    chain1.append(current);
+    chain1.push_back(current);
   for (current = &otherScope; current; current = current->parentTreeScope())
-    chain2.append(current);
+    chain2.push_back(current);
 
   unsigned index1 = chain1.size();
   unsigned index2 = chain2.size();
@@ -471,19 +492,19 @@ const TreeScope* TreeScope::commonAncestorTreeScope(
     const TreeScope& other) const {
   HeapVector<Member<const TreeScope>, 16> thisChain;
   for (const TreeScope* tree = this; tree; tree = tree->parentTreeScope())
-    thisChain.append(tree);
+    thisChain.push_back(tree);
 
   HeapVector<Member<const TreeScope>, 16> otherChain;
   for (const TreeScope* tree = &other; tree; tree = tree->parentTreeScope())
-    otherChain.append(tree);
+    otherChain.push_back(tree);
 
   // Keep popping out the last elements of these chains until a mismatched pair
   // is found. If |this| and |other| belong to different documents, null will be
   // returned.
   const TreeScope* lastAncestor = nullptr;
   while (!thisChain.isEmpty() && !otherChain.isEmpty() &&
-         thisChain.last() == otherChain.last()) {
-    lastAncestor = thisChain.last();
+         thisChain.back() == otherChain.back()) {
+    lastAncestor = thisChain.back();
     thisChain.pop_back();
     otherChain.pop_back();
   }

@@ -44,6 +44,10 @@ class FakeContentPasswordManagerDriver
     show_pw_suggestions_options_ = -1;
   }
 
+  bool called_show_not_secure_warning() const {
+    return called_show_not_secure_warning_;
+  }
+
   bool called_password_form_submitted() const {
     return called_password_form_submitted_;
   }
@@ -77,8 +81,6 @@ class FakeContentPasswordManagerDriver
   bool called_record_save_progress() const {
     return called_record_save_progress_;
   }
-
-  bool called_agent_constructed() const { return called_agent_constructed_; }
 
   bool called_save_generation_field() const {
     return called_save_generation_field_;
@@ -135,7 +137,8 @@ class FakeContentPasswordManagerDriver
                                int options,
                                const gfx::RectF& bounds) override;
 
-  void PasswordAutofillAgentConstructed() override;
+  void ShowNotSecureWarning(base::i18n::TextDirection text_direction,
+                            const gfx::RectF& bounds) override;
 
   void RecordSavePasswordProgress(const std::string& log) override;
 
@@ -149,6 +152,8 @@ class FakeContentPasswordManagerDriver
   int show_pw_suggestions_key_ = -1;
   base::Optional<base::string16> show_pw_suggestions_username_;
   int show_pw_suggestions_options_ = -1;
+  // Records whether ShowNotSecureWarning() gets called.
+  bool called_show_not_secure_warning_ = false;
   // Records whether PasswordFormSubmitted() gets called.
   bool called_password_form_submitted_ = false;
   // Records data received via PasswordFormSubmitted() call.
@@ -163,8 +168,6 @@ class FakeContentPasswordManagerDriver
   base::Optional<std::vector<autofill::PasswordForm>> password_forms_rendered_;
   // Records whether RecordSavePasswordProgress() gets called.
   bool called_record_save_progress_ = false;
-  // Records whether PasswordAutofillAgentConstructed() gets called.
-  bool called_agent_constructed_ = false;
   // Records whether SaveGenerationFieldDetectedByClassifier() gets called.
   bool called_save_generation_field_ = false;
   // Records data received via SaveGenerationFieldDetectedByClassifier() call.

@@ -36,31 +36,7 @@ void X509Certificate::Initialize() {
   serial_number_ = x509_util::ParseSerialNumber(cert_handle_);
 }
 
-// static
-scoped_refptr<X509Certificate> X509Certificate::CreateFromBytesWithNickname(
-    const char* data,
-    size_t length,
-    const char* nickname) {
-  OSCertHandle cert_handle = CreateOSCertHandleFromBytesWithNickname(data,
-                                                                     length,
-                                                                     nickname);
-  if (!cert_handle)
-    return NULL;
-
-  scoped_refptr<X509Certificate> cert =
-      CreateFromHandle(cert_handle, OSCertHandles());
-  FreeOSCertHandle(cert_handle);
-
-  if (nickname)
-    cert->default_nickname_ = nickname;
-
-  return cert;
-}
-
 std::string X509Certificate::GetDefaultNickname(CertType type) const {
-  if (!default_nickname_.empty())
-    return default_nickname_;
-
   std::string result;
   if (type == USER_CERT && cert_handle_->slot) {
     // Find the private key for this certificate and see if it has a
@@ -260,6 +236,28 @@ void X509Certificate::GetPublicKeyInfo(OSCertHandle cert_handle,
                                        size_t* size_bits,
                                        PublicKeyType* type) {
   x509_util::GetPublicKeyInfo(cert_handle, size_bits, type);
+}
+
+// static
+X509Certificate::SignatureHashAlgorithm
+X509Certificate::GetSignatureHashAlgorithm(OSCertHandle cert_handle) {
+  SECAlgorithmID& signature = cert_handle->signature;
+  SECOidTag oid_tag = SECOID_FindOIDTag(&signature.algorithm);
+  switch (oid_tag) {
+    case SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION:
+      return kSignatureHashAlgorithmMd5;
+    case SEC_OID_PKCS1_MD2_WITH_RSA_ENCRYPTION:
+      return kSignatureHashAlgorithmMd2;
+    case SEC_OID_PKCS1_MD4_WITH_RSA_ENCRYPTION:
+      return kSignatureHashAlgorithmMd4;
+    case SEC_OID_PKCS1_SHA1_WITH_RSA_ENCRYPTION:
+    case SEC_OID_ISO_SHA1_WITH_RSA_SIGNATURE:
+    case SEC_OID_ANSIX9_DSA_SIGNATURE_WITH_SHA1_DIGEST:
+    case SEC_OID_ANSIX962_ECDSA_SHA1_SIGNATURE:
+      return kSignatureHashAlgorithmSha1;
+    default:
+      return kSignatureHashAlgorithmOther;
+  }
 }
 
 // static

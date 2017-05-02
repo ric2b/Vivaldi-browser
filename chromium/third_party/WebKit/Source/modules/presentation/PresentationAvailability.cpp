@@ -12,6 +12,7 @@
 #include "modules/presentation/PresentationController.h"
 #include "public/platform/Platform.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -33,11 +34,12 @@ WebPresentationClient* presentationClient(ExecutionContext* executionContext) {
 
 // static
 PresentationAvailability* PresentationAvailability::take(
-    ScriptPromiseResolver* resolver,
-    const KURL& url,
+    PresentationAvailabilityProperty* resolver,
+    const WTF::Vector<KURL>& urls,
     bool value) {
   PresentationAvailability* presentationAvailability =
-      new PresentationAvailability(resolver->getExecutionContext(), url, value);
+      new PresentationAvailability(resolver->getExecutionContext(), urls,
+                                   value);
   presentationAvailability->suspendIfNeeded();
   presentationAvailability->updateListening();
   return presentationAvailability;
@@ -45,15 +47,19 @@ PresentationAvailability* PresentationAvailability::take(
 
 PresentationAvailability::PresentationAvailability(
     ExecutionContext* executionContext,
-    const KURL& url,
+    const WTF::Vector<KURL>& urls,
     bool value)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(executionContext),
+    : SuspendableObject(executionContext),
       PageVisibilityObserver(toDocument(executionContext)->page()),
-      m_url(url),
+      m_urls(urls),
       m_value(value),
       m_state(State::Active) {
   ASSERT(executionContext->isDocument());
+  WebVector<WebURL> data(urls.size());
+  for (size_t i = 0; i < urls.size(); ++i)
+    data[i] = WebURL(urls[i]);
+
+  m_urls.swap(data);
 }
 
 PresentationAvailability::~PresentationAvailability() {}
@@ -63,7 +69,7 @@ const AtomicString& PresentationAvailability::interfaceName() const {
 }
 
 ExecutionContext* PresentationAvailability::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
 void PresentationAvailability::addedEventListener(
@@ -95,7 +101,7 @@ void PresentationAvailability::suspend() {
   setState(State::Suspended);
 }
 
-void PresentationAvailability::contextDestroyed() {
+void PresentationAvailability::contextDestroyed(ExecutionContext*) {
   setState(State::Inactive);
 }
 
@@ -123,8 +129,8 @@ void PresentationAvailability::updateListening() {
     client->stopListening(this);
 }
 
-const WebURL PresentationAvailability::url() const {
-  return WebURL(m_url);
+const WebVector<WebURL>& PresentationAvailability::urls() const {
+  return m_urls;
 }
 
 bool PresentationAvailability::value() const {
@@ -134,7 +140,7 @@ bool PresentationAvailability::value() const {
 DEFINE_TRACE(PresentationAvailability) {
   EventTargetWithInlineData::trace(visitor);
   PageVisibilityObserver::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

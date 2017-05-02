@@ -36,6 +36,14 @@
 
 namespace blink {
 
+void TreeScopeAdopter::execute() const {
+  moveTreeToNewScope(*m_toAdopt);
+  Document& oldDocument = oldScope().document();
+  if (oldDocument == newScope().document())
+    return;
+  oldDocument.didMoveTreeToNewDocument(*m_toAdopt);
+}
+
 void TreeScopeAdopter::moveTreeToNewScope(Node& root) const {
   DCHECK(needsScopeChange());
 
@@ -48,8 +56,6 @@ void TreeScopeAdopter::moveTreeToNewScope(Node& root) const {
   Document& oldDocument = oldScope().document();
   Document& newDocument = newScope().document();
   bool willMoveToNewDocument = oldDocument != newDocument;
-  if (willMoveToNewDocument)
-    oldDocument.incDOMTreeVersion();
 
   for (Node& node : NodeTraversal::inclusiveDescendantsOf(root)) {
     updateTreeScope(node);
@@ -78,9 +84,6 @@ void TreeScopeAdopter::moveTreeToNewScope(Node& root) const {
         moveTreeToNewDocument(*shadow, oldDocument, newDocument);
     }
   }
-  if (!willMoveToNewDocument)
-    return;
-  oldDocument.didMoveTreeToNewDocument(root);
 }
 
 void TreeScopeAdopter::moveTreeToNewDocument(Node& root,
@@ -128,6 +131,8 @@ inline void TreeScopeAdopter::moveNodeToNewDocument(
     Document& oldDocument,
     Document& newDocument) const {
   DCHECK_NE(oldDocument, newDocument);
+  // Note: at the start of this function, node.document() may already have
+  // changed to match |newDocument|, which is why |oldDocument| is passed in.
 
   if (node.hasRareData()) {
     NodeRareData* rareData = node.rareData();
@@ -135,6 +140,7 @@ inline void TreeScopeAdopter::moveNodeToNewDocument(
       rareData->nodeLists()->adoptDocument(oldDocument, newDocument);
   }
 
+  node.willMoveToNewDocument(oldDocument, newDocument);
   oldDocument.moveNodeIteratorsToNewDocument(node, newDocument);
 
   if (node.getCustomElementState() == CustomElementState::Custom) {

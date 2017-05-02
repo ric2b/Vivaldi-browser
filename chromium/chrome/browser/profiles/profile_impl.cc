@@ -115,6 +115,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/page_zoom.h"
 #include "extensions/features/features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -122,6 +123,7 @@
 #include "chrome/browser/chromeos/locale_change_guard.h"
 #include "chrome/browser/chromeos/preferences.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -132,7 +134,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
+#include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #else
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
@@ -433,11 +435,13 @@ ProfileImpl::ProfileImpl(
       policy::SchemaRegistryServiceFactory::CreateForContext(
           this, connector->GetChromeSchema(), connector->GetSchemaRegistry());
 #if defined(OS_CHROMEOS)
-  cloud_policy_manager_ =
-      policy::UserCloudPolicyManagerFactoryChromeOS::CreateForProfile(
+  if (force_immediate_policy_load)
+    chromeos::DeviceSettingsService::Get()->LoadImmediately();
+  configuration_policy_provider_ =
+      policy::UserPolicyManagerFactoryChromeOS::CreateForProfile(
           this, force_immediate_policy_load, sequenced_task_runner);
 #else
-  cloud_policy_manager_ =
+  configuration_policy_provider_ =
       policy::UserCloudPolicyManagerFactory::CreateForOriginalBrowserContext(
           this, force_immediate_policy_load, sequenced_task_runner,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
@@ -621,7 +625,7 @@ void ProfileImpl::DoFinalInit() {
                 session_cookie_mode, GetSpecialStoragePolicy(),
                 CreateDomainReliabilityMonitor(local_state));
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   ChromePluginServiceFilter::GetInstance()->RegisterResourceContext(
       this, io_data_.GetResourceContextNoInit());
 #endif
@@ -688,7 +692,7 @@ ProfileImpl::~ProfileImpl() {
   // Remove pref observers
   pref_change_registrar_.RemoveAll();
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   ChromePluginServiceFilter::GetInstance()->UnregisterResourceContext(
       io_data_.GetResourceContextNoInit());
 #endif
@@ -854,6 +858,15 @@ void ProfileImpl::OnLocaleReady() {
 void ProfileImpl::OnPrefsLoaded(CreateMode create_mode, bool success) {
   TRACE_EVENT0("browser", "ProfileImpl::OnPrefsLoaded");
   if (!success) {
+    if (delegate_)
+      delegate_->OnProfileCreated(this, false, false);
+    return;
+  }
+
+  // Fail fast if the browser is shutting down. We want to avoid launching new
+  // UI, finalising profile creation, etc. which would trigger a crash down the
+  // the line. See crbug.com/625646
+  if (g_browser_process->IsShuttingDown()) {
     if (delegate_)
       delegate_->OnProfileCreated(this, false, false);
     return;

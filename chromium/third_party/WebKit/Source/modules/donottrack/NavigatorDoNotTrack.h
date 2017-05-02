@@ -31,19 +31,17 @@
 #ifndef NavigatorDoNotTrack_h
 #define NavigatorDoNotTrack_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class LocalFrame;
 class Navigator;
 
 class NavigatorDoNotTrack final : public GarbageCollected<NavigatorDoNotTrack>,
-                                  public Supplement<Navigator>,
-                                  public DOMWindowProperty {
+                                  public Supplement<Navigator> {
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorDoNotTrack);
 
  public:
@@ -55,7 +53,7 @@ class NavigatorDoNotTrack final : public GarbageCollected<NavigatorDoNotTrack>,
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit NavigatorDoNotTrack(LocalFrame*);
+  explicit NavigatorDoNotTrack(Navigator&);
   static const char* supplementName();
 };
 

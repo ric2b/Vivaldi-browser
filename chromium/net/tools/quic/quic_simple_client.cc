@@ -21,7 +21,7 @@
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/spdy_utils.h"
 #include "net/socket/udp_client_socket.h"
@@ -29,31 +29,18 @@
 #include "net/spdy/spdy_http_utils.h"
 
 using std::string;
-using std::vector;
 using base::StringPiece;
 
 namespace net {
 
 QuicSimpleClient::QuicSimpleClient(
-    IPEndPoint server_address,
+    QuicSocketAddress server_address,
     const QuicServerId& server_id,
     const QuicVersionVector& supported_versions,
-    std::unique_ptr<ProofVerifier> proof_verifier)
-    : QuicSimpleClient(server_address,
-                       server_id,
-                       supported_versions,
-                       QuicConfig(),
-                       std::move(proof_verifier)) {}
-
-QuicSimpleClient::QuicSimpleClient(
-    IPEndPoint server_address,
-    const QuicServerId& server_id,
-    const QuicVersionVector& supported_versions,
-    const QuicConfig& config,
     std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClientBase(server_id,
                      supported_versions,
-                     config,
+                     QuicConfig(),
                      CreateQuicConnectionHelper(),
                      CreateQuicAlarmFactory(),
                      std::move(proof_verifier)),
@@ -71,23 +58,22 @@ QuicSimpleClient::~QuicSimpleClient() {
   }
 }
 
-bool QuicSimpleClient::CreateUDPSocketAndBind(IPEndPoint server_address,
-                                              IPAddress bind_to_address,
+bool QuicSimpleClient::CreateUDPSocketAndBind(QuicSocketAddress server_address,
+                                              QuicIpAddress bind_to_address,
                                               int bind_to_port) {
   std::unique_ptr<UDPClientSocket> socket(
       new UDPClientSocket(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
                           &net_log_, NetLogSource()));
 
-  int address_family = server_address.GetSockAddrFamily();
-  if (bind_to_address.size() != 0) {
-    client_address_ = IPEndPoint(bind_to_address, bind_to_port);
-  } else if (address_family == AF_INET) {
-    client_address_ = IPEndPoint(IPAddress::IPv4AllZeros(), bind_to_port);
+  if (bind_to_address.IsInitialized()) {
+    client_address_ = QuicSocketAddress(bind_to_address, local_port());
+  } else if (server_address.host().address_family() == IpAddressFamily::IP_V4) {
+    client_address_ = QuicSocketAddress(QuicIpAddress::Any4(), bind_to_port);
   } else {
-    client_address_ = IPEndPoint(IPAddress::IPv6AllZeros(), bind_to_port);
+    client_address_ = QuicSocketAddress(QuicIpAddress::Any6(), bind_to_port);
   }
 
-  int rc = socket->Connect(server_address);
+  int rc = socket->Connect(server_address.impl().socket_address());
   if (rc != OK) {
     LOG(ERROR) << "Connect failed: " << ErrorToShortString(rc);
     return false;
@@ -105,11 +91,13 @@ bool QuicSimpleClient::CreateUDPSocketAndBind(IPEndPoint server_address,
     return false;
   }
 
-  rc = socket->GetLocalAddress(&client_address_);
+  IPEndPoint address;
+  rc = socket->GetLocalAddress(&address);
   if (rc != OK) {
     LOG(ERROR) << "GetLocalAddress failed: " << ErrorToShortString(rc);
     return false;
   }
+  client_address_ = QuicSocketAddress(QuicSocketAddressImpl(address));
 
   socket_.swap(socket);
   packet_reader_.reset(new QuicChromiumPacketReader(
@@ -162,15 +150,16 @@ void QuicSimpleClient::OnReadError(int result,
   Disconnect();
 }
 
-IPEndPoint QuicSimpleClient::GetLatestClientAddress() const {
+QuicSocketAddress QuicSimpleClient::GetLatestClientAddress() const {
   return client_address_;
 }
 
 bool QuicSimpleClient::OnPacket(const QuicReceivedPacket& packet,
                                 IPEndPoint local_address,
                                 IPEndPoint peer_address) {
-  session()->connection()->ProcessUdpPacket(local_address, peer_address,
-                                            packet);
+  session()->connection()->ProcessUdpPacket(
+      QuicSocketAddress(QuicSocketAddressImpl(local_address)),
+      QuicSocketAddress(QuicSocketAddressImpl(peer_address)), packet);
   if (!session()->connection()->connected()) {
     return false;
   }

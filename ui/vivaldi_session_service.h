@@ -57,8 +57,8 @@ class VivaldiSessionService {
   base::File* OpenAndWriteHeader(const base::FilePath& path);
   bool AppendCommandsToFile(
       base::File* file,
-      const ScopedVector<sessions::SessionCommand>& commands);
-  bool Read(ScopedVector<sessions::SessionCommand>* commands);
+      const std::vector <std::unique_ptr<sessions::SessionCommand>>& commands);
+  bool Read(std::vector <std::unique_ptr<sessions::SessionCommand>>* commands);
   bool FillBuffer();
   Browser* ProcessSessionWindows(
     std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
@@ -83,12 +83,14 @@ class VivaldiSessionService {
   // either there are no commands, or there was an error. Use errored_ to
   // distinguish the two. If NULL is returned, and there is no error, it means
   // the end of file was successfully reached.
-  sessions::SessionCommand* ReadCommand();
-  const ScopedVector<sessions::SessionCommand>& pending_commands() {
+  std::unique_ptr<sessions::SessionCommand> ReadCommand();
+
+  const std::vector<std::unique_ptr<sessions::SessionCommand>>&
+  pending_commands() {
     return pending_commands_;
   }
   // Commands we need to send over to the backend.
-  ScopedVector<sessions::SessionCommand> pending_commands_;
+  std::vector <std::unique_ptr<sessions::SessionCommand>> pending_commands_;
 
   // Maps from session tab id to the range of navigation entries that has
   // been written to disk.

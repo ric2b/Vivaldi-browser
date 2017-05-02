@@ -20,12 +20,15 @@
 #include "chrome/browser/policy/javascript_policy_handler.h"
 #include "chrome/browser/policy/managed_bookmarks_policy_handler.h"
 #include "chrome/browser/policy/network_prediction_policy_handler.h"
+#include "chrome/browser/profiles/guest_mode_policy_handler.h"
 #include "chrome/browser/profiles/incognito_mode_policy_handler.h"
 #include "chrome/browser/sessions/restore_on_startup_policy_handler.h"
+#include "chrome/browser/supervised_user/supervised_user_creation_policy_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browsing_data/core/pref_names.h"
 #include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -47,12 +50,15 @@
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/ssl_config/ssl_config_prefs.h"
+#include "components/sync/base/pref_names.h"
 #include "components/sync/driver/sync_policy_handler.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/variations/pref_names.h"
 #include "extensions/features/features.h"
+#include "media/media_features.h"
+#include "ppapi/features/features.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/search/contextual_search_policy_handler_android.h"
 #endif
 
@@ -80,7 +86,7 @@
 #include "extensions/common/manifest.h"
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/plugin_policy_handler.h"
 #endif
 
@@ -94,537 +100,551 @@ namespace {
 
 // List of policy types to preference names. This is used for simple policies
 // that directly map to a single preference.
+// clang-format off
 const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kHomepageLocation,
     prefs::kHomePage,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kHomepageIsNewTabPage,
     prefs::kHomePageIsNewTabPage,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kRestoreOnStartupURLs,
     prefs::kURLsToRestoreOnStartup,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kAlternateErrorPagesEnabled,
     prefs::kAlternateErrorPagesEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kSearchSuggestEnabled,
     prefs::kSearchSuggestEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kBuiltInDnsClientEnabled,
     prefs::kBuiltInDnsClientEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kWPADQuickCheckEnabled,
     prefs::kQuickCheckEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kPacHttpsUrlStrippingEnabled,
     prefs::kPacHttpsUrlStrippingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
+  { key::kQuicAllowed,
+    prefs::kQuicAllowed,
+    base::Value::Type::BOOLEAN },
   { key::kSafeBrowsingEnabled,
     prefs::kSafeBrowsingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kForceGoogleSafeSearch,
     prefs::kForceGoogleSafeSearch,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kForceYouTubeRestrict,
     prefs::kForceYouTubeRestrict,
-    base::Value::TYPE_INTEGER},
+    base::Value::Type::INTEGER},
   { key::kPasswordManagerEnabled,
-    password_manager::prefs::kPasswordManagerSavingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    password_manager::prefs::kCredentialsEnableService,
+    base::Value::Type::BOOLEAN },
   { key::kPrintingEnabled,
     prefs::kPrintingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDisablePrintPreview,
     prefs::kPrintPreviewDisabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDefaultPrinterSelection,
     prefs::kPrintPreviewDefaultDestinationSelectionRules,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kApplicationLocaleValue,
     prefs::kApplicationLocale,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kAlwaysOpenPdfExternally,
     prefs::kPluginsAlwaysOpenPdfExternally,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kShowHomeButton,
     prefs::kShowHomeButton,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kSavingBrowserHistoryDisabled,
     prefs::kSavingBrowserHistoryDisabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAllowDeletingBrowserHistory,
     prefs::kAllowDeletingBrowserHistory,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDeveloperToolsDisabled,
     prefs::kDevToolsDisabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kBlockThirdPartyCookies,
     prefs::kBlockThirdPartyCookies,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDefaultCookiesSetting,
     prefs::kManagedDefaultCookiesSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDefaultImagesSetting,
     prefs::kManagedDefaultImagesSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDefaultPluginsSetting,
     prefs::kManagedDefaultPluginsSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDefaultPopupsSetting,
     prefs::kManagedDefaultPopupsSetting,
-    base::Value::TYPE_INTEGER },
-  { key::kDefaultKeygenSetting,
-    prefs::kManagedDefaultKeygenSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kAutoSelectCertificateForUrls,
     prefs::kManagedAutoSelectCertificateForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kCookiesAllowedForUrls,
     prefs::kManagedCookiesAllowedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kCookiesBlockedForUrls,
     prefs::kManagedCookiesBlockedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kCookiesSessionOnlyForUrls,
     prefs::kManagedCookiesSessionOnlyForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kImagesAllowedForUrls,
     prefs::kManagedImagesAllowedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kImagesBlockedForUrls,
     prefs::kManagedImagesBlockedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kJavaScriptAllowedForUrls,
     prefs::kManagedJavaScriptAllowedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kJavaScriptBlockedForUrls,
     prefs::kManagedJavaScriptBlockedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kPluginsAllowedForUrls,
     prefs::kManagedPluginsAllowedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kPluginsBlockedForUrls,
     prefs::kManagedPluginsBlockedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kPopupsAllowedForUrls,
     prefs::kManagedPopupsAllowedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kPopupsBlockedForUrls,
     prefs::kManagedPopupsBlockedForUrls,
-    base::Value::TYPE_LIST },
-  { key::kKeygenAllowedForUrls,
-    prefs::kManagedKeygenAllowedForUrls,
-    base::Value::TYPE_LIST },
-  { key::kKeygenBlockedForUrls,
-    prefs::kManagedKeygenBlockedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kNotificationsAllowedForUrls,
     prefs::kManagedNotificationsAllowedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kNotificationsBlockedForUrls,
     prefs::kManagedNotificationsBlockedForUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kDefaultNotificationsSetting,
     prefs::kManagedDefaultNotificationsSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDefaultGeolocationSetting,
     prefs::kManagedDefaultGeolocationSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kSigninAllowed,
     prefs::kSigninAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kEnableOnlineRevocationChecks,
     ssl_config::prefs::kCertRevocationCheckingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kRequireOnlineRevocationChecksForLocalAnchors,
     ssl_config::prefs::kCertRevocationCheckingRequiredLocalAnchors,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kEnableSha1ForLocalAnchors,
     ssl_config::prefs::kCertEnableSha1LocalAnchors,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAuthSchemes,
     prefs::kAuthSchemes,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kDisableAuthNegotiateCnameLookup,
     prefs::kDisableAuthNegotiateCnameLookup,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kEnableAuthNegotiatePort,
     prefs::kEnableAuthNegotiatePort,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAuthServerWhitelist,
     prefs::kAuthServerWhitelist,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kAuthNegotiateDelegateWhitelist,
     prefs::kAuthNegotiateDelegateWhitelist,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kGSSAPILibraryName,
     prefs::kGSSAPILibraryName,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kAllowCrossOriginAuthPrompt,
     prefs::kAllowCrossOriginAuthPrompt,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDisable3DAPIs,
     prefs::kDisable3DAPIs,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDisablePluginFinder,
     prefs::kDisablePluginFinder,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDiskCacheSize,
     prefs::kDiskCacheSize,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kMediaCacheSize,
     prefs::kMediaCacheSize,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kPolicyRefreshRate,
     policy_prefs::kUserPolicyRefreshRate,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDevicePolicyRefreshRate,
     prefs::kDevicePolicyRefreshRate,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDefaultBrowserSettingEnabled,
     prefs::kDefaultBrowserSettingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kCloudPrintProxyEnabled,
     prefs::kCloudPrintProxyEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kCloudPrintSubmitEnabled,
     prefs::kCloudPrintSubmitEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kTranslateEnabled,
     prefs::kEnableTranslate,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAllowOutdatedPlugins,
     prefs::kPluginsAllowOutdated,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAlwaysAuthorizePlugins,
     prefs::kPluginsAlwaysAuthorize,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kBookmarkBarEnabled,
     bookmarks::prefs::kShowBookmarkBar,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kEditBookmarksEnabled,
     bookmarks::prefs::kEditBookmarksEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kShowAppsShortcutInBookmarkBar,
     bookmarks::prefs::kShowAppsShortcutInBookmarkBar,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAllowFileSelectionDialogs,
     prefs::kAllowFileSelectionDialogs,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kImportBookmarks,
     prefs::kImportBookmarks,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kImportHistory,
     prefs::kImportHistory,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kImportHomepage,
     prefs::kImportHomepage,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kImportSearchEngine,
     prefs::kImportSearchEngine,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kImportSavedPasswords,
     prefs::kImportSavedPasswords,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kImportAutofillFormData,
     prefs::kImportAutofillFormData,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kMaxConnectionsPerProxy,
     prefs::kMaxConnectionsPerProxy,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kURLWhitelist,
     policy_prefs::kUrlWhitelist,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kRestrictSigninToPattern,
     prefs::kGoogleServicesUsernamePattern,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kDefaultWebBluetoothGuardSetting,
     prefs::kManagedDefaultWebBluetoothGuardSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDefaultMediaStreamSetting,
     prefs::kManagedDefaultMediaStreamSetting,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kDisableSafeBrowsingProceedAnyway,
     prefs::kSafeBrowsingProceedAnywayDisabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kSafeBrowsingExtendedReportingOptInAllowed,
     prefs::kSafeBrowsingExtendedReportingOptInAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kSSLErrorOverrideAllowed,
     prefs::kSSLErrorOverrideAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kHardwareAccelerationModeEnabled,
     prefs::kHardwareAccelerationModeEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAllowDinosaurEasterEgg,
     prefs::kAllowDinosaurEasterEgg,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAllowedDomainsForApps,
     prefs::kAllowedDomainsForApps,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kComponentUpdatesEnabled,
     prefs::kComponentUpdatesEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   { key::kSpellCheckServiceEnabled,
     spellcheck::prefs::kSpellCheckUseSpellingService,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
   { key::kDisableScreenshots,
     prefs::kDisableScreenshots,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAudioCaptureAllowed,
     prefs::kAudioCaptureAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kVideoCaptureAllowed,
     prefs::kVideoCaptureAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAudioCaptureAllowedUrls,
     prefs::kAudioCaptureAllowedUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kVideoCaptureAllowedUrls,
     prefs::kVideoCaptureAllowedUrls,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
   { key::kHideWebStoreIcon,
     prefs::kHideWebStoreIcon,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kVariationsRestrictParameter,
     variations::prefs::kVariationsRestrictParameter,
-    base::Value::TYPE_STRING },
-  { key::kSupervisedUserCreationEnabled,
-    prefs::kSupervisedUserCreationAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::STRING },
   { key::kForceEphemeralProfiles,
     prefs::kForceEphemeralProfiles,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDHEEnabled,
     ssl_config::prefs::kDHEEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kNTPContentSuggestionsEnabled,
     ntp_snippets::prefs::kEnableSnippets,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #if defined(ENABLE_MEDIA_ROUTER)
   { key::kEnableMediaRouter,
     prefs::kEnableMediaRouter,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif  // defined(ENABLE_MEDIA_ROUTER)
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   { key::kWebRtcUdpPortRange,
     prefs::kWebRTCUDPPortRange,
-    base::Value::TYPE_STRING },
-#endif  // defined(ENABLE_WEBRTC)
+    base::Value::Type::STRING },
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 #if !defined(OS_MACOSX)
   { key::kFullscreenAllowed,
     prefs::kFullscreenAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   { key::kFullscreenAllowed,
     extensions::pref_names::kAppFullscreenAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // !defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
   { key::kChromeOsLockOnIdleSuspend,
     prefs::kEnableAutoScreenLock,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kChromeOsReleaseChannel,
     prefs::kChromeOsReleaseChannel,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kDriveDisabled,
     drive::prefs::kDisableDrive,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDriveDisabledOverCellular,
     drive::prefs::kDisableDriveOverCellular,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kExternalStorageDisabled,
     prefs::kExternalStorageDisabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kExternalStorageReadOnly,
     prefs::kExternalStorageReadOnly,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAudioOutputAllowed,
     chromeos::prefs::kAudioOutputAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kShowLogoutButtonInTray,
     prefs::kShowLogoutButtonInTray,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kShelfAutoHideBehavior,
     prefs::kShelfAutoHideBehaviorLocal,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kSessionLengthLimit,
     prefs::kSessionLengthLimit,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
   { key::kWaitForInitialUserActivity,
     prefs::kSessionWaitForInitialUserActivity,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kPowerManagementUsesAudioActivity,
     prefs::kPowerUseAudioActivity,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kPowerManagementUsesVideoActivity,
     prefs::kPowerUseVideoActivity,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAllowScreenWakeLocks,
     prefs::kPowerAllowScreenWakeLocks,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kWaitForInitialUserActivity,
     prefs::kPowerWaitForInitialUserActivity,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kTermsOfServiceURL,
     prefs::kTermsOfServiceURL,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kShowAccessibilityOptionsInSystemTrayMenu,
     prefs::kShouldAlwaysShowAccessibilityMenu,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kLargeCursorEnabled,
     prefs::kAccessibilityLargeCursorEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kSpokenFeedbackEnabled,
     prefs::kAccessibilitySpokenFeedbackEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kHighContrastEnabled,
     prefs::kAccessibilityHighContrastEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kVirtualKeyboardEnabled,
     prefs::kAccessibilityVirtualKeyboardEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenDefaultLargeCursorEnabled,
     NULL,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenDefaultSpokenFeedbackEnabled,
     NULL,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenDefaultHighContrastEnabled,
     NULL,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenDefaultVirtualKeyboardEnabled,
     NULL,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kRebootAfterUpdate,
     prefs::kRebootAfterUpdate,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAttestationEnabledForUser,
     prefs::kAttestationEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kChromeOsMultiProfileUserBehavior,
     prefs::kMultiProfileUserBehavior,
-    base::Value::TYPE_STRING },
+    base::Value::Type::STRING },
   { key::kKeyboardDefaultToFunctionKeys,
     prefs::kLanguageSendFunctionKeys,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kTouchVirtualKeyboardEnabled,
     prefs::kTouchVirtualKeyboardEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kEasyUnlockAllowed,
     prefs::kEasyUnlockAllowed,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kCaptivePortalAuthenticationIgnoresProxy,
     prefs::kCaptivePortalAuthenticationIgnoresProxy,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kForceMaximizeOnFirstRun,
     prefs::kForceMaximizeOnFirstRun,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kUnifiedDesktopEnabledByDefault,
     prefs::kUnifiedDesktopEnabledByDefault,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kArcEnabled,
     prefs::kArcEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kArcBackupRestoreEnabled,
     prefs::kArcBackupRestoreEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
+  { key::kArcLocationServiceEnabled,
+    prefs::kArcLocationServiceEnabled,
+    base::Value::Type::BOOLEAN },
   { key::kReportArcStatusEnabled,
     prefs::kReportArcStatusEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kNativePrinters,
     prefs::kRecommendedNativePrinters,
-    base::Value::TYPE_LIST },
+    base::Value::Type::LIST },
 #endif  // defined(OS_CHROMEOS)
 
 // Metrics reporting is controlled by a platform specific policy for ChromeOS
 #if defined(OS_CHROMEOS)
   { key::kDeviceMetricsReportingEnabled,
     metrics::prefs::kMetricsReportingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #else
   { key::kMetricsReportingEnabled,
     metrics::prefs::kMetricsReportingEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif
 
 #if !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
   { key::kBackgroundModeEnabled,
     prefs::kBackgroundModeEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif  // !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   { key::kDataCompressionProxyEnabled,
     prefs::kDataSaverEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kAuthAndroidNegotiateAccountType,
     prefs::kAuthAndroidNegotiateAccountType,
-    base::Value::TYPE_STRING },
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+    base::Value::Type::STRING },
+#endif  // defined(OS_ANDROID)
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   { key::kNativeMessagingUserLevelHosts,
     extensions::pref_names::kNativeMessagingUserLevelHosts,
-    base::Value::TYPE_BOOLEAN },
-  { key::kBrowserGuestModeEnabled,
-    prefs::kBrowserGuestModeEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
   { key::kBrowserAddPersonEnabled,
     prefs::kBrowserAddPersonEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+
   { key::kForceBrowserSignin,
     prefs::kForceBrowserSignin,
-    base::Value::TYPE_BOOLEAN },
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+    base::Value::Type::BOOLEAN },
 
 #if defined(OS_WIN)
   { key::kWelcomePageOnOSUpgradeEnabled,
     prefs::kWelcomePageOnOSUpgradeEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif  // OS_WIN
 
 #if !defined(OS_ANDROID)
   { key::kSuppressUnsupportedOSWarning,
     prefs::kSuppressUnsupportedOSWarning,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 #endif  // !OS_ANDROID
 
 #if defined(OS_CHROMEOS)
   { key::kSystemTimezoneAutomaticDetection,
     prefs::kSystemTimezoneAutomaticDetectionPolicy,
-    base::Value::TYPE_INTEGER },
+    base::Value::Type::INTEGER },
 #endif
 
   { key::kTaskManagerEndProcessEnabled,
     prefs::kTaskManagerEndProcessEnabled,
-    base::Value::TYPE_BOOLEAN },
+    base::Value::Type::BOOLEAN },
 
 #if defined(OS_CHROMEOS)
   { key::kNetworkThrottlingEnabled,
     prefs::kNetworkThrottlingEnabled,
-    base::Value::TYPE_DICTIONARY },
+    base::Value::Type::DICTIONARY },
 
-  { key::kAllowScreenLock, prefs::kAllowScreenLock, base::Value::TYPE_BOOLEAN },
+  { key::kAllowScreenLock,
+    prefs::kAllowScreenLock,
+    base::Value::Type::BOOLEAN },
 
-  { key::kQuickUnlockModeWhitelist, prefs::kQuickUnlockModeWhitelist,
-    base::Value::TYPE_LIST },
-  { key::kQuickUnlockTimeout, prefs::kQuickUnlockTimeout,
-    base::Value::TYPE_INTEGER },
+  { key::kQuickUnlockModeWhitelist,
+    prefs::kQuickUnlockModeWhitelist,
+    base::Value::Type::LIST },
+  { key::kQuickUnlockTimeout,
+    prefs::kQuickUnlockTimeout,
+    base::Value::Type::INTEGER },
+  { key::kPinUnlockMinimumLength,
+    prefs::kPinUnlockMinimumLength,
+    base::Value::Type::INTEGER },
+  { key::kPinUnlockMaximumLength,
+    prefs::kPinUnlockMaximumLength,
+    base::Value::Type::INTEGER },
+  { key::kPinUnlockWeakPinsAllowed,
+    prefs::kPinUnlockWeakPinsAllowed,
+    base::Value::Type::BOOLEAN },
 #endif
+
+  { key::kRoamingProfileSupportEnabled,
+    syncer::prefs::kEnableLocalSyncBackend,
+    base::Value::Type::BOOLEAN },
+  { key::kRoamingProfileLocation,
+    syncer::prefs::kLocalSyncBackendDir,
+    base::Value::Type::STRING },
 };
+// clang-format on
 
 class ForceSafeSearchPolicyHandler : public TypeCheckingPolicyHandler {
  public:
   ForceSafeSearchPolicyHandler()
       : TypeCheckingPolicyHandler(key::kForceSafeSearch,
-                                  base::Value::TYPE_BOOLEAN) {}
+                                  base::Value::Type::BOOLEAN) {}
   ~ForceSafeSearchPolicyHandler() override {}
 
   // ConfigurationPolicyHandler implementation:
@@ -665,7 +685,7 @@ class ForceYouTubeSafetyModePolicyHandler : public TypeCheckingPolicyHandler {
  public:
   ForceYouTubeSafetyModePolicyHandler()
       : TypeCheckingPolicyHandler(key::kForceYouTubeSafetyMode,
-                                  base::Value::TYPE_BOOLEAN) {}
+                                  base::Value::Type::BOOLEAN) {}
   ~ForceYouTubeSafetyModePolicyHandler() override {}
 
   // ConfigurationPolicyHandler implementation:
@@ -691,6 +711,27 @@ class ForceYouTubeSafetyModePolicyHandler : public TypeCheckingPolicyHandler {
   DISALLOW_COPY_AND_ASSIGN(ForceYouTubeSafetyModePolicyHandler);
 };
 
+class BrowsingHistoryPolicyHandler : public TypeCheckingPolicyHandler {
+ public:
+  BrowsingHistoryPolicyHandler()
+      : TypeCheckingPolicyHandler(key::kAllowDeletingBrowserHistory,
+                                  base::Value::Type::BOOLEAN) {}
+  ~BrowsingHistoryPolicyHandler() override {}
+
+  void ApplyPolicySettings(const PolicyMap& policies,
+                           PrefValueMap* prefs) override {
+    const base::Value* value = policies.GetValue(policy_name());
+    bool deleting_history_allowed;
+    if (value && value->GetAsBoolean(&deleting_history_allowed) &&
+        !deleting_history_allowed) {
+      prefs->SetBoolean(
+          browsing_data::prefs::kDeleteBrowsingHistory, false);
+      prefs->SetBoolean(
+          browsing_data::prefs::kDeleteDownloadHistory, false);
+    }
+  }
+};
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 void GetExtensionAllowedTypesMap(
     std::vector<std::unique_ptr<StringMappingListPolicyHandler::MappingEntry>>*
@@ -707,6 +748,31 @@ void GetExtensionAllowedTypesMap(
                             new base::FundamentalValue(entry.manifest_type))));
   }
 }
+
+// Piggy-back kDeveloperToolsDisabled set to true to also force-disable
+// kExtensionsUIDeveloperMode.
+class DevToolsExtensionsUIPolicyHandler : public TypeCheckingPolicyHandler {
+ public:
+  DevToolsExtensionsUIPolicyHandler()
+      : TypeCheckingPolicyHandler(key::kDeveloperToolsDisabled,
+                                  base::Value::Type::BOOLEAN) {}
+  ~DevToolsExtensionsUIPolicyHandler() override {}
+
+  // ConfigurationPolicyHandler implementation:
+  void ApplyPolicySettings(const PolicyMap& policies,
+                           PrefValueMap* prefs) override {
+    const base::Value* value = policies.GetValue(policy_name());
+    bool developerToolsDisabled;
+    if (value && value->GetAsBoolean(&developerToolsDisabled) &&
+        developerToolsDisabled) {
+      prefs->SetValue(prefs::kExtensionsUIDeveloperMode,
+                      base::MakeUnique<base::FundamentalValue>(false));
+    }
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DevToolsExtensionsUIPolicyHandler);
+};
 #endif
 
 void GetDeprecatedFeaturesMap(
@@ -746,6 +812,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(base::MakeUnique<ForceSafeSearchPolicyHandler>());
   handlers->AddHandler(base::MakeUnique<ForceYouTubeSafetyModePolicyHandler>());
   handlers->AddHandler(base::MakeUnique<IncognitoModePolicyHandler>());
+  handlers->AddHandler(base::MakeUnique<GuestModePolicyHandler>());
   handlers->AddHandler(
       base::MakeUnique<ManagedBookmarksPolicyHandler>(chrome_schema));
   handlers->AddHandler(base::MakeUnique<ProxyPolicyHandler>());
@@ -757,7 +824,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       SCHEMA_STRICT, SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,
       SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED));
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   handlers->AddHandler(
       base::MakeUnique<ContextualSearchPolicyHandlerAndroid>());
 #endif
@@ -772,6 +839,8 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       key::kEnableDeprecatedWebPlatformFeatures,
       prefs::kEnableDeprecatedWebPlatformFeatures,
       base::Bind(GetDeprecatedFeaturesMap)));
+
+  handlers->AddHandler(base::MakeUnique<BrowsingHistoryPolicyHandler>());
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   handlers->AddHandler(base::MakeUnique<extensions::ExtensionListPolicyHandler>(
@@ -792,6 +861,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(
       base::MakeUnique<extensions::ExtensionSettingsPolicyHandler>(
           chrome_schema));
+  handlers->AddHandler(base::MakeUnique<DevToolsExtensionsUIPolicyHandler>());
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
@@ -805,6 +875,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       base::MakeUnique<extensions::NativeMessagingHostListPolicyHandler>(
           key::kNativeMessagingBlacklist,
           extensions::pref_names::kNativeMessagingBlacklist, true));
+  handlers->AddHandler(base::MakeUnique<SupervisedUserCreationPolicyHandler>());
 #endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
 #if !defined(OS_ANDROID)
@@ -916,6 +987,8 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(
       base::MakeUnique<ExternalDataPolicyHandler>(key::kUserAvatarImage));
   handlers->AddHandler(
+      base::MakeUnique<ExternalDataPolicyHandler>(key::kDeviceWallpaperImage));
+  handlers->AddHandler(
       base::MakeUnique<ExternalDataPolicyHandler>(key::kWallpaperImage));
   handlers->AddHandler(base::WrapUnique(new SimpleSchemaValidatingPolicyHandler(
       key::kSessionLocales, NULL, chrome_schema, SCHEMA_STRICT,
@@ -926,9 +999,9 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(base::WrapUnique(new DefaultGeolocationPolicyHandler()));
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   handlers->AddHandler(base::MakeUnique<PluginPolicyHandler>());
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
   return handlers;
 }

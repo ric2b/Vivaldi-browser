@@ -4,7 +4,7 @@
 
 module media_router.mojom;
 
-import "mojo/common/common_custom_types.mojom";
+import "mojo/common/time.mojom";
 
 // Represents an output sink to which media can be routed.
 struct MediaSink {
@@ -50,6 +50,8 @@ struct MediaRoute {
   bool for_display;
   // Set to true if this route was created by an incognito profile.
   bool is_incognito;
+  // Set to true if this route corresponds to an offscreen presentation.
+  bool is_offscreen_presentation;
 };
 
 // Notifications or an actionable events to be shown to the user.
@@ -127,6 +129,7 @@ struct SinkSearchCriteria {
 // - RouteRequestResult::ResultCode in route_request_result.h
 // - MediaRouteProviderResult enum in tools/metrics/histograms.xml.
 // - mr.RouteRequestResultCode in route_request_error.js
+// - RouteRequestResultCodeFromMojo in media_router_type_converters.cc
 enum RouteRequestResultCode {
   UNKNOWN_ERROR,
   OK,
@@ -135,7 +138,8 @@ enum RouteRequestResultCode {
   SINK_NOT_FOUND,
   INVALID_ORIGIN,
   INCOGNITO_MISMATCH,
-  NO_SUPPORTED_PROVIDER
+  NO_SUPPORTED_PROVIDER,
+  CANCELLED
 // New values must be added here.
 };
 
@@ -334,7 +338,7 @@ interface MediaRouter {
     AVAILABLE
   };
 
-  // Keep in sync with content/public/browser/presentation_session.h.
+  // Keep in sync with content/public/common/presentation_session.h.
   enum PresentationConnectionState {
     CONNECTING,
     CONNECTED,
@@ -342,7 +346,7 @@ interface MediaRouter {
     TERMINATED
   };
 
-  // Keep in sync with content/public/browser/presentation_session.h.
+  // Keep in sync with content/public/common/presentation_session.h.
   enum PresentationConnectionCloseReason {
     CONNECTION_ERROR,
     CLOSED,

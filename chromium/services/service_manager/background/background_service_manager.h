@@ -12,14 +12,10 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/catalog/store.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
-
-namespace catalog {
-class Store;
-}
+#include "services/service_manager/runner/host/service_process_launcher.h"
 
 namespace service_manager {
 
-class NativeRunnerDelegate;
 class ServiceManager;
 
 // BackgroundServiceManager starts up a Service Manager on a background thread,
@@ -33,8 +29,9 @@ class BackgroundServiceManager {
     InitParams();
     ~InitParams();
 
-    NativeRunnerDelegate* native_runner_delegate = nullptr;
-    std::unique_ptr<catalog::Store> catalog_store;
+    ServiceProcessLauncher::Delegate*
+        service_process_launcher_delegate = nullptr;
+
     // If true the edk is initialized.
     bool init_edk = true;
   };

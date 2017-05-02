@@ -4,6 +4,7 @@
 
 #include "content/renderer/mus/compositor_mus_connection.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
@@ -70,7 +71,6 @@ void CompositorMusConnection::AttachCompositorFrameSinkOnCompositorThread(
       std::move(compositor_frame_sink_binding);
   if (root_) {
     root_->AttachCompositorFrameSink(
-        ui::mojom::CompositorFrameSinkType::DEFAULT,
         std::move(window_compositor_frame_sink_binding_));
   }
 }
@@ -95,7 +95,7 @@ void CompositorMusConnection::OnConnectionLostOnMainThread() {
 }
 
 void CompositorMusConnection::OnWindowInputEventOnMainThread(
-    ui::ScopedWebInputEvent web_event,
+    blink::WebScopedInputEvent web_event,
     const base::Callback<void(EventResult)>& ack) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   RenderWidgetMusConnection* connection =
@@ -158,7 +158,6 @@ void CompositorMusConnection::OnEmbed(ui::Window* root) {
   root_->set_input_event_handler(this);
   if (window_compositor_frame_sink_binding_) {
     root->AttachCompositorFrameSink(
-        ui::mojom::CompositorFrameSinkType::DEFAULT,
         std::move(window_compositor_frame_sink_binding_));
   }
 }
@@ -186,7 +185,7 @@ void CompositorMusConnection::OnWindowInputEvent(
   // Take ownership of the callback, indicating that we will handle it.
   std::unique_ptr<base::Callback<void(EventResult)>> callback =
       std::move(*ack_callback);
-  ui::ScopedWebInputEvent web_event(Convert(event).release());
+  blink::WebScopedInputEvent web_event(Convert(event).release());
   // TODO(sad): We probably need to plumb LatencyInfo through Mus.
   ui::LatencyInfo info;
   input_handler_manager_->HandleInputEvent(
@@ -199,7 +198,7 @@ void CompositorMusConnection::OnWindowInputEvent(
 void CompositorMusConnection::DidHandleWindowInputEventAndOverscroll(
     std::unique_ptr<base::Callback<void(EventResult)>> ack_callback,
     InputEventAckState ack_state,
-    ui::ScopedWebInputEvent web_event,
+    blink::WebScopedInputEvent web_event,
     const ui::LatencyInfo& latency_info,
     std::unique_ptr<ui::DidOverscrollParams> overscroll_params) {
   // TODO(jonross): We probably need to ack the event based on the consumed

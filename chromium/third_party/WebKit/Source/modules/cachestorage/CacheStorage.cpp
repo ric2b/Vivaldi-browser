@@ -16,6 +16,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
+#include <utility>
 
 namespace blink {
 
@@ -53,7 +54,7 @@ class CacheStorage::Callbacks final
 
   void onSuccess() override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->resolve(true);
     m_resolver.clear();
@@ -61,7 +62,7 @@ class CacheStorage::Callbacks final
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (reason == WebServiceWorkerCacheErrorNotFound)
       m_resolver->resolve(false);
@@ -90,17 +91,17 @@ class CacheStorage::WithCacheCallbacks final
 
   void onSuccess(std::unique_ptr<WebServiceWorkerCache> webCache) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     Cache* cache = Cache::create(m_cacheStorage->m_scopedFetcher,
-                                 wrapUnique(webCache.release()));
+                                 WTF::wrapUnique(webCache.release()));
     m_resolver->resolve(cache);
     m_resolver.clear();
   }
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (reason == WebServiceWorkerCacheErrorNotFound)
       m_resolver->resolve();
@@ -126,7 +127,7 @@ class CacheStorage::MatchCallbacks
 
   void onSuccess(const WebServiceWorkerResponse& webResponse) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     ScriptState::Scope scope(m_resolver->getScriptState());
     m_resolver->resolve(
@@ -136,7 +137,7 @@ class CacheStorage::MatchCallbacks
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (reason == WebServiceWorkerCacheErrorNotFound ||
         reason == WebServiceWorkerCacheErrorCacheNameNotFound)
@@ -166,7 +167,7 @@ class CacheStorage::DeleteCallbacks final
 
   void onSuccess() override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->resolve(true);
     m_resolver.clear();
@@ -174,7 +175,7 @@ class CacheStorage::DeleteCallbacks final
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (reason == WebServiceWorkerCacheErrorNotFound)
       m_resolver->resolve(false);
@@ -201,18 +202,18 @@ class CacheStorage::KeysCallbacks final
 
   void onSuccess(const WebVector<WebString>& keys) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     Vector<String> wtfKeys;
     for (size_t i = 0; i < keys.size(); ++i)
-      wtfKeys.append(keys[i]);
+      wtfKeys.push_back(keys[i]);
     m_resolver->resolve(wtfKeys);
     m_resolver.clear();
   }
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->reject(CacheStorageError::createException(reason));
     m_resolver.clear();
@@ -225,7 +226,7 @@ class CacheStorage::KeysCallbacks final
 CacheStorage* CacheStorage::create(
     GlobalFetch::ScopedFetcher* fetcher,
     WebServiceWorkerCacheStorage* webCacheStorage) {
-  return new CacheStorage(fetcher, wrapUnique(webCacheStorage));
+  return new CacheStorage(fetcher, WTF::wrapUnique(webCacheStorage));
 }
 
 ScriptPromise CacheStorage::open(ScriptState* scriptState,
@@ -237,11 +238,13 @@ ScriptPromise CacheStorage::open(ScriptState* scriptState,
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   const ScriptPromise promise = resolver->promise();
 
-  if (m_webCacheStorage)
+  if (m_webCacheStorage) {
     m_webCacheStorage->dispatchOpen(
-        new WithCacheCallbacks(cacheName, this, resolver), cacheName);
-  else
+        WTF::makeUnique<WithCacheCallbacks>(cacheName, this, resolver),
+        cacheName);
+  } else {
     resolver->reject(createNoImplementationException());
+  }
 
   return promise;
 }
@@ -255,10 +258,12 @@ ScriptPromise CacheStorage::has(ScriptState* scriptState,
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   const ScriptPromise promise = resolver->promise();
 
-  if (m_webCacheStorage)
-    m_webCacheStorage->dispatchHas(new Callbacks(resolver), cacheName);
-  else
+  if (m_webCacheStorage) {
+    m_webCacheStorage->dispatchHas(WTF::makeUnique<Callbacks>(resolver),
+                                   cacheName);
+  } else {
     resolver->reject(createNoImplementationException());
+  }
 
   return promise;
 }
@@ -272,11 +277,12 @@ ScriptPromise CacheStorage::deleteFunction(ScriptState* scriptState,
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   const ScriptPromise promise = resolver->promise();
 
-  if (m_webCacheStorage)
+  if (m_webCacheStorage) {
     m_webCacheStorage->dispatchDelete(
-        new DeleteCallbacks(cacheName, this, resolver), cacheName);
-  else
+        WTF::makeUnique<DeleteCallbacks>(cacheName, this, resolver), cacheName);
+  } else {
     resolver->reject(createNoImplementationException());
+  }
 
   return promise;
 }
@@ -290,7 +296,7 @@ ScriptPromise CacheStorage::keys(ScriptState* scriptState,
   const ScriptPromise promise = resolver->promise();
 
   if (m_webCacheStorage)
-    m_webCacheStorage->dispatchKeys(new KeysCallbacks(resolver));
+    m_webCacheStorage->dispatchKeys(WTF::makeUnique<KeysCallbacks>(resolver));
   else
     resolver->reject(createNoImplementationException());
 
@@ -329,7 +335,8 @@ ScriptPromise CacheStorage::matchImpl(ScriptState* scriptState,
   }
 
   if (m_webCacheStorage)
-    m_webCacheStorage->dispatchMatch(new MatchCallbacks(resolver), webRequest,
+    m_webCacheStorage->dispatchMatch(WTF::makeUnique<MatchCallbacks>(resolver),
+                                     webRequest,
                                      Cache::toWebQueryParams(options));
   else
     resolver->reject(createNoImplementationException());

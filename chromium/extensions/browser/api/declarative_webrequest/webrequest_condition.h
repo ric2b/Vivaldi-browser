@@ -11,11 +11,14 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "components/url_matcher/url_matcher.h"
 #include "extensions/browser/api/declarative/declarative_rule.h"
 #include "extensions/browser/api/declarative_webrequest/webrequest_condition_attribute.h"
 #include "net/http/http_response_headers.h"
+
+namespace net {
+class URLRequest;
+}
 
 namespace extensions {
 class ExtensionNavigationUIData;

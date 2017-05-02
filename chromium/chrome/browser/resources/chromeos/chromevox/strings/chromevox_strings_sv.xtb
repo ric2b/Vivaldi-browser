@@ -74,6 +74,7 @@
 <translation id="1680732992526857724"><ph name="NAME" />, aktivera</translation>
 <translation id="1692077714702418899">rad i strukturen</translation>
 <translation id="1700517974991662022">Har besökts</translation>
+<translation id="1714116687360794776">Mätare</translation>
 <translation id="1722567105086139392">Länk</translation>
 <translation id="1727806147743597030">sidfot</translation>
 <translation id="174268867904053074">Nästa bild</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">Inmatning av datum och tid</translation>
 <translation id="2347456970887948350">En länk</translation>
 <translation id="2359897517538099099">Inte i tabelläge.</translation>
+<translation id="2390264819538553347">Tryck på Retur om du vill fortsätta. Tryck på mellanslag om du vill öppna föregående sida.</translation>
 <translation id="241124561063364910">följt av</translation>
 <translation id="2416512023405990736">En omarkerad kryssruta</translation>
 <translation id="2417569100218200841">Innehållsinformation</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{vänster klammerparentes}other{# vänster-klammerparenteser}}</translation>
 <translation id="2911433807131383493">Öppna självstudierna för ChromeVox</translation>
 <translation id="2932083475399492303">Byt mellan rader i strukturen och rader i layouten</translation>
+<translation id="2944762337049891859">Läs upp sidan automatiskt när den har lästs in.</translation>
 <translation id="2964026537669811554">Rubrikgrupp</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{tabbtecken}other{# tabbtecken}}</translation>
 <translation id="2972078295414139404">Det finns inga länkar som har besökts tidigare.</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">Det finns inget föregående avsnitt.</translation>
 <translation id="3030432017085518523">Alternativknapp för menyalternativ</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}other{# apostrofer}}</translation>
+<translation id="3040901448410802366">Förloppsindikator</translation>
 <translation id="3046838483509668188">Alternativ för ChromeVox</translation>
 <translation id="3047143736589213134">Experimentell tangentuppsättning</translation>
 <translation id="3060756054951570867">Menyn <ph name="TITLE" /> har öppnats</translation>
@@ -230,7 +234,7 @@ Om du är klar med självstudiekursen kan du använda ChromeVox till att naviger
 <translation id="3321460131042519426">Aktivera radbrytning</translation>
 <translation id="3322936298410871309">Föregående rubrik på nivå 1</translation>
 <translation id="3323447499041942178">Textruta</translation>
-<translation id="3329854757664111426">Tryck på Retur om du vill fortsätta.</translation>
+<translation id="3338224621010291843">Skjutreglage för <ph name="NAME" /> med värdet <ph name="VALUE" /></translation>
 <translation id="3353420241558113817">{"ar": "arabiska",
         "bg": "bulgariska",
         "ca": "katalanska",
@@ -307,6 +311,7 @@ Om du är klar med självstudiekursen kan du använda ChromeVox till att naviger
 <translation id="3712520970944678024">Röstkontroller</translation>
 <translation id="3716845769494773620">Flerradigt</translation>
 <translation id="3731746171184829332">Det finns ingen föregående rubrik.</translation>
+<translation id="3735039640698208086">Vid ljuduppspelning …</translation>
 <translation id="3762198587642264450">Flytta till slutet av aktuell rad</translation>
 <translation id="3777255250339039212">rubr1</translation>
 <translation id="3793710123303304873">Dialogrutan stängdes.</translation>
@@ -547,6 +552,7 @@ Flytta framåt mellan öppna flikar genom att trycka på Ctrl + tabbtangenten.
 <translation id="5876817486144482042">Sänk talvolymen</translation>
 <translation id="5887397643266327462">Textning med punktskrift har aktiverats.</translation>
 <translation id="5891934789323004067">Tabell</translation>
+<translation id="5899860758576822363">Spela upp på lägre volym när ChromeVox används</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{likhetstecken}other{# likhetstecken}}</translation>
 <translation id="5939518447894949180">Återställ</translation>
 <translation id="5948123859135882163">Växla mellan strukturell och semantisk tolkning av matematiska uttryck</translation>
@@ -569,6 +575,7 @@ Flytta framåt mellan öppna flikar genom att trycka på Ctrl + tabbtangenten.
 <translation id="6132506484792346370">En listruta eller kombinationsruta</translation>
 <translation id="6138576064440631958">Ackordet $1</translation>
 <translation id="6142308968191113180">Rubrik 4</translation>
+<translation id="6164829606128959761">mätare</translation>
 <translation id="6169420925157477918">Bild med lång beskrivning</translation>
 <translation id="6186305613600865047">Till slutet av sidan</translation>
 <translation id="6193330012414963395">FM/EM</translation>
@@ -579,6 +586,7 @@ Flytta framåt mellan öppna flikar genom att trycka på Ctrl + tabbtangenten.
 <translation id="6281876499889881039">Nästa element av liknande typ.</translation>
 <translation id="6282062888058716985">navig</translation>
 <translation id="6290434000785343030">Det finns inga fler kombinationsrutor.</translation>
+<translation id="6305702903308659374">Spela upp på normal volym även när ChromeVox används</translation>
 <translation id="6307969636681130414">Nedtryckt</translation>
 <translation id="6322856989298155004">Ljud</translation>
 <translation id="6324551002951139333">Ett grammatiskt fel har upptäckts</translation>
@@ -691,7 +699,6 @@ Flytta framåt mellan öppna flikar genom att trycka på Ctrl + tabbtangenten.
 <translation id="7492049978501397201">Dialogruta öppnad</translation>
 <translation id="7518543783849163354">Stoppa ChromeVox från att tala genom att trycka på Ctrl-tangenten.</translation>
 <translation id="7532613204005497612">juni</translation>
-<translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, skjutreglage</translation>
 <translation id="7552432549459840808">Användbara kortkommandon i Chrome</translation>
 <translation id="7579911500627256166">punkt <ph name="DOT" /></translation>
 <translation id="7596919493010894443">markering borttagen</translation>
@@ -769,6 +776,7 @@ Flytta framåt mellan öppna flikar genom att trycka på Ctrl + tabbtangenten.
 <translation id="8455868257606149352">Högst <ph name="X" /></translation>
 <translation id="84575901236241018">har snabbtangenten <ph name="KEY" /></translation>
 <translation id="847154984256717791">upptagen</translation>
+<translation id="8476408756881832830">Pausa uppspelningen när ChromeVox används</translation>
 <translation id="8476508772960940536">fönsteröversikt</translation>
 <translation id="8503360654911991865">Minska navigeringens granularitet</translation>
 <translation id="8520472399088452386">Snurrknapp</translation>

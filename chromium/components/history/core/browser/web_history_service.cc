@@ -34,18 +34,20 @@
 #include "ui/base/device_form_factor.h"
 #include "url/gurl.h"
 
+#include "sync/vivaldi_sync_urls.h"
+
 namespace history {
 
 namespace {
 
 const char kHistoryOAuthScope[] =
-    "https://www.googleapis.com/auth/chromesync";
+    TEST_SYNC_URL("/apis/auth/chromesync");
 
 const char kHistoryQueryHistoryUrl[] =
-    "https://history.google.com/history/api/lookup?client=chrome";
+    TEST_SYNC_URL("/apis/history/api/lookup?client=chrome");
 
 const char kHistoryDeleteHistoryUrl[] =
-    "https://history.google.com/history/api/delete?client=chrome";
+    TEST_SYNC_URL("/apis/history/api/delete?client=chrome");
 
 const char kHistoryAudioHistoryUrl[] =
     "https://history.google.com/history/api/lookup?client=audio";
@@ -275,11 +277,15 @@ GURL GetQueryUrl(const base::string16& text_query,
   url = net::AppendQueryParameter(url, "titles", "1");
 
   // Take |begin_time|, |end_time|, and |max_count| from the original query
-  // options, and convert them to the equivalent URL parameters.
+  // options, and convert them to the equivalent URL parameters. Note that
+  // QueryOptions uses exclusive |end_time| while the history.google.com API
+  // uses it inclusively, so we subtract 1us during conversion.
 
   base::Time end_time =
-      std::min(base::Time::FromInternalValue(options.EffectiveEndTime()),
-               base::Time::Now());
+      options.end_time.is_null()
+          ? base::Time::Now()
+          : std::min(options.end_time - base::TimeDelta::FromMicroseconds(1),
+                     base::Time::Now());
   url = net::AppendQueryParameter(url, "max", ServerTimeString(end_time));
 
   if (!options.begin_time.is_null()) {
@@ -360,7 +366,7 @@ std::unique_ptr<base::DictionaryValue> WebHistoryService::ReadResponse(
   if (request->GetResponseCode() == net::HTTP_OK) {
     std::unique_ptr<base::Value> value =
         base::JSONReader::Read(request->GetResponseBody());
-    if (value.get() && value.get()->IsType(base::Value::TYPE_DICTIONARY))
+    if (value.get() && value.get()->IsType(base::Value::Type::DICTIONARY))
       result.reset(static_cast<base::DictionaryValue*>(value.release()));
     else
       DLOG(WARNING) << "Non-JSON response received from history server.";

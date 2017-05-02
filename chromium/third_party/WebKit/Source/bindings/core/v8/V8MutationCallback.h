@@ -26,8 +26,8 @@
 #ifndef V8MutationCallback_h
 #define V8MutationCallback_h
 
-#include "bindings/core/v8/ActiveDOMCallback.h"
 #include "bindings/core/v8/ScopedPersistent.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/MutationCallback.h"
 #include "wtf/RefPtr.h"
 #include <v8.h>
@@ -35,12 +35,8 @@
 namespace blink {
 
 class ExecutionContext;
-class ScriptState;
 
-class V8MutationCallback final : public MutationCallback,
-                                 public ActiveDOMCallback {
-  USING_GARBAGE_COLLECTED_MIXIN(V8MutationCallback);
-
+class V8MutationCallback final : public MutationCallback {
  public:
   static V8MutationCallback* create(v8::Local<v8::Function> callback,
                                     v8::Local<v8::Object> owner,
@@ -51,8 +47,9 @@ class V8MutationCallback final : public MutationCallback,
 
   void call(const HeapVector<Member<MutationRecord>>&,
             MutationObserver*) override;
+
   ExecutionContext* getExecutionContext() const override {
-    return ContextLifecycleObserver::getExecutionContext();
+    return m_scriptState->getExecutionContext();
   }
 
   DECLARE_VIRTUAL_TRACE();

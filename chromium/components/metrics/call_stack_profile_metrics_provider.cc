@@ -33,6 +33,22 @@ namespace metrics {
 
 namespace {
 
+// Provide a mapping from the C++ "enum" definition of various process mile-
+// stones to the equivalent protobuf "enum" definition. This table-lookup
+// conversion allows for the implementation to evolve and still be compatible
+// with the protobuf -- even if there are ever more than 32 defined proto
+// values, though never more than 32 could be in-use in a given C++ version
+// of the code.
+const ProcessPhase
+    kProtoPhases[CallStackProfileMetricsProvider::MILESTONES_MAX_VALUE] = {
+        ProcessPhase::MAIN_LOOP_START,
+        ProcessPhase::MAIN_NAVIGATION_START,
+        ProcessPhase::MAIN_NAVIGATION_FINISHED,
+        ProcessPhase::FIRST_NONEMPTY_PAINT,
+
+        ProcessPhase::SHUTDOWN_START,
+};
+
 // ProfilesState --------------------------------------------------------------
 
 // A set of profiles and the CallStackProfileMetricsProvider state associated
@@ -223,7 +239,7 @@ void CopySampleToProto(
     const StackSamplingProfiler::Sample& sample,
     const std::vector<StackSamplingProfiler::Module>& modules,
     CallStackProfile::Sample* proto_sample) {
-  for (const StackSamplingProfiler::Frame& frame : sample) {
+  for (const StackSamplingProfiler::Frame& frame : sample.frames) {
     CallStackProfile::Entry* entry = proto_sample->add_entry();
     // A frame may not have a valid module. If so, we can't compute the
     // instruction pointer offset, and we don't want to send bare pointers, so
@@ -239,6 +255,27 @@ void CopySampleToProto(
   }
 }
 
+// Transcode Sample annotations into protobuf fields. The C++ code uses a bit-
+// field with each bit corresponding to an entry in an enumeration while the
+// protobuf uses a repeated field of individual values. Conversion tables
+// allow for arbitrary mapping, though no more than 32 in any given version
+// of the code.
+void CopyAnnotationsToProto(uint32_t new_milestones,
+                            CallStackProfile::Sample* sample_proto) {
+  for (size_t bit = 0; new_milestones != 0 && bit < sizeof(new_milestones) * 8;
+       ++bit) {
+    const uint32_t flag = 1U << bit;
+    if (new_milestones & flag) {
+      if (bit >= arraysize(kProtoPhases)) {
+        NOTREACHED();
+        continue;
+      }
+      sample_proto->add_process_phase(kProtoPhases[bit]);
+      new_milestones ^= flag;  // Bit is set so XOR will clear it.
+    }
+  }
+}
+
 // Transcode |profile| into |proto_profile|.
 void CopyProfileToProto(
     const StackSamplingProfiler::CallStackProfile& profile,
@@ -250,11 +287,17 @@ void CopyProfileToProto(
   if (ordering_spec == CallStackProfileParams::PRESERVE_ORDER) {
     // Collapse only consecutive repeated samples together.
     CallStackProfile::Sample* current_sample_proto = nullptr;
+    uint32_t milestones = 0;
     for (auto it = profile.samples.begin(); it != profile.samples.end(); ++it) {
+      // Check if the sample is different than the previous one. Samples match
+      // if the frame and all annotations are the same.
       if (!current_sample_proto || *it != *(it - 1)) {
         current_sample_proto = proto_profile->add_sample();
         CopySampleToProto(*it, profile.modules, current_sample_proto);
         current_sample_proto->set_count(1);
+        CopyAnnotationsToProto(it->process_milestones & ~milestones,
+                               current_sample_proto);
+        milestones = it->process_milestones;
       } else {
         current_sample_proto->set_count(current_sample_proto->count() + 1);
       }
@@ -262,15 +305,21 @@ void CopyProfileToProto(
   } else {
     // Collapse all repeated samples together.
     std::map<StackSamplingProfiler::Sample, int> sample_index;
+    uint32_t milestones = 0;
     for (auto it = profile.samples.begin(); it != profile.samples.end(); ++it) {
+      // Check for a sample already seen. Samples match if the frame and all
+      // annotations are the same.
       auto location = sample_index.find(*it);
       if (location == sample_index.end()) {
         CallStackProfile::Sample* sample_proto = proto_profile->add_sample();
         CopySampleToProto(*it, profile.modules, sample_proto);
         sample_proto->set_count(1);
+        CopyAnnotationsToProto(it->process_milestones & ~milestones,
+                               sample_proto);
         sample_index.insert(
             std::make_pair(
                 *it, static_cast<int>(proto_profile->sample().size()) - 1));
+        milestones = it->process_milestones;
       } else {
         CallStackProfile::Sample* sample_proto =
             proto_profile->mutable_sample()->Mutable(location->second);

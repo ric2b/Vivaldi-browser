@@ -116,6 +116,7 @@ bool supportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::PseudoBackdrop:
     case CSSSelector::PseudoLang:
     case CSSSelector::PseudoNot:
+    case CSSSelector::PseudoPlaceholder:
     case CSSSelector::PseudoResizer:
     case CSSSelector::PseudoRoot:
     case CSSSelector::PseudoScope:
@@ -247,7 +248,6 @@ InvalidationSet& ensureInvalidationSet(
 void extractInvalidationSets(InvalidationSet* invalidationSet,
                              DescendantInvalidationSet*& descendants,
                              SiblingInvalidationSet*& siblings) {
-  RELEASE_ASSERT(invalidationSet->isAlive());
   if (invalidationSet->type() == InvalidateDescendants) {
     descendants = toDescendantInvalidationSet(invalidationSet);
     siblings = nullptr;
@@ -271,33 +271,17 @@ DEFINE_TRACE(RuleFeature) {
   visitor->trace(rule);
 }
 
-RuleFeatureSet::RuleFeatureSet() : m_isAlive(true) {}
-
-RuleFeatureSet::~RuleFeatureSet() {
-  RELEASE_ASSERT(m_isAlive);
-
-  m_metadata.clear();
-  m_classInvalidationSets.clear();
-  m_attributeInvalidationSets.clear();
-  m_idInvalidationSets.clear();
-  m_pseudoInvalidationSets.clear();
-  m_universalSiblingInvalidationSet.clear();
-  m_nthInvalidationSet.clear();
-
-  m_isAlive = false;
-}
-
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureClassInvalidationSet(
     const AtomicString& className,
     InvalidationType type) {
-  RELEASE_ASSERT(!className.isEmpty());
+  DCHECK(!className.isEmpty());
   return ensureInvalidationSet(m_classInvalidationSets, className, type);
 }
 
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureAttributeInvalidationSet(
     const AtomicString& attributeName,
     InvalidationType type) {
-  RELEASE_ASSERT(!attributeName.isEmpty());
+  DCHECK(!attributeName.isEmpty());
   return ensureInvalidationSet(m_attributeInvalidationSets, attributeName,
                                type);
 }
@@ -305,14 +289,14 @@ ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureAttributeInvalidationSet(
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureIdInvalidationSet(
     const AtomicString& id,
     InvalidationType type) {
-  RELEASE_ASSERT(!id.isEmpty());
+  DCHECK(!id.isEmpty());
   return ensureInvalidationSet(m_idInvalidationSets, id, type);
 }
 
 ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensurePseudoInvalidationSet(
     CSSSelector::PseudoType pseudoType,
     InvalidationType type) {
-  RELEASE_ASSERT(pseudoType != CSSSelector::PseudoUnknown);
+  DCHECK(pseudoType != CSSSelector::PseudoUnknown);
   return ensureInvalidationSet(m_pseudoInvalidationSets, pseudoType, type);
 }
 
@@ -362,19 +346,19 @@ void RuleFeatureSet::extractInvalidationSetFeaturesFromSimpleSelector(
     InvalidationSetFeatures& features) {
   if (selector.match() == CSSSelector::Tag &&
       selector.tagQName().localName() != starAtom) {
-    features.tagNames.append(selector.tagQName().localName());
+    features.tagNames.push_back(selector.tagQName().localName());
     return;
   }
   if (selector.match() == CSSSelector::Id) {
-    features.ids.append(selector.value());
+    features.ids.push_back(selector.value());
     return;
   }
   if (selector.match() == CSSSelector::Class) {
-    features.classes.append(selector.value());
+    features.classes.push_back(selector.value());
     return;
   }
   if (selector.isAttributeSelector()) {
-    features.attributes.append(selector.attribute().localName());
+    features.attributes.push_back(selector.attribute().localName());
     return;
   }
   switch (selector.getPseudoType()) {
@@ -783,7 +767,6 @@ void RuleFeatureSet::addFeaturesToInvalidationSets(
 
 RuleFeatureSet::SelectorPreMatch RuleFeatureSet::collectFeaturesFromRuleData(
     const RuleData& ruleData) {
-  RELEASE_ASSERT(m_isAlive);
   FeatureMetadata metadata;
   if (collectFeaturesFromSelector(ruleData.selector(), metadata) ==
       SelectorNeverMatches)
@@ -792,11 +775,12 @@ RuleFeatureSet::SelectorPreMatch RuleFeatureSet::collectFeaturesFromRuleData(
   m_metadata.add(metadata);
 
   if (metadata.foundSiblingSelector) {
-    m_siblingRules.append(RuleFeature(ruleData.rule(), ruleData.selectorIndex(),
-                                      ruleData.hasDocumentSecurityOrigin()));
+    m_siblingRules.push_back(RuleFeature(ruleData.rule(),
+                                         ruleData.selectorIndex(),
+                                         ruleData.hasDocumentSecurityOrigin()));
   }
   if (ruleData.containsUncommonAttributeSelector()) {
-    m_uncommonAttributeRules.append(
+    m_uncommonAttributeRules.push_back(
         RuleFeature(ruleData.rule(), ruleData.selectorIndex(),
                     ruleData.hasDocumentSecurityOrigin()));
   }
@@ -899,9 +883,7 @@ void RuleFeatureSet::FeatureMetadata::clear() {
 }
 
 void RuleFeatureSet::add(const RuleFeatureSet& other) {
-  RELEASE_ASSERT(m_isAlive);
-  RELEASE_ASSERT(other.m_isAlive);
-  RELEASE_ASSERT(&other != this);
+  DCHECK(&other != this);
   for (const auto& entry : other.m_classInvalidationSets)
     ensureInvalidationSet(m_classInvalidationSets, entry.key,
                           entry.value->type())
@@ -928,10 +910,13 @@ void RuleFeatureSet::add(const RuleFeatureSet& other) {
 
   m_siblingRules.appendVector(other.m_siblingRules);
   m_uncommonAttributeRules.appendVector(other.m_uncommonAttributeRules);
+  m_viewportDependentMediaQueryResults.appendVector(
+      other.m_viewportDependentMediaQueryResults);
+  m_deviceDependentMediaQueryResults.appendVector(
+      other.m_deviceDependentMediaQueryResults);
 }
 
 void RuleFeatureSet::clear() {
-  RELEASE_ASSERT(m_isAlive);
   m_siblingRules.clear();
   m_uncommonAttributeRules.clear();
   m_metadata.clear();
@@ -941,6 +926,8 @@ void RuleFeatureSet::clear() {
   m_pseudoInvalidationSets.clear();
   m_universalSiblingInvalidationSet.clear();
   m_nthInvalidationSet.clear();
+  m_viewportDependentMediaQueryResults.clear();
+  m_deviceDependentMediaQueryResults.clear();
 }
 
 void RuleFeatureSet::collectInvalidationSetsForClass(
@@ -959,13 +946,13 @@ void RuleFeatureSet::collectInvalidationSetsForClass(
   if (descendants) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, classChange,
                                       className);
-    invalidationLists.descendants.append(descendants);
+    invalidationLists.descendants.push_back(descendants);
   }
 
   if (siblings) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, classChange,
                                       className);
-    invalidationLists.siblings.append(siblings);
+    invalidationLists.siblings.push_back(siblings);
   }
 }
 
@@ -990,7 +977,7 @@ void RuleFeatureSet::collectSiblingInvalidationSetForClass(
 
   TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblingSet, classChange,
                                     className);
-  invalidationLists.siblings.append(siblingSet);
+  invalidationLists.siblings.push_back(siblingSet);
 }
 
 void RuleFeatureSet::collectInvalidationSetsForId(
@@ -1007,12 +994,12 @@ void RuleFeatureSet::collectInvalidationSetsForId(
 
   if (descendants) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, idChange, id);
-    invalidationLists.descendants.append(descendants);
+    invalidationLists.descendants.push_back(descendants);
   }
 
   if (siblings) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, idChange, id);
-    invalidationLists.siblings.append(siblings);
+    invalidationLists.siblings.push_back(siblings);
   }
 }
 
@@ -1035,7 +1022,7 @@ void RuleFeatureSet::collectSiblingInvalidationSetForId(
     return;
 
   TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblingSet, idChange, id);
-  invalidationLists.siblings.append(siblingSet);
+  invalidationLists.siblings.push_back(siblingSet);
 }
 
 void RuleFeatureSet::collectInvalidationSetsForAttribute(
@@ -1054,13 +1041,13 @@ void RuleFeatureSet::collectInvalidationSetsForAttribute(
   if (descendants) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, attributeChange,
                                       attributeName);
-    invalidationLists.descendants.append(descendants);
+    invalidationLists.descendants.push_back(descendants);
   }
 
   if (siblings) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, attributeChange,
                                       attributeName);
-    invalidationLists.siblings.append(siblings);
+    invalidationLists.siblings.push_back(siblings);
   }
 }
 
@@ -1085,7 +1072,7 @@ void RuleFeatureSet::collectSiblingInvalidationSetForAttribute(
 
   TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblingSet, attributeChange,
                                     attributeName);
-  invalidationLists.siblings.append(siblingSet);
+  invalidationLists.siblings.push_back(siblingSet);
 }
 
 void RuleFeatureSet::collectInvalidationSetsForPseudoClass(
@@ -1104,12 +1091,12 @@ void RuleFeatureSet::collectInvalidationSetsForPseudoClass(
   if (descendants) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, pseudoChange,
                                       pseudo);
-    invalidationLists.descendants.append(descendants);
+    invalidationLists.descendants.push_back(descendants);
   }
 
   if (siblings) {
     TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, pseudoChange, pseudo);
-    invalidationLists.siblings.append(siblings);
+    invalidationLists.siblings.push_back(siblings);
   }
 }
 
@@ -1119,7 +1106,7 @@ void RuleFeatureSet::collectUniversalSiblingInvalidationSet(
   if (m_universalSiblingInvalidationSet &&
       m_universalSiblingInvalidationSet->maxDirectAdjacentSelectors() >=
           minDirectAdjacent)
-    invalidationLists.siblings.append(m_universalSiblingInvalidationSet);
+    invalidationLists.siblings.push_back(m_universalSiblingInvalidationSet);
 }
 
 SiblingInvalidationSet&
@@ -1132,7 +1119,7 @@ RuleFeatureSet::ensureUniversalSiblingInvalidationSet() {
 void RuleFeatureSet::collectNthInvalidationSet(
     InvalidationLists& invalidationLists) const {
   if (m_nthInvalidationSet)
-    invalidationLists.descendants.append(m_nthInvalidationSet);
+    invalidationLists.descendants.push_back(m_nthInvalidationSet);
 }
 
 DescendantInvalidationSet& RuleFeatureSet::ensureNthInvalidationSet() {
@@ -1160,6 +1147,8 @@ void RuleFeatureSet::addFeaturesToUniversalSiblingInvalidationSet(
 DEFINE_TRACE(RuleFeatureSet) {
   visitor->trace(m_siblingRules);
   visitor->trace(m_uncommonAttributeRules);
+  visitor->trace(m_viewportDependentMediaQueryResults);
+  visitor->trace(m_deviceDependentMediaQueryResults);
 }
 
 void RuleFeatureSet::InvalidationSetFeatures::add(

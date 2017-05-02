@@ -50,7 +50,7 @@ class USBDeviceManagerImplTest : public testing::Test {
   DeviceManagerPtr ConnectToDeviceManager() {
     DeviceManagerPtr device_manager;
     DeviceManagerImpl::Create(permission_provider_.GetWeakPtr(),
-                              mojo::GetProxy(&device_manager));
+                              mojo::MakeRequest(&device_manager));
     return device_manager;
   }
 
@@ -122,11 +122,10 @@ TEST_F(USBDeviceManagerImplTest, GetDevices) {
   DeviceManagerPtr device_manager = ConnectToDeviceManager();
 
   EnumerationOptionsPtr options = EnumerationOptions::New();
-  auto filter = DeviceFilter::New();
-  filter->has_vendor_id = true;
-  filter->vendor_id = 0x1234;
+  UsbDeviceFilter filter;
+  filter.vendor_id = 0x1234;
   options->filters.emplace();
-  options->filters->push_back(std::move(filter));
+  options->filters->push_back(filter);
 
   std::set<std::string> guids;
   guids.insert(device0->guid());
@@ -152,14 +151,14 @@ TEST_F(USBDeviceManagerImplTest, GetDevice) {
   {
     base::RunLoop loop;
     DevicePtr device;
-    device_manager->GetDevice(mock_device->guid(), mojo::GetProxy(&device));
+    device_manager->GetDevice(mock_device->guid(), mojo::MakeRequest(&device));
     device->GetDeviceInfo(base::Bind(&ExpectDeviceInfoAndThen,
                                      mock_device->guid(), loop.QuitClosure()));
     loop.Run();
   }
 
   DevicePtr bad_device;
-  device_manager->GetDevice("not a real guid", mojo::GetProxy(&bad_device));
+  device_manager->GetDevice("not a real guid", mojo::MakeRequest(&bad_device));
 
   {
     base::RunLoop loop;

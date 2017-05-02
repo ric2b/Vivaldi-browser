@@ -11,12 +11,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/strings/stringprintf.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/throttled_time_domain.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
-#include "public/platform/WebFrameScheduler.h"
 
 namespace blink {
 namespace scheduler {
@@ -61,6 +61,12 @@ base::Optional<T> Max(const base::Optional<T>& a, const base::Optional<T>& b) {
   if (!a)
     return b;
   return std::max(a.value(), b.value());
+}
+
+std::string PointerToId(void* pointer) {
+  return base::StringPrintf(
+      "0x%" PRIx64,
+      static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer)));
 }
 
 }  // namespace
@@ -132,6 +138,9 @@ void TaskQueueThrottler::TimeBudgetPool::EnableThrottling(LazyNow* lazy_now) {
     return;
   is_enabled_ = true;
 
+  TRACE_EVENT0(task_queue_throttler_->tracing_category_,
+               "TaskQueueThrottler_TimeBudgetPool_EnableThrottling");
+
   BlockThrottledQueues(lazy_now->Now());
 }
 
@@ -139,6 +148,9 @@ void TaskQueueThrottler::TimeBudgetPool::DisableThrottling(LazyNow* lazy_now) {
   if (!is_enabled_)
     return;
   is_enabled_ = false;
+
+  TRACE_EVENT0(task_queue_throttler_->tracing_category_,
+               "TaskQueueThrottler_TimeBudgetPool_DisableThrottling");
 
   for (TaskQueue* queue : associated_task_queues_) {
     if (!task_queue_throttler_->IsThrottled(queue))
@@ -214,7 +226,7 @@ const char* TaskQueueThrottler::TimeBudgetPool::Name() const {
 void TaskQueueThrottler::TimeBudgetPool::AsValueInto(
     base::trace_event::TracedValue* state,
     base::TimeTicks now) const {
-  state->BeginDictionary();
+  state->BeginDictionary(name_);
 
   state->SetString("name", name_);
   state->SetDouble("time_budget", cpu_percentage_);
@@ -222,11 +234,11 @@ void TaskQueueThrottler::TimeBudgetPool::AsValueInto(
                    current_budget_level_.InSecondsF());
   state->SetDouble("last_checkpoint_seconds_ago",
                    (now - last_checkpoint_).InSecondsF());
+  state->SetBoolean("is_enabled", is_enabled_);
 
   state->BeginArray("task_queues");
   for (TaskQueue* queue : associated_task_queues_) {
-    state->AppendString(base::StringPrintf(
-        "%" PRIx64, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(queue))));
+    state->AppendString(PointerToId(queue));
   }
   state->EndArray();
 
@@ -473,7 +485,8 @@ void TaskQueueThrottler::MaybeSchedulePumpThrottledTasks(
     return;
 
   base::TimeTicks runtime =
-      std::max(now, AlignedThrottledRunTime(unaligned_runtime));
+      AlignedThrottledRunTime(std::max(now, unaligned_runtime));
+  DCHECK_LE(now, runtime);
 
   // If there is a pending call to PumpThrottledTasks and it's sooner than
   // |runtime| then return.
@@ -528,13 +541,24 @@ void TaskQueueThrottler::AsValueInto(base::trace_event::TracedValue* state,
         (pending_pump_throttled_tasks_runtime_.value() - now).InSecondsF());
   }
 
-  state->BeginDictionary("time_budget_pools");
+  state->SetBoolean("allow_throttling", allow_throttling_);
 
+  state->BeginDictionary("time_budget_pools");
   for (const auto& map_entry : time_budget_pools_) {
     TaskQueueThrottler::TimeBudgetPool* pool = map_entry.first;
     pool->AsValueInto(state, now);
   }
+  state->EndDictionary();
 
+  state->BeginDictionary("queue_details");
+  for (const auto& map_entry : queue_details_) {
+    state->BeginDictionaryWithCopiedName(PointerToId(map_entry.first));
+
+    state->SetInteger("throttling_ref_count",
+                      map_entry.second.throttling_ref_count);
+
+    state->EndDictionary();
+  }
   state->EndDictionary();
 }
 
@@ -592,6 +616,8 @@ void TaskQueueThrottler::DisableThrottling() {
 
   pump_throttled_tasks_closure_.Cancel();
   pending_pump_throttled_tasks_runtime_ = base::nullopt;
+
+  TRACE_EVENT0(tracing_category_, "TaskQueueThrottler_DisableThrottling");
 }
 
 void TaskQueueThrottler::EnableThrottling() {
@@ -615,6 +641,8 @@ void TaskQueueThrottler::EnableThrottling() {
     MaybeSchedulePumpQueue(FROM_HERE, lazy_now.Now(), queue,
                            GetNextAllowedRunTime(lazy_now.Now(), queue));
   }
+
+  TRACE_EVENT0(tracing_category_, "TaskQueueThrottler_EnableThrottling");
 }
 
 }  // namespace scheduler

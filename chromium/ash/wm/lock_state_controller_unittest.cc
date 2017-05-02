@@ -20,12 +20,13 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/session_state_animator.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
-#include "ui/display/chromeos/display_configurator.h"
 #include "ui/display/fake_display_snapshot.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/size.h"
@@ -642,9 +643,6 @@ TEST_F(LockStateControllerTest, CancelLockToShutdown) {
   EXPECT_FALSE(test_api_->shutdown_timer_is_running());
 }
 
-// TODO(bruthig): Investigate why this hangs on Windows 8 and whether it can be
-// safely enabled on OS_WIN.
-#ifndef OS_WIN
 // Test that we handle the case where lock requests are ignored.
 TEST_F(LockStateControllerTest, Lock) {
   Initialize(false, LoginStatus::USER);
@@ -664,7 +662,6 @@ TEST_F(LockStateControllerTest, Lock) {
   // Act as if the request timed out.
   EXPECT_DEATH(test_api_->trigger_lock_fail_timeout(), "");
 }
-#endif
 
 // Test the basic operation of the lock button (not logged in).
 TEST_F(LockStateControllerTest, LockButtonBasicNotLoggedIn) {
@@ -901,21 +898,21 @@ TEST_F(LockStateControllerTest, IgnorePowerButtonIfScreenIsOff) {
 
 TEST_F(LockStateControllerTest, HonorPowerButtonInDockedMode) {
   // Create two outputs, the first internal and the second external.
-  ui::DisplayConfigurator::DisplayStateList outputs;
+  display::DisplayConfigurator::DisplayStateList outputs;
 
-  std::unique_ptr<ui::DisplaySnapshot> internal_display =
+  std::unique_ptr<display::DisplaySnapshot> internal_display =
       display::FakeDisplaySnapshot::Builder()
           .SetId(123)
           .SetNativeMode(gfx::Size(1, 1))
-          .SetType(ui::DISPLAY_CONNECTION_TYPE_INTERNAL)
+          .SetType(display::DISPLAY_CONNECTION_TYPE_INTERNAL)
           .Build();
   outputs.push_back(internal_display.get());
 
-  std::unique_ptr<ui::DisplaySnapshot> external_display =
+  std::unique_ptr<display::DisplaySnapshot> external_display =
       display::FakeDisplaySnapshot::Builder()
           .SetId(456)
           .SetNativeMode(gfx::Size(1, 1))
-          .SetType(ui::DISPLAY_CONNECTION_TYPE_HDMI)
+          .SetType(display::DISPLAY_CONNECTION_TYPE_HDMI)
           .Build();
   outputs.push_back(external_display.get());
 

@@ -33,7 +33,7 @@
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/process_type.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -64,6 +64,10 @@ std::string GenerateHeader(size_t response_data_size) {
       response_data_size);
 }
 
+int64_t TotalReceivedBytes(size_t response_data_size) {
+  return response_data_size + GenerateHeader(response_data_size).size();
+}
+
 std::string GenerateData(size_t response_data_size) {
   return std::string(response_data_size, 'a');
 }
@@ -92,7 +96,6 @@ class RecordingResourceMessageFilter : public ResourceMessageFilter {
                                  net::URLRequestContext* request_context)
       : ResourceMessageFilter(
             0,
-            PROCESS_TYPE_RENDERER,
             nullptr,
             nullptr,
             nullptr,
@@ -101,6 +104,7 @@ class RecordingResourceMessageFilter : public ResourceMessageFilter {
                        base::Unretained(this))),
         resource_context_(resource_context),
         request_context_(request_context) {
+    InitializeForTest();
     set_peer_process_for_testing(base::Process::Current());
   }
 
@@ -161,8 +165,7 @@ class AsyncResourceHandlerTest : public ::testing::Test,
     filter_ =
         new RecordingResourceMessageFilter(resource_context_.get(), &context_);
     ResourceRequestInfoImpl* info = new ResourceRequestInfoImpl(
-        PROCESS_TYPE_RENDERER,                 // process_type
-        0,                                     // child_id
+        filter_->requester_info_for_test(),
         0,                                     // route_id
         -1,                                    // frame_tree_node_id
         0,                                     // origin_pid
@@ -183,10 +186,9 @@ class AsyncResourceHandlerTest : public ::testing::Test,
         blink::WebReferrerPolicyDefault,       // referrer_policy
         blink::WebPageVisibilityStateVisible,  // visibility_state
         resource_context_.get(),               // context
-        filter_->GetWeakPtr(),                 // filter
         false,                                 // report_raw_headers
         true,                                  // is_async
-        false,                                 // is_using_lofi
+        PREVIEWS_OFF,                          // previews_state
         std::string(),                         // original_headers
         nullptr,                               // body
         false);                                // initiated_in_secure_context
@@ -248,7 +250,8 @@ TEST_F(AsyncResourceHandlerTest, Construct) {
 TEST_F(AsyncResourceHandlerTest, OneChunkLengths) {
   // Larger than kInlinedLeadingChunkSize and smaller than
   // kMaxAllocationSize.
-  StartRequestAndWaitWithResponseDataSize(4096);
+  constexpr auto kDataSize = 4096;
+  StartRequestAndWaitWithResponseDataSize(kDataSize);
   const auto& messages = filter_->messages();
   ASSERT_EQ(4u, messages.size());
   ASSERT_EQ(ResourceMsg_DataReceived::ID, messages[2]->type());
@@ -256,9 +259,17 @@ TEST_F(AsyncResourceHandlerTest, OneChunkLengths) {
   ResourceMsg_DataReceived::Read(messages[2].get(), &params);
 
   int encoded_data_length = std::get<3>(params);
-  EXPECT_EQ(4096, encoded_data_length);
-  int encoded_body_length = std::get<4>(params);
-  EXPECT_EQ(4096, encoded_body_length);
+  EXPECT_EQ(kDataSize, encoded_data_length);
+
+  ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[3]->type());
+  ResourceMsg_RequestComplete::Param completion_params;
+  ResourceMsg_RequestComplete::Read(messages[3].get(), &completion_params);
+  ResourceRequestCompletionStatus completion_status =
+      std::get<1>(completion_params);
+
+  EXPECT_EQ(TotalReceivedBytes(kDataSize),
+            completion_status.encoded_data_length);
+  EXPECT_EQ(kDataSize, completion_status.encoded_body_length);
 }
 
 TEST_F(AsyncResourceHandlerTest, InlinedChunkLengths) {
@@ -269,7 +280,8 @@ TEST_F(AsyncResourceHandlerTest, InlinedChunkLengths) {
       features::kOptimizeLoadingIPCForSmallResources);
 
   // Smaller than kInlinedLeadingChunkSize.
-  StartRequestAndWaitWithResponseDataSize(8);
+  constexpr auto kDataSize = 8;
+  StartRequestAndWaitWithResponseDataSize(kDataSize);
   const auto& messages = filter_->messages();
   ASSERT_EQ(3u, messages.size());
   ASSERT_EQ(ResourceMsg_InlinedDataChunkReceived::ID, messages[1]->type());
@@ -277,14 +289,23 @@ TEST_F(AsyncResourceHandlerTest, InlinedChunkLengths) {
   ResourceMsg_InlinedDataChunkReceived::Read(messages[1].get(), &params);
 
   int encoded_data_length = std::get<2>(params);
-  EXPECT_EQ(8, encoded_data_length);
-  int encoded_body_length = std::get<3>(params);
-  EXPECT_EQ(8, encoded_body_length);
+  EXPECT_EQ(kDataSize, encoded_data_length);
+
+  ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[2]->type());
+  ResourceMsg_RequestComplete::Param completion_params;
+  ResourceMsg_RequestComplete::Read(messages[2].get(), &completion_params);
+  ResourceRequestCompletionStatus completion_status =
+      std::get<1>(completion_params);
+
+  EXPECT_EQ(TotalReceivedBytes(kDataSize),
+            completion_status.encoded_data_length);
+  EXPECT_EQ(kDataSize, completion_status.encoded_body_length);
 }
 
 TEST_F(AsyncResourceHandlerTest, TwoChunksLengths) {
   // Larger than kMaxAllocationSize.
-  StartRequestAndWaitWithResponseDataSize(64*1024);
+  constexpr auto kDataSize = 64 * 1024;
+  StartRequestAndWaitWithResponseDataSize(kDataSize);
   const auto& messages = filter_->messages();
   ASSERT_EQ(5u, messages.size());
   ASSERT_EQ(ResourceMsg_DataReceived::ID, messages[2]->type());
@@ -293,16 +314,21 @@ TEST_F(AsyncResourceHandlerTest, TwoChunksLengths) {
 
   int encoded_data_length = std::get<3>(params);
   EXPECT_EQ(32768, encoded_data_length);
-  int encoded_body_length = std::get<4>(params);
-  EXPECT_EQ(32768, encoded_body_length);
 
   ASSERT_EQ(ResourceMsg_DataReceived::ID, messages[3]->type());
   ResourceMsg_DataReceived::Read(messages[3].get(), &params);
 
   encoded_data_length = std::get<3>(params);
   EXPECT_EQ(32768, encoded_data_length);
-  encoded_body_length = std::get<4>(params);
-  EXPECT_EQ(32768, encoded_body_length);
+
+  ASSERT_EQ(ResourceMsg_RequestComplete::ID, messages[4]->type());
+  ResourceMsg_RequestComplete::Param completion_params;
+  ResourceMsg_RequestComplete::Read(messages[4].get(), &completion_params);
+  ResourceRequestCompletionStatus completion_status =
+      std::get<1>(completion_params);
+  EXPECT_EQ(TotalReceivedBytes(kDataSize),
+            completion_status.encoded_data_length);
+  EXPECT_EQ(kDataSize, completion_status.encoded_body_length);
 }
 
 }  // namespace

@@ -21,16 +21,12 @@
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace content {
-struct FrameNavigateParams;
-struct LoadCommittedDetails;
 class WebContents;
 }
 
 namespace autofill {
 
 class AutofillPopupControllerImpl;
-class CreditCardScannerController;
-struct FormData;
 
 // Chrome implementation of AutofillClient.
 class ChromeAutofillClient
@@ -47,7 +43,7 @@ class ChromeAutofillClient
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
-  rappor::RapporService* GetRapporService() override;
+  rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -81,9 +77,10 @@ class ChromeAutofillClient
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
-  bool IsContextSecure(const GURL& form_origin) override;
+  bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
   void StartSigninFlow() override;
+  void ShowHttpNotSecureExplanation() override;
 
   // content::WebContentsObserver implementation.
   void MainFrameWasResized(bool width_changed) override;

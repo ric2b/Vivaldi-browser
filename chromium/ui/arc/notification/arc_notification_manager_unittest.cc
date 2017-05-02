@@ -8,10 +8,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/arc/instance_holder.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
 #include "components/arc/test/fake_notifications_instance.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/arc/notification/arc_notification_manager.h"
@@ -80,7 +81,6 @@ class ArcNotificationManagerTest : public testing::Test {
   ~ArcNotificationManagerTest() override { base::RunLoop().RunUntilIdle(); }
 
  protected:
-  FakeArcBridgeService* service() { return service_.get(); }
   FakeNotificationsInstance* arc_notifications_instance() {
     return arc_notifications_instance_.get();
   }
@@ -109,18 +109,18 @@ class ArcNotificationManagerTest : public testing::Test {
 
  private:
   base::MessageLoop loop_;
-  std::unique_ptr<FakeArcBridgeService> service_;
+  std::unique_ptr<ArcBridgeService> service_;
   std::unique_ptr<FakeNotificationsInstance> arc_notifications_instance_;
   std::unique_ptr<ArcNotificationManager> arc_notification_manager_;
   std::unique_ptr<MockMessageCenter> message_center_;
 
   void SetUp() override {
-    arc_notifications_instance_.reset(new FakeNotificationsInstance());
-    service_.reset(new FakeArcBridgeService());
-    message_center_.reset(new MockMessageCenter());
+    arc_notifications_instance_ = base::MakeUnique<FakeNotificationsInstance>();
+    service_ = base::MakeUnique<ArcBridgeService>();
+    message_center_ = base::MakeUnique<MockMessageCenter>();
 
-    arc_notification_manager_.reset(new ArcNotificationManager(
-        service(), EmptyAccountId(), message_center_.get()));
+    arc_notification_manager_ = base::MakeUnique<ArcNotificationManager>(
+        service_.get(), EmptyAccountId(), message_center_.get());
 
     NotificationsObserver observer;
     service_->notifications()->AddObserver(&observer);
@@ -153,7 +153,6 @@ TEST_F(ArcNotificationManagerTest, NotificationCreatedAndRemoved) {
 }
 
 TEST_F(ArcNotificationManagerTest, NotificationRemovedByChrome) {
-  service()->SetReady();
   EXPECT_EQ(0u, message_center()->GetVisibleNotifications().size());
   std::string key = CreateNotification();
   EXPECT_EQ(1u, message_center()->GetVisibleNotifications().size());
@@ -172,7 +171,6 @@ TEST_F(ArcNotificationManagerTest, NotificationRemovedByChrome) {
 }
 
 TEST_F(ArcNotificationManagerTest, NotificationRemovedByConnectionClose) {
-  service()->SetReady();
   EXPECT_EQ(0u, message_center()->GetVisibleNotifications().size());
   CreateNotificationWithKey("notification1");
   CreateNotificationWithKey("notification2");

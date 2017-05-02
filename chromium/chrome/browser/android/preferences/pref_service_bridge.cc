@@ -72,6 +72,7 @@ using base::android::CheckException;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ScopedJavaGlobalRef;
 using content::BrowserThread;
@@ -239,7 +240,7 @@ static jboolean GetBlockThirdPartyCookiesManaged(
 static jboolean GetRememberPasswordsEnabled(JNIEnv* env,
                                             const JavaParamRef<jobject>& obj) {
   return GetPrefService()->GetBoolean(
-      password_manager::prefs::kPasswordManagerSavingEnabled);
+      password_manager::prefs::kCredentialsEnableService);
 }
 
 static jboolean GetPasswordManagerAutoSigninEnabled(
@@ -252,7 +253,7 @@ static jboolean GetPasswordManagerAutoSigninEnabled(
 static jboolean GetRememberPasswordsManaged(JNIEnv* env,
                                             const JavaParamRef<jobject>& obj) {
   return GetPrefService()->IsManagedPreference(
-      password_manager::prefs::kPasswordManagerSavingEnabled);
+      password_manager::prefs::kCredentialsEnableService);
 }
 
 static jboolean GetPasswordManagerAutoSigninManaged(
@@ -329,7 +330,9 @@ static void SetSafeBrowsingExtendedReportingEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean enabled) {
-  safe_browsing::SetExtendedReportingPref(GetPrefService(), enabled);
+  safe_browsing::SetExtendedReportingPrefAndMetric(
+      GetPrefService(), enabled,
+      safe_browsing::SBER_OPTIN_SITE_ANDROID_SETTINGS);
 }
 
 static jboolean GetSafeBrowsingExtendedReportingManaged(
@@ -653,22 +656,26 @@ static void ClearBrowsingData(
         ignoring_domains, ignoring_domain_reasons);
   }
 
-  // Delete the filterable types with a filter, and the rest completely.
-  // TODO(msramek): This is only necessary until the filter is implemented in
-  // all data storage backends.
-  int filterable_mask = remove_mask & BrowsingDataRemover::FILTERABLE_DATATYPES;
-  int nonfilterable_mask =
-      remove_mask & ~BrowsingDataRemover::FILTERABLE_DATATYPES;
+  // Delete the types protected by Important Sites with a filter,
+  // and the rest completely.
+  int filterable_mask =
+      remove_mask & BrowsingDataRemover::IMPORTANT_SITES_DATATYPES;
+  int nonfilterable_mask = remove_mask &
+      ~BrowsingDataRemover::IMPORTANT_SITES_DATATYPES;
 
   // ClearBrowsingDataObserver deletes itself when |browsing_data_remover| is
   // done with both removal tasks.
   ClearBrowsingDataObserver* observer = new ClearBrowsingDataObserver(
       env, obj, browsing_data_remover, 2 /* tasks_count */);
 
+  browsing_data::TimePeriod period =
+      static_cast<browsing_data::TimePeriod>(time_period);
+  browsing_data::RecordDeletionForPeriod(period);
+
   if (filterable_mask) {
     browsing_data_remover->RemoveWithFilterAndReply(
-        BrowsingDataRemover::Period(
-            static_cast<browsing_data::TimePeriod>(time_period)),
+        browsing_data::CalculateBeginDeleteTime(period),
+        browsing_data::CalculateEndDeleteTime(period),
         filterable_mask, BrowsingDataHelper::UNPROTECTED_WEB,
         std::move(filter_builder), observer);
   } else {
@@ -678,8 +685,8 @@ static void ClearBrowsingData(
 
   if (nonfilterable_mask) {
     browsing_data_remover->RemoveAndReply(
-        BrowsingDataRemover::Period(
-            static_cast<browsing_data::TimePeriod>(time_period)),
+        browsing_data::CalculateBeginDeleteTime(period),
+        browsing_data::CalculateEndDeleteTime(period),
         nonfilterable_mask, BrowsingDataHelper::UNPROTECTED_WEB, observer);
   } else {
     // Make sure |observer| doesn't wait for the non-filtered task.
@@ -737,7 +744,7 @@ static void MarkOriginAsImportantForTesting(
 }
 
 static void ShowNoticeAboutOtherFormsOfBrowsingHistory(
-    ScopedJavaGlobalRef<jobject>* listener,
+    const JavaRef<jobject>& listener,
     bool show) {
   JNIEnv* env = AttachCurrentThread();
   UMA_HISTOGRAM_BOOLEAN(
@@ -745,17 +752,17 @@ static void ShowNoticeAboutOtherFormsOfBrowsingHistory(
   if (!show)
     return;
   Java_OtherFormsOfBrowsingHistoryListener_showNoticeAboutOtherFormsOfBrowsingHistory(
-      env, listener->obj());
+      env, listener);
 }
 
 static void EnableDialogAboutOtherFormsOfBrowsingHistory(
-    ScopedJavaGlobalRef<jobject>* listener,
+    const JavaRef<jobject>& listener,
     bool enabled) {
   JNIEnv* env = AttachCurrentThread();
   if (!enabled)
     return;
   Java_OtherFormsOfBrowsingHistoryListener_enableDialogAboutOtherFormsOfBrowsingHistory(
-      env, listener->obj());
+      env, listener);
 }
 
 static void RequestInfoAboutOtherFormsOfBrowsingHistory(
@@ -767,7 +774,7 @@ static void RequestInfoAboutOtherFormsOfBrowsingHistory(
       ProfileSyncServiceFactory::GetForProfile(GetOriginalProfile()),
       WebHistoryServiceFactory::GetForProfile(GetOriginalProfile()),
       base::Bind(&ShowNoticeAboutOtherFormsOfBrowsingHistory,
-                 base::Owned(new ScopedJavaGlobalRef<jobject>(env, listener))));
+                 ScopedJavaGlobalRef<jobject>(env, listener)));
 
   // The one-time notice in the dialog.
   browsing_data::ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
@@ -775,7 +782,7 @@ static void RequestInfoAboutOtherFormsOfBrowsingHistory(
       WebHistoryServiceFactory::GetForProfile(GetOriginalProfile()),
       chrome::GetChannel(),
       base::Bind(&EnableDialogAboutOtherFormsOfBrowsingHistory,
-                 base::Owned(new ScopedJavaGlobalRef<jobject>(env, listener))));
+                 ScopedJavaGlobalRef<jobject>(env, listener)));
 }
 
 static void SetAutoplayEnabled(JNIEnv* env,
@@ -818,7 +825,7 @@ static void SetRememberPasswordsEnabled(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj,
                                         jboolean allow) {
   GetPrefService()->SetBoolean(
-      password_manager::prefs::kPasswordManagerSavingEnabled, allow);
+      password_manager::prefs::kCredentialsEnableService, allow);
 }
 
 static void SetPasswordManagerAutoSigninEnabled(

@@ -92,8 +92,10 @@ void DisplayAndroidManager::UpdateDisplay(
       gfx::ScaleToCeiledSize(bounds_in_pixels.size(), 1.0f / dipScale));
 
   display::Display display(sdkDisplayId, bounds_in_dip);
+  if (!Display::HasForceDeviceScaleFactor())
+    display.set_device_scale_factor(dipScale);
 
-  display.set_device_scale_factor(dipScale);
+  display.set_size_in_pixels(bounds_in_pixels.size());
   display.SetRotationAsDegree(rotationDegrees);
   display.set_color_depth(bitsPerPixel);
   display.set_depth_per_component(bitsPerComponent);

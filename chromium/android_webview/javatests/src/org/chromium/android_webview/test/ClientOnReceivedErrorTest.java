@@ -4,7 +4,7 @@
 
 package org.chromium.android_webview.test;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.webkit.WebSettings;
 
 import org.chromium.android_webview.AwContents;
@@ -37,7 +37,7 @@ public class ClientOnReceivedErrorTest extends AwTestBase {
         TestCallbackHelperContainer.OnReceivedErrorHelper onReceivedErrorHelper =
                 mContentsClient.getOnReceivedErrorHelper();
 
-        String url = "http://man.id.be.really.surprised.if.this.address.existed.blah/";
+        String url = "http://id.be.really.surprised.if.this.address.existed.blah/";
         int onReceivedErrorCallCount = onReceivedErrorHelper.getCallCount();
         loadUrlAsync(mAwContents, url);
 

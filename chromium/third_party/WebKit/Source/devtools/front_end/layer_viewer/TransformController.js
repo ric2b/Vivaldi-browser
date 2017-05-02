@@ -33,19 +33,20 @@ LayerViewer.TransformController = class extends Common.Object {
     this._modeButtons = {};
     if (!disableRotate) {
       var panModeButton = new UI.ToolbarToggle(Common.UIString('Pan mode (X)'), 'largeicon-pan');
-      panModeButton.addEventListener('click', this._setMode.bind(this, LayerViewer.TransformController.Modes.Pan));
+      panModeButton.addEventListener(
+          UI.ToolbarButton.Events.Click, this._setMode.bind(this, LayerViewer.TransformController.Modes.Pan));
       this._modeButtons[LayerViewer.TransformController.Modes.Pan] = panModeButton;
       this._controlPanelToolbar.appendToolbarItem(panModeButton);
       var rotateModeButton = new UI.ToolbarToggle(Common.UIString('Rotate mode (V)'), 'largeicon-rotate');
       rotateModeButton.addEventListener(
-          'click', this._setMode.bind(this, LayerViewer.TransformController.Modes.Rotate));
+          UI.ToolbarButton.Events.Click, this._setMode.bind(this, LayerViewer.TransformController.Modes.Rotate));
       this._modeButtons[LayerViewer.TransformController.Modes.Rotate] = rotateModeButton;
       this._controlPanelToolbar.appendToolbarItem(rotateModeButton);
     }
     this._setMode(LayerViewer.TransformController.Modes.Pan);
 
     var resetButton = new UI.ToolbarButton(Common.UIString('Reset transform (0)'), 'largeicon-center');
-    resetButton.addEventListener('click', this.resetAndNotify.bind(this, undefined));
+    resetButton.addEventListener(UI.ToolbarButton.Events.Click, this.resetAndNotify.bind(this, undefined));
     this._controlPanelToolbar.appendToolbarItem(resetButton);
 
     this._reset();
@@ -81,26 +82,21 @@ LayerViewer.TransformController = class extends Common.Object {
   }
 
   _registerShortcuts() {
-    this._addShortcuts(Components.ShortcutsScreen.LayersPanelShortcuts.ResetView, this.resetAndNotify.bind(this));
+    this._addShortcuts(UI.ShortcutsScreen.LayersPanelShortcuts.ResetView, this.resetAndNotify.bind(this));
     this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.PanMode,
+        UI.ShortcutsScreen.LayersPanelShortcuts.PanMode,
         this._setMode.bind(this, LayerViewer.TransformController.Modes.Pan));
     this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.RotateMode,
+        UI.ShortcutsScreen.LayersPanelShortcuts.RotateMode,
         this._setMode.bind(this, LayerViewer.TransformController.Modes.Rotate));
     var zoomFactor = 1.1;
+    this._addShortcuts(UI.ShortcutsScreen.LayersPanelShortcuts.ZoomIn, this._onKeyboardZoom.bind(this, zoomFactor));
     this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.ZoomIn, this._onKeyboardZoom.bind(this, zoomFactor));
-    this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.ZoomOut, this._onKeyboardZoom.bind(this, 1 / zoomFactor));
-    this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.Up, this._onKeyboardPanOrRotate.bind(this, 0, -1));
-    this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.Down, this._onKeyboardPanOrRotate.bind(this, 0, 1));
-    this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.Left, this._onKeyboardPanOrRotate.bind(this, -1, 0));
-    this._addShortcuts(
-        Components.ShortcutsScreen.LayersPanelShortcuts.Right, this._onKeyboardPanOrRotate.bind(this, 1, 0));
+        UI.ShortcutsScreen.LayersPanelShortcuts.ZoomOut, this._onKeyboardZoom.bind(this, 1 / zoomFactor));
+    this._addShortcuts(UI.ShortcutsScreen.LayersPanelShortcuts.Up, this._onKeyboardPanOrRotate.bind(this, 0, -1));
+    this._addShortcuts(UI.ShortcutsScreen.LayersPanelShortcuts.Down, this._onKeyboardPanOrRotate.bind(this, 0, 1));
+    this._addShortcuts(UI.ShortcutsScreen.LayersPanelShortcuts.Left, this._onKeyboardPanOrRotate.bind(this, -1, 0));
+    this._addShortcuts(UI.ShortcutsScreen.LayersPanelShortcuts.Right, this._onKeyboardPanOrRotate.bind(this, 1, 0));
   }
 
   _postChangeEvent() {

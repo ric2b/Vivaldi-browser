@@ -102,24 +102,31 @@ BorderImageLength animatableValueToBorderImageLength(
   return Length(Auto);
 }
 
-template <typename T>
-T animatableValueClampTo(const AnimatableValue* value,
-                         T min = defaultMinimumForClamp<T>(),
-                         T max = defaultMaximumForClamp<T>()) {
-  static_assert(std::is_integral<T>::value,
-                "should use integral type T when rounding values");
-  return clampTo<T>(
-      roundForImpreciseConversion<T>(toAnimatableDouble(value)->toDouble()),
-      min, max);
+double animatableValueToPixels(const AnimatableValue* value,
+                               const StyleResolverState& state) {
+  return toAnimatableLength(value)
+      ->getLength(state.style()->effectiveZoom(), ValueRangeAll)
+      .pixels();
 }
 
 template <typename T>
-T animatableLineWidthClamp(const AnimatableValue* value) {
-  double doubleValue = toAnimatableDouble(value)->toDouble();
+T roundedClampTo(double value) {
+  static_assert(std::is_integral<T>::value,
+                "should use integral type T when rounding values");
+  return clampTo<T>(roundForImpreciseConversion<T>(value));
+}
+
+template <typename T>
+T animatableValueClampTo(const AnimatableValue* value) {
+  return roundedClampTo<T>(toAnimatableDouble(value)->toDouble());
+}
+
+template <typename T>
+T animatableLineWidthClamp(const AnimatableValue* value,
+                           const StyleResolverState& state) {
+  double lineWidth = animatableValueToPixels(value, state);
   // This matches StyleBuilderConverter::convertLineWidth().
-  return (doubleValue > 0 && doubleValue < 1)
-             ? 1
-             : animatableValueClampTo<T>(value);
+  return (lineWidth > 0 && lineWidth < 1) ? 1 : roundedClampTo<T>(lineWidth);
 }
 
 LengthBox animatableValueToLengthBox(const AnimatableValue* value,
@@ -163,8 +170,7 @@ TransformOrigin animatableValueToTransformOrigin(
   return TransformOrigin(
       animatableValueToLength(animatableLengthPoint3D->x(), state),
       animatableValueToLength(animatableLengthPoint3D->y(), state),
-      clampTo<float>(
-          toAnimatableDouble(animatableLengthPoint3D->z())->toDouble()));
+      animatableValueToPixels(animatableLengthPoint3D->z(), state));
 }
 
 LengthSize animatableValueToLengthSize(const AnimatableValue* value,
@@ -352,7 +358,8 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           animatableValueToLengthSize(value, state, ValueRangeNonNegative));
       return;
     case CSSPropertyBorderBottomWidth:
-      style->setBorderBottomWidth(animatableLineWidthClamp<unsigned>(value));
+      style->setBorderBottomWidth(
+          animatableLineWidthClamp<unsigned>(value, state));
       return;
     case CSSPropertyBorderImageOutset:
       style->setBorderImageOutset(
@@ -379,7 +386,8 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           toAnimatableColor(value)->visitedLinkColor());
       return;
     case CSSPropertyBorderLeftWidth:
-      style->setBorderLeftWidth(animatableLineWidthClamp<unsigned>(value));
+      style->setBorderLeftWidth(
+          animatableLineWidthClamp<unsigned>(value, state));
       return;
     case CSSPropertyBorderRightColor:
       style->setBorderRightColor(toAnimatableColor(value)->getColor());
@@ -387,7 +395,8 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           toAnimatableColor(value)->visitedLinkColor());
       return;
     case CSSPropertyBorderRightWidth:
-      style->setBorderRightWidth(animatableLineWidthClamp<unsigned>(value));
+      style->setBorderRightWidth(
+          animatableLineWidthClamp<unsigned>(value, state));
       return;
     case CSSPropertyBorderTopColor:
       style->setBorderTopColor(toAnimatableColor(value)->getColor());
@@ -403,13 +412,19 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           animatableValueToLengthSize(value, state, ValueRangeNonNegative));
       return;
     case CSSPropertyBorderTopWidth:
-      style->setBorderTopWidth(animatableLineWidthClamp<unsigned>(value));
+      style->setBorderTopWidth(
+          animatableLineWidthClamp<unsigned>(value, state));
       return;
     case CSSPropertyBottom:
       style->setBottom(animatableValueToLength(value, state));
       return;
     case CSSPropertyBoxShadow:
       style->setBoxShadow(toAnimatableShadow(value)->getShadowList());
+      return;
+    case CSSPropertyCaretColor:
+      style->setCaretColor(toAnimatableColor(value)->getColor());
+      style->setVisitedLinkCaretColor(
+          toAnimatableColor(value)->visitedLinkColor());
       return;
     case CSSPropertyClip:
       style->setClip(animatableValueToLengthBox(value, state));
@@ -488,7 +503,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
       return;
     case CSSPropertyLetterSpacing:
       style->setLetterSpacing(
-          clampTo<float>(toAnimatableDouble(value)->toDouble()));
+          clampTo<float>(animatableValueToPixels(value, state)));
       return;
     case CSSPropertyMarginBottom:
       style->setMarginBottom(animatableValueToLength(value, state));
@@ -536,10 +551,12 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           toAnimatableColor(value)->visitedLinkColor());
       return;
     case CSSPropertyOutlineOffset:
-      style->setOutlineOffset(animatableValueClampTo<int>(value));
+      style->setOutlineOffset(
+          roundedClampTo<int>(animatableValueToPixels(value, state)));
       return;
     case CSSPropertyOutlineWidth:
-      style->setOutlineWidth(animatableLineWidthClamp<unsigned short>(value));
+      style->setOutlineWidth(
+          animatableLineWidthClamp<unsigned short>(value, state));
       return;
     case CSSPropertyPaddingBottom:
       style->setPaddingBottom(
@@ -612,12 +629,12 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
       style->setTop(animatableValueToLength(value, state));
       return;
     case CSSPropertyWebkitBorderHorizontalSpacing:
-      style->setHorizontalBorderSpacing(
-          animatableValueClampTo<unsigned short>(value));
+      style->setHorizontalBorderSpacing(roundedClampTo<unsigned short>(
+          animatableValueToPixels(value, state)));
       return;
     case CSSPropertyWebkitBorderVerticalSpacing:
-      style->setVerticalBorderSpacing(
-          animatableValueClampTo<unsigned short>(value));
+      style->setVerticalBorderSpacing(roundedClampTo<unsigned short>(
+          animatableValueToPixels(value, state)));
       return;
     case CSSPropertyClipPath:
       style->setClipPath(
@@ -628,7 +645,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           round(toAnimatableDouble(value)->toDouble()), 1));
       return;
     case CSSPropertyColumnGap:
-      style->setColumnGap(clampTo(toAnimatableDouble(value)->toDouble(), 0));
+      style->setColumnGap(clampTo(animatableValueToPixels(value, state), 0));
       return;
     case CSSPropertyColumnRuleColor:
       style->setColumnRuleColor(toAnimatableColor(value)->getColor());
@@ -636,12 +653,12 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
           toAnimatableColor(value)->visitedLinkColor());
       return;
     case CSSPropertyColumnWidth:
-      style->setColumnWidth(clampTo(toAnimatableDouble(value)->toDouble(),
+      style->setColumnWidth(clampTo(animatableValueToPixels(value, state),
                                     std::numeric_limits<float>::epsilon()));
       return;
     case CSSPropertyColumnRuleWidth:
       style->setColumnRuleWidth(
-          animatableLineWidthClamp<unsigned short>(value));
+          animatableLineWidthClamp<unsigned short>(value, state));
       return;
     case CSSPropertyFilter:
       style->setFilter(toAnimatableFilterOperations(value)->operations());
@@ -687,8 +704,8 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
       return;
     case CSSPropertyPerspective:
       style->setPerspective(
-          value->isDouble()
-              ? clampTo<float>(toAnimatableDouble(value)->toDouble())
+          value->isLength()
+              ? clampTo<float>(animatableValueToPixels(value, state))
               : 0);
       return;
     case CSSPropertyPerspectiveOrigin:
@@ -782,7 +799,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
       style->setTransformOriginY(animatableValueToLength(value, state));
       return;
     case CSSPropertyWebkitTransformOriginZ:
-      style->setTransformOriginZ(toAnimatableDouble(value)->toDouble());
+      style->setTransformOriginZ(animatableValueToPixels(value, state));
       return;
     case CSSPropertyWidows:
       style->setWidows(
@@ -794,7 +811,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property,
       return;
     case CSSPropertyWordSpacing:
       style->setWordSpacing(
-          clampTo<float>(toAnimatableDouble(value)->toDouble()));
+          clampTo<float>(animatableValueToPixels(value, state)));
       return;
     case CSSPropertyVerticalAlign:
       style->setVerticalAlignLength(animatableValueToLength(value, state));

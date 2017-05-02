@@ -27,6 +27,7 @@
 
 #include "core/dom/DOMException.h"
 #include "wtf/PtrUtil.h"
+
 #include <memory>
 
 namespace blink {
@@ -34,7 +35,7 @@ namespace blink {
 // static
 std::unique_ptr<WebIDBDatabaseCallbacksImpl>
 WebIDBDatabaseCallbacksImpl::create(IDBDatabaseCallbacks* callbacks) {
-  return wrapUnique(new WebIDBDatabaseCallbacksImpl(callbacks));
+  return WTF::wrapUnique(new WebIDBDatabaseCallbacksImpl(callbacks));
 }
 
 WebIDBDatabaseCallbacksImpl::WebIDBDatabaseCallbacksImpl(
@@ -68,6 +69,15 @@ void WebIDBDatabaseCallbacksImpl::onAbort(long long transactionId,
 void WebIDBDatabaseCallbacksImpl::onComplete(long long transactionId) {
   if (m_callbacks)
     m_callbacks->onComplete(transactionId);
+}
+
+void WebIDBDatabaseCallbacksImpl::onChanges(
+    const std::unordered_map<int32_t, std::vector<int32_t>>&
+        observation_index_map,
+    const WebVector<WebIDBObservation>& observations,
+    const IDBDatabaseCallbacks::TransactionMap& transactions) {
+  if (m_callbacks)
+    m_callbacks->onChanges(observation_index_map, observations, transactions);
 }
 
 void WebIDBDatabaseCallbacksImpl::detach() {

@@ -6,6 +6,7 @@
 
 #include "core/dom/ExceptionCode.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/ImageBitmap.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
@@ -21,12 +22,26 @@
 
 namespace blink {
 
-OffscreenCanvas::OffscreenCanvas(const IntSize& size)
-    : m_size(size), m_originClean(true) {}
+OffscreenCanvas::OffscreenCanvas(const IntSize& size) : m_size(size) {}
 
 OffscreenCanvas* OffscreenCanvas::create(unsigned width, unsigned height) {
   return new OffscreenCanvas(
       IntSize(clampTo<int>(width), clampTo<int>(height)));
+}
+
+OffscreenCanvas::~OffscreenCanvas() {}
+
+void OffscreenCanvas::dispose() {
+  if (m_context) {
+    m_context->detachOffscreenCanvas();
+    m_context = nullptr;
+  }
+  if (m_commitPromiseResolver) {
+    // keepAliveWhilePending() guarantees the promise resolver is never
+    // GC-ed before the OffscreenCanvas
+    m_commitPromiseResolver->reject();
+    m_commitPromiseResolver.clear();
+  }
 }
 
 void OffscreenCanvas::setWidth(unsigned width) {
@@ -51,6 +66,9 @@ void OffscreenCanvas::setSize(const IntSize& size) {
     }
   }
   m_size = size;
+  if (m_frameDispatcher) {
+    m_frameDispatcher->reshape(m_size.width(), m_size.height());
+  }
 }
 
 void OffscreenCanvas::setNeutered() {
@@ -90,7 +108,10 @@ PassRefPtr<Image> OffscreenCanvas::getSourceImageForCanvas(
     const FloatSize& size) const {
   if (!m_context) {
     *status = InvalidSourceImageStatus;
-    return nullptr;
+    sk_sp<SkSurface> surface =
+        SkSurface::MakeRasterN32Premul(m_size.width(), m_size.height());
+    return surface ? StaticBitmapImage::create(surface->makeImageSnapshot())
+                   : nullptr;
   }
   if (!size.width() || !size.height()) {
     *status = ZeroSizeCanvasSourceImageStatus;
@@ -103,6 +124,30 @@ PassRefPtr<Image> OffscreenCanvas::getSourceImageForCanvas(
     *status = NormalSourceImageStatus;
   }
   return image.release();
+}
+
+IntSize OffscreenCanvas::bitmapSourceSize() const {
+  return m_size;
+}
+
+ScriptPromise OffscreenCanvas::createImageBitmap(
+    ScriptState* scriptState,
+    EventTarget&,
+    Optional<IntRect> cropRect,
+    const ImageBitmapOptions& options,
+    ExceptionState& exceptionState) {
+  if ((cropRect &&
+       !ImageBitmap::isSourceSizeValid(cropRect->width(), cropRect->height(),
+                                       exceptionState)) ||
+      !ImageBitmap::isSourceSizeValid(bitmapSourceSize().width(),
+                                      bitmapSourceSize().height(),
+                                      exceptionState))
+    return ScriptPromise();
+  if (!ImageBitmap::isResizeOptionValid(options, exceptionState))
+    return ScriptPromise();
+  return ImageBitmapSource::fulfillImageBitmap(
+      scriptState,
+      isPaintable() ? ImageBitmap::create(this, cropRect, options) : nullptr);
 }
 
 bool OffscreenCanvas::isOpaque() const {
@@ -169,7 +214,7 @@ bool OffscreenCanvas::originClean() const {
 bool OffscreenCanvas::isPaintable() const {
   if (!m_context)
     return ImageBuffer::canCreateImageBuffer(m_size);
-  return m_context->isPaintable();
+  return m_context->isPaintable() && m_size.width() && m_size.height();
 }
 
 bool OffscreenCanvas::isAccelerated() const {
@@ -181,11 +226,47 @@ OffscreenCanvasFrameDispatcher* OffscreenCanvas::getOrCreateFrameDispatcher() {
     // The frame dispatcher connects the current thread of OffscreenCanvas
     // (either main or worker) to the browser process and remains unchanged
     // throughout the lifetime of this OffscreenCanvas.
-    m_frameDispatcher = wrapUnique(new OffscreenCanvasFrameDispatcherImpl(
-        m_clientId, m_sinkId, m_localId, m_nonceHigh, m_nonceLow,
-        m_placeholderCanvasId, width(), height()));
+    m_frameDispatcher = WTF::wrapUnique(new OffscreenCanvasFrameDispatcherImpl(
+        this, m_clientId, m_sinkId, m_placeholderCanvasId, m_size.width(),
+        m_size.height()));
   }
   return m_frameDispatcher.get();
+}
+
+ScriptPromise OffscreenCanvas::commit(RefPtr<StaticBitmapImage> image,
+                                      bool isWebGLSoftwareRendering,
+                                      ScriptState* scriptState) {
+  if (m_commitPromiseResolver) {
+    if (image) {
+      m_overdrawFrame = std::move(image);
+      m_overdrawFrameIsWebGLSoftwareRendering = isWebGLSoftwareRendering;
+    }
+  } else {
+    m_overdrawFrame = nullptr;
+    m_commitPromiseResolver = ScriptPromiseResolver::create(scriptState);
+    m_commitPromiseResolver->keepAliveWhilePending();
+    doCommit(std::move(image), isWebGLSoftwareRendering);
+  }
+  return m_commitPromiseResolver->promise();
+}
+
+void OffscreenCanvas::doCommit(RefPtr<StaticBitmapImage> image,
+                               bool isWebGLSoftwareRendering) {
+  double commitStartTime = WTF::monotonicallyIncreasingTime();
+  getOrCreateFrameDispatcher()->dispatchFrame(std::move(image), commitStartTime,
+                                              isWebGLSoftwareRendering);
+}
+
+void OffscreenCanvas::beginFrame() {
+  if (m_overdrawFrame) {
+    // if we have an overdraw backlog, push the frame from the backlog
+    // first and save the promise resolution for later.
+    doCommit(std::move(m_overdrawFrame),
+             m_overdrawFrameIsWebGLSoftwareRendering);
+  } else if (m_commitPromiseResolver) {
+    m_commitPromiseResolver->resolve();
+    m_commitPromiseResolver.clear();
+  }
 }
 
 ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* scriptState,
@@ -204,7 +285,9 @@ ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* scriptState,
   }
 
   if (!this->isPaintable()) {
-    return ScriptPromise();
+    exceptionState.throwDOMException(
+        IndexSizeError, "The size of the OffscreenCanvas is zero.");
+    return exceptionState.reject(scriptState);
   }
 
   double startTime = WTF::monotonicallyIncreasingTime();
@@ -238,7 +321,8 @@ ScriptPromise OffscreenCanvas::convertToBlob(ScriptState* scriptState,
 DEFINE_TRACE(OffscreenCanvas) {
   visitor->trace(m_context);
   visitor->trace(m_executionContext);
-  EventTarget::trace(visitor);
+  visitor->trace(m_commitPromiseResolver);
+  EventTargetWithInlineData::trace(visitor);
 }
 
 }  // namespace blink

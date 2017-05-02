@@ -9,7 +9,7 @@
 namespace content {
 
 MockIndexedDBDatabaseCallbacks::MockIndexedDBDatabaseCallbacks()
-    : IndexedDBDatabaseCallbacks(nullptr, 0, nullptr),
+    : IndexedDBDatabaseCallbacks(nullptr, nullptr),
       abort_called_(false),
       forced_close_called_(false) {}
 
@@ -18,7 +18,7 @@ void MockIndexedDBDatabaseCallbacks::OnForcedClose() {
 }
 
 void MockIndexedDBDatabaseCallbacks::OnAbort(
-    int64_t transaction_id,
+    const IndexedDBTransaction& transaction,
     const IndexedDBDatabaseError& error) {
   abort_called_ = true;
 }

@@ -17,16 +17,22 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/cloud_external_data_manager_base_test_util.h"
+#include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
+#include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/chrome_paths.h"
@@ -37,6 +43,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/ownership/mock_owner_key_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
@@ -71,7 +78,8 @@ policy::CloudPolicyStore* GetStoreForUser(const user_manager::User* user) {
     return NULL;
   }
   policy::UserCloudPolicyManagerChromeOS* policy_manager =
-      policy::UserCloudPolicyManagerFactoryChromeOS::GetForProfile(profile);
+      policy::UserPolicyManagerFactoryChromeOS::GetCloudPolicyManagerForProfile(
+          profile);
   if (!policy_manager) {
     ADD_FAILURE();
     return NULL;
@@ -141,6 +149,7 @@ class WallpaperManagerPolicyTest : public LoginManagerTest,
   WallpaperManagerPolicyTest()
       : LoginManagerTest(true),
         wallpaper_change_count_(0),
+        owner_key_util_(new ownership::MockOwnerKeyUtil()),
         fake_session_manager_client_(new FakeSessionManagerClient) {
     testUsers_.push_back(
         AccountId::FromUserEmail(LoginManagerTest::kEnterpriseUser1));
@@ -160,23 +169,34 @@ class WallpaperManagerPolicyTest : public LoginManagerTest,
     const base::FilePath user_key_file =
         user_keys_dir.AppendASCII(sanitized_user_id)
                      .AppendASCII("policy.pub");
-    std::vector<uint8_t> user_key_bits;
-    EXPECT_TRUE(user_policy_builder->GetSigningKey()->
-                ExportPublicKey(&user_key_bits));
+    std::string user_key_bits =
+        user_policy_builder->GetPublicSigningKeyAsString();
+    EXPECT_FALSE(user_key_bits.empty());
     EXPECT_TRUE(base::CreateDirectory(user_key_file.DirName()));
-    EXPECT_EQ(base::WriteFile(
-                  user_key_file,
-                  reinterpret_cast<const char*>(user_key_bits.data()),
-                  user_key_bits.size()),
-              static_cast<int>(user_key_bits.size()));
+    EXPECT_EQ(base::WriteFile(user_key_file, user_key_bits.data(),
+                              user_key_bits.length()),
+              base::checked_cast<int>(user_key_bits.length()));
     user_policy_builder->policy_data().set_username(account_id.GetUserEmail());
     return user_policy_builder;
   }
 
   // LoginManagerTest:
   void SetUpInProcessBrowserTestFixture() override {
+    device_policy_.Build();
+    OwnerSettingsServiceChromeOSFactory::GetInstance()
+        ->SetOwnerKeyUtilForTesting(owner_key_util_);
+    owner_key_util_->SetPublicKeyFromPrivateKey(
+        *device_policy_.GetSigningKey());
+    fake_session_manager_client_->set_device_policy(device_policy_.GetBlob());
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
         std::unique_ptr<SessionManagerClient>(fake_session_manager_client_));
+
+    // Set up fake install attributes.
+    std::unique_ptr<chromeos::StubInstallAttributes> attributes =
+        base::MakeUnique<chromeos::StubInstallAttributes>();
+    attributes->SetEnterprise("fake-domain", "fake-id");
+    policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
+        attributes.release());
 
     LoginManagerTest::SetUpInProcessBrowserTestFixture();
     ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_));
@@ -280,6 +300,8 @@ class WallpaperManagerPolicyTest : public LoginManagerTest,
   std::unique_ptr<base::RunLoop> run_loop_;
   int wallpaper_change_count_;
   std::unique_ptr<policy::UserPolicyBuilder> user_policy_builders_[2];
+  policy::DevicePolicyBuilder device_policy_;
+  scoped_refptr<ownership::MockOwnerKeyUtil> owner_key_util_;
   FakeSessionManagerClient* fake_session_manager_client_;
   std::vector<AccountId> testUsers_;
 
@@ -410,6 +432,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerPolicyTest, PRE_PersistOverLogout) {
   // Run until wallpaper has changed.
   RunUntilWallpaperChangeCount(2);
   ASSERT_EQ(kRedImageColor, GetAverageWallpaperColor());
+  StartupUtils::MarkOobeCompleted();
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerPolicyTest, PersistOverLogout) {

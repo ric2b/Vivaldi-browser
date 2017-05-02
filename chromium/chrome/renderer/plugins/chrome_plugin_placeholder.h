@@ -26,9 +26,6 @@ class ChromePluginPlaceholder final
  public:
   static gin::WrapperInfo kWrapperInfo;
 
-  // Check if Chrome participates in small content experiment.
-  static bool IsSmallContentFilterEnabled();
-
   static ChromePluginPlaceholder* CreateBlockedPlugin(
       content::RenderFrame* render_frame,
       blink::WebLocalFrame* frame,
@@ -80,9 +77,6 @@ class ChromePluginPlaceholder final
   void OnMenuAction(int request_id, unsigned action) override;
   void OnMenuClosed(int request_id) override;
 
-  // Javascript callbacks:
-  // Open chrome://plugins in a new tab.
-  void OpenAboutPluginsCallback();
   // Show the Plugins permission bubble.
   void ShowPermissionBubbleCallback();
 

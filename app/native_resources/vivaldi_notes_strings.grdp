@@ -10,4 +10,38 @@
   <message name="IDS_VIV_CONTENT_INSERT_NOTE" desc="The Insert Note submenu text.">
     Insert Note
   </message>
+  <message name="IDS_NOTES_UNDO" desc="In Title Case: Menu title for undoing a Notes operation">
+    &amp;Undo
+  </message>
+  <message name="IDS_NOTES_REDO" desc="In Title Case: Menu title for redoing a Notes operation">
+    &amp;Redo
+  </message>
+  <message name="IDS_NOTES_UNDO_DELETE" desc="In Title Case: Menu title for undoing a Notes delete operation">
+    &amp;Undo Delete
+  </message>
+  <message name="IDS_NOTES_REDO_DELETE" desc="In Title Case: Menu title for redoing a Notes delete operation">
+    &amp;Redo Delete
+  </message>
+  <message name="IDS_NOTES_UNDO_ADD" desc="In Title Case: Menu title for undoing a Notes add operation">
+    &amp;Undo Add
+  </message>
+  <message name="IDS_NOTES_UNDO_EDIT" desc="In Title Case: Menu title for undoing a Notes edit operation">
+    &amp;Undo Edit
+  </message>
+  <message name="IDS_NOTES_REDO_EDIT" desc="In Title Case: Menu title for redoing a Notes edit operation">
+    &amp;Redo Edit
+  </message>
+  <message name="IDS_NOTES_UNDO_MOVE" desc="In Title Case: Menu title for undoing a Notes move operation">
+    &amp;Undo Move
+  </message>
+  <message name="IDS_NOTES_REDO_MOVE" desc="In Title Case: Menu title for redoing a Notes move operation">
+    &amp;Redo Move
+  </message>
+  <message name="IDS_NOTES_UNDO_REORDER" desc="In Title Case: Menu title for undoing a Notes reorder operation">
+    &amp;Undo Reorder
+  </message>
+  <message name="IDS_NOTES_REDO_REORDER" desc="In Title Case: Menu title for redoing a Notes reorder operation">
+    &amp;Redo Reorder
+  </message>
+
 </grit-part>

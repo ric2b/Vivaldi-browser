@@ -46,6 +46,7 @@
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/weborigin/Referrer.h"
 #include "public/platform/WebEffectiveConnectionType.h"
+#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/Forward.h"
@@ -69,7 +70,6 @@ class LocalFrame;
 class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
-class ScriptState;
 class SecurityOrigin;
 class SharedWorkerRepositoryClient;
 class SubstituteData;
@@ -133,6 +133,7 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
                                  NavigationPolicy,
                                  const String& suggestedName,
                                  bool replacesCurrentHistoryItem) = 0;
+  virtual void loadErrorPage(int reason) = 0;
 
   virtual bool navigateBackForward(int offset) const = 0;
 
@@ -217,13 +218,10 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
   virtual void runScriptsAtDocumentReady(bool documentIsEmpty) = 0;
 
   virtual void didCreateScriptContext(v8::Local<v8::Context>,
-                                      int extensionGroup,
                                       int worldId) = 0;
   virtual void willReleaseScriptContext(v8::Local<v8::Context>,
                                         int worldId) = 0;
-  virtual bool allowScriptExtension(const String& extensionName,
-                                    int extensionGroup,
-                                    int worldId) = 0;
+  virtual bool allowScriptExtensions() = 0;
 
   virtual void didChangeScrollOffset() {}
   virtual void didUpdateCurrentHistoryItem() {}
@@ -262,9 +260,6 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
   // This callback is similar, but for plugins.
   virtual void didNotAllowPlugins() {}
 
-  // This callback notifies the client that the frame created a Keygen element.
-  virtual void didUseKeygen() {}
-
   virtual WebCookieJar* cookieJar() const = 0;
 
   virtual void didChangeName(const String& name, const String& uniqueName) {}
@@ -274,6 +269,9 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
   virtual void didUpdateToUniqueOrigin() {}
 
   virtual void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) {}
+
+  virtual void didSetFeaturePolicyHeader(
+      const WebParsedFeaturePolicy& parsedHeader) {}
 
   // Called when a new Content Security Policy is added to the frame's document.
   // This can be triggered by handling of HTTP headers, handling of <meta>
@@ -339,9 +337,12 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
   // returned if the URL is not overriden.
   virtual KURL overrideFlashEmbedWithHTML(const KURL&) { return KURL(); }
 
+  virtual BlameContext* frameBlameContext() { return nullptr; }
+
+  virtual void setHasReceivedUserGesture() {}
+
   // VB-6063:
   virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}
-
 };
 
 }  // namespace blink

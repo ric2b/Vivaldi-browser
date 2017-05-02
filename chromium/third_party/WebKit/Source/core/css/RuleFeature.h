@@ -25,6 +25,7 @@
 
 #include "core/CoreExport.h"
 #include "core/css/CSSSelector.h"
+#include "core/css/MediaQueryEvaluator.h"
 #include "core/css/invalidation/InvalidationSet.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
@@ -66,8 +67,7 @@ class CORE_EXPORT RuleFeatureSet {
   WTF_MAKE_NONCOPYABLE(RuleFeatureSet);
 
  public:
-  RuleFeatureSet();
-  ~RuleFeatureSet();
+  RuleFeatureSet() {}
 
   void add(const RuleFeatureSet&);
   void clear();
@@ -108,6 +108,19 @@ class CORE_EXPORT RuleFeatureSet {
     return m_uncommonAttributeRules;
   }
 
+  const MediaQueryResultList& viewportDependentMediaQueryResults() const {
+    return m_viewportDependentMediaQueryResults;
+  }
+  const MediaQueryResultList& deviceDependentMediaQueryResults() const {
+    return m_deviceDependentMediaQueryResults;
+  }
+  MediaQueryResultList& viewportDependentMediaQueryResults() {
+    return m_viewportDependentMediaQueryResults;
+  }
+  MediaQueryResultList& deviceDependentMediaQueryResults() {
+    return m_deviceDependentMediaQueryResults;
+  }
+
   // Collect descendant and sibling invalidation sets.
   void collectInvalidationSetsForClass(InvalidationLists&,
                                        Element&,
@@ -143,8 +156,6 @@ class CORE_EXPORT RuleFeatureSet {
   bool hasIdsInSelectors() const { return m_idInvalidationSets.size() > 0; }
 
   DECLARE_TRACE();
-
-  bool isAlive() const { return m_isAlive; }
 
  protected:
   InvalidationSet* invalidationSetForSimpleSelector(const CSSSelector&,
@@ -277,9 +288,8 @@ class CORE_EXPORT RuleFeatureSet {
   RefPtr<DescendantInvalidationSet> m_nthInvalidationSet;
   HeapVector<RuleFeature> m_siblingRules;
   HeapVector<RuleFeature> m_uncommonAttributeRules;
-
-  // If true, the RuleFeatureSet is alive and can be used.
-  unsigned m_isAlive : 1;
+  MediaQueryResultList m_viewportDependentMediaQueryResults;
+  MediaQueryResultList m_deviceDependentMediaQueryResults;
 
   friend class RuleFeatureSetTest;
 };

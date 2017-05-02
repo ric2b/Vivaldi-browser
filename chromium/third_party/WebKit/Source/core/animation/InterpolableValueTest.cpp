@@ -4,8 +4,7 @@
 
 #include "core/animation/InterpolableValue.h"
 
-#include "core/animation/Interpolation.h"
-#include "core/animation/PropertyHandle.h"
+#include "core/animation/LegacyStyleInterpolation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <memory>
 
@@ -13,34 +12,33 @@ namespace blink {
 
 namespace {
 
-class SampleInterpolation : public Interpolation {
+class SampleInterpolation : public LegacyStyleInterpolation {
  public:
-  static PassRefPtr<Interpolation> create(
+  static PassRefPtr<LegacyStyleInterpolation> create(
       std::unique_ptr<InterpolableValue> start,
       std::unique_ptr<InterpolableValue> end) {
     return adoptRef(new SampleInterpolation(std::move(start), std::move(end)));
   }
 
-  PropertyHandle getProperty() const override {
-    return PropertyHandle(CSSPropertyBackgroundColor);
-  }
-
  private:
   SampleInterpolation(std::unique_ptr<InterpolableValue> start,
                       std::unique_ptr<InterpolableValue> end)
-      : Interpolation(std::move(start), std::move(end)) {}
+      : LegacyStyleInterpolation(std::move(start),
+                                 std::move(end),
+                                 CSSPropertyBackgroundColor) {}
 };
 
 }  // namespace
 
 class AnimationInterpolableValueTest : public ::testing::Test {
  protected:
-  InterpolableValue* interpolationValue(Interpolation& interpolation) {
+  InterpolableValue* interpolationValue(
+      LegacyStyleInterpolation& interpolation) {
     return interpolation.getCachedValueForTesting();
   }
 
   double interpolateNumbers(double a, double b, double progress) {
-    RefPtr<Interpolation> i = SampleInterpolation::create(
+    RefPtr<LegacyStyleInterpolation> i = SampleInterpolation::create(
         InterpolableNumber::create(a), InterpolableNumber::create(b));
     i->interpolate(0, progress);
     return toInterpolableNumber(interpolationValue(*i.get()))->value();
@@ -52,11 +50,11 @@ class AnimationInterpolableValueTest : public ::testing::Test {
     base.scaleAndAdd(scale, add);
   }
 
-  PassRefPtr<Interpolation> interpolateLists(
+  PassRefPtr<LegacyStyleInterpolation> interpolateLists(
       std::unique_ptr<InterpolableList> listA,
       std::unique_ptr<InterpolableList> listB,
       double progress) {
-    RefPtr<Interpolation> i =
+    RefPtr<LegacyStyleInterpolation> i =
         SampleInterpolation::create(std::move(listA), std::move(listB));
     i->interpolate(0, progress);
     return i;
@@ -83,7 +81,7 @@ TEST_F(AnimationInterpolableValueTest, SimpleList) {
   listB->set(1, InterpolableNumber::create(-200));
   listB->set(2, InterpolableNumber::create(300));
 
-  RefPtr<Interpolation> i =
+  RefPtr<LegacyStyleInterpolation> i =
       interpolateLists(std::move(listA), std::move(listB), 0.3);
   InterpolableList* outList = toInterpolableList(interpolationValue(*i.get()));
   EXPECT_FLOAT_EQ(30, toInterpolableNumber(outList->get(0))->value());
@@ -106,7 +104,7 @@ TEST_F(AnimationInterpolableValueTest, NestedList) {
   listB->set(1, std::move(subListB));
   listB->set(2, InterpolableNumber::create(1));
 
-  RefPtr<Interpolation> i =
+  RefPtr<LegacyStyleInterpolation> i =
       interpolateLists(std::move(listA), std::move(listB), 0.5);
   InterpolableList* outList = toInterpolableList(interpolationValue(*i.get()));
   EXPECT_FLOAT_EQ(50, toInterpolableNumber(outList->get(0))->value());

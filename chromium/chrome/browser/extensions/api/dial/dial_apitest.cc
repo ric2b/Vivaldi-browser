@@ -15,10 +15,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
-using extensions::DialDeviceData;
 using extensions::Extension;
-
-namespace api = extensions::api;
+using extensions::ResultCatcher;
+using extensions::api::dial::DialDeviceData;
+using extensions::api::dial::DialDeviceDescriptionData;
+using extensions::api::dial::DialRegistry;
 
 namespace {
 
@@ -52,9 +53,9 @@ IN_PROC_BROWSER_TEST_F(DialAPITest, MAYBE_DeviceListEvents) {
       extensions::DialAPIFactory::GetInstance()->GetForBrowserContext(
           profile());
   ASSERT_TRUE(api.get());
-  extensions::DialRegistry::DeviceList devices;
+  DialRegistry::DeviceList devices;
 
-  extensions::ResultCatcher catcher;
+  ResultCatcher catcher;
 
   DialDeviceData device1;
   device1.set_device_id("1");
@@ -96,13 +97,13 @@ IN_PROC_BROWSER_TEST_F(DialAPITest, DiscoveryNoListeners) {
 
 // Make sure this API is only accessible to whitelisted extensions.
 IN_PROC_BROWSER_TEST_F(DialAPITest, NonWhitelistedExtension) {
-  extensions::ResultCatcher catcher;
+  ResultCatcher catcher;
   catcher.RestrictToBrowserContext(browser()->profile());
 
   ExtensionTestMessageListener listener("ready", true);
-  const extensions::Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII("dial/whitelist"),
-      ExtensionBrowserTest::kFlagIgnoreManifestWarnings);
+  const Extension* extension =
+      LoadExtensionWithFlags(test_data_dir_.AppendASCII("dial/whitelist"),
+                             ExtensionBrowserTest::kFlagIgnoreManifestWarnings);
   // We should have a DIAL API not available warning.
   ASSERT_FALSE(extension->install_warnings().empty());
 
@@ -114,4 +115,23 @@ IN_PROC_BROWSER_TEST_F(DialAPITest, NonWhitelistedExtension) {
 
 IN_PROC_BROWSER_TEST_F(DialAPITest, OnError) {
   ASSERT_TRUE(RunExtensionSubtest("dial/experimental", "on_error.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DialAPITest, FetchDeviceDescription) {
+  scoped_refptr<extensions::DialAPI> api =
+      extensions::DialAPIFactory::GetInstance()->GetForBrowserContext(
+          profile());
+  ASSERT_TRUE(api);
+
+  DialDeviceData test_device("testDeviceId",
+                             GURL("http://127.0.0.1/description.xml"),
+                             base::Time::Now());
+  test_device.set_label("testDevice");
+
+  DialDeviceDescriptionData test_description("<xml>testDescription</xml>",
+                                             GURL("http://127.0.0.1/apps"));
+  api->SetDeviceForTest(test_device, test_description);
+
+  ASSERT_TRUE(RunExtensionSubtest("dial/experimental",
+                                  "fetch_device_description.html"));
 }

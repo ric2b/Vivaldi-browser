@@ -29,9 +29,9 @@ class TrackListBase : public EventTargetWithInlineData {
   }
 
   T* getTrackById(const String& id) const {
-    for (unsigned i = 0; i < m_tracks.size(); ++i) {
-      if (String(m_tracks[i]->id()) == id)
-        return m_tracks[i].get();
+    for (const auto& track : m_tracks) {
+      if (String(track->id()) == id)
+        return track.get();
     }
 
     return nullptr;
@@ -50,7 +50,7 @@ class TrackListBase : public EventTargetWithInlineData {
 
   void add(T* track) {
     track->setMediaElement(m_mediaElement);
-    m_tracks.append(TraceWrapperMember<T>(this, track));
+    m_tracks.push_back(TraceWrapperMember<T>(this, track));
     scheduleEvent(TrackEvent::create(EventTypeNames::addtrack, track));
   }
 
@@ -69,8 +69,8 @@ class TrackListBase : public EventTargetWithInlineData {
   }
 
   void removeAll() {
-    for (unsigned i = 0; i < m_tracks.size(); ++i)
-      m_tracks[i]->setMediaElement(0);
+    for (const auto& track : m_tracks)
+      track->setMediaElement(0);
 
     m_tracks.clear();
   }

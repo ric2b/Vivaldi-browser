@@ -31,6 +31,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/layout.h"
 
+#include "components/bookmarks/browser/bookmark_model.h"
+using bookmarks_helper::GetBookmarkModel;
+
 using bookmarks::BookmarkNode;
 using bookmarks_helper::AddFolder;
 using bookmarks_helper::AddURL;
@@ -111,6 +114,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, Sanity) {
   ASSERT_NE(nullptr, AddURL(1, "Yahoo", GURL("http://www.yahoo.com")));
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
 
+  const BookmarkNode *trash_node_0 = GetBookmarkModel(0)->trash_node();
+  const BookmarkNode *trash_node_1 = GetBookmarkModel(1)->trash_node();
+  if (trash_node_0 && trash_node_1) {
+    ASSERT_TRUE(AddURL(0, trash_node_0, 0, "trash_1_url0",
+      GURL("http://www.microsoft.com")));
+    ASSERT_EQ(1, trash_node_0->child_count());
+    ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
+    ASSERT_EQ(1, trash_node_1->child_count());
+    ASSERT_TRUE(AllModelsMatchVerifier());
+  }
+
   const BookmarkNode* new_folder = AddFolder(0, 2, "New Folder");
   Move(0, GetUniqueNodeByURL(0, google_url), new_folder, 0);
   SetTitle(0, GetBookmarkBarNode(0)->GetChild(0), "Yahoo!!");
@@ -121,6 +135,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientBookmarksSyncTest, Sanity) {
   ASSERT_NE(nullptr, AddURL(1, "Facebook", GURL("http://www.facebook.com")));
 
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
+
+  if (trash_node_0 && trash_node_1) {
+    Remove(1, trash_node_1, 0);
+    ASSERT_EQ(0, trash_node_1->child_count());
+    ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());
+    ASSERT_EQ(0, trash_node_0->child_count());
+    ASSERT_TRUE(AllModelsMatchVerifier());
+  }
 
   SortChildren(1, GetBookmarkBarNode(1));
   ASSERT_TRUE(BookmarksMatchVerifierChecker().Wait());

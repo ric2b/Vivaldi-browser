@@ -39,6 +39,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/ScopedWindowFocusAllowedIndicator.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/frame/UseCounter.h"
 #include "modules/notifications/NotificationAction.h"
@@ -91,8 +92,7 @@ Notification* Notification::create(ExecutionContext* context,
     return nullptr;
   }
 
-  String insecureOriginMessage;
-  if (context->isSecureContext(insecureOriginMessage)) {
+  if (context->isSecureContext()) {
     UseCounter::count(context, UseCounter::NotificationSecureOrigin);
     if (context->isDocument())
       UseCounter::countCrossOriginIframe(
@@ -113,8 +113,6 @@ Notification* Notification::create(ExecutionContext* context,
   Notification* notification =
       new Notification(context, Type::NonPersistent, data);
   notification->schedulePrepareShow();
-
-  notification->suspendIfNeeded();
   return notification;
 }
 
@@ -126,16 +124,13 @@ Notification* Notification::create(ExecutionContext* context,
       new Notification(context, Type::Persistent, data);
   notification->setState(showing ? State::Showing : State::Closed);
   notification->setNotificationId(notificationId);
-
-  notification->suspendIfNeeded();
   return notification;
 }
 
 Notification::Notification(ExecutionContext* context,
                            Type type,
                            const WebNotificationData& data)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_type(type),
       m_state(State::Loading),
       m_data(data) {
@@ -155,7 +150,8 @@ void Notification::schedulePrepareShow() {
 
 void Notification::prepareShow() {
   DCHECK_EQ(m_state, State::Loading);
-  if (NotificationManager::from(getExecutionContext())->permissionStatus() !=
+  if (NotificationManager::from(getExecutionContext())
+          ->permissionStatus(getExecutionContext()) !=
       mojom::blink::PermissionStatus::GRANTED) {
     dispatchErrorEvent();
     return;
@@ -187,8 +183,9 @@ void Notification::close() {
   // Persistent notifications won't get such events for programmatic closes.
   if (m_type == Type::NonPersistent) {
     getExecutionContext()->postTask(
-        BLINK_FROM_HERE, createSameThreadTask(&Notification::dispatchCloseEvent,
-                                              wrapPersistent(this)));
+        TaskType::UserInteraction, BLINK_FROM_HERE,
+        createSameThreadTask(&Notification::dispatchCloseEvent,
+                             wrapPersistent(this)));
     m_state = State::Closing;
 
     notificationManager()->close(this);
@@ -332,7 +329,7 @@ Vector<v8::Local<v8::Value>> Notification::actions(
     // Both the Action dictionaries themselves and the sequence they'll be
     // returned in are expected to the frozen. This cannot be done with WebIDL.
     actions[i] =
-        freezeV8Object(toV8(action, scriptState), scriptState->isolate());
+        freezeV8Object(ToV8(action, scriptState), scriptState->isolate());
   }
 
   return actions;
@@ -355,7 +352,7 @@ String Notification::permissionString(
 
 String Notification::permission(ExecutionContext* context) {
   return permissionString(
-      NotificationManager::from(context)->permissionStatus());
+      NotificationManager::from(context)->permissionStatus(context));
 }
 
 ScriptPromise Notification::requestPermission(
@@ -378,7 +375,7 @@ const AtomicString& Notification::interfaceName() const {
   return EventTargetNames::Notification;
 }
 
-void Notification::contextDestroyed() {
+void Notification::contextDestroyed(ExecutionContext*) {
   notificationManager()->notifyDelegateDestroyed(this);
 
   m_state = State::Closed;
@@ -403,7 +400,7 @@ DEFINE_TRACE(Notification) {
   visitor->trace(m_prepareShowMethodRunner);
   visitor->trace(m_loader);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

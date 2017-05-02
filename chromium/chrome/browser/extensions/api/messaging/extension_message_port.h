@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "chrome/browser/extensions/api/messaging/message_service.h"
+#include "extensions/common/api/messaging/port_id.h"
 
 class GURL;
 
@@ -29,14 +30,14 @@ class ExtensionMessagePort : public MessageService::MessagePort {
  public:
   // Create a port that is tied to frame(s) in a single tab.
   ExtensionMessagePort(base::WeakPtr<MessageService> message_service,
-                       int port_id,
+                       const PortId& port_id,
                        const std::string& extension_id,
                        content::RenderFrameHost* rfh,
                        bool include_child_frames);
   // Create a port that is tied to all frames of an extension, possibly spanning
   // multiple tabs, including the invisible background page, popups, etc.
   ExtensionMessagePort(base::WeakPtr<MessageService> message_service,
-                       int port_id,
+                       const PortId& port_id,
                        const std::string& extension_id,
                        content::RenderProcessHost* extension_process);
   ~ExtensionMessagePort() override;
@@ -85,7 +86,7 @@ class ExtensionMessagePort : public MessageService::MessagePort {
 
   base::WeakPtr<MessageService> weak_message_service_;
 
-  int port_id_;
+  const PortId port_id_;
   std::string extension_id_;
   content::BrowserContext* browser_context_;
   // Only for receivers in an extension process.
@@ -97,11 +98,6 @@ class ExtensionMessagePort : public MessageService::MessagePort {
   // and shrinks over time when the port is rejected by the recipient frame, or
   // when the frame is removed or unloaded.
   std::set<content::RenderFrameHost*> frames_;
-
-  // The ID of the tab where the channel was created. This is saved so that any
-  // onMessage events can be run in the scope of the tab.
-  // Only set on receiver ports (if the opener was a tab). -1 if invalid.
-  int opener_tab_id_;
 
   // Whether the renderer acknowledged creation of the port. This is used to
   // distinguish abnormal port closure (e.g. no receivers) from explicit port

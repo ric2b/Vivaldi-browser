@@ -13,6 +13,7 @@
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "grit/ash_resources.h"
 #include "skia/ext/image_operations.h"
@@ -442,6 +443,7 @@ void ShelfButton::Layout() {
       gfx::Rect(button_bounds.x() + x_offset, button_bounds.y() + y_offset,
                 icon_width, icon_height);
   icon_view_bounds.Inset(insets_shadows);
+  icon_view_bounds.AdjustToFit(gfx::Rect(size()));
   icon_view_->SetBoundsRect(icon_view_bounds);
 
   // Icon size has been incorrect when running
@@ -472,9 +474,8 @@ void ShelfButton::OnBlur() {
 void ShelfButton::OnPaint(gfx::Canvas* canvas) {
   CustomButton::OnPaint(canvas);
   if (HasFocus()) {
-    gfx::Rect paint_bounds(GetLocalBounds());
-    paint_bounds.Inset(1, 1, 1, 1);
-    canvas->DrawSolidFocusRect(paint_bounds, kFocusBorderColor);
+    canvas->DrawSolidFocusRect(gfx::RectF(GetLocalBounds()), kFocusBorderColor,
+                               kFocusBorderThickness);
   }
 }
 

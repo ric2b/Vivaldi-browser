@@ -4,11 +4,11 @@
 
 // https://wicg.github.io/shape-detection-api/#face-detection-api
 
-// TODO(xianglu): Add [Constructor(optional FaceDetectorOptions faceDetectorOptions)]. https://crbug.com/646083
 [
-    Constructor,
-    ConstructorCallWith=ScriptState,
+    Constructor(optional FaceDetectorOptions faceDetectorOptions),
+    ConstructorCallWith=Document,
+    Exposed=(Window,Worker),
     RuntimeEnabled=ShapeDetection,
 ] interface FaceDetector {
-    [CallWith=ScriptState] Promise<sequence<DetectedObject>> detect(CanvasImageSource image);
+    [CallWith=ScriptState, Measure] Promise<sequence<DetectedFace>> detect(ImageBitmapSource image);
 };

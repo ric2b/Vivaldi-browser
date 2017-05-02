@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/web_state/web_state_impl.h"
+#import "ios/web/web_state/web_state_impl.h"
 
 #include <stddef.h>
 
@@ -11,26 +11,27 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/mac/bind_objc_block.h"
+#import "base/mac/bind_objc_block.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/ios/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #include "base/values.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
 #include "ios/web/public/load_committed_details.h"
-#include "ios/web/public/test/test_browser_state.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
+#import "ios/web/public/test/fakes/test_web_state_delegate.h"
 #include "ios/web/public/test/web_test.h"
-#include "ios/web/public/web_state/context_menu_params.h"
+#import "ios/web/public/web_state/context_menu_params.h"
 #include "ios/web/public/web_state/global_web_state_observer.h"
-#include "ios/web/public/web_state/web_state_delegate.h"
+#import "ios/web/public/web_state/web_state_delegate.h"
 #include "ios/web/public/web_state/web_state_observer.h"
-#include "ios/web/public/web_state/web_state_policy_decider.h"
+#import "ios/web/public/web_state/web_state_policy_decider.h"
 #include "ios/web/web_state/global_web_state_event_tracker.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
+#import "testing/gtest_mac.h"
 #include "url/gurl.h"
 
 using testing::_;
@@ -112,95 +113,6 @@ class TestGlobalWebStateObserver : public GlobalWebStateObserver {
   bool did_stop_loading_called_;
   bool page_loaded_called_with_success_;
   bool web_state_destroyed_called_;
-};
-
-// Test delegate to check that the WebStateDelegate methods are called as
-// expected.
-class TestWebStateDelegate : public WebStateDelegate {
- public:
-  TestWebStateDelegate()
-      : load_progress_changed_called_(false),
-        handle_context_menu_called_(false),
-        get_java_script_dialog_presenter_called_(false) {}
-
-  // True if the WebStateDelegate LoadProgressChanged method has been called.
-  bool load_progress_changed_called() const {
-    return load_progress_changed_called_;
-  }
-
-  // True if the WebStateDelegate HandleContextMenu method has been called.
-  bool handle_context_menu_called() const {
-    return handle_context_menu_called_;
-  }
-
-  // True if the WebStateDelegate GetJavaScriptDialogPresenter method has been
-  // called.
-  bool get_java_script_dialog_presenter_called() const {
-    return get_java_script_dialog_presenter_called_;
-  }
-
-  void SetJavaScriptDialogPresenter(JavaScriptDialogPresenter* presenter) {
-    presenter_ = presenter;
-  }
-
- private:
-  // WebStateDelegate implementation:
-  void LoadProgressChanged(WebState* source, double progress) override {
-    load_progress_changed_called_ = true;
-  }
-
-  bool HandleContextMenu(WebState* source,
-                         const ContextMenuParams& params) override {
-    handle_context_menu_called_ = true;
-    return NO;
-  }
-
-  JavaScriptDialogPresenter* GetJavaScriptDialogPresenter(
-      WebState* source) override {
-    get_java_script_dialog_presenter_called_ = true;
-    return presenter_;
-  }
-
-  bool load_progress_changed_called_;
-  bool handle_context_menu_called_;
-  bool get_java_script_dialog_presenter_called_;
-  JavaScriptDialogPresenter* presenter_;
-};
-
-// Test presenter to check that the JavaScriptDialogPresenter methods are called
-// as expected.
-class TestJavaScriptDialogPresenter : public JavaScriptDialogPresenter {
- public:
-  TestJavaScriptDialogPresenter()
-      : cancel_dialogs_called_(false), run_java_script_dialog_called_(false) {}
-
-  // True if the JavaScriptDialogPresenter CancelDialogs method has been called.
-  bool cancel_dialogs_called() const { return cancel_dialogs_called_; }
-
-  // True if the JavaScriptDialogPresenter RunJavaScriptDialog method has been
-  // called.
-  bool run_java_script_dialog_called() const {
-    return run_java_script_dialog_called_;
-  }
-
- private:
-  // JavaScriptDialogPresenter implementation:
-  void RunJavaScriptDialog(WebState* web_state,
-                           const GURL& origin_url,
-                           JavaScriptDialogType java_script_dialog_type,
-                           NSString* message_text,
-                           NSString* default_prompt_text,
-                           const DialogClosedCallback& callback) override {
-    run_java_script_dialog_called_ = true;
-    callback.Run(false, nil);
-  }
-
-  void CancelDialogs(WebState* web_state) override {
-    cancel_dialogs_called_ = true;
-  }
-
-  bool cancel_dialogs_called_;
-  bool run_java_script_dialog_called_;
 };
 
 // Test observer to check that the WebStateObserver methods are called as
@@ -506,12 +418,11 @@ TEST_F(WebStateTest, DelegateTest) {
   EXPECT_TRUE(delegate.handle_context_menu_called());
 
   // Test that GetJavaScriptDialogPresenter() is called.
-  TestJavaScriptDialogPresenter presenter;
-  delegate.SetJavaScriptDialogPresenter(&presenter);
-
+  TestJavaScriptDialogPresenter* presenter =
+      delegate.GetTestJavaScriptDialogPresenter();
   EXPECT_FALSE(delegate.get_java_script_dialog_presenter_called());
-  EXPECT_FALSE(presenter.run_java_script_dialog_called());
-  EXPECT_FALSE(presenter.cancel_dialogs_called());
+  EXPECT_TRUE(presenter->requested_dialogs().empty());
+  EXPECT_FALSE(presenter->cancel_dialogs_called());
 
   __block bool callback_called = false;
   web_state_->RunJavaScriptDialog(GURL(), JAVASCRIPT_DIALOG_TYPE_ALERT, @"",
@@ -520,12 +431,29 @@ TEST_F(WebStateTest, DelegateTest) {
                                   }));
 
   EXPECT_TRUE(delegate.get_java_script_dialog_presenter_called());
-  EXPECT_TRUE(presenter.run_java_script_dialog_called());
+  EXPECT_EQ(1U, presenter->requested_dialogs().size());
   EXPECT_TRUE(callback_called);
 
-  EXPECT_FALSE(presenter.cancel_dialogs_called());
+  EXPECT_FALSE(presenter->cancel_dialogs_called());
   web_state_->CancelDialogs();
-  EXPECT_TRUE(presenter.cancel_dialogs_called());
+  EXPECT_TRUE(presenter->cancel_dialogs_called());
+
+  // Test that OnAuthRequired() is called.
+  EXPECT_FALSE(delegate.last_authentication_request());
+  base::scoped_nsobject<NSURLProtectionSpace> protection_space(
+      [[NSURLProtectionSpace alloc] init]);
+  base::scoped_nsobject<NSURLCredential> credential(
+      [[NSURLCredential alloc] init]);
+  WebStateDelegate::AuthCallback callback;
+  web_state_->OnAuthRequired(protection_space.get(), credential.get(),
+                             callback);
+  ASSERT_TRUE(delegate.last_authentication_request());
+  EXPECT_EQ(delegate.last_authentication_request()->web_state,
+            web_state_.get());
+  EXPECT_EQ(delegate.last_authentication_request()->protection_space,
+            protection_space.get());
+  EXPECT_EQ(delegate.last_authentication_request()->credential,
+            credential.get());
 }
 
 // Verifies that GlobalWebStateObservers are called when expected.
@@ -692,15 +620,17 @@ TEST_F(WebStateTest, ScriptExecution) {
 
   // Execute script with callback.
   __block std::unique_ptr<base::Value> execution_result;
+  __block bool execution_complete = false;
   web_state_->ExecuteJavaScript(base::UTF8ToUTF16("window.foo"),
                                 base::BindBlock(^(const base::Value* value) {
-                                  ASSERT_TRUE(value);
                                   execution_result = value->CreateDeepCopy();
+                                  execution_complete = true;
                                 }));
-  base::test::ios::WaitUntilCondition(^bool() {
-    return execution_result.get();
+  base::test::ios::WaitUntilCondition(^{
+    return execution_complete;
   });
 
+  ASSERT_TRUE(execution_result);
   std::string string_result;
   execution_result->GetAsString(&string_result);
   EXPECT_EQ("bar", string_result);

@@ -57,6 +57,8 @@
 
 #include "extensions/schema/import_data.h"
 
+#include "components/strings/grit/components_strings.h"
+
 class Browser;
 
 

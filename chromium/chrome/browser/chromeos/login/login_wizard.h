@@ -7,14 +7,12 @@
 
 #include <string>
 
-namespace gfx {
-class Size;
-}
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 
 namespace chromeos {
 
 // Shows the Chrome OS out-of-box / login UI.
-void ShowLoginWizard(const std::string& start_screen);
+void ShowLoginWizard(OobeScreen start_screen);
 
 }  // namespace chromeos
 

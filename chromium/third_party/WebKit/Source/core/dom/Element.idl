@@ -34,14 +34,12 @@ interface Element : Node {
     [CEReactions, Reflect] attribute DOMString id;
     [CEReactions, Reflect=class] attribute DOMString className;
     [SameObject, CEReactions, PerWorldBindings, PutForwards=value] readonly attribute DOMTokenList classList;
+    [Unscopable, CEReactions, Reflect] attribute DOMString slot;
 
-    // PointerEvent (http://www.w3.org/TR/pointerevents/#extensions-to-the-element-interface)
+    // Pointer Events
+    // https://w3c.github.io/pointerevents/#extensions-to-the-element-interface
     [RuntimeEnabled=PointerEvent, RaisesException] void setPointerCapture (long pointerId);
     [RuntimeEnabled=PointerEvent, RaisesException] void releasePointerCapture (long pointerId);
-    [RuntimeEnabled=PointerEvent] attribute EventHandler ongotpointercapture;
-    [RuntimeEnabled=PointerEvent] attribute EventHandler onlostpointercapture;
-
-    // PointerEvent v2 (https://w3c.github.io/pointerevents/#extensions-to-the-element-interface)
     [RuntimeEnabled=PointerEvent] boolean hasPointerCapture (long pointerId);
 
     boolean hasAttributes();
@@ -65,6 +63,9 @@ interface Element : Node {
     [RaisesException] boolean matches(DOMString selectors);
     [RaisesException, ImplementedAs=matches, MeasureAs=ElementPrefixedMatchesSelector] boolean webkitMatchesSelector(DOMString selectors); // historical alias of .matches
 
+    [RaisesException, CallWith=ScriptState, MeasureAs=ElementAttachShadow] ShadowRoot attachShadow(ShadowRootInit shadowRootInitDict);
+    [PerWorldBindings, ImplementedAs=openShadowRoot] readonly attribute ShadowRoot? shadowRoot;
+
     HTMLCollection getElementsByTagName(DOMString localName);
     HTMLCollection getElementsByTagNameNS(DOMString? namespaceURI, DOMString localName);
     HTMLCollection getElementsByClassName(DOMString classNames);
@@ -72,27 +73,22 @@ interface Element : Node {
     [RaisesException, CEReactions, CustomElementCallbacks] Element? insertAdjacentElement(DOMString where, Element element);
     [RaisesException] void insertAdjacentText(DOMString where, DOMString data);
 
+    // Mixin Slotable
+    // https://dom.spec.whatwg.org/#mixin-slotable
+    [ImplementedAs=assignedSlotForBinding] readonly attribute HTMLSlotElement? assignedSlot;
+
     // DOM Parsing and Serialization
-    // https://dvcs.w3.org/hg/innerhtml/raw-file/tip/index.html#extensions-to-the-element-interface
+    // https://w3c.github.io/DOM-Parsing/#extensions-to-the-element-interface
     [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter] attribute DOMString innerHTML;
     [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter] attribute DOMString outerHTML;
     [CEReactions, CustomElementCallbacks, RaisesException] void insertAdjacentHTML(DOMString position, DOMString text);
 
-    // Shadow DOM
-    // http://w3c.github.io/webcomponents/spec/shadow/#extensions-to-element-interface
-    [RaisesException, CallWith=ScriptState, MeasureAs=ElementCreateShadowRoot] ShadowRoot createShadowRoot();
-    [RuntimeEnabled=ShadowDOMV1, RaisesException, CallWith=ScriptState, MeasureAs=ElementAttachShadow] ShadowRoot attachShadow(ShadowRootInit shadowRootInitDict);
-    NodeList getDestinationInsertionPoints();
-    [PerWorldBindings, ImplementedAs=openShadowRoot] readonly attribute ShadowRoot? shadowRoot;
-    [RuntimeEnabled=ShadowDOMV1, Unscopable, CEReactions, Reflect] attribute DOMString slot;
-    [RuntimeEnabled=ShadowDOMV1, ImplementedAs=assignedSlotForBinding] readonly attribute HTMLSlotElement assignedSlot;
-
     // Pointer Lock
-    // https://dvcs.w3.org/hg/pointerlock/raw-file/default/index.html#extensions-to-the-element-interface
+    // https://w3c.github.io/pointerlock/#extensions-to-the-element-interface
     [MeasureAs=ElementRequestPointerLock] void requestPointerLock();
 
     // CSSOM View Module
-    // http://dev.w3.org/csswg/cssom-view/#extension-to-the-element-interface
+    // https://dev.w3.org/csswg/cssom-view/#extension-to-the-element-interface
     // FIXME: getClientRect() and getBoundingClientRect() should
     // return DOMRectList and DOMRect respectively.
     ClientRectList getClientRects();
@@ -120,6 +116,8 @@ interface Element : Node {
 
     // Non-standard API
     [MeasureAs=ElementScrollIntoViewIfNeeded] void scrollIntoViewIfNeeded(optional boolean centerIfNeeded);
+    [RaisesException, CallWith=ScriptState, MeasureAs=ElementCreateShadowRoot] ShadowRoot createShadowRoot();
+    NodeList getDestinationInsertionPoints();
 
     // Experimental accessibility API
     [RuntimeEnabled=ComputedAccessibilityInfo] readonly attribute DOMString? computedRole;

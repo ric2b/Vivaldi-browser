@@ -123,7 +123,7 @@
 #include "ash/shell.h"  // nogncheck
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
@@ -516,6 +516,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONTINUE_BUTTON },
     { "configurePinMismatched", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED },
     { "configurePinTooShort", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT} ,
+    { "configurePinTooLong", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_LONG} ,
     { "configurePinWeakPin", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_WEAK_PIN },
     { "lockScreenChangePinButton",
       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_CHANGE_PIN_BUTTON},
@@ -863,6 +864,10 @@ void BrowserOptionsHandler::RegisterMessages() {
       base::Bind(&BrowserOptionsHandler::ShowAndroidAppsSettings,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      "showPlayStoreApps",
+      base::Bind(&BrowserOptionsHandler::ShowPlayStoreApps,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       "showAccessibilityTalkBackSettings",
       base::Bind(&BrowserOptionsHandler::ShowAccessibilityTalkBackSettings,
                  base::Unretained(this)));
@@ -942,6 +947,7 @@ void BrowserOptionsHandler::Uninitialize() {
       Profile::FromWebUI(web_ui()));
   if (arc_prefs)
     arc_prefs->RemoveObserver(this);
+  user_manager::UserManager::Get()->RemoveObserver(this);
 #endif
 }
 
@@ -1011,8 +1017,7 @@ void BrowserOptionsHandler::InitializeHandler() {
 #endif
 
 #if defined(OS_CHROMEOS)
-  registrar_.Add(this, chrome::NOTIFICATION_LOGIN_USER_IMAGE_CHANGED,
-                 content::NotificationService::AllSources());
+  user_manager::UserManager::Get()->AddObserver(this);
 #endif
   registrar_.Add(this, chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
                  content::Source<ThemeService>(
@@ -1165,10 +1170,10 @@ void BrowserOptionsHandler::InitializePage() {
       chromeos::WallpaperManager::Get()->IsPolicyControlled(
           user->GetAccountId()));
 
-  if (arc::ArcAuthService::IsAllowedForProfile(profile) &&
-      !arc::ArcAuthService::IsOptInVerificationDisabled()) {
+  if (arc::ArcSessionManager::IsAllowedForProfile(profile) &&
+      !arc::ArcSessionManager::IsOptInVerificationDisabled()) {
     base::FundamentalValue is_arc_enabled(
-        arc::ArcAuthService::Get()->IsArcEnabled());
+        arc::ArcSessionManager::Get()->IsArcEnabled());
     web_ui()->CallJavascriptFunctionUnsafe(
         "BrowserOptions.showAndroidAppsSection",
         is_arc_enabled);
@@ -1291,15 +1296,15 @@ void BrowserOptionsHandler::OnTemplateURLServiceChanged() {
   TemplateURLService::TemplateURLVector model_urls(
       template_url_service_->GetTemplateURLs());
   for (size_t i = 0; i < model_urls.size(); ++i) {
-    if (!model_urls[i]->ShowInDefaultList(
-            template_url_service_->search_terms_data()))
+    TemplateURL* t_url = model_urls[i];
+    if (!template_url_service_->ShowInDefaultList(t_url))
       continue;
 
     std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
-    entry->SetString("name", model_urls[i]->short_name());
+    entry->SetString("name", t_url->short_name());
     entry->SetInteger("index", i);
     search_engines.Append(std::move(entry));
-    if (model_urls[i] == default_url)
+    if (t_url == default_url)
       default_index = i;
   }
 
@@ -1371,11 +1376,6 @@ void BrowserOptionsHandler::Observe(
     case chrome::NOTIFICATION_BROWSER_THEME_CHANGED:
       ObserveThemeChanged();
       break;
-#if defined(OS_CHROMEOS)
-    case chrome::NOTIFICATION_LOGIN_USER_IMAGE_CHANGED:
-      UpdateAccountPicture();
-      break;
-#endif
     case chrome::NOTIFICATION_GLOBAL_ERRORS_CHANGED:
       // Update our sync/signin status display.
       OnStateChanged();
@@ -2000,6 +2000,10 @@ void BrowserOptionsHandler::OnAppReadyChanged(
   }
 }
 
+void BrowserOptionsHandler::OnUserImageChanged(const user_manager::User& user) {
+  UpdateAccountPicture();
+}
+
 void BrowserOptionsHandler::UpdateAndroidSettingsAppState(bool visible) {
   base::FundamentalValue is_visible(visible);
   web_ui()->CallJavascriptFunctionUnsafe(
@@ -2010,7 +2014,7 @@ void BrowserOptionsHandler::ShowAndroidAppsSettings(
     const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   // Settings in secondary profile cannot access ARC.
-  if (!arc::ArcAuthService::IsAllowedForProfile(profile)) {
+  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
     LOG(ERROR) << "Settings can't be invoked for non-primary profile";
     return;
   }
@@ -2025,11 +2029,23 @@ void BrowserOptionsHandler::ShowAndroidAppsSettings(
   arc::LaunchAndroidSettingsApp(profile, flags);
 }
 
+void BrowserOptionsHandler::ShowPlayStoreApps(const base::ListValue* args) {
+  std::string apps_url;
+  args->GetString(0, &apps_url);
+  Profile* profile = Profile::FromWebUI(web_ui());
+  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
+    VLOG(1) << "ARC is not enabled for this profile";
+    return;
+  }
+
+  arc::LaunchPlayStoreWithUrl(apps_url);
+}
+
 void BrowserOptionsHandler::ShowAccessibilityTalkBackSettings(
     const base::ListValue *args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   // Settings in secondary profile cannot access ARC.
-  if (!arc::ArcAuthService::IsAllowedForProfile(profile)) {
+  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
     LOG(WARNING) << "Settings can't be invoked for non-primary profile";
     return;
   }
@@ -2091,7 +2107,7 @@ void BrowserOptionsHandler::SetupFontSizeSelector() {
       !default_font_size->IsUserModifiable() ||
       !default_fixed_font_size->IsUserModifiable());
 
-  // This is a poor man's version of CoreOptionsHandler::CreateValueForPref,
+  // This is a simplified version of CoreOptionsHandler::CreateValueForPref,
   // adapted to consider two prefs. It may be better to refactor
   // CreateValueForPref so it can be called from here.
   if (default_font_size->IsManaged() || default_fixed_font_size->IsManaged()) {
@@ -2288,8 +2304,9 @@ void BrowserOptionsHandler::HandleSafeBrowsingExtendedReporting(
     const base::ListValue* args) {
   bool checked;
   if (args->GetBoolean(0, &checked)) {
-    safe_browsing::SetExtendedReportingPref(
-        Profile::FromWebUI(web_ui())->GetPrefs(), checked);
+    safe_browsing::SetExtendedReportingPrefAndMetric(
+        Profile::FromWebUI(web_ui())->GetPrefs(), checked,
+        safe_browsing::SBER_OPTIN_SITE_CHROME_SETTINGS);
   }
 }
 

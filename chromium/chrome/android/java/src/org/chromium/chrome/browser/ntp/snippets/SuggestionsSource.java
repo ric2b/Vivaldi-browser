@@ -35,7 +35,15 @@ public interface SuggestionsSource {
          * currently exist or has never existed and should be ignored in that case.
          */
         void onSuggestionInvalidated(@CategoryInt int category, String idWithinCategory);
+
+        /** Called when the observer should discard the suggestions it has and pull new ones. */
+        void onFullRefreshRequired();
     }
+
+    /**
+     * Fetches new snippets for all remote categories.
+     */
+    void fetchRemoteSuggestions();
 
     /**
      * Gets the categories in the order in which they should be displayed.

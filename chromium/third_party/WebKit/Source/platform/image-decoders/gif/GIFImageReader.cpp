@@ -74,9 +74,7 @@ mailing address.
 
 #include "platform/image-decoders/gif/GIFImageReader.h"
 
-#include "platform/Histogram.h"
 #include "wtf/PtrUtil.h"
-#include "wtf/Threading.h"
 #include <string.h>
 
 using blink::GIFImageDecoder;
@@ -342,7 +340,7 @@ bool GIFFrameContext::decode(blink::FastSharedBufferReader* reader,
     if (!isDataSizeDefined() || !isHeaderDefined())
       return true;
 
-    m_lzwContext = makeUnique<GIFLZWContext>(client, this);
+    m_lzwContext = WTF::makeUnique<GIFLZWContext>(client, this);
     if (!m_lzwContext->prepareToDecode()) {
       m_lzwContext.reset();
       return false;
@@ -446,14 +444,14 @@ bool GIFImageReader::parseData(size_t dataPosition,
         ASSERT(!m_frames.isEmpty());
         // m_bytesToConsume is the current component size because it hasn't been
         // updated.
-        m_frames.last()->addLzwBlock(currentComponentPosition,
+        m_frames.back()->addLzwBlock(currentComponentPosition,
                                      m_bytesToConsume);
         GETN(1, GIFSubBlock);
         break;
 
       case GIFLZWStart: {
         ASSERT(!m_frames.isEmpty());
-        m_frames.last()->setDataSize(static_cast<unsigned char>(
+        m_frames.back()->setDataSize(static_cast<unsigned char>(
             reader.getOneByte(currentComponentPosition)));
         GETN(1, GIFSubBlock);
         break;
@@ -602,7 +600,7 @@ bool GIFImageReader::parseData(size_t dataPosition,
                 currentComponentPosition, 4, readBuffer));
 
         addFrameIfNecessary();
-        GIFFrameContext* currentFrame = m_frames.last().get();
+        GIFFrameContext* currentFrame = m_frames.back().get();
         if (*currentComponent & 0x1)
           currentFrame->setTransparentPixel(currentComponent[3]);
 
@@ -729,39 +727,6 @@ bool GIFImageReader::parseData(size_t dataPosition,
         // set to zero, since usually the first frame completely fills
         // the image.
         if (currentFrameIsFirstFrame()) {
-          int yCanvasExpansion = (m_screenHeight < yOffset + height)
-                                     ? yOffset + height - m_screenHeight
-                                     : 0;
-          int xCanvasExpansion = (m_screenWidth < xOffset + width)
-                                     ? xOffset + width - m_screenWidth
-                                     : 0;
-          DEFINE_THREAD_SAFE_STATIC_LOCAL(
-              blink::BooleanHistogram, canvasExpandedHistogram,
-              new blink::BooleanHistogram(
-                  "Blink.DecodedImage.CanvasExpanded.GIF"));
-          canvasExpandedHistogram.count(xCanvasExpansion > 0 ||
-                                        yCanvasExpansion > 0);
-          if (yCanvasExpansion > 0) {
-            DEFINE_THREAD_SAFE_STATIC_LOCAL(
-                blink::CustomCountHistogram, yCanvasExpansionHistogram,
-                new blink::CustomCountHistogram(
-                    "Blink.DecodedImage.YCanvasExpansion.GIF", 0, 10000, 50));
-            yCanvasExpansionHistogram.count(yCanvasExpansion);
-          }
-          if (xCanvasExpansion > 0) {
-            DEFINE_THREAD_SAFE_STATIC_LOCAL(
-                blink::CustomCountHistogram, xCanvasExpansionHistogram,
-                new blink::CustomCountHistogram(
-                    "Blink.DecodedImage.XCanvasExpansion.GIF", 0, 10000, 50));
-            xCanvasExpansionHistogram.count(xCanvasExpansion);
-          }
-          DEFINE_THREAD_SAFE_STATIC_LOCAL(
-              blink::CustomCountHistogram, dimensionsLocationHistogram,
-              new blink::CustomCountHistogram(
-                  "Blink.DecodedImage.EffectiveDimensionsLocation.GIF", 0,
-                  50000, 50));
-          dimensionsLocationHistogram.count(dataPosition - 1);
-
           m_screenHeight = std::max(m_screenHeight, yOffset + height);
           m_screenWidth = std::max(m_screenWidth, xOffset + width);
         }
@@ -782,7 +747,7 @@ bool GIFImageReader::parseData(size_t dataPosition,
         }
 
         addFrameIfNecessary();
-        GIFFrameContext* currentFrame = m_frames.last().get();
+        GIFFrameContext* currentFrame = m_frames.back().get();
 
         currentFrame->setHeaderDefined();
 
@@ -825,7 +790,7 @@ bool GIFImageReader::parseData(size_t dataPosition,
 
       case GIFImageColormap: {
         ASSERT(!m_frames.isEmpty());
-        m_frames.last()->localColorMap().setDefined();
+        m_frames.back()->localColorMap().setDefined();
         GETN(1, GIFLZWStart);
         break;
       }
@@ -840,7 +805,7 @@ bool GIFImageReader::parseData(size_t dataPosition,
           ASSERT(!m_frames.isEmpty());
           // Note that some broken GIF files do not have enough LZW blocks to
           // fully decode all rows; we treat this case as "frame complete".
-          m_frames.last()->setComplete();
+          m_frames.back()->setComplete();
           GETN(1, GIFImageStart);
         }
         break;
@@ -868,8 +833,8 @@ void GIFImageReader::setRemainingBytes(size_t remainingBytes) {
 }
 
 void GIFImageReader::addFrameIfNecessary() {
-  if (m_frames.isEmpty() || m_frames.last()->isComplete())
-    m_frames.append(wrapUnique(new GIFFrameContext(m_frames.size())));
+  if (m_frames.isEmpty() || m_frames.back()->isComplete())
+    m_frames.push_back(WTF::wrapUnique(new GIFFrameContext(m_frames.size())));
 }
 
 // FIXME: Move this method to close to doLZW().

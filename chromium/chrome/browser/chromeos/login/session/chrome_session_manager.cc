@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
@@ -15,8 +16,9 @@
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
+#include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -24,7 +26,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/ash/ash_util.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/audio/cras_audio_handler.h"
@@ -33,7 +34,6 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_service_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -61,7 +61,7 @@ void StartKioskSession() {
   session_manager::SessionManager::Get()->SetSessionState(
       session_manager::SessionState::LOGIN_PRIMARY);
 
-  ShowLoginWizard(chromeos::WizardController::kAppLaunchSplashScreenName);
+  ShowLoginWizard(chromeos::OobeScreen::SCREEN_APP_LAUNCH_SPLASH);
 
   // Login screen is skipped but 'login-prompt-visible' signal is still needed.
   VLOG(1) << "Kiosk app auto launch >> login-prompt-visible";
@@ -71,7 +71,7 @@ void StartKioskSession() {
 // Starts the login/oobe screen.
 void StartLoginOobeSession() {
   // State will be defined once out-of-box/login branching is complete.
-  ShowLoginWizard(std::string());
+  ShowLoginWizard(OobeScreen::SCREEN_UNKNOWN);
 
   // Reset reboot after update flag when login screen is shown.
   policy::BrowserPolicyConnectorChromeOS* connector =
@@ -86,9 +86,6 @@ void StartLoginOobeSession() {
 void StartRestoreAfterCrashSession(Profile* user_profile,
                                    const std::string& login_user_id) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-
-  session_manager::SessionManager::Get()->SetSessionState(
-      session_manager::SessionState::ACTIVE);
 
   // TODO(xiyuan): Identify tests that do not set this kLoginUser flag but
   // still rely on "stub user" session. Keeping existing behavior to avoid
@@ -110,16 +107,11 @@ void StartRestoreAfterCrashSession(Profile* user_profile,
     user_session_mgr->InitializeCertificateTransparencyComponents(user);
 
     if (arc::ArcBridgeService::GetEnabled(
+            base::CommandLine::ForCurrentProcess()) ||
+        arc::ArcBridgeService::GetKioskStarted(
             base::CommandLine::ForCurrentProcess())) {
-      DCHECK(arc::ArcServiceManager::Get());
-      std::unique_ptr<BooleanPrefMember> arc_enabled_pref =
-          base::MakeUnique<BooleanPrefMember>();
-      arc_enabled_pref->Init(prefs::kArcEnabled, user_profile->GetPrefs());
-      arc::ArcServiceManager::Get()->OnPrimaryUserProfilePrepared(
-          multi_user_util::GetAccountIdFromProfile(user_profile),
-          std::move(arc_enabled_pref));
-      DCHECK(arc::ArcAuthService::Get());
-      arc::ArcAuthService::Get()->OnPrimaryUserProfilePrepared(user_profile);
+      arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(
+          user_profile);
     }
 
     // Send the PROFILE_PREPARED notification and call SessionStarted()
@@ -140,7 +132,6 @@ void StartRestoreAfterCrashSession(Profile* user_profile,
 
   bool is_running_test = command_line->HasSwitch(::switches::kTestName) ||
                          command_line->HasSwitch(::switches::kTestType);
-
   if (!is_running_test) {
     // Enable CrasAudioHandler logging when chrome restarts after crashing.
     if (chromeos::CrasAudioHandler::IsInitialized())
@@ -156,9 +147,6 @@ void StartRestoreAfterCrashSession(Profile* user_profile,
 // Starts a user session with stub user.
 void StartStubLoginSession(Profile* user_profile,
                            const std::string& login_user_id) {
-  session_manager::SessionManager::Get()->SetSessionState(
-      session_manager::SessionState::ACTIVE);
-
   // For dev machines and stub user emulate as if sync has been initialized.
   SigninManagerFactory::GetForProfile(user_profile)
       ->SetAuthenticatedAccountInfo(login_user_id, login_user_id);
@@ -241,6 +229,8 @@ void ChromeSessionManager::SessionStarted() {
       content::Source<session_manager::SessionManager>(this),
       content::Details<const user_manager::User>(
           user_manager->GetActiveUser()));
+
+  chromeos::WebUIScreenLocker::RequestPreload();
 }
 
 void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,

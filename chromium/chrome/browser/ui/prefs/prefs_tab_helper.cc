@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -45,11 +46,12 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/web_preferences.h"
 #include "extensions/features/features.h"
+#include "media/media_features.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && defined(ENABLE_THEMES)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #endif
@@ -89,6 +91,7 @@ const char* const kPrefsToObserve[] = {
   prefs::kWebKitMinimumFontSize,
   prefs::kWebKitMinimumLogicalFontSize,
   prefs::kWebKitPluginsEnabled,
+  prefs::kWebKitEncryptedMediaEnabled,
   prefs::kWebkitTabsToLinks,
   prefs::kWebKitTextAreasAreResizable,
   prefs::kWebKitWebSecurityEnabled,
@@ -321,6 +324,7 @@ void OverrideFontFamily(WebPreferences* prefs,
   (*map)[script] = base::UTF8ToUTF16(pref_value);
 }
 
+#if !defined(OS_ANDROID)
 void RegisterLocalizedFontPref(user_prefs::PrefRegistrySyncable* registry,
                                const char* path,
                                int default_message_id) {
@@ -330,6 +334,7 @@ void RegisterLocalizedFontPref(user_prefs::PrefRegistrySyncable* registry,
   DCHECK(success);
   registry->RegisterIntegerPref(path, val);
 }
+#endif
 
 }  // namespace
 
@@ -347,7 +352,7 @@ class PrefWatcher : public KeyedService {
     pref_change_registrar_.Add(prefs::kEnableDoNotTrack, renderer_callback);
     pref_change_registrar_.Add(prefs::kEnableReferrers, renderer_callback);
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
     pref_change_registrar_.Add(prefs::kWebRTCMultipleRoutesEnabled,
                                renderer_callback);
     pref_change_registrar_.Add(prefs::kWebRTCNonProxiedUdpEnabled,
@@ -489,7 +494,7 @@ PrefsTabHelper::PrefsTabHelper(WebContents* contents)
                                                       profile_,
                                                       web_contents_);
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && defined(ENABLE_THEMES)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
   registrar_.Add(this,
                  chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
                  content::Source<ThemeService>(
@@ -520,6 +525,8 @@ void PrefsTabHelper::RegisterProfilePrefs(
                                 pref_defaults.loads_images_automatically);
   registry->RegisterBooleanPref(prefs::kWebKitPluginsEnabled,
                                 pref_defaults.plugins_enabled);
+  registry->RegisterBooleanPref(prefs::kWebKitEncryptedMediaEnabled,
+                                pref_defaults.encrypted_media_enabled);
   registry->RegisterBooleanPref(prefs::kWebKitDomPasteEnabled,
                                 pref_defaults.dom_paste_enabled);
   registry->RegisterBooleanPref(prefs::kWebKitTextAreasAreResizable,
@@ -580,10 +587,9 @@ void PrefsTabHelper::RegisterProfilePrefs(
     }
   }
 
-  // Register per-script font prefs that don't have defaults.
+// Register font prefs.  This is only configurable on desktop Chrome.
 #if !defined(OS_ANDROID)
   RegisterFontFamilyPrefs(registry, fonts_with_defaults);
-#endif
 
   RegisterLocalizedFontPref(registry, prefs::kWebKitDefaultFontSize,
                             IDS_DEFAULT_FONT_SIZE);
@@ -593,6 +599,7 @@ void PrefsTabHelper::RegisterProfilePrefs(
                             IDS_MINIMUM_FONT_SIZE);
   RegisterLocalizedFontPref(registry, prefs::kWebKitMinimumLogicalFontSize,
                             IDS_MINIMUM_LOGICAL_FONT_SIZE);
+#endif
 }
 
 // static
@@ -603,7 +610,7 @@ void PrefsTabHelper::GetServiceInstance() {
 void PrefsTabHelper::Observe(int type,
                              const content::NotificationSource& source,
                              const content::NotificationDetails& details) {
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && defined(ENABLE_THEMES)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
   if (type == chrome::NOTIFICATION_BROWSER_THEME_CHANGED) {
     UpdateRendererPreferences();
     return;

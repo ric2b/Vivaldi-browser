@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/test/mus/window_tree_client_private.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -55,6 +56,7 @@ WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
   host_->GetInputMethod()->OnFocus();
   host_->window()->AddObserver(this);
   host_->InitHost();
+  host_->window()->Show();
   return host_;
 }
 
@@ -63,7 +65,7 @@ void TestScreen::SetDeviceScaleFactor(float device_scale_factor) {
   gfx::Rect bounds_in_pixel(display.GetSizeInPixel());
   display.SetScaleAndBounds(device_scale_factor, bounds_in_pixel);
   display_list().UpdateDisplay(display);
-  host_->OnHostResized(bounds_in_pixel.size());
+  host_->OnHostResizedInPixels(bounds_in_pixel.size());
 }
 
 void TestScreen::SetDisplayRotation(display::Display::Rotation rotation) {

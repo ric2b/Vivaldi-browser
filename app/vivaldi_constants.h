@@ -1,7 +1,9 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
 // Defines all the command-line switches used by Vivaldi.
 
-#ifndef VIVALDI_APP_VIVALDI_CONSTANTS_H_
-#define VIVALDI_APP_VIVALDI_CONSTANTS_H_
+#ifndef APP_VIVALDI_CONSTANTS_H_
+#define APP_VIVALDI_CONSTANTS_H_
 
 #define VIVALDI_APP_ID "mpognobbkildjkofajifpdfhcoklimli"
 
@@ -22,13 +24,14 @@ extern const char kVivaldiNewTabURL[];
 extern const char kVivaldiReservedApiError[];
 
 extern const char kVivaldiUIScheme[];
-extern const char kVivaldiUINewTabHost[];
-extern const char kVivaldiUINewTabURL[];
 
 extern const char kVivaldiVersion[];
 
 extern const char kWindowExtDataKey[];
 
+extern const wchar_t kUpdateNotifierAutorunName[];
+extern const wchar_t kQuitAllUpdateNotifiersEventName[];
+
 }  // namespace vivaldi
 
-#endif  // VIVALDI_APP_VIVALDI_CONSTANTS_H_
+#endif  // APP_VIVALDI_CONSTANTS_H_

@@ -33,6 +33,8 @@
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/delegated_frame_host.h"
+#include "content/browser/renderer_host/delegated_frame_host_client_aura.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
@@ -106,6 +108,11 @@ using blink::WebTouchPoint;
 using ui::WebInputEventTraits;
 
 namespace content {
+
+void InstallDelegatedFrameHostClient(
+    RenderWidgetHostViewAura* render_widget_host_view,
+    std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client);
+
 namespace {
 
 class TestOverscrollDelegate : public OverscrollControllerDelegate {
@@ -252,9 +259,7 @@ class TestWindowObserver : public aura::WindowObserver {
 
 class FakeSurfaceObserver : public cc::SurfaceObserver {
  public:
-  void OnSurfaceCreated(const cc::SurfaceId& surface_id,
-                        const gfx::Size& frame,
-                        float device_scale_factor) override {}
+  void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override {}
 
   void OnSurfaceDamaged(const cc::SurfaceId& id, bool* changed) override {
     *changed = true;
@@ -323,30 +328,63 @@ class FakeWindowEventDispatcher : public aura::WindowEventDispatcher {
   size_t processed_touch_event_count_;
 };
 
+class FakeDelegatedFrameHostClientAura : public DelegatedFrameHostClientAura {
+ public:
+  explicit FakeDelegatedFrameHostClientAura(
+      RenderWidgetHostViewAura* render_widget_host_view)
+      : DelegatedFrameHostClientAura(render_widget_host_view) {}
+  ~FakeDelegatedFrameHostClientAura() override {}
+
+  void DisableResizeLock() { can_create_resize_lock_ = false; }
+
+ private:
+  // A lock that doesn't actually do anything to the compositor, and does not
+  // time out.
+  class FakeResizeLock : public ResizeLock {
+   public:
+    FakeResizeLock(const gfx::Size new_size, bool defer_compositor_lock)
+        : ResizeLock(new_size, defer_compositor_lock) {}
+  };
+
+  // DelegatedFrameHostClientAura:
+  std::unique_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
+      bool defer_compositor_lock) override {
+    gfx::Size desired_size =
+        render_widget_host_view()->GetNativeView()->bounds().size();
+    return std::unique_ptr<ResizeLock>(
+        new FakeResizeLock(desired_size, defer_compositor_lock));
+  }
+  bool DelegatedFrameCanCreateResizeLock() const override {
+    return can_create_resize_lock_;
+  }
+
+  bool can_create_resize_lock_ = true;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeDelegatedFrameHostClientAura);
+};
+
 class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
  public:
   FakeRenderWidgetHostViewAura(RenderWidgetHost* widget,
                                bool is_guest_view_hack)
       : RenderWidgetHostViewAura(widget, is_guest_view_hack),
-        can_create_resize_lock_(true) {}
+        delegated_frame_host_client_(
+            new FakeDelegatedFrameHostClientAura(this)) {
+    std::unique_ptr<DelegatedFrameHostClient> client(
+        delegated_frame_host_client_);
+    InstallDelegatedFrameHostClient(this, std::move(client));
+  }
+
+  ~FakeRenderWidgetHostViewAura() override {}
+
+  void DisableResizeLock() {
+    delegated_frame_host_client_->DisableResizeLock();
+  }
 
   void UseFakeDispatcher() {
     dispatcher_ = new FakeWindowEventDispatcher(window()->GetHost());
     std::unique_ptr<aura::WindowEventDispatcher> dispatcher(dispatcher_);
     aura::test::SetHostDispatcher(window()->GetHost(), std::move(dispatcher));
-  }
-
-  ~FakeRenderWidgetHostViewAura() override {}
-
-  std::unique_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
-      bool defer_compositor_lock) override {
-    gfx::Size desired_size = window()->bounds().size();
-    return std::unique_ptr<ResizeLock>(
-        new FakeResizeLock(desired_size, defer_compositor_lock));
-  }
-
-  bool DelegatedFrameCanCreateResizeLock() const override {
-    return can_create_resize_lock_;
   }
 
   void RunOnCompositingDidCommit() {
@@ -388,22 +426,18 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
 
   void ResetCompositor() { GetDelegatedFrameHost()->ResetCompositor(); }
 
-  // A lock that doesn't actually do anything to the compositor, and does not
-  // time out.
-  class FakeResizeLock : public ResizeLock {
-   public:
-    FakeResizeLock(const gfx::Size new_size, bool defer_compositor_lock)
-        : ResizeLock(new_size, defer_compositor_lock) {}
-  };
-
   const ui::MotionEventAura& pointer_state_for_test() {
     return event_handler()->pointer_state();
   }
 
-  bool can_create_resize_lock_;
   gfx::Size last_frame_size_;
   std::unique_ptr<cc::CopyOutputRequest> last_copy_request_;
   FakeWindowEventDispatcher* dispatcher_;
+
+ private:
+  FakeDelegatedFrameHostClientAura* delegated_frame_host_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeRenderWidgetHostViewAura);
 };
 
 // A layout manager that always resizes a child to the root window size.
@@ -491,6 +525,13 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
       : widget_host_uses_shutdown_to_destroy_(false),
         is_guest_view_hack_(false) {}
 
+  static void InstallDelegatedFrameHostClient(
+      RenderWidgetHostViewAura* render_widget_host_view,
+      std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client) {
+    render_widget_host_view->delegated_frame_host_client_ =
+        std::move(delegated_frame_host_client);
+  }
+
   void SetUpEnvironment() {
     ImageTransportFactory::InitializeForUnitTests(
         std::unique_ptr<ImageTransportFactory>(
@@ -498,7 +539,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     aura_test_helper_.reset(
         new aura::test::AuraTestHelper(base::MessageLoopForUI::current()));
     aura_test_helper_->SetUp(
-        ImageTransportFactory::GetInstance()->GetContextFactory());
+        ImageTransportFactory::GetInstance()->GetContextFactory(),
+        ImageTransportFactory::GetInstance()->GetContextFactoryPrivate());
     new wm::DefaultActivationClient(aura_test_helper_->root_window());
 
     browser_context_.reset(new TestBrowserContext);
@@ -512,8 +554,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     parent_host_ = new RenderWidgetHostImpl(delegates_.back().get(),
                                             process_host_, routing_id, false);
     delegates_.back()->set_widget_host(parent_host_);
-    parent_view_ = new RenderWidgetHostViewAura(parent_host_,
-                                                is_guest_view_hack_);
+    parent_view_ =
+        new RenderWidgetHostViewAura(parent_host_, is_guest_view_hack_);
     parent_view_->InitAsChild(nullptr);
     aura::client::ParentWindowWithContext(parent_view_->GetNativeView(),
                                           aura_test_helper_->root_window(),
@@ -617,8 +659,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
       return;
 
     const blink::WebInputEvent* event = std::get<0>(params);
-    SendTouchEventACK(event->type, ack_result,
-        WebInputEventTraits::GetUniqueTouchEventId(*event));
+    SendTouchEventACK(event->type(), ack_result,
+                      WebInputEventTraits::GetUniqueTouchEventId(*event));
   }
 
   const ui::MotionEventAura& pointer_state() {
@@ -688,6 +730,13 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraTest);
 };
+
+void InstallDelegatedFrameHostClient(
+    RenderWidgetHostViewAura* render_widget_host_view,
+    std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client) {
+  RenderWidgetHostViewAuraTest::InstallDelegatedFrameHostClient(
+      render_widget_host_view, std::move(delegated_frame_host_client));
+}
 
 // Helper class to instantiate RenderWidgetHostViewGuest which is backed
 // by an aura platform view.
@@ -1666,16 +1715,14 @@ cc::CompositorFrame MakeDelegatedFrame(float scale_factor,
                                        gfx::Rect damage) {
   cc::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
-  frame.delegated_frame_data.reset(new cc::DelegatedFrameData);
 
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
-  pass->SetNew(
-      cc::RenderPassId(1, 1), gfx::Rect(size), damage, gfx::Transform());
-  frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  pass->SetNew(1, gfx::Rect(size), damage, gfx::Transform());
+  frame.render_pass_list.push_back(std::move(pass));
   if (!size.IsEmpty()) {
     cc::TransferableResource resource;
     resource.id = 1;
-    frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+    frame.resource_list.push_back(std::move(resource));
   }
   return frame;
 }
@@ -1686,7 +1733,8 @@ cc::CompositorFrame MakeDelegatedFrame(float scale_factor,
 TEST_F(RenderWidgetHostViewAuraTest, ResettingCompositorReturnsResources) {
   FakeSurfaceObserver manager_observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  cc::SurfaceManager* manager = factory->GetSurfaceManager();
+  cc::SurfaceManager* manager =
+      factory->GetContextFactoryPrivate()->GetSurfaceManager();
   manager->AddObserver(&manager_observer);
 
   gfx::Size view_size(100, 100);
@@ -1753,7 +1801,8 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
 TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   FakeSurfaceObserver manager_observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  cc::SurfaceManager* manager = factory->GetSurfaceManager();
+  cc::SurfaceManager* manager =
+      factory->GetContextFactoryPrivate()->GetSurfaceManager();
   manager->AddObserver(&manager_observer);
 
   gfx::Size view_size(100, 100);
@@ -1918,7 +1967,8 @@ TEST_F(RenderWidgetHostViewAuraTest, MirrorLayers) {
   cc::SurfaceId id = view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
   if (id.is_valid()) {
     ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-    cc::SurfaceManager* manager = factory->GetSurfaceManager();
+    cc::SurfaceManager* manager =
+        factory->GetContextFactoryPrivate()->GetSurfaceManager();
     cc::Surface* surface = manager->GetSurfaceForId(id);
     EXPECT_TRUE(surface);
 
@@ -1940,7 +1990,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
   gfx::Size medium_size(40, 95);
 
   // Prevent the DelegatedFrameHost from skipping frames.
-  view_->can_create_resize_lock_ = false;
+  // XXX
+  view_->DisableResizeLock();
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -2074,7 +2125,7 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
         InputMsg_HandleInputEvent::Param params;
         InputMsg_HandleInputEvent::Read(msg, &params);
         const blink::WebInputEvent* event = std::get<0>(params);
-        EXPECT_EQ(blink::WebInputEvent::MouseMove, event->type);
+        EXPECT_EQ(blink::WebInputEvent::MouseMove, event->type());
         break;
       }
       case ViewMsg_ReclaimCompositorResources::ID:
@@ -4150,8 +4201,7 @@ class RenderWidgetHostViewAuraWithViewHarnessTest
     delete contents()->GetRenderViewHost()->GetWidget()->GetView();
     // This instance is destroyed in the TearDown method below.
     view_ = new RenderWidgetHostViewAura(
-        contents()->GetRenderViewHost()->GetWidget(),
-        false);
+        contents()->GetRenderViewHost()->GetWidget(), false);
   }
 
   void TearDown() override {
@@ -4680,5 +4730,20 @@ TEST_F(InputMethodStateAuraTest, SelectedTextCopiedToClipboard) {
   }
 }
 #endif
+
+// This test verifies that when any view on the page cancels an ongoing
+// composition, the RenderWidgetHostViewAura will receive the notification and
+// the current composition is canceled.
+TEST_F(InputMethodStateAuraTest, ImeCancelCompositionForAllViews) {
+  for (auto* view : views_) {
+    ActivateViewForTextInputManager(view, ui::TEXT_INPUT_TYPE_TEXT);
+    // There is no composition in the beginning.
+    EXPECT_FALSE(has_composition_text());
+    SetHasCompositionTextToTrue();
+    view->ImeCancelComposition();
+    // The composition must have been canceled.
+    EXPECT_FALSE(has_composition_text());
+  }
+}
 
 }  // namespace content

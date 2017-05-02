@@ -13,7 +13,7 @@
   <template>
     <style include="settings-shared">
       #about-menu[about-selected] {
-        color: var(--google-blue-500);
+        color: var(--google-blue-700);
       }
 
       iron-icon {
@@ -22,7 +22,7 @@
       }
 
       .iron-selected:not(.menu-trigger) > iron-icon {
-        fill: var(--google-blue-500);
+        fill: var(--google-blue-700);
       }
 
       .menu-trigger span {
@@ -38,7 +38,7 @@
           background: none;
         };
         color: var(--settings-nav-grey);
-        font-size: 13px;
+        font-size: 100%;
         padding: 0;
       }
 
@@ -65,13 +65,13 @@
       }
 
       paper-ripple {
-        color: var(--google-blue-500);
+        color: var(--google-blue-700);
         opacity: .5;
       }
 
       .page-menu paper-menu {
         --paper-menu-selected-item: {
-          color: var(--google-blue-500);
+          color: var(--google-blue-700);
           font-weight: 500;
         };
       }
@@ -80,9 +80,14 @@
         -webkit-padding-start: 24px;
         align-items: center;
         display: flex;
-        font-size: 13px;
+        font-size: 100%;
         font-weight: 500;
         min-height: 40px;
+        word-break: break-word;
+      }
+
+      .page-menu div iron-icon {
+        flex-shrink: 0;
       }
 
       .separator {
@@ -121,6 +126,13 @@
             <iron-icon icon="cr:search"></iron-icon>
             $i18n{searchPageTitle}
           </div>
+<if expr="chromeos">
+           <div data-path="/androidApps" on-tap="openPage_"
+               hidden="[[!showAndroidApps]]">
+             <iron-icon icon="settings:android"></iron-icon>
+             $i18n{androidAppsPageTitle}
+           </div>
+</if>
 <if expr="not chromeos">
           <div data-path="/defaultBrowser" on-tap="openPage_"
               hidden="[[!pageVisibility.defaultBrowser]]">

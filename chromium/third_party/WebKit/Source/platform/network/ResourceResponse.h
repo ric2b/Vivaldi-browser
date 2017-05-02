@@ -146,6 +146,21 @@ class PLATFORM_EXPORT ResourceResponse final {
   bool isNull() const { return m_isNull; }
   bool isHTTP() const;
 
+  // The URL of the resource. Note that if a service worker responded to the
+  // request for this resource, it may have fetched an entirely different URL
+  // and responded with that resource. wasFetchedViaServiceWorker() and
+  // originalURLViaServiceWorker() can be used to determine whether and how a
+  // service worker responded to the request. Example service worker code:
+  //
+  // onfetch = (event => {
+  //   if (event.request.url == 'https://abc.com')
+  //     event.respondWith(fetch('https://def.com'));
+  // });
+  //
+  // If this service worker responds to an "https://abc.com" request, then for
+  // the resulting ResourceResponse, url() is "https://abc.com",
+  // wasFetchedViaServiceWorker() is true, and originalURLViaServiceWorker() is
+  // "https://def.com".
   const KURL& url() const;
   void setURL(const KURL&);
 
@@ -263,6 +278,7 @@ class PLATFORM_EXPORT ResourceResponse final {
     m_wasAlternateProtocolAvailable = value;
   }
 
+  // See ServiceWorkerResponseInfo::was_fetched_via_service_worker.
   bool wasFetchedViaServiceWorker() const {
     return m_wasFetchedViaServiceWorker;
   }
@@ -275,6 +291,7 @@ class PLATFORM_EXPORT ResourceResponse final {
     m_wasFetchedViaForeignFetch = value;
   }
 
+  // See ServiceWorkerResponseInfo::was_fallback_required.
   bool wasFallbackRequiredByServiceWorker() const {
     return m_wasFallbackRequiredByServiceWorker;
   }
@@ -289,12 +306,17 @@ class PLATFORM_EXPORT ResourceResponse final {
     m_serviceWorkerResponseType = value;
   }
 
-  const KURL& originalURLViaServiceWorker() const {
-    return m_originalURLViaServiceWorker;
+  // See ServiceWorkerResponseInfo::url_list_via_service_worker.
+  const Vector<KURL>& urlListViaServiceWorker() const {
+    return m_urlListViaServiceWorker;
   }
-  void setOriginalURLViaServiceWorker(const KURL& url) {
-    m_originalURLViaServiceWorker = url;
+  void setURLListViaServiceWorker(const Vector<KURL>& urlList) {
+    m_urlListViaServiceWorker = urlList;
   }
+
+  // Returns the last URL of urlListViaServiceWorker if exists. Otherwise
+  // returns an empty URL.
+  KURL originalURLViaServiceWorker() const;
 
   const Vector<char>& multipartBoundary() const { return m_multipartBoundary; }
   void setMultipartBoundary(const char* bytes, size_t size) {
@@ -316,6 +338,13 @@ class PLATFORM_EXPORT ResourceResponse final {
     m_corsExposedHeaderNames = headerNames;
   }
 
+  bool didServiceWorkerNavigationPreload() const {
+    return m_didServiceWorkerNavigationPreload;
+  }
+  void setDidServiceWorkerNavigationPreload(bool value) {
+    m_didServiceWorkerNavigationPreload = value;
+  }
+
   int64_t responseTime() const { return m_responseTime; }
   void setResponseTime(int64_t responseTime) { m_responseTime = responseTime; }
 
@@ -328,7 +357,7 @@ class PLATFORM_EXPORT ResourceResponse final {
   void setRemotePort(unsigned short value) { m_remotePort = value; }
 
   long long encodedDataLength() const { return m_encodedDataLength; }
-  void addToEncodedDataLength(long long value);
+  void setEncodedDataLength(long long value);
 
   long long encodedBodyLength() const { return m_encodedBodyLength; }
   void addToEncodedBodyLength(long long value);
@@ -448,9 +477,9 @@ class PLATFORM_EXPORT ResourceResponse final {
   // The type of the response which was fetched by the ServiceWorker.
   WebServiceWorkerResponseType m_serviceWorkerResponseType;
 
-  // The original URL of the response which was fetched by the ServiceWorker.
-  // This may be empty if the response was created inside the ServiceWorker.
-  KURL m_originalURLViaServiceWorker;
+  // The URL list of the response which was fetched by the ServiceWorker.
+  // This is empty if the response was created inside the ServiceWorker.
+  Vector<KURL> m_urlListViaServiceWorker;
 
   // The cache name of the CacheStorage from where the response is served via
   // the ServiceWorker. Null if the response isn't from the CacheStorage.
@@ -459,6 +488,10 @@ class PLATFORM_EXPORT ResourceResponse final {
   // The headers that should be exposed according to CORS. Only guaranteed
   // to be set if the response was fetched by a ServiceWorker.
   Vector<String> m_corsExposedHeaderNames;
+
+  // True if service worker navigation preload was performed due to
+  // the request for this resource.
+  bool m_didServiceWorkerNavigationPreload;
 
   // The time at which the response headers were received.  For cached
   // responses, this time could be "far" in the past.
@@ -536,8 +569,9 @@ struct CrossThreadResourceResponseData {
   bool m_wasFetchedViaForeignFetch;
   bool m_wasFallbackRequiredByServiceWorker;
   WebServiceWorkerResponseType m_serviceWorkerResponseType;
-  KURL m_originalURLViaServiceWorker;
+  Vector<KURL> m_urlListViaServiceWorker;
   String m_cacheStorageCacheName;
+  bool m_didServiceWorkerNavigationPreload;
   int64_t m_responseTime;
   String m_remoteIPAddress;
   unsigned short m_remotePort;

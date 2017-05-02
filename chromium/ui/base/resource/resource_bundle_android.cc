@@ -113,7 +113,7 @@ std::string ResourceBundle::LoadLocaleResources(
     return std::string();
   }
 
-  locale_resources_data_.reset(data_pack.release());
+  locale_resources_data_ = std::move(data_pack);
   return app_locale;
 }
 
@@ -164,6 +164,11 @@ std::string GetPathForAndroidLocalePakWithinApk(const std::string& locale) {
     return std::string();
   }
   return base::android::ConvertJavaStringToUTF8(env, ret.obj());
+}
+
+float GetPrimaryDisplayScale() {
+  return Java_ResourceBundle_getPrimaryDisplayScale(
+      base::android::AttachCurrentThread());
 }
 
 }  // namespace ui

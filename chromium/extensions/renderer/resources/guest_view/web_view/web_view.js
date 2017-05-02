@@ -149,6 +149,12 @@ WebViewImpl.prototype.createGuest = function() {
     params['tab_id'] = this.attributes[
         WebViewConstants.ATTRIBUTE_TAB_ID].getValue();
   }
+
+  if (this.attributes[WebViewConstants.ATTRIBUTE_GUESTCONTENT_ID].getValue()) {
+    params['guestcontent_id'] = this.attributes[
+        WebViewConstants.ATTRIBUTE_GUESTCONTENT_ID].getValue();
+  }
+
   }
 
   this.guest.create(params, function() {

@@ -59,13 +59,6 @@ public class ThreadedInputConnectionFactoryTest {
         }
 
         @Override
-        protected Handler createHandler() {
-            mImeHandler = super.createHandler();
-            mImeShadowLooper = (ShadowLooper) ShadowExtractor.extract(mImeHandler.getLooper());
-            return mImeHandler;
-        }
-
-        @Override
         protected ThreadedInputConnectionProxyView createProxyView(Handler handler,
                 View containerView) {
             return mProxyView;
@@ -135,6 +128,8 @@ public class ThreadedInputConnectionFactoryTest {
 
         mFactory = new TestFactory(new InputMethodManagerWrapper(mContext));
         mFactory.onWindowFocusChanged(true);
+        mImeHandler = mFactory.getHandler();
+        mImeShadowLooper = (ShadowLooper) ShadowExtractor.extract(mImeHandler.getLooper());
 
         when(mContext.getSystemService(Context.INPUT_METHOD_SERVICE))
                 .thenReturn(mInputMethodManager);
@@ -151,7 +146,7 @@ public class ThreadedInputConnectionFactoryTest {
             @Override
             public InputConnection call() throws Exception {
                 return mFactory.initializeAndGet(
-                        mContainerView, mImeAdapter, 1, 0, 0, 0, mEditorInfo);
+                        mContainerView, mImeAdapter, 1, 0, 0, 0, 0, mEditorInfo);
             }
         };
         when(mProxyView.onCreateInputConnection(any(EditorInfo.class))).thenAnswer(
@@ -193,7 +188,7 @@ public class ThreadedInputConnectionFactoryTest {
             @Override
             public void run() {
                 assertNull(mFactory.initializeAndGet(
-                        mContainerView, mImeAdapter, 1, 0, 0, 0, mEditorInfo));
+                        mContainerView, mImeAdapter, 1, 0, 0, 0, 0, mEditorInfo));
             }
         });
     }

@@ -19,6 +19,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge.DropdownKeyValue;
 import org.chromium.ui.UiUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -56,22 +57,29 @@ class EditorDropdownField implements EditorFieldView {
         final List<DropdownKeyValue> dropdownKeyValues = mFieldModel.getDropdownKeyValues();
         mSelectedIndex = getDropdownIndex(dropdownKeyValues, mFieldModel.getValue());
 
-        ArrayAdapter<DropdownKeyValue> adapter;
+        final List<CharSequence> dropdownValues = getDropdownValues(dropdownKeyValues);
+        ArrayAdapter<CharSequence> adapter;
         if (mFieldModel.getHint() != null) {
             // Use the BillingAddressAdapter and pass it a hint to be displayed as default.
-            adapter = new BillingAddressAdapter<DropdownKeyValue>(
-                    context, R.layout.multiline_spinner_item, dropdownKeyValues,
-                    new DropdownKeyValue("", mFieldModel.getHint().toString()));
+            adapter = new BillingAddressAdapter<CharSequence>(context,
+                    R.layout.multiline_spinner_item, R.id.spinner_item, dropdownValues,
+                    mFieldModel.getHint().toString());
+            // Wrap the TextView in the dropdown popup around with a FrameLayout to display the text
+            // in multiple lines.
+            // Note that the TextView in the dropdown popup is displayed in a DropDownListView for
+            // the dropdown style Spinner and the DropDownListView sets to display TextView instance
+            // in a single line.
+            adapter.setDropDownViewResource(R.layout.payment_request_dropdown_item);
 
             // If no value is selected, select the hint entry which is the last item in the adapter.
             // Using getCount will not result in an out of bounds index because the hint value is
             // ommited in the count.
             if (mFieldModel.getValue() == null) mSelectedIndex = adapter.getCount();
         } else {
-            adapter = new ArrayAdapter<DropdownKeyValue>(
-                    context, R.layout.multiline_spinner_item, dropdownKeyValues);
+            adapter = new DropdownFieldAdapter<CharSequence>(
+                    context, R.layout.multiline_spinner_item, dropdownValues);
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         }
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 
         mDropdown = (Spinner) mLayout.findViewById(R.id.spinner);
         mDropdown.setTag(this);
@@ -148,6 +156,14 @@ class EditorDropdownField implements EditorFieldView {
         }
 
         mDropdown.setSelection(mSelectedIndex);
+    }
+
+    private static List<CharSequence> getDropdownValues(List<DropdownKeyValue> dropdownKeyValues) {
+        List<CharSequence> dropdownValues = new ArrayList<CharSequence>();
+        for (int i = 0; i < dropdownKeyValues.size(); i++) {
+            dropdownValues.add(dropdownKeyValues.get(i).getValue());
+        }
+        return dropdownValues;
     }
 
     private static int getDropdownIndex(

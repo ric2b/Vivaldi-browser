@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/base_paths.h"
 #include "base/bind.h"
@@ -17,12 +18,16 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
+#include "base/task_scheduler/post_task.h"
+#if defined(OS_MACOSX)
+#include "base/mac/authorization_util.h"
+#include "base/mac/scoped_authorizationref.h"
+#endif
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
-#include "base/threading/worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -75,6 +80,7 @@ enum RecoveryComponentEvent {
   RCE_ELEVATED_SUCCEEDED = 7,
   RCE_ELEVATED_SKIPPED = 8,
   RCE_COMPONENT_DOWNLOAD_ERROR = 9,
+  RCE_ELEVATED_UNKNOWN_RESULT = 10,
   RCE_COUNT
 };
 
@@ -91,33 +97,47 @@ bool SimulatingElevatedRecovery() {
 }
 #endif  // !defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
 
-base::CommandLine GetRecoveryInstallCommandLine(
+std::vector<std::string> GetRecoveryInstallArguments(
+    const base::DictionaryValue& manifest,
+    bool is_deferred_run,
+    const base::Version& version) {
+  std::vector<std::string> arguments;
+
+  // Add a flag for re-attempted install with elevated privilege so that the
+  // recovery executable can report back accordingly.
+  if (is_deferred_run)
+    arguments.push_back("/deferredrun");
+
+  std::string recovery_args;
+  if (manifest.GetStringASCII("x-recovery-args", &recovery_args))
+    arguments.push_back(recovery_args);
+  std::string recovery_add_version;
+  if (manifest.GetStringASCII("x-recovery-add-version",
+                              &recovery_add_version) &&
+      recovery_add_version == "yes") {
+    arguments.push_back("/version");
+    arguments.push_back(version.GetString());
+  }
+
+  return arguments;
+}
+
+base::CommandLine BuildRecoveryInstallCommandLine(
     const base::FilePath& command,
     const base::DictionaryValue& manifest,
     bool is_deferred_run,
     const base::Version& version) {
   base::CommandLine command_line(command);
 
-  // Add a flag to for re-attempted install with elevated privilege so that the
-  // recovery executable can report back accordingly.
-  if (is_deferred_run)
-    command_line.AppendArg("/deferredrun");
-
-  std::string arguments;
-  if (manifest.GetStringASCII("x-recovery-args", &arguments))
-    command_line.AppendArg(arguments);
-  std::string add_version;
-  if (manifest.GetStringASCII("x-recovery-add-version", &add_version) &&
-      add_version == "yes") {
-    std::string version_string = "/version ";
-    version_string += version.GetString();
-    command_line.AppendArg(version_string);
-  }
+  const auto arguments = GetRecoveryInstallArguments(
+      manifest, is_deferred_run, version);
+  for (const auto& arg : arguments)
+    command_line.AppendArg(arg);
 
   return command_line;
 }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 std::unique_ptr<base::DictionaryValue> ReadManifest(
     const base::FilePath& manifest) {
   JSONFileValueDeserializer deserializer(manifest);
@@ -158,7 +178,8 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
     return;
 
   const bool is_deferred_run = true;
-  const auto cmdline = GetRecoveryInstallCommandLine(
+#if defined(OS_WIN)
+  const auto cmdline = BuildRecoveryInstallCommandLine(
       main_file, *manifest, is_deferred_run, version);
 
   RecordRecoveryComponentUMAEvent(RCE_RUNNING_ELEVATED);
@@ -166,18 +187,61 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
   base::LaunchOptions options;
   options.start_hidden = true;
   base::Process process = base::LaunchElevatedProcess(cmdline, options);
+#elif defined(OS_MACOSX)
+  base::mac::ScopedAuthorizationRef authRef(
+      base::mac::AuthorizationCreateToRunAsRoot(nullptr));
+  if (!authRef.get()) {
+    RecordRecoveryComponentUMAEvent(RCE_ELEVATED_FAILED);
+    return;
+  }
 
-  base::WorkerPool::PostTask(
-      FROM_HERE,
-      base::Bind(&WaitForElevatedInstallToComplete, base::Passed(&process)),
-      true);
+  const auto arguments = GetRecoveryInstallArguments(
+      *manifest, is_deferred_run, version);
+  // Convert the arguments memory layout to the format required by
+  // ExecuteWithPrivilegesAndGetPID(): an array of string pointers
+  // that ends with a null pointer.
+  std::vector<const char*> raw_string_args;
+  for (const auto& arg : arguments)
+    raw_string_args.push_back(arg.c_str());
+  raw_string_args.push_back(nullptr);
+
+  pid_t pid = -1;
+  const OSStatus status = base::mac::ExecuteWithPrivilegesAndGetPID(
+      authRef.get(), main_file.value().c_str(), kAuthorizationFlagDefaults,
+      raw_string_args.data(), nullptr, &pid);
+  if (status != errAuthorizationSuccess) {
+    RecordRecoveryComponentUMAEvent(RCE_ELEVATED_FAILED);
+    return;
+  }
+
+  // The child process must print its PID in the first line of its STDOUT. See
+  // https://cs.chromium.org/chromium/src/base/mac/authorization_util.h?l=8
+  // for more details. When |pid| cannot be determined, we are not able to
+  // get process exit code, thus bail out early.
+  if (pid < 0) {
+    RecordRecoveryComponentUMAEvent(RCE_ELEVATED_UNKNOWN_RESULT);
+    return;
+  }
+  base::Process process = base::Process::Open(pid);
+#endif
+  // This task joins a process, hence .WithBaseSyncPrimitives().
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                     .WithPriority(base::TaskPriority::BACKGROUND)
+                     .WithBaseSyncPrimitives(),
+      base::Bind(&WaitForElevatedInstallToComplete, base::Passed(&process)));
 }
 
 void ElevatedInstallRecoveryComponent(const base::FilePath& installer_path) {
-  base::WorkerPool::PostTask(
-      FROM_HERE,
-      base::Bind(&DoElevatedInstallRecoveryComponent, installer_path),
-      true);
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                     .WithPriority(base::TaskPriority::BACKGROUND)
+                     .MayBlock(),
+      base::Bind(&DoElevatedInstallRecoveryComponent, installer_path));
 }
 #endif  // defined(OS_WIN)
 
@@ -268,7 +332,7 @@ void RecoveryComponentInstaller::OnUpdateError(int error) {
   NOTREACHED() << "Recovery component update error: " << error;
 }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 void WaitForInstallToComplete(base::Process process,
                               const base::FilePath& installer_folder,
                               PrefService* prefs) {
@@ -300,17 +364,23 @@ bool RecoveryComponentInstaller::RunInstallCommand(
   RecordRecoveryComponentUMAEvent(RCE_RUNNING_NON_ELEVATED);
 
   base::LaunchOptions options;
+#if defined(OS_WIN)
   options.start_hidden = true;
+#endif
   base::Process process = base::LaunchProcess(cmdline, options);
   if (!process.IsValid())
     return false;
 
   // Let worker pool thread wait for us so we don't block Chrome shutdown.
-  base::WorkerPool::PostTask(
-      FROM_HERE,
-      base::Bind(&WaitForInstallToComplete,
-                 base::Passed(&process), installer_folder, prefs_),
-      true);
+  // This task joins a process, hence .WithBaseSyncPrimitives().
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                     .WithPriority(base::TaskPriority::BACKGROUND)
+                     .WithBaseSyncPrimitives(),
+      base::Bind(&WaitForInstallToComplete, base::Passed(&process),
+                 installer_folder, prefs_));
 
   // Returns true regardless of install result since from updater service
   // perspective the install is done, even we may need to do elevated
@@ -394,7 +464,7 @@ bool RecoveryComponentInstaller::DoInstall(
 
   // Run the recovery component.
   const bool is_deferred_run = false;
-  const auto cmdline = GetRecoveryInstallCommandLine(
+  const auto cmdline = BuildRecoveryInstallCommandLine(
       main_file, manifest, is_deferred_run, current_version_);
 
   if (!RunInstallCommand(cmdline, path)) {
@@ -451,7 +521,7 @@ void RegisterPrefsForRecoveryComponent(PrefRegistrySimple* registry) {
 void AcceptedElevatedRecoveryInstall(PrefService* prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
   ElevatedInstallRecoveryComponent(
       prefs->GetFilePath(prefs::kRecoveryComponentUnpackPath));
 #endif  // OS_WIN

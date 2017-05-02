@@ -8,10 +8,9 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
-#include "components/arc/user_data/arc_user_data_service.h"
 
 namespace arc {
 
@@ -28,9 +27,8 @@ ArcEnterpriseReportingService::~ArcEnterpriseReportingService() {
 
 void ArcEnterpriseReportingService::OnInstanceReady() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  auto* instance =
-      arc_bridge_service()->enterprise_reporting()->GetInstanceForMethod(
-          "Init");
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service()->enterprise_reporting(), Init);
   DCHECK(instance);
   instance->Init(binding_.CreateInterfacePtrAndBind());
 }
@@ -42,8 +40,9 @@ void ArcEnterpriseReportingService::ReportManagementState(
 
   if (state == mojom::ManagementState::MANAGED_DO_LOST) {
     DCHECK(ArcServiceManager::Get());
-    ArcAuthService::Get()->RemoveArcData();
-    ArcAuthService::Get()->StopAndEnableArc();
+    VLOG(1) << "Management state lost. Removing ARC user data.";
+    ArcSessionManager::Get()->RemoveArcData();
+    ArcSessionManager::Get()->StopAndEnableArc();
   }
 }
 

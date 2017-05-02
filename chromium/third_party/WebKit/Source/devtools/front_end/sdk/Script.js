@@ -22,11 +22,12 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 /**
  * @implements {Common.ContentProvider}
  * @unrestricted
  */
-SDK.Script = class extends SDK.SDKObject {
+SDK.Script = class {
   /**
    * @param {!SDK.DebuggerModel} debuggerModel
    * @param {string} scriptId
@@ -56,7 +57,6 @@ SDK.Script = class extends SDK.SDKObject {
       isLiveEdit,
       sourceMapURL,
       hasSourceURL) {
-    super(debuggerModel.target());
     this.debuggerModel = debuggerModel;
     this.scriptId = scriptId;
     this.sourceURL = sourceURL;
@@ -64,6 +64,7 @@ SDK.Script = class extends SDK.SDKObject {
     this.columnOffset = startColumn;
     this.endLine = endLine;
     this.endColumn = endColumn;
+
     this._executionContextId = executionContextId;
     this.hash = hash;
     this._isContentScript = isContentScript;
@@ -118,6 +119,13 @@ SDK.Script = class extends SDK.SDKObject {
         script.target(), SDK.ConsoleMessage.MessageSource.JS, SDK.ConsoleMessage.MessageLevel.Warning, text, undefined,
         undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, script.scriptId);
     consoleModel.addMessage(msg);
+  }
+
+  /**
+   * @return {!SDK.Target}
+   */
+  target() {
+    return this.debuggerModel.target();
   }
 
   /**
@@ -289,7 +297,7 @@ SDK.Script = class extends SDK.SDKObject {
     if (this.sourceMapURL)
       return;
     this.sourceMapURL = sourceMapURL;
-    this.dispatchEventToListeners(SDK.Script.Events.SourceMapURLAdded, this.sourceMapURL);
+    this.debuggerModel.dispatchEventToListeners(SDK.DebuggerModel.Events.SourceMapURLAdded, this);
   }
 
   /**
@@ -330,12 +338,6 @@ SDK.Script = class extends SDK.SDKObject {
       }
     }
   }
-};
-
-/** @enum {symbol} */
-SDK.Script.Events = {
-  ScriptEdited: Symbol('ScriptEdited'),
-  SourceMapURLAdded: Symbol('SourceMapURLAdded')
 };
 
 SDK.Script.sourceURLRegex = /^[\040\t]*\/\/[@#] sourceURL=\s*(\S*?)\s*$/m;

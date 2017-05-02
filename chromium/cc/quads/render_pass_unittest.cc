@@ -22,14 +22,16 @@ namespace {
 struct RenderPassSize {
   // If you add a new field to this class, make sure to add it to the
   // Copy() tests.
-  RenderPassId id;
-  QuadList quad_list;
-  SharedQuadStateList shared_quad_state_list;
-  gfx::Transform transform_to_root_target;
+  int id;
   gfx::Rect output_rect;
   gfx::Rect damage_rect;
+  gfx::Transform transform_to_root_target;
+  FilterOperations filters;
+  FilterOperations background_filters;
   bool has_transparent_background;
   std::vector<std::unique_ptr<CopyOutputRequest>> copy_callbacks;
+  QuadList quad_list;
+  SharedQuadStateList shared_quad_state_list;
 };
 
 static void CompareRenderPassLists(const RenderPassList& expected_list,
@@ -44,6 +46,8 @@ static void CompareRenderPassLists(const RenderPassList& expected_list,
     EXPECT_EQ(expected->transform_to_root_target,
               actual->transform_to_root_target);
     EXPECT_EQ(expected->damage_rect, actual->damage_rect);
+    EXPECT_EQ(expected->filters, actual->filters);
+    EXPECT_EQ(expected->background_filters, expected->background_filters);
     EXPECT_EQ(expected->has_transparent_background,
               actual->has_transparent_background);
 
@@ -63,44 +67,41 @@ static void CompareRenderPassLists(const RenderPassList& expected_list,
 }
 
 TEST(RenderPassTest, CopyShouldBeIdenticalExceptIdAndQuads) {
-  RenderPassId id(3, 2);
+  int id = 3;
   gfx::Rect output_rect(45, 22, 120, 13);
   gfx::Transform transform_to_root =
       gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   gfx::Rect damage_rect(56, 123, 19, 43);
+  FilterOperations filters;
+  filters.Append(FilterOperation::CreateOpacityFilter(0.5));
+  FilterOperations background_filters;
+  background_filters.Append(FilterOperation::CreateInvertFilter(1.0));
   bool has_transparent_background = true;
 
   std::unique_ptr<RenderPass> pass = RenderPass::Create();
-  pass->SetAll(id,
-               output_rect,
-               damage_rect,
-               transform_to_root,
-               has_transparent_background);
+  pass->SetAll(id, output_rect, damage_rect, transform_to_root, filters,
+               background_filters, has_transparent_background);
   pass->copy_requests.push_back(CopyOutputRequest::CreateEmptyRequest());
 
   // Stick a quad in the pass, this should not get copied.
   SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(),
-                       gfx::Size(),
-                       gfx::Rect(),
-                       gfx::Rect(),
-                       false,
-                       1,
-                       SkXfermode::kSrcOver_Mode,
-                       0);
+  shared_state->SetAll(gfx::Transform(), gfx::Size(), gfx::Rect(), gfx::Rect(),
+                       false, 1, SkBlendMode::kSrcOver, 0);
 
   SolidColorDrawQuad* color_quad =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   color_quad->SetNew(pass->shared_quad_state_list.back(), gfx::Rect(),
                      gfx::Rect(), SkColor(), false);
 
-  RenderPassId new_id(63, 4);
+  int new_id = 63;
 
   std::unique_ptr<RenderPass> copy = pass->Copy(new_id);
   EXPECT_EQ(new_id, copy->id);
   EXPECT_EQ(pass->output_rect, copy->output_rect);
   EXPECT_EQ(pass->transform_to_root_target, copy->transform_to_root_target);
   EXPECT_EQ(pass->damage_rect, copy->damage_rect);
+  EXPECT_EQ(pass->filters, copy->filters);
+  EXPECT_EQ(pass->background_filters, copy->background_filters);
   EXPECT_EQ(pass->has_transparent_background, copy->has_transparent_background);
   EXPECT_EQ(0u, copy->quad_list.size());
 
@@ -114,30 +115,25 @@ TEST(RenderPassTest, CopyShouldBeIdenticalExceptIdAndQuads) {
 TEST(RenderPassTest, CopyAllShouldBeIdentical) {
   RenderPassList pass_list;
 
-  RenderPassId id(3, 2);
+  int id = 3;
   gfx::Rect output_rect(45, 22, 120, 13);
   gfx::Transform transform_to_root =
       gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   gfx::Rect damage_rect(56, 123, 19, 43);
+  FilterOperations filters;
+  filters.Append(FilterOperation::CreateOpacityFilter(0.5));
+  FilterOperations background_filters;
+  background_filters.Append(FilterOperation::CreateInvertFilter(1.0));
   bool has_transparent_background = true;
 
   std::unique_ptr<RenderPass> pass = RenderPass::Create();
-  pass->SetAll(id,
-               output_rect,
-               damage_rect,
-               transform_to_root,
-               has_transparent_background);
+  pass->SetAll(id, output_rect, damage_rect, transform_to_root, filters,
+               background_filters, has_transparent_background);
 
   // Two quads using one shared state.
   SharedQuadState* shared_state1 = pass->CreateAndAppendSharedQuadState();
-  shared_state1->SetAll(gfx::Transform(),
-                        gfx::Size(1, 1),
-                        gfx::Rect(),
-                        gfx::Rect(),
-                        false,
-                        1,
-                        SkXfermode::kSrcOver_Mode,
-                        0);
+  shared_state1->SetAll(gfx::Transform(), gfx::Size(1, 1), gfx::Rect(),
+                        gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   SolidColorDrawQuad* color_quad1 =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -153,14 +149,8 @@ TEST(RenderPassTest, CopyAllShouldBeIdentical) {
 
   // And two quads using another shared state.
   SharedQuadState* shared_state2 = pass->CreateAndAppendSharedQuadState();
-  shared_state2->SetAll(gfx::Transform(),
-                        gfx::Size(2, 2),
-                        gfx::Rect(),
-                        gfx::Rect(),
-                        false,
-                        1,
-                        SkXfermode::kSrcOver_Mode,
-                        0);
+  shared_state2->SetAll(gfx::Transform(), gfx::Size(2, 2), gfx::Rect(),
+                        gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   SolidColorDrawQuad* color_quad3 =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -175,30 +165,27 @@ TEST(RenderPassTest, CopyAllShouldBeIdentical) {
                       false);
 
   // A second render pass with a quad.
-  RenderPassId contrib_id(4, 1);
+  int contrib_id = 4;
   gfx::Rect contrib_output_rect(10, 15, 12, 17);
   gfx::Transform contrib_transform_to_root =
       gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   gfx::Rect contrib_damage_rect(11, 16, 10, 15);
+  FilterOperations contrib_filters;
+  contrib_filters.Append(FilterOperation::CreateSepiaFilter(0.5));
+  FilterOperations contrib_background_filters;
+  contrib_background_filters.Append(FilterOperation::CreateSaturateFilter(1));
   bool contrib_has_transparent_background = true;
 
   std::unique_ptr<RenderPass> contrib = RenderPass::Create();
-  contrib->SetAll(contrib_id,
-                  contrib_output_rect,
-                  contrib_damage_rect,
-                  contrib_transform_to_root,
+  contrib->SetAll(contrib_id, contrib_output_rect, contrib_damage_rect,
+                  contrib_transform_to_root, contrib_filters,
+                  contrib_background_filters,
                   contrib_has_transparent_background);
 
   SharedQuadState* contrib_shared_state =
       contrib->CreateAndAppendSharedQuadState();
-  contrib_shared_state->SetAll(gfx::Transform(),
-                               gfx::Size(2, 2),
-                               gfx::Rect(),
-                               gfx::Rect(),
-                               false,
-                               1,
-                               SkXfermode::kSrcOver_Mode,
-                               0);
+  contrib_shared_state->SetAll(gfx::Transform(), gfx::Size(2, 2), gfx::Rect(),
+                               gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   SolidColorDrawQuad* contrib_quad =
       contrib->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -211,8 +198,7 @@ TEST(RenderPassTest, CopyAllShouldBeIdentical) {
       base::WrapUnique(new RenderPassDrawQuad);
   pass_quad->SetNew(pass->shared_quad_state_list.back(), contrib_output_rect,
                     contrib_output_rect, contrib_id, 0, gfx::Vector2dF(),
-                    gfx::Size(), FilterOperations(), gfx::Vector2dF(),
-                    gfx::PointF(), FilterOperations());
+                    gfx::Size(), gfx::Vector2dF(), gfx::PointF());
 
   pass_list.push_back(std::move(pass));
   pass_list.push_back(std::move(contrib));
@@ -227,30 +213,25 @@ TEST(RenderPassTest, CopyAllShouldBeIdentical) {
 TEST(RenderPassTest, CopyAllWithCulledQuads) {
   RenderPassList pass_list;
 
-  RenderPassId id(3, 2);
+  int id = 3;
   gfx::Rect output_rect(45, 22, 120, 13);
   gfx::Transform transform_to_root =
       gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   gfx::Rect damage_rect(56, 123, 19, 43);
+  FilterOperations filters;
+  filters.Append(FilterOperation::CreateOpacityFilter(0.5));
+  FilterOperations background_filters;
+  background_filters.Append(FilterOperation::CreateInvertFilter(1.0));
   bool has_transparent_background = true;
 
   std::unique_ptr<RenderPass> pass = RenderPass::Create();
-  pass->SetAll(id,
-               output_rect,
-               damage_rect,
-               transform_to_root,
-               has_transparent_background);
+  pass->SetAll(id, output_rect, damage_rect, transform_to_root, filters,
+               background_filters, has_transparent_background);
 
   // A shared state with a quad.
   SharedQuadState* shared_state1 = pass->CreateAndAppendSharedQuadState();
-  shared_state1->SetAll(gfx::Transform(),
-                        gfx::Size(1, 1),
-                        gfx::Rect(),
-                        gfx::Rect(),
-                        false,
-                        1,
-                        SkXfermode::kSrcOver_Mode,
-                        0);
+  shared_state1->SetAll(gfx::Transform(), gfx::Size(1, 1), gfx::Rect(),
+                        gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   SolidColorDrawQuad* color_quad1 =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -260,36 +241,18 @@ TEST(RenderPassTest, CopyAllWithCulledQuads) {
 
   // A shared state with no quads, they were culled.
   SharedQuadState* shared_state2 = pass->CreateAndAppendSharedQuadState();
-  shared_state2->SetAll(gfx::Transform(),
-                        gfx::Size(2, 2),
-                        gfx::Rect(),
-                        gfx::Rect(),
-                        false,
-                        1,
-                        SkXfermode::kSrcOver_Mode,
-                        0);
+  shared_state2->SetAll(gfx::Transform(), gfx::Size(2, 2), gfx::Rect(),
+                        gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   // A second shared state with no quads.
   SharedQuadState* shared_state3 = pass->CreateAndAppendSharedQuadState();
-  shared_state3->SetAll(gfx::Transform(),
-                        gfx::Size(2, 2),
-                        gfx::Rect(),
-                        gfx::Rect(),
-                        false,
-                        1,
-                        SkXfermode::kSrcOver_Mode,
-                        0);
+  shared_state3->SetAll(gfx::Transform(), gfx::Size(2, 2), gfx::Rect(),
+                        gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   // A last shared state with a quad again.
   SharedQuadState* shared_state4 = pass->CreateAndAppendSharedQuadState();
-  shared_state4->SetAll(gfx::Transform(),
-                        gfx::Size(2, 2),
-                        gfx::Rect(),
-                        gfx::Rect(),
-                        false,
-                        1,
-                        SkXfermode::kSrcOver_Mode,
-                        0);
+  shared_state4->SetAll(gfx::Transform(), gfx::Size(2, 2), gfx::Rect(),
+                        gfx::Rect(), false, 1, SkBlendMode::kSrcOver, 0);
 
   SolidColorDrawQuad* color_quad2 =
       pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();

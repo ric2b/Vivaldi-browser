@@ -14,13 +14,11 @@ source_set("voice") {
   ]
 
   deps = [
+    "//base",
     "//components/pref_registry",
     "//components/prefs",
-  ]
-
-  public_deps = [
-    "//base",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/voice",
   ]
 }
 
@@ -33,11 +31,12 @@ source_set("prefs") {
   deps = [
     "//components/pref_registry",
     "//components/prefs",
-    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/voice",
   ]
 }
 
 source_set("tts") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "text_to_speech_listener.h",
     "text_to_speech_listener.mm",
@@ -54,7 +53,7 @@ source_set("tts") {
     "//components/prefs",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
-    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/voice",
     "//ios/web",
     "//net",
     "//third_party/google_toolbox_for_mac",
@@ -63,6 +62,7 @@ source_set("tts") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
 
   sources = [
@@ -71,14 +71,11 @@ source_set("unit_tests") {
   ]
 
   deps = [
+    ":tts",
     "//base",
     "//ios/web",
     "//ios/web:test_support",
     "//testing/gtest",
     "//third_party/google_toolbox_for_mac",
-  ]
-
-  public_deps = [
-    ":tts",
   ]
 }

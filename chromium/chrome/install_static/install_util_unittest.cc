@@ -39,65 +39,224 @@ TEST(InstallStaticTest, MatchPattern) {
 // Tests the install_static::GetSwitchValueFromCommandLine function.
 TEST(InstallStaticTest, GetSwitchValueFromCommandLineTest) {
   // Simple case with one switch.
-  std::string value =
-      GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe --type=bar", "type");
-  EXPECT_EQ("bar", value);
+  std::wstring value =
+      GetSwitchValueFromCommandLine(L"c:\\temp\\bleh.exe --type=bar", L"type");
+  EXPECT_EQ(L"bar", value);
 
   // Multiple switches with trailing spaces between them.
   value = GetSwitchValueFromCommandLine(
-      "c:\\temp\\bleh.exe --type=bar  --abc=def bleh", "abc");
-  EXPECT_EQ("def", value);
+      L"c:\\temp\\bleh.exe --type=bar  --abc=def bleh", L"abc");
+  EXPECT_EQ(L"def", value);
 
   // Multiple switches with trailing spaces and tabs between them.
   value = GetSwitchValueFromCommandLine(
-      "c:\\temp\\bleh.exe --type=bar \t\t\t --abc=def bleh", "abc");
-  EXPECT_EQ("def", value);
+      L"c:\\temp\\bleh.exe --type=bar \t\t\t --abc=def bleh", L"abc");
+  EXPECT_EQ(L"def", value);
 
   // Non existent switch.
   value = GetSwitchValueFromCommandLine(
-      "c:\\temp\\bleh.exe --foo=bar  --abc=def bleh", "type");
-  EXPECT_EQ("", value);
+      L"c:\\temp\\bleh.exe --foo=bar  --abc=def bleh", L"type");
+  EXPECT_EQ(L"", value);
 
   // Non existent switch.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe", "type");
-  EXPECT_EQ("", value);
+  value = GetSwitchValueFromCommandLine(L"c:\\temp\\bleh.exe", L"type");
+  EXPECT_EQ(L"", value);
 
   // Non existent switch.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe type=bar", "type");
-  EXPECT_EQ("", value);
+  value =
+      GetSwitchValueFromCommandLine(L"c:\\temp\\bleh.exe type=bar", L"type");
+  EXPECT_EQ(L"", value);
 
   // Trailing spaces after the switch.
   value = GetSwitchValueFromCommandLine(
-      "c:\\temp\\bleh.exe --type=bar      \t\t", "type");
-  EXPECT_EQ("bar", value);
+      L"c:\\temp\\bleh.exe --type=bar      \t\t", L"type");
+  EXPECT_EQ(L"bar", value);
 
   // Multiple switches with trailing spaces and tabs between them.
   value = GetSwitchValueFromCommandLine(
-      "c:\\temp\\bleh.exe --type=bar      \t\t --foo=bleh", "foo");
-  EXPECT_EQ("bleh", value);
+      L"c:\\temp\\bleh.exe --type=bar      \t\t --foo=bleh", L"foo");
+  EXPECT_EQ(L"bleh", value);
 
   // Nothing after a switch.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe --type=", "type");
+  value = GetSwitchValueFromCommandLine(L"c:\\temp\\bleh.exe --type=", L"type");
   EXPECT_TRUE(value.empty());
 
   // Whitespace after a switch.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe --type= ", "type");
+  value =
+      GetSwitchValueFromCommandLine(L"c:\\temp\\bleh.exe --type= ", L"type");
   EXPECT_TRUE(value.empty());
 
   // Just tabs after a switch.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe --type=\t\t\t",
-      "type");
+  value = GetSwitchValueFromCommandLine(L"c:\\temp\\bleh.exe --type=\t\t\t",
+                                        L"type");
   EXPECT_TRUE(value.empty());
+}
 
-  // Whitespace after the "=" before the value.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe --type= bar",
-      "type");
-  EXPECT_EQ("bar", value);
+TEST(InstallStaticTest, SpacesAndQuotesInCommandLineArguments) {
+  std::vector<std::wstring> tokenized;
 
-  // Tabs after the "=" before the value.
-  value = GetSwitchValueFromCommandLine("c:\\temp\\bleh.exe --type=\t\t\tbar",
-      "type");
-  EXPECT_EQ(value, "bar");
+  tokenized = TokenizeCommandLineToArray(L"\"C:\\a\\b.exe\"");
+  ASSERT_EQ(1u, tokenized.size());
+  EXPECT_EQ(L"C:\\a\\b.exe", tokenized[0]);
+
+  tokenized = TokenizeCommandLineToArray(L"x.exe");
+  ASSERT_EQ(1u, tokenized.size());
+  EXPECT_EQ(L"x.exe", tokenized[0]);
+
+  tokenized = TokenizeCommandLineToArray(L"\"c:\\with space\\something.exe\"");
+  ASSERT_EQ(1u, tokenized.size());
+  EXPECT_EQ(L"c:\\with space\\something.exe", tokenized[0]);
+
+  tokenized = TokenizeCommandLineToArray(L"\"C:\\a\\b.exe\" arg");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\a\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"arg", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(L"\"C:\\with space\\b.exe\" \"arg\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\with space\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"arg", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(L"\"C:\\a\\b.exe\" c:\\tmp\\");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\a\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"c:\\tmp\\", tokenized[1]);
+
+  tokenized =
+      TokenizeCommandLineToArray(L"\"C:\\a\\b.exe\" \"c:\\some file path\\\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\a\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"c:\\some file path\"", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"C:\\with space\\b.exe\" \\\\x\\\\ \\\\y\\\\");
+  ASSERT_EQ(3u, tokenized.size());
+  EXPECT_EQ(L"C:\\with space\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"\\\\x\\\\", tokenized[1]);
+  EXPECT_EQ(L"\\\\y\\\\", tokenized[2]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"C:\\with space\\b.exe\" \"\\\\space quoted\\\\\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\with space\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"\\\\space quoted\\", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"C:\\with space\\b.exe\" --stuff    -x -Y   \"c:\\some thing\\\"    "
+      L"weewaa    ");
+  ASSERT_EQ(5u, tokenized.size());
+  EXPECT_EQ(L"C:\\with space\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"--stuff", tokenized[1]);
+  EXPECT_EQ(L"-x", tokenized[2]);
+  EXPECT_EQ(L"-Y", tokenized[3]);
+  EXPECT_EQ(L"c:\\some thing\"    weewaa    ", tokenized[4]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"C:\\with space\\b.exe\" --stuff=\"d:\\stuff and things\"");
+  EXPECT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\with space\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"--stuff=d:\\stuff and things", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"C:\\with space\\b.exe\" \\\\\\\"\"");
+  EXPECT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"C:\\with space\\b.exe", tokenized[0]);
+  EXPECT_EQ(L"\\\"", tokenized[1]);
+}
+
+// Test cases from
+// https://blogs.msdn.microsoft.com/oldnewthing/20100917-00/?p=12833.
+TEST(InstallStaticTest, SpacesAndQuotesOldNewThing) {
+  std::vector<std::wstring> tokenized;
+
+  tokenized = TokenizeCommandLineToArray(L"program.exe \"hello there.txt\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"program.exe", tokenized[0]);
+  EXPECT_EQ(L"hello there.txt", tokenized[1]);
+
+  tokenized =
+      TokenizeCommandLineToArray(L"program.exe \"C:\\Hello there.txt\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"program.exe", tokenized[0]);
+  EXPECT_EQ(L"C:\\Hello there.txt", tokenized[1]);
+
+  tokenized =
+      TokenizeCommandLineToArray(L"program.exe \"hello\\\"there\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"program.exe", tokenized[0]);
+  EXPECT_EQ(L"hello\"there", tokenized[1]);
+
+  tokenized =
+      TokenizeCommandLineToArray(L"program.exe \"hello\\\\\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"program.exe", tokenized[0]);
+  EXPECT_EQ(L"hello\\", tokenized[1]);
+}
+
+// Test cases from
+// http://www.windowsinspired.com/how-a-windows-programs-splits-its-command-line-into-individual-arguments/.
+// These are mostly about the special handling of argv[0], which uses different
+// quoting than the rest of the arguments.
+TEST(InstallStaticTest, SpacesAndQuotesWindowsInspired) {
+  std::vector<std::wstring> tokenized;
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"They said \"you can't do this!\", didn't they?\"");
+  ASSERT_EQ(5u, tokenized.size());
+  EXPECT_EQ(L"They said ", tokenized[0]);
+  EXPECT_EQ(L"you", tokenized[1]);
+  EXPECT_EQ(L"can't", tokenized[2]);
+  EXPECT_EQ(L"do", tokenized[3]);
+  EXPECT_EQ(L"this!, didn't they?", tokenized[4]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"test.exe \"c:\\Path With Spaces\\Ending In Backslash\\\" Arg2 Arg3");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"test.exe", tokenized[0]);
+  EXPECT_EQ(L"c:\\Path With Spaces\\Ending In Backslash\" Arg2 Arg3",
+            tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"FinalProgram.exe \"first second \"\"embedded quote\"\" third\"");
+  ASSERT_EQ(4u, tokenized.size());
+  EXPECT_EQ(L"FinalProgram.exe", tokenized[0]);
+  EXPECT_EQ(L"first second \"embedded", tokenized[1]);
+  EXPECT_EQ(L"quote", tokenized[2]);
+  EXPECT_EQ(L"third", tokenized[3]);
+
+  tokenized = TokenizeCommandLineToArray(
+      L"\"F\"i\"r\"s\"t S\"e\"c\"o\"n\"d\" T\"h\"i\"r\"d\"");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"F", tokenized[0]);
+  EXPECT_EQ(L"irst Second Third", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(L"F\"\"ir\"s\"\"t \\\"Second Third\"");
+  ASSERT_EQ(3u, tokenized.size());
+  EXPECT_EQ(L"F\"\"ir\"s\"\"t", tokenized[0]);
+  EXPECT_EQ(L"\"Second", tokenized[1]);
+  EXPECT_EQ(L"Third", tokenized[2]);
+
+  tokenized = TokenizeCommandLineToArray(L"  Something Else");
+  ASSERT_EQ(3u, tokenized.size());
+  EXPECT_EQ(L"", tokenized[0]);
+  EXPECT_EQ(L"Something", tokenized[1]);
+  EXPECT_EQ(L"Else", tokenized[2]);
+
+  tokenized = TokenizeCommandLineToArray(L" Something Else");
+  ASSERT_EQ(3u, tokenized.size());
+  EXPECT_EQ(L"", tokenized[0]);
+  EXPECT_EQ(L"Something", tokenized[1]);
+  EXPECT_EQ(L"Else", tokenized[2]);
+
+  tokenized = TokenizeCommandLineToArray(L"\"123 456\tabc\\def\"ghi");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"123 456\tabc\\def", tokenized[0]);
+  EXPECT_EQ(L"ghi", tokenized[1]);
+
+  tokenized = TokenizeCommandLineToArray(L"123\"456\"\tabc");
+  ASSERT_EQ(2u, tokenized.size());
+  EXPECT_EQ(L"123\"456\"", tokenized[0]);
+  EXPECT_EQ(L"abc", tokenized[1]);
 }
 
 TEST(InstallStaticTest, BrowserProcessTest) {
@@ -108,20 +267,17 @@ TEST(InstallStaticTest, BrowserProcessTest) {
 
 class InstallStaticUtilTest
     : public ::testing::TestWithParam<
-          std::tuple<InstallConstantIndex, const char*, const char*>> {
+          std::tuple<InstallConstantIndex, const char*>> {
  protected:
   InstallStaticUtilTest() {
     InstallConstantIndex mode_index;
     const char* level;
-    const char* mode;
 
-    std::tie(mode_index, level, mode) = GetParam();
+    std::tie(mode_index, level) = GetParam();
 
     mode_ = &kInstallModes[mode_index];
     system_level_ = std::string(level) != "user";
     EXPECT_TRUE(!system_level_ || mode_->supports_system_level);
-    multi_install_ = std::string(mode) != "single";
-    EXPECT_TRUE(!multi_install_ || mode_->supports_multi_install);
     root_key_ = system_level_ ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
     nt_root_key_ = system_level_ ? nt::HKLM : nt::HKCU;
 
@@ -130,7 +286,6 @@ class InstallStaticUtilTest
     details->set_mode(mode_);
     details->set_channel(mode_->default_channel_name);
     details->set_system_level(system_level_);
-    details->set_multi_install(multi_install_);
     InstallDetails::SetForProcess(std::move(details));
 
     base::string16 path;
@@ -144,8 +299,6 @@ class InstallStaticUtilTest
   }
 
   bool system_level() const { return system_level_; }
-
-  bool multi_install() const { return multi_install_; }
 
   const wchar_t* default_channel() const { return mode_->default_channel_name; }
 
@@ -182,12 +335,7 @@ class InstallStaticUtilTest
       if (medium)
         result.append(L"Medium");
       result.push_back(L'\\');
-      if (multi_install_)
-        result.append(kBinariesAppGuid);
-      else
-        result.append(mode_->app_guid);
-    } else if (multi_install_) {
-      result.append(kBinariesPathName);
+      result.append(mode_->app_guid);
     } else {
       result.append(kProductPathName);
     }
@@ -199,7 +347,6 @@ class InstallStaticUtilTest
   nt::ROOT_KEY nt_root_key_ = nt::AUTO;
   const InstallConstants* mode_ = nullptr;
   bool system_level_ = false;
-  bool multi_install_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(InstallStaticUtilTest);
 };
@@ -264,42 +411,26 @@ TEST_P(InstallStaticUtilTest, UsageStatsPolicy) {
 }
 
 TEST_P(InstallStaticUtilTest, GetChromeChannelName) {
-  EXPECT_EQ(default_channel(), GetChromeChannelName(false));
-  std::wstring expected = default_channel();
-  if (multi_install()) {
-    if (expected.empty())
-      expected = L"m";
-    else
-      expected += L"-m";
-  }
-  EXPECT_EQ(expected, GetChromeChannelName(true));
-}
-
-TEST_P(InstallStaticUtilTest, GetDefaultUserDataDirectory) {
-  std::wstring user_data_directory;
-  ASSERT_TRUE(GetDefaultUserDataDirectory(&user_data_directory));
+  EXPECT_EQ(default_channel(), GetChromeChannelName());
 }
 
 #if defined(GOOGLE_CHROME_BUILD)
-// Stable supports multi-install at user and system levels.
+// Stable supports user and system levels.
 INSTANTIATE_TEST_CASE_P(Stable,
                         InstallStaticUtilTest,
                         testing::Combine(testing::Values(STABLE_INDEX),
-                                         testing::Values("user", "system"),
-                                         testing::Values("single", "multi")));
-// Canary is single-only at user level.
+                                         testing::Values("user", "system")));
+// Canary is only at user level.
 INSTANTIATE_TEST_CASE_P(Canary,
                         InstallStaticUtilTest,
                         testing::Combine(testing::Values(CANARY_INDEX),
-                                         testing::Values("user"),
-                                         testing::Values("single")));
+                                         testing::Values("user")));
 #else   // GOOGLE_CHROME_BUILD
-// Chromium supports multi-install at user and system levels.
+// Chromium supports user and system levels.
 INSTANTIATE_TEST_CASE_P(Chromium,
                         InstallStaticUtilTest,
                         testing::Combine(testing::Values(CHROMIUM_INDEX),
-                                         testing::Values("user", "system"),
-                                         testing::Values("single", "multi")));
+                                         testing::Values("user", "system")));
 #endif  // !GOOGLE_CHROME_BUILD
 
 }  // namespace install_static

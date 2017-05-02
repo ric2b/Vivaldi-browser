@@ -25,6 +25,18 @@ void DeleteServiceObjects(ClientServiceMap<ClientType, ServiceType>* id_map,
   id_map->Clear();
 }
 
+template <typename ClientType, typename ServiceType, typename ResultType>
+bool GetClientID(const ClientServiceMap<ClientType, ServiceType>* map,
+                 ResultType service_id,
+                 ResultType* result) {
+  ClientType client_id = 0;
+  if (!map->GetClientID(static_cast<ServiceType>(service_id), &client_id)) {
+    return false;
+  }
+  *result = static_cast<ResultType>(client_id);
+  return true;
+};
+
 }  // anonymous namespace
 
 PassthroughResources::PassthroughResources() {}
@@ -159,9 +171,9 @@ bool GLES2DecoderPassthroughImpl::Initialize(
 
   // Check for required extensions
   if (!feature_info_->feature_flags().angle_robust_client_memory ||
-      !feature_info_->feature_flags().chromium_bind_generates_resource ||
-      (feature_info_->IsWebGLContext() !=
-       feature_info_->feature_flags().angle_webgl_compatibility)) {
+      !feature_info_->feature_flags().chromium_bind_generates_resource) {
+    // TODO(geofflang): Verify that ANGLE_webgl_compatibility is enabled if this
+    // is a WebGL context (depends on crbug.com/671217).
     Destroy(true);
     return false;
   }
@@ -179,20 +191,17 @@ bool GLES2DecoderPassthroughImpl::Initialize(
   glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &num_texture_units);
 
   active_texture_unit_ = 0;
-  bound_textures_.resize(num_texture_units, 0);
+  bound_textures_[GL_TEXTURE_2D].resize(num_texture_units, 0);
+  bound_textures_[GL_TEXTURE_CUBE_MAP].resize(num_texture_units, 0);
+  if (feature_info_->IsWebGL2OrES3Context()) {
+    bound_textures_[GL_TEXTURE_2D_ARRAY].resize(num_texture_units, 0);
+    bound_textures_[GL_TEXTURE_3D].resize(num_texture_units, 0);
+  }
 
   if (group_->gpu_preferences().enable_gpu_driver_debug_logging &&
       feature_info_->feature_flags().khr_debug) {
     InitializeGLDebugLogging();
   }
-
-  emulated_extensions_.push_back("GL_CHROMIUM_lose_context");
-  emulated_extensions_.push_back("GL_CHROMIUM_pixel_transfer_buffer_object");
-  emulated_extensions_.push_back("GL_CHROMIUM_resource_safe");
-  emulated_extensions_.push_back("GL_CHROMIUM_strict_attribs");
-  emulated_extensions_.push_back("GL_CHROMIUM_texture_mailbox");
-  emulated_extensions_.push_back("GL_CHROMIUM_trace_marker");
-  BuildExtensionsString();
 
   set_initialized();
   return true;
@@ -427,10 +436,13 @@ gpu::gles2::ImageManager* GLES2DecoderPassthroughImpl::GetImageManager() {
 }
 
 bool GLES2DecoderPassthroughImpl::HasPendingQueries() const {
-  return false;
+  return !pending_queries_.empty();
 }
 
-void GLES2DecoderPassthroughImpl::ProcessPendingQueries(bool did_finish) {}
+void GLES2DecoderPassthroughImpl::ProcessPendingQueries(bool did_finish) {
+  // TODO(geofflang): If this returned an error, store it somewhere.
+  ProcessQueries(did_finish);
+}
 
 bool GLES2DecoderPassthroughImpl::HasMoreIdleWork() const {
   return false;
@@ -539,14 +551,285 @@ GLES2DecoderPassthroughImpl::GetTranslator(GLenum type) {
   return nullptr;
 }
 
-void GLES2DecoderPassthroughImpl::BuildExtensionsString() {
-  std::ostringstream combined_string_stream;
-  combined_string_stream << reinterpret_cast<const char*>(
-                                glGetString(GL_EXTENSIONS))
-                         << " ";
-  std::copy(emulated_extensions_.begin(), emulated_extensions_.end(),
-            std::ostream_iterator<std::string>(combined_string_stream, " "));
-  extension_string_ = combined_string_stream.str();
+void* GLES2DecoderPassthroughImpl::GetScratchMemory(size_t size) {
+  if (scratch_memory_.size() < size) {
+    scratch_memory_.resize(size, 0);
+  }
+  return scratch_memory_.data();
+}
+
+template <typename T>
+error::Error GLES2DecoderPassthroughImpl::PatchGetNumericResults(GLenum pname,
+                                                                 GLsizei length,
+                                                                 T* params) {
+  // Likely a gl error if no parameters were returned
+  if (length < 1) {
+    return error::kNoError;
+  }
+
+  switch (pname) {
+    case GL_NUM_EXTENSIONS:
+      // Currently handled on the client side.
+      params[0] = 0;
+      break;
+
+    case GL_TEXTURE_BINDING_2D:
+    case GL_TEXTURE_BINDING_CUBE_MAP:
+    case GL_TEXTURE_BINDING_2D_ARRAY:
+    case GL_TEXTURE_BINDING_3D:
+      if (!GetClientID(&resources_->texture_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_ARRAY_BUFFER_BINDING:
+    case GL_ELEMENT_ARRAY_BUFFER_BINDING:
+    case GL_PIXEL_PACK_BUFFER_BINDING:
+    case GL_PIXEL_UNPACK_BUFFER_BINDING:
+    case GL_TRANSFORM_FEEDBACK_BUFFER_BINDING:
+    case GL_COPY_READ_BUFFER_BINDING:
+    case GL_COPY_WRITE_BUFFER_BINDING:
+    case GL_UNIFORM_BUFFER_BINDING:
+      if (!GetClientID(&resources_->buffer_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_RENDERBUFFER_BINDING:
+      if (!GetClientID(&resources_->renderbuffer_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_SAMPLER_BINDING:
+      if (!GetClientID(&resources_->sampler_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_ACTIVE_PROGRAM:
+      if (!GetClientID(&resources_->program_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_FRAMEBUFFER_BINDING:
+    case GL_READ_FRAMEBUFFER_BINDING:
+      if (!GetClientID(&framebuffer_id_map_, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_TRANSFORM_FEEDBACK_BINDING:
+      if (!GetClientID(&transform_feedback_id_map_, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_VERTEX_ARRAY_BINDING:
+      if (!GetClientID(&vertex_array_id_map_, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  return error::kNoError;
+}
+
+// Instantiate templated functions
+#define INSTANTIATE_PATCH_NUMERIC_RESULTS(type)                              \
+  template error::Error GLES2DecoderPassthroughImpl::PatchGetNumericResults( \
+      GLenum, GLsizei, type*)
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLint);
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLint64);
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLfloat);
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLboolean);
+#undef INSTANTIATE_PATCH_NUMERIC_RESULTS
+
+error::Error
+GLES2DecoderPassthroughImpl::PatchGetFramebufferAttachmentParameter(
+    GLenum target,
+    GLenum attachment,
+    GLenum pname,
+    GLsizei length,
+    GLint* params) {
+  // Likely a gl error if no parameters were returned
+  if (length < 1) {
+    return error::kNoError;
+  }
+
+  switch (pname) {
+    // If the attached object name was requested, it needs to be converted back
+    // to a client id.
+    case GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME: {
+      GLint object_type = GL_NONE;
+      glGetFramebufferAttachmentParameterivEXT(
+          target, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
+          &object_type);
+
+      switch (object_type) {
+        case GL_TEXTURE:
+          if (!GetClientID(&resources_->texture_id_map, *params, params)) {
+            return error::kInvalidArguments;
+          }
+          break;
+
+        case GL_RENDERBUFFER:
+          if (!GetClientID(&resources_->renderbuffer_id_map, *params, params)) {
+            return error::kInvalidArguments;
+          }
+          break;
+
+        case GL_NONE:
+          // Default framebuffer, don't transform the result
+          break;
+
+        default:
+          NOTREACHED();
+          break;
+      }
+    } break;
+
+    default:
+      break;
+  }
+
+  return error::kNoError;
+}
+
+void GLES2DecoderPassthroughImpl::InsertError(GLenum error,
+                                              const std::string&) {
+  // Message ignored for now
+  errors_.insert(error);
+}
+
+GLenum GLES2DecoderPassthroughImpl::PopError() {
+  GLenum error = GL_NO_ERROR;
+  if (!errors_.empty()) {
+    error = *errors_.begin();
+    errors_.erase(errors_.begin());
+  }
+  return error;
+}
+
+bool GLES2DecoderPassthroughImpl::FlushErrors() {
+  bool had_error = false;
+  GLenum error = glGetError();
+  while (error != GL_NO_ERROR) {
+    errors_.insert(error);
+    had_error = true;
+    error = glGetError();
+  }
+  return had_error;
+}
+
+bool GLES2DecoderPassthroughImpl::IsEmulatedQueryTarget(GLenum target) const {
+  // GL_COMMANDS_COMPLETED_CHROMIUM is implemented in ANGLE
+  switch (target) {
+    case GL_COMMANDS_ISSUED_CHROMIUM:
+    case GL_LATENCY_QUERY_CHROMIUM:
+    case GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM:
+    case GL_GET_ERROR_QUERY_CHROMIUM:
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+error::Error GLES2DecoderPassthroughImpl::ProcessQueries(bool did_finish) {
+  while (!pending_queries_.empty()) {
+    const PendingQuery& query = pending_queries_.front();
+    GLint result_available = GL_FALSE;
+    GLuint64 result = 0;
+    switch (query.target) {
+      case GL_COMMANDS_ISSUED_CHROMIUM:
+        result_available = GL_TRUE;
+        result = GL_TRUE;
+        break;
+
+      case GL_LATENCY_QUERY_CHROMIUM:
+        result_available = GL_TRUE;
+        // TODO: time from when the query is ended?
+        result = (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds();
+        break;
+
+      case GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM:
+        // TODO: Use a fence and do a real async readback
+        result_available = GL_TRUE;
+        result = GL_TRUE;
+        break;
+
+      case GL_GET_ERROR_QUERY_CHROMIUM:
+        result_available = GL_TRUE;
+        FlushErrors();
+        result = PopError();
+        break;
+
+      default:
+        DCHECK(!IsEmulatedQueryTarget(query.target));
+        if (did_finish) {
+          result_available = GL_TRUE;
+        } else {
+          glGetQueryObjectiv(query.service_id, GL_QUERY_RESULT_AVAILABLE,
+                             &result_available);
+        }
+        if (result_available == GL_TRUE) {
+          glGetQueryObjectui64v(query.service_id, GL_QUERY_RESULT, &result);
+        }
+        break;
+    }
+
+    if (!result_available) {
+      break;
+    }
+
+    QuerySync* sync = GetSharedMemoryAs<QuerySync*>(
+        query.shm_id, query.shm_offset, sizeof(QuerySync));
+    if (sync == nullptr) {
+      pending_queries_.pop_front();
+      return error::kOutOfBounds;
+    }
+
+    // Mark the query as complete
+    sync->result = result;
+    base::subtle::Release_Store(&sync->process_count, query.submit_count);
+    pending_queries_.pop_front();
+  }
+
+  // If glFinish() has been called, all of our queries should be completed.
+  DCHECK(!did_finish || pending_queries_.empty());
+  return error::kNoError;
+}
+
+void GLES2DecoderPassthroughImpl::UpdateTextureBinding(GLenum target,
+                                                       GLuint client_id,
+                                                       GLuint service_id) {
+  size_t cur_texture_unit = active_texture_unit_;
+  const auto& target_bound_textures = bound_textures_.at(target);
+  for (size_t bound_texture_index = 0;
+       bound_texture_index < target_bound_textures.size();
+       bound_texture_index++) {
+    GLuint bound_client_id = target_bound_textures[bound_texture_index];
+    if (bound_client_id == client_id) {
+      // Update the active texture unit if needed
+      if (bound_texture_index != cur_texture_unit) {
+        glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + bound_texture_index));
+        cur_texture_unit = bound_texture_index;
+      }
+
+      // Update the texture binding
+      glBindTexture(target, service_id);
+    }
+  }
+
+  // Reset the active texture unit if it was changed
+  if (cur_texture_unit != active_texture_unit_) {
+    glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + active_texture_unit_));
+  }
 }
 
 #define GLES2_CMD_OP(name)                                               \

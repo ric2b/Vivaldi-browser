@@ -29,9 +29,6 @@ class MdHistoryUI : public content::WebUIController {
 
   static bool IsEnabled(Profile* profile);
 
-  // Reset the current list of features and explicitly set MD History enabled.
-  static void SetEnabledForTesting(bool enabled);
-
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   static base::RefCountedMemory* GetFaviconResourceBytes(
@@ -42,7 +39,7 @@ class MdHistoryUI : public content::WebUIController {
 
   static bool use_test_title_;
 
-  void CreateDataSource();
+  void UpdateDataSource();
 
   // Handler for the "menuPromoShown" message from the page. No arguments.
   void HandleMenuPromoShown(const base::ListValue* args);

@@ -18,12 +18,12 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "chrome/browser/android/search_geolocation/search_geolocation_service.h"
 #include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/browsing_data/local_data_container.h"
-#include "chrome/browser/browsing_data/origin_filter_builder.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -73,13 +73,6 @@ Profile* GetActiveUserProfile(bool is_incognito) {
 HostContentSettingsMap* GetHostContentSettingsMap(bool is_incognito) {
   return HostContentSettingsMapFactory::GetForProfile(
       GetActiveUserProfile(is_incognito));
-}
-
-bool ForwardPrimaryPatternCallback(
-    const base::Callback<bool(const ContentSettingsPattern&)> predicate,
-    const ContentSettingsPattern& primary_pattern,
-    const ContentSettingsPattern& secondary_pattern) {
-  return predicate.Run(primary_pattern);
 }
 
 typedef void (*InfoListInsertionFunction)(
@@ -211,42 +204,6 @@ static void SetGeolocationSettingForOrigin(
     jboolean is_incognito) {
   SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_GEOLOCATION, origin, embedder,
                       static_cast<ContentSetting>(value), is_incognito);
-}
-
-static void GetKeygenOrigins(JNIEnv* env,
-                             const JavaParamRef<jclass>& clazz,
-                             const JavaParamRef<jobject>& list) {
-  GetOrigins(env, CONTENT_SETTINGS_TYPE_KEYGEN,
-             &Java_WebsitePreferenceBridge_insertKeygenInfoIntoList, list,
-             false);
-}
-
-static jint GetKeygenSettingForOrigin(JNIEnv* env,
-                                      const JavaParamRef<jclass>& clazz,
-                                      const JavaParamRef<jstring>& origin,
-                                      const JavaParamRef<jstring>& embedder,
-                                      jboolean is_incognito) {
-  return GetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_KEYGEN, origin,
-                             embedder, is_incognito);
-}
-
-static void SetKeygenSettingForOrigin(JNIEnv* env,
-                                      const JavaParamRef<jclass>& clazz,
-                                      const JavaParamRef<jstring>& origin,
-                                      jint value,
-                                      jboolean is_incognito) {
-  // Here 'nullptr' indicates that keygen uses wildcard for embedder.
-  SetSettingForOrigin(env, CONTENT_SETTINGS_TYPE_KEYGEN, origin, nullptr,
-                      static_cast<ContentSetting>(value), is_incognito);
-}
-
-static jboolean GetKeygenBlocked(JNIEnv* env,
-                             const JavaParamRef<jclass>& clazz,
-                             const JavaParamRef<jobject>& java_web_contents) {
-  content::WebContents* web_contents =
-      content::WebContents::FromJavaWebContents(java_web_contents);
-  return TabSpecificContentSettings::FromWebContents(
-      web_contents)->IsContentBlocked(CONTENT_SETTINGS_TYPE_KEYGEN);
 }
 
 static void GetMidiOrigins(JNIEnv* env,
@@ -780,13 +737,39 @@ static void ClearCookieData(JNIEnv* env,
 static void ClearBannerData(JNIEnv* env,
                             const JavaParamRef<jclass>& clazz,
                             const JavaParamRef<jstring>& jorigin) {
-  OriginFilterBuilder builder(OriginFilterBuilder::WHITELIST);
-  builder.AddOrigin(url::Origin(GURL(ConvertJavaStringToUTF8(env, jorigin))));
-  GetHostContentSettingsMap(false)
-          ->ClearSettingsForOneTypeWithPredicate(
-              CONTENT_SETTINGS_TYPE_APP_BANNER,
-              base::Bind(&ForwardPrimaryPatternCallback,
-                         builder.BuildWebsiteSettingsPatternMatchesFilter()));
+  GetHostContentSettingsMap(false)->SetWebsiteSettingDefaultScope(
+      GURL(ConvertJavaStringToUTF8(env, jorigin)), GURL(),
+      CONTENT_SETTINGS_TYPE_APP_BANNER, std::string(), nullptr);
+}
+
+static jboolean ShouldUseDSEGeolocationSetting(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin,
+    jboolean is_incognito) {
+  SearchGeolocationService* search_helper =
+      SearchGeolocationService::Factory::GetForBrowserContext(
+          GetActiveUserProfile(is_incognito));
+  return search_helper &&
+         search_helper->UseDSEGeolocationSetting(
+             url::Origin(GURL(ConvertJavaStringToUTF8(env, jorigin))));
+}
+
+static jboolean GetDSEGeolocationSetting(JNIEnv* env,
+                                         const JavaParamRef<jclass>& clazz) {
+  SearchGeolocationService* search_helper =
+      SearchGeolocationService::Factory::GetForBrowserContext(
+          GetActiveUserProfile(false /* is_incognito */));
+  return search_helper->GetDSEGeolocationSetting();
+}
+
+static void SetDSEGeolocationSetting(JNIEnv* env,
+                                     const JavaParamRef<jclass>& clazz,
+                                     jboolean setting) {
+  SearchGeolocationService* search_helper =
+      SearchGeolocationService::Factory::GetForBrowserContext(
+          GetActiveUserProfile(false /* is_incognito */));
+  return search_helper->SetDSEGeolocationSetting(setting);
 }
 
 // Register native methods

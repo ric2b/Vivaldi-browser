@@ -32,9 +32,11 @@ importer.ImportRunner.prototype.importFromScanResult;
  *
  * @param {!ProgressCenter} progressCenter
  * @param {!importer.HistoryLoader} historyLoader
+ * @param {!importer.DispositionChecker.CheckerFunction} dispositionChecker
  * @param {!analytics.Tracker} tracker
  */
-importer.MediaImportHandler = function(progressCenter, historyLoader, tracker) {
+importer.MediaImportHandler = function(progressCenter, historyLoader,
+                                       dispositionChecker, tracker) {
   /** @private {!ProgressCenter} */
   this.progressCenter_ = progressCenter;
 
@@ -57,6 +59,9 @@ importer.MediaImportHandler = function(progressCenter, historyLoader, tracker) {
 
   /** @private {number} */
   this.nextTaskId_ = 0;
+
+  /** @private {!importer.DispositionChecker.CheckerFunction} */
+  this.getDisposition_ = dispositionChecker;
 };
 
 // The name of the Drive property used to tag imported files.  Used to look up
@@ -78,6 +83,7 @@ importer.MediaImportHandler.prototype.importFromScanResult =
       scanResult,
       directoryPromise,
       destination,
+      this.getDisposition_,
       this.tracker_);
 
   task.addObserver(this.onTaskProgress_.bind(this, task));
@@ -192,6 +198,7 @@ importer.MediaImportHandler.prototype.onFileImported_ =
  * @param {!importer.ScanResult} scanResult
  * @param {!Promise<!DirectoryEntry>} directoryPromise
  * @param {!importer.Destination} destination The logical destination.
+ * @param {!importer.DispositionChecker.CheckerFunction} dispositionChecker
  * @param {!analytics.Tracker} tracker
  */
 importer.MediaImportHandler.ImportTask = function(
@@ -200,6 +207,7 @@ importer.MediaImportHandler.ImportTask = function(
     scanResult,
     directoryPromise,
     destination,
+    dispositionChecker,
     tracker) {
 
   importer.TaskQueue.BaseTask.call(this, taskId);
@@ -227,6 +235,11 @@ importer.MediaImportHandler.ImportTask = function(
   /** @private {number} */
   this.processedBytes_ = 0;
 
+  /**
+   * Number of duplicate files found by the content hash check.
+   * @private {number} */
+  this.duplicateFilesCount_ = 0;
+
   /** @private {number} */
   this.remainingFilesCount_ = 0;
 
@@ -238,6 +251,9 @@ importer.MediaImportHandler.ImportTask = function(
 
   /** @private {number} */
   this.errorCount_ = 0;
+
+  /** @private {!importer.DispositionChecker.CheckerFunction} */
+  this.getDisposition_ = dispositionChecker;
 };
 
 /** @struct */
@@ -360,6 +376,8 @@ importer.MediaImportHandler.ImportTask.prototype.markDuplicatesImported_ =
 };
 
 /**
+ * Imports one file. If the file already exist in Drive, marks as imported.
+ *
  * @param {!DirectoryEntry} destinationDirectory
  * @param {function()} completionCallback Called after this operation is
  *     complete.
@@ -375,7 +393,22 @@ importer.MediaImportHandler.ImportTask.prototype.importOne_ =
     return;
   }
 
-  this.copy_(entry, destinationDirectory)
+  this.getDisposition_(entry, importer.Destination.GOOGLE_DRIVE,
+                       importer.ScanMode.CONTENT)
+      .then(
+          /**
+           * @param {!importer.Disposition} disposition The disposition
+           *     of the entry. Either some sort of dupe, or an original.
+           * @return {!Promise}
+           * @this {importer.DefaultMediaScanner}
+           */
+          function(disposition) {
+            if (disposition === importer.Disposition.ORIGINAL) {
+              return this.copy_(entry, destinationDirectory);
+            }
+            this.duplicateFilesCount_++;
+            this.markAsImported_(entry);
+          }.bind(this))
       // Regardless of the result of this copy, push on to the next file.
       .then(completionCallback)
       .catch(
@@ -554,6 +587,11 @@ importer.MediaImportHandler.ImportTask.prototype.sendImportStats_ =
   // Finally we want to report on the number of duplicates
   // that were identified during scanning.
   var totalDeduped = 0;
+  // The scan is run without content duplicate check.
+  // Instead, report the number of duplicated files found at import.
+  assert(scanStats.duplicates[importer.Disposition.CONTENT_DUPLICATE] === 0);
+  scanStats.duplicates[importer.Disposition.CONTENT_DUPLICATE] =
+      this.duplicateFilesCount_;
   Object.keys(scanStats.duplicates).forEach(
       /**
        * @param {!importer.Disposition} disposition

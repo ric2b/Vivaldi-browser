@@ -8,7 +8,6 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "chrome/browser/mac/keystone_glue.h"
@@ -238,11 +237,20 @@ void VersionUpdaterMac::UpdateStatus(NSDictionary* dictionary) {
   if (!status_callback_.is_null())
     status_callback_.Run(status, 0, message);
 
+  PromotionState promotion_state;
   if (!promote_callback_.is_null()) {
-    PromotionState promotion_state = PROMOTE_HIDDEN;
-    if (show_promote_button_)
-      promotion_state = enable_promote_button ? PROMOTE_ENABLED
-                                              : PROMOTE_DISABLED;
+    KeystoneGlue* keystone_glue = [KeystoneGlue defaultKeystoneGlue];
+    if (keystone_glue && [keystone_glue isAutoupdateEnabledForAllUsers]) {
+      promotion_state = PROMOTED;
+    } else {
+      promotion_state = PROMOTE_HIDDEN;
+
+      if (show_promote_button_) {
+        promotion_state = enable_promote_button ? PROMOTE_ENABLED
+                                                : PROMOTE_DISABLED;
+      }
+    }
+
     promote_callback_.Run(promotion_state);
   }
 }

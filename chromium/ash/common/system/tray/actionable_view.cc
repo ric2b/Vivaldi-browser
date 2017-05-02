@@ -42,13 +42,8 @@ ActionableView::~ActionableView() {
 }
 
 void ActionableView::OnPaintFocus(gfx::Canvas* canvas) {
-  gfx::Rect rect(GetFocusBounds());
-  rect.Inset(1, 1, 3, 2);
-  canvas->DrawSolidFocusRect(rect, kFocusBorderColor);
-}
-
-gfx::Rect ActionableView::GetFocusBounds() {
-  return GetLocalBounds();
+  gfx::RectF rect(GetLocalBounds());
+  canvas->DrawSolidFocusRect(rect, kFocusBorderColor, kFocusBorderThickness);
 }
 
 void ActionableView::HandlePerformActionResult(bool action_performed,

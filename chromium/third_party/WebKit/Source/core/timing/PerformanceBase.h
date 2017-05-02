@@ -35,7 +35,10 @@
 #include "core/CoreExport.h"
 #include "core/dom/DOMHighResTimeStamp.h"
 #include "core/events/EventTarget.h"
+#include "core/loader/FrameLoaderTypes.h"
 #include "core/timing/PerformanceEntry.h"
+#include "core/timing/PerformanceNavigationTiming.h"
+#include "core/timing/PerformancePaintTiming.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
@@ -45,10 +48,11 @@
 
 namespace blink {
 
-class DOMWindow;
 class ExceptionState;
+class LocalFrame;
 class PerformanceObserver;
 class PerformanceTiming;
+class ResourceResponse;
 class ResourceTimingInfo;
 class UserTiming;
 
@@ -56,6 +60,8 @@ using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 using PerformanceObservers = HeapListHashSet<Member<PerformanceObserver>>;
 
 class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
+  friend class PerformanceBaseTest;
+
  public:
   ~PerformanceBase() override;
 
@@ -69,12 +75,17 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   // http://www.w3.org/TR/hr-time-2/#privacy-security
   static double clampTimeResolution(double timeSeconds);
 
+  // monotonicTime needs to be no smaller than timeOrigin.
+  static DOMHighResTimeStamp monotonicTimeToDOMHighResTimeStamp(
+      double timeOrigin,
+      double monotonicTime);
+
   // Translate given platform monotonic time in seconds into a high resolution
   // DOMHighResTimeStamp in milliseconds. The result timestamp is relative to
   // document's time origin and has a time resolution that is safe for
-  // exposing to web.
+  // exposing to web. The monotonic time provided needs to be no smaller than
+  // document's time origin.
   DOMHighResTimeStamp monotonicTimeToDOMHighResTimeStamp(double) const;
-  double monotonicTimeToDOMHighResTimeStampInMillis(DOMHighResTimeStamp) const;
   DOMHighResTimeStamp now() const;
 
   double timeOrigin() const { return m_timeOrigin; }
@@ -88,16 +99,26 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void setResourceTimingBufferSize(unsigned);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(resourcetimingbufferfull);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitresourcetimingbufferfull);
 
   void clearFrameTimings();
   void setFrameTimingBufferSize(unsigned);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(frametimingbufferfull);
 
-  void addLongTaskTiming(double, double, const String&, DOMWindow*);
+  void addLongTaskTiming(double startTime,
+                         double endTime,
+                         const String& name,
+                         const String& culpritFrameSrc,
+                         const String& culpritFrameId,
+                         const String& culpritFrameName);
 
   void addResourceTiming(const ResourceTimingInfo&);
+
+  void addNavigationTiming(LocalFrame*);
+
+  void addFirstPaintTiming(double startTime);
+
+  void addFirstContentfulPaintTiming(double startTime);
 
   void mark(const String& markName, ExceptionState&);
   void clearMarks(const String& markName);
@@ -115,6 +136,23 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void resumeSuspendedObservers();
 
   DECLARE_VIRTUAL_TRACE();
+
+ private:
+  static PerformanceNavigationTiming::NavigationType getNavigationType(
+      NavigationType,
+      const Document*);
+
+  static bool allowsTimingRedirect(const Vector<ResourceResponse>&,
+                                   const ResourceResponse&,
+                                   const SecurityOrigin&,
+                                   ExecutionContext*);
+
+  static bool passesTimingAllowCheck(const ResourceResponse&,
+                                     const SecurityOrigin&,
+                                     const AtomicString&,
+                                     ExecutionContext*);
+
+  void addPaintTiming(PerformancePaintTiming::PaintType, double startTime);
 
  protected:
   explicit PerformanceBase(double timeOrigin);
@@ -134,6 +172,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   unsigned m_frameTimingBufferSize;
   PerformanceEntryVector m_resourceTimingBuffer;
   unsigned m_resourceTimingBufferSize;
+  Member<PerformanceEntry> m_navigationTiming;
   Member<UserTiming> m_userTiming;
 
   double m_timeOrigin;

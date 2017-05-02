@@ -33,9 +33,10 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "modules/ModulesExport.h"
 #include "modules/filesystem/DOMFileSystemBase.h"
 #include "modules/filesystem/EntriesCallback.h"
@@ -50,10 +51,11 @@ class BlobCallback;
 class FileEntry;
 class FileWriterCallback;
 
-class MODULES_EXPORT DOMFileSystem final : public DOMFileSystemBase,
-                                           public ScriptWrappable,
-                                           public ActiveScriptWrappable,
-                                           public ActiveDOMObject {
+class MODULES_EXPORT DOMFileSystem final
+    : public DOMFileSystemBase,
+      public ScriptWrappable,
+      public ActiveScriptWrappable<DOMFileSystem>,
+      public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(DOMFileSystem);
 
@@ -87,11 +89,7 @@ class MODULES_EXPORT DOMFileSystem final : public DOMFileSystemBase,
   // Schedule a callback. This should not cross threads (should be called on the
   // same context thread).
   static void scheduleCallback(ExecutionContext* executionContext,
-                               std::unique_ptr<ExecutionContextTask> task) {
-    DCHECK(executionContext->isContextThread());
-    executionContext->postTask(BLINK_FROM_HERE, std::move(task),
-                               taskNameForInstrumentation());
-  }
+                               std::unique_ptr<WTF::Closure> task);
 
   DECLARE_VIRTUAL_TRACE();
 

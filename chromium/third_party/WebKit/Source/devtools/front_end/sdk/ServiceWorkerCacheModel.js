@@ -31,8 +31,7 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
   static fromTarget(target) {
     if (!target.hasBrowserCapability())
       return null;
-    var instance =
-        /** @type {?SDK.ServiceWorkerCacheModel} */ (target.model(SDK.ServiceWorkerCacheModel));
+    var instance = target.model(SDK.ServiceWorkerCacheModel);
     if (!instance)
       instance = new SDK.ServiceWorkerCacheModel(target, SDK.SecurityOriginManager.fromTarget(target));
     return instance;
@@ -235,14 +234,14 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
    * @param {!SDK.ServiceWorkerCacheModel.Cache} cache
    */
   _cacheAdded(cache) {
-    this.dispatchEventToListeners(SDK.ServiceWorkerCacheModel.Events.CacheAdded, cache);
+    this.dispatchEventToListeners(SDK.ServiceWorkerCacheModel.Events.CacheAdded, {model: this, cache: cache});
   }
 
   /**
    * @param {!SDK.ServiceWorkerCacheModel.Cache} cache
    */
   _cacheRemoved(cache) {
-    this.dispatchEventToListeners(SDK.ServiceWorkerCacheModel.Events.CacheRemoved, cache);
+    this.dispatchEventToListeners(SDK.ServiceWorkerCacheModel.Events.CacheRemoved, {model: this, cache: cache});
   }
 
   /**

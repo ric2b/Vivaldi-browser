@@ -128,8 +128,9 @@ void WebEncryptedMediaClientImpl::CreateCdm(
     const blink::WebSecurityOrigin& security_origin,
     const CdmConfig& cdm_config,
     std::unique_ptr<blink::WebContentDecryptionModuleResult> result) {
-  WebContentDecryptionModuleImpl::Create(
-      cdm_factory_, key_system, security_origin, cdm_config, std::move(result));
+  WebContentDecryptionModuleImpl::Create(cdm_factory_, key_system.utf16(),
+                                         security_origin, cdm_config,
+                                         std::move(result));
 }
 
 void WebEncryptedMediaClientImpl::OnRequestSucceeded(
@@ -172,12 +173,10 @@ WebEncryptedMediaClientImpl::Reporter* WebEncryptedMediaClientImpl::GetReporter(
 
   // Return a per-frame singleton so that UMA reports will be once-per-frame.
   std::string uma_name = GetKeySystemNameForUMA(key_system_ascii);
-  Reporter* reporter = reporters_.get(uma_name);
-  if (!reporter) {
-    reporter = new Reporter(uma_name);
-    reporters_.add(uma_name, base::WrapUnique(reporter));
-  }
-  return reporter;
+  std::unique_ptr<Reporter>& reporter = reporters_[uma_name];
+  if (!reporter)
+    reporter = base::MakeUnique<Reporter>(uma_name);
+  return reporter.get();
 }
 
 }  // namespace media

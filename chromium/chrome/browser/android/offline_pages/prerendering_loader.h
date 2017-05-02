@@ -9,20 +9,15 @@
 
 #include "base/callback.h"
 #include "chrome/browser/android/offline_pages/prerender_adapter.h"
-#include "components/offline_pages/background/offliner.h"
-#include "components/offline_pages/snapshot_controller.h"
+#include "components/offline_pages/core/background/offliner.h"
+#include "components/offline_pages/core/snapshot_controller.h"
 
 class GURL;
 
 namespace content {
 class BrowserContext;
 class WebContents;
-class SessionStorageNamespace;
 }  // namespace content
-
-namespace gfx {
-class Size;
-}  // namespace gfx
 
 namespace offline_pages {
 
@@ -57,10 +52,6 @@ class PrerenderingLoader : public PrerenderAdapter::Observer,
   // This loader should also be responsible for stopping offline
   // prerenders when Chrome is transitioned to foreground.
   virtual void StopLoading();
-
-  // Returns whether prerendering is possible for this device's configuration
-  // and the browser context.
-  virtual bool CanPrerender();
 
   // Returns whether the loader is idle and able to accept new LoadPage
   // request.

@@ -20,8 +20,6 @@
 #include "components/safe_browsing_db/v4_update_protocol_manager.h"
 #include "url/gurl.h"
 
-using content::ResourceType;
-
 namespace safe_browsing {
 
 typedef unsigned ThreatSeverity;
@@ -33,7 +31,8 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // Create and return an instance of V4LocalDatabaseManager, if Finch trial
   // allows it; nullptr otherwise.
   static scoped_refptr<V4LocalDatabaseManager> Create(
-      const base::FilePath& base_path);
+      const base::FilePath& base_path,
+      ExtendedReportingLevelCallback extended_reporting_level_callback);
 
   //
   // SafeBrowsingDatabaseManager implementation
@@ -74,7 +73,9 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
  protected:
   // Construct V4LocalDatabaseManager.
   // Must be initialized by calling StartOnIOThread() before using.
-  V4LocalDatabaseManager(const base::FilePath& base_path);
+  V4LocalDatabaseManager(
+      const base::FilePath& base_path,
+      ExtendedReportingLevelCallback extended_reporting_level_callback);
 
   ~V4LocalDatabaseManager() override;
 
@@ -269,6 +270,10 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
   // Whether the service is running.
   bool enabled_;
+
+  // Callback to get the current extended reporting level. Needed by the update
+  // manager.
+  ExtendedReportingLevelCallback extended_reporting_level_callback_;
 
   // The list of stores to manage (for hash prefixes and full hashes). Each
   // element contains the identifier for the store, the corresponding

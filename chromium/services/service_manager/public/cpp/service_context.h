@@ -103,6 +103,8 @@ class ServiceContext : public mojom::Service {
   void DestroyService();
 
  private:
+  friend class service_manager::Service;
+
   using InterfaceRegistryMap =
       std::map<InterfaceRegistry*, std::unique_ptr<InterfaceRegistry>>;
 
@@ -112,6 +114,16 @@ class ServiceContext : public mojom::Service {
   void OnConnect(const ServiceInfo& source_info,
                  mojom::InterfaceProviderRequest interfaces,
                  const OnConnectCallback& callback) override;
+  void OnBindInterface(
+      const ServiceInfo& source_info,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle interface_pipe,
+      const OnBindInterfaceCallback& callback) override;
+
+  void CallOnConnect(const ServiceInfo& source_info,
+                     const InterfaceProviderSpec& source_spec,
+                     const InterfaceProviderSpec& target_spec,
+                     mojom::InterfaceProviderRequest request);
 
   void OnConnectionError();
   void OnRegistryConnectionError(InterfaceRegistry* registry);

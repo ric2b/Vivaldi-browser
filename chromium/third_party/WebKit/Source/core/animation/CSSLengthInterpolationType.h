@@ -17,15 +17,15 @@ class CSSLengthInterpolationType : public CSSInterpolationType {
  public:
   CSSLengthInterpolationType(PropertyHandle);
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const StyleResolverState&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
                  double interpolationFraction) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   float effectiveZoom(const ComputedStyle&) const;

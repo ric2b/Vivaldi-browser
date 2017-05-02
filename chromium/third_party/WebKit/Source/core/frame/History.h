@@ -29,8 +29,8 @@
 #include "base/gtest_prod_util.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/loader/FrameLoaderTypes.h"
-#include "core/frame/DOMWindowProperty.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
@@ -38,13 +38,14 @@ namespace blink {
 
 class LocalFrame;
 class KURL;
-class ExecutionContext;
 class ExceptionState;
 class SecurityOrigin;
+class ScriptState;
 
+// This class corresponds to the History interface.
 class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
                                   public ScriptWrappable,
-                                  public DOMWindowProperty {
+                                  public DOMWindowClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(History);
 
@@ -54,9 +55,9 @@ class CORE_EXPORT History final : public GarbageCollectedFinalized<History>,
   unsigned length() const;
   SerializedScriptValue* state();
 
-  void back(ExecutionContext*);
-  void forward(ExecutionContext*);
-  void go(ExecutionContext*, int delta);
+  void back(ScriptState*);
+  void forward(ScriptState*);
+  void go(ScriptState*, int delta);
 
   void pushState(PassRefPtr<SerializedScriptValue> data,
                  const String& title,

@@ -87,6 +87,7 @@ ThreatSeverity GetThreatSeverity(const ListIdentifier& list_id) {
     case UNWANTED_SOFTWARE:
       return 1;
     case API_ABUSE:
+    case CLIENT_INCIDENT:
       return 2;
     default:
       NOTREACHED() << "Unexpected ThreatType encountered: "
@@ -128,17 +129,22 @@ V4LocalDatabaseManager::PendingCheck::~PendingCheck() {}
 
 // static
 scoped_refptr<V4LocalDatabaseManager> V4LocalDatabaseManager::Create(
-    const base::FilePath& base_path) {
+    const base::FilePath& base_path,
+    ExtendedReportingLevelCallback extended_reporting_level_callback) {
   if (!V4FeatureList::IsLocalDatabaseManagerEnabled()) {
     return nullptr;
   }
 
-  return make_scoped_refptr(new V4LocalDatabaseManager(base_path));
+  return make_scoped_refptr(
+      new V4LocalDatabaseManager(base_path, extended_reporting_level_callback));
 }
 
-V4LocalDatabaseManager::V4LocalDatabaseManager(const base::FilePath& base_path)
+V4LocalDatabaseManager::V4LocalDatabaseManager(
+    const base::FilePath& base_path,
+    ExtendedReportingLevelCallback extended_reporting_level_callback)
     : base_path_(base_path),
       enabled_(false),
+      extended_reporting_level_callback_(extended_reporting_level_callback),
       list_infos_(GetListInfos()),
       weak_factory_(this) {
   DCHECK(!base_path_.empty());
@@ -708,12 +714,13 @@ void V4LocalDatabaseManager::SetupDatabase() {
 void V4LocalDatabaseManager::SetupUpdateProtocolManager(
     net::URLRequestContextGetter* request_context_getter,
     const V4ProtocolConfig& config) {
-  V4UpdateCallback callback =
+  V4UpdateCallback update_callback =
       base::Bind(&V4LocalDatabaseManager::UpdateRequestCompleted,
                  weak_factory_.GetWeakPtr());
 
-  v4_update_protocol_manager_ =
-      V4UpdateProtocolManager::Create(request_context_getter, config, callback);
+  v4_update_protocol_manager_ = V4UpdateProtocolManager::Create(
+      request_context_getter, config, update_callback,
+      extended_reporting_level_callback_);
 }
 
 void V4LocalDatabaseManager::UpdateRequestCompleted(

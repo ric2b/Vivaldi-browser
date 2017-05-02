@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/snippets_internals_ui.h"
 
+#include "base/memory/ptr_util.h"
+#include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/snippets_internals_message_handler.h"
 #include "chrome/common/url_constants.h"
@@ -20,7 +22,7 @@ content::WebUIDataSource* CreateSnippetsInternalsHTMLSource() {
   source->AddResourcePath("snippets_internals.js", IDR_SNIPPETS_INTERNALS_JS);
   source->AddResourcePath("snippets_internals.css", IDR_SNIPPETS_INTERNALS_CSS);
   source->SetDefaultResource(IDR_SNIPPETS_INTERNALS_HTML);
-  source->DisableI18nAndUseGzipForAllPaths();
+  source->UseGzip(std::unordered_set<std::string>());
   return source;
 }
 
@@ -31,7 +33,9 @@ SnippetsInternalsUI::SnippetsInternalsUI(content::WebUI* web_ui)
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource::Add(profile, CreateSnippetsInternalsHTMLSource());
 
-  web_ui->AddMessageHandler(new SnippetsInternalsMessageHandler);
+  web_ui->AddMessageHandler(base::MakeUnique<SnippetsInternalsMessageHandler>(
+      ContentSuggestionsServiceFactory::GetInstance()->GetForProfile(profile),
+      profile->GetPrefs()));
 }
 
 SnippetsInternalsUI::~SnippetsInternalsUI() {}

@@ -9,8 +9,8 @@ import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.os.ResultReceiver;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwGLFunctor;
@@ -228,7 +228,7 @@ public class AwContentsGarbageCollectionTest extends AwTestBase {
         });
     }
 
-    private void gcAndCheckAllAwContentsDestroyed() throws InterruptedException {
+    private void gcAndCheckAllAwContentsDestroyed() {
         Runtime.getRuntime().gc();
 
         Criteria criteria = new Criteria() {

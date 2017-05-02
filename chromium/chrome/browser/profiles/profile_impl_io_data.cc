@@ -171,6 +171,8 @@ void ProfileImplIOData::Handle::Init(
   lazy_params->extensions_cookie_path = extensions_cookie_path;
   lazy_params->session_cookie_mode = session_cookie_mode;
   lazy_params->special_storage_policy = special_storage_policy;
+  lazy_params->domain_reliability_monitor =
+      std::move(domain_reliability_monitor);
 
   PrefService* pref_service = profile_->GetPrefs();
   lazy_params->http_server_properties_manager.reset(
@@ -188,11 +190,10 @@ void ProfileImplIOData::Handle::Init(
   io_data_->app_media_cache_max_size_ = media_cache_max_size;
 
   io_data_->predictor_.reset(predictor);
-  io_data_->domain_reliability_monitor_ = std::move(domain_reliability_monitor);
 
   io_data_->InitializeMetricsEnabledStateOnUIThread();
-  if (io_data_->domain_reliability_monitor_)
-    io_data_->domain_reliability_monitor_->MoveToNetworkThread();
+  if (io_data_->lazy_params_->domain_reliability_monitor)
+    io_data_->lazy_params_->domain_reliability_monitor->MoveToNetworkThread();
 
   io_data_->previews_io_data_ = base::MakeUnique<previews::PreviewsIOData>(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
@@ -378,10 +379,6 @@ void ProfileImplIOData::Handle::LazyInitialize() const {
   // below try to get the ResourceContext pointer.
   initialized_ = true;
   PrefService* pref_service = profile_->GetPrefs();
-  io_data_->session_startup_pref()->Init(
-      prefs::kRestoreOnStartup, pref_service);
-  io_data_->session_startup_pref()->MoveToThread(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   io_data_->safe_browsing_enabled()->Init(prefs::kSafeBrowsingEnabled,
       pref_service);
   io_data_->safe_browsing_enabled()->MoveToThread(
@@ -426,11 +423,15 @@ ProfileImplIOData::LazyParams::~LazyParams() {}
 ProfileImplIOData::ProfileImplIOData()
     : ProfileIOData(Profile::REGULAR_PROFILE),
       http_server_properties_manager_(NULL),
+      domain_reliability_monitor_(nullptr),
       app_cache_max_size_(0),
       app_media_cache_max_size_(0) {
 }
 
 ProfileImplIOData::~ProfileImplIOData() {
+  if (domain_reliability_monitor_)
+    domain_reliability_monitor_->Shutdown();
+
   DestroyResourceContext();
 
   if (media_request_context_)
@@ -459,13 +460,18 @@ void ProfileImplIOData::InitializeInternal(
   IOThread* const io_thread = profile_params->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
 
-  if (domain_reliability_monitor_) {
-    domain_reliability::DomainReliabilityMonitor* monitor =
-        domain_reliability_monitor_.get();
-    monitor->InitURLRequestContext(main_context);
-    monitor->AddBakedInConfigs();
-    monitor->SetDiscardUploads(!GetMetricsEnabledStateOnIOThread());
-    chrome_network_delegate->set_domain_reliability_monitor(monitor);
+  if (lazy_params_->domain_reliability_monitor) {
+    // Hold on to a raw pointer to call Shutdown() in ~ProfileImplIOData.
+    domain_reliability_monitor_ =
+        lazy_params_->domain_reliability_monitor.get();
+
+    domain_reliability_monitor_->InitURLRequestContext(main_context);
+    domain_reliability_monitor_->AddBakedInConfigs();
+    domain_reliability_monitor_->SetDiscardUploads(
+        !GetMetricsEnabledStateOnIOThread());
+
+    chrome_network_delegate->set_domain_reliability_monitor(
+        std::move(lazy_params_->domain_reliability_monitor));
   }
 
   ApplyProfileParamsToContext(main_context);
@@ -540,16 +546,16 @@ void ProfileImplIOData::InitializeInternal(
 
   // Install the Offline Page Interceptor.
 #if defined(OS_ANDROID)
-  request_interceptors.push_back(std::unique_ptr<net::URLRequestInterceptor>(
-      new offline_pages::OfflinePageRequestInterceptor(
-          previews_io_data_.get())));
+  request_interceptors.push_back(
+      base::MakeUnique<offline_pages::OfflinePageRequestInterceptor>(
+          previews_io_data_.get()));
 #endif
 
   // The data reduction proxy interceptor should be as close to the network
   // as possible.
   request_interceptors.insert(
       request_interceptors.begin(),
-      data_reduction_proxy_io_data()->CreateInterceptor().release());
+      data_reduction_proxy_io_data()->CreateInterceptor());
   main_context_storage->set_job_factory(SetUpJobFactoryDefaults(
       std::move(main_job_factory), std::move(request_interceptors),
       std::move(profile_params->protocol_handler_interceptor),
@@ -574,9 +580,8 @@ void ProfileImplIOData::InitializeInternal(
   // Create a media request context based on the main context, but using a
   // media cache.  It shares the same job factory as the main context.
   StoragePartitionDescriptor details(profile_path_, false);
-  media_request_context_.reset(InitializeMediaRequestContext(main_context,
-                                                             details));
-
+  media_request_context_.reset(
+      InitializeMediaRequestContext(main_context, details, "main_media"));
   lazy_params_.reset();
 }
 
@@ -704,7 +709,7 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   // as possible.
   request_interceptors.insert(
       request_interceptors.begin(),
-      data_reduction_proxy_io_data()->CreateInterceptor().release());
+      data_reduction_proxy_io_data()->CreateInterceptor());
 
   std::unique_ptr<net::URLRequestJobFactory> top_job_factory(
       SetUpJobFactoryDefaults(
@@ -716,12 +721,12 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   return context;
 }
 
-net::URLRequestContext*
-ProfileImplIOData::InitializeMediaRequestContext(
+net::URLRequestContext* ProfileImplIOData::InitializeMediaRequestContext(
     net::URLRequestContext* original_context,
-    const StoragePartitionDescriptor& partition_descriptor) const {
+    const StoragePartitionDescriptor& partition_descriptor,
+    const std::string& name) const {
   // Copy most state from the original context.
-  MediaRequestContext* context = new MediaRequestContext();
+  MediaRequestContext* context = new MediaRequestContext(name);
   context->CopyFrom(original_context);
 
   // For in-memory context, return immediately after creating the new
@@ -791,8 +796,8 @@ ProfileImplIOData::AcquireIsolatedMediaRequestContext(
     net::URLRequestContext* app_context,
     const StoragePartitionDescriptor& partition_descriptor) const {
   // We create per-app media contexts on demand, unlike the others above.
-  net::URLRequestContext* media_request_context =
-      InitializeMediaRequestContext(app_context, partition_descriptor);
+  net::URLRequestContext* media_request_context = InitializeMediaRequestContext(
+      app_context, partition_descriptor, "isolated_media");
   DCHECK(media_request_context);
   return media_request_context;
 }

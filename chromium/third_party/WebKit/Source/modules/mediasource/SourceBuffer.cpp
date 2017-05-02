@@ -50,7 +50,7 @@
 #include "modules/mediasource/MediaSource.h"
 #include "modules/mediasource/SourceBufferTrackBaseSupplement.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/WebSourceBuffer.h"
 #include "wtf/MathExtras.h"
 #include <limits>
@@ -116,8 +116,7 @@ SourceBuffer* SourceBuffer::create(
 SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> webSourceBuffer,
                            MediaSource* source,
                            GenericEventQueue* asyncEventQueue)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(source->getExecutionContext()),
+    : SuspendableObject(source->getExecutionContext()),
       m_webSourceBuffer(std::move(webSourceBuffer)),
       m_source(source),
       m_trackDefaults(TrackDefaultList::create()),
@@ -142,7 +141,6 @@ SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> webSourceBuffer,
   DCHECK(m_webSourceBuffer);
   DCHECK(m_source);
   DCHECK(m_source->mediaElement());
-  ThreadState::current()->registerPreFinalizer(this);
   m_audioTracks = AudioTrackList::create(*m_source->mediaElement());
   m_videoTracks = VideoTrackList::create(*m_source->mediaElement());
   m_webSourceBuffer->setClient(this);
@@ -269,12 +267,12 @@ void SourceBuffer::setTimestampOffset(double offset,
 }
 
 AudioTrackList& SourceBuffer::audioTracks() {
-  DCHECK(RuntimeEnabledFeatures::audioVideoTracksEnabled());
+  DCHECK(HTMLMediaElement::mediaTracksEnabledInternally());
   return *m_audioTracks;
 }
 
 VideoTrackList& SourceBuffer::videoTracks() {
-  DCHECK(RuntimeEnabledFeatures::audioVideoTracksEnabled());
+  DCHECK(HTMLMediaElement::mediaTracksEnabledInternally());
   return *m_videoTracks;
 }
 
@@ -569,7 +567,7 @@ void SourceBuffer::removedFromMediaSource() {
     abortIfUpdating();
   }
 
-  if (RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
+  if (HTMLMediaElement::mediaTracksEnabledInternally()) {
     DCHECK(m_source);
     if (m_source->mediaElement()->audioTracks().length() > 0 ||
         m_source->mediaElement()->videoTracks().length() > 0) {
@@ -592,7 +590,7 @@ double SourceBuffer::highestPresentationTimestamp() {
 }
 
 void SourceBuffer::removeMediaTracks() {
-  DCHECK(RuntimeEnabledFeatures::audioVideoTracksEnabled());
+  DCHECK(HTMLMediaElement::mediaTracksEnabledInternally());
   // Spec:
   // http://w3c.github.io/media-source/#widl-MediaSource-removeSourceBuffer-void-SourceBuffer-sourceBuffer
   DCHECK(m_source);
@@ -756,7 +754,7 @@ bool SourceBuffer::initializationSegmentReceived(
   DCHECK(m_source->mediaElement());
   DCHECK(m_updating);
 
-  if (!RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
+  if (!HTMLMediaElement::mediaTracksEnabledInternally()) {
     if (!m_firstInitializationSegmentReceived) {
       m_source->setSourceBufferActive(this, true);
       m_firstInitializationSegmentReceived = true;
@@ -774,11 +772,11 @@ bool SourceBuffer::initializationSegmentReceived(
   for (const MediaTrackInfo& trackInfo : newTracks) {
     const TrackBase* track = nullptr;
     if (trackInfo.trackType == WebMediaPlayer::AudioTrack) {
-      newAudioTracks.append(trackInfo);
+      newAudioTracks.push_back(trackInfo);
       if (m_firstInitializationSegmentReceived)
         track = findExistingTrackById(audioTracks(), trackInfo.id);
     } else if (trackInfo.trackType == WebMediaPlayer::VideoTrack) {
-      newVideoTracks.append(trackInfo);
+      newVideoTracks.push_back(trackInfo);
       if (m_firstInitializationSegmentReceived)
         track = findExistingTrackById(videoTracks(), trackInfo.id);
     } else {
@@ -1041,13 +1039,13 @@ void SourceBuffer::resume() {
   m_removeAsyncPartRunner->resume();
 }
 
-void SourceBuffer::contextDestroyed() {
+void SourceBuffer::contextDestroyed(ExecutionContext*) {
   m_appendBufferAsyncPartRunner->stop();
   m_removeAsyncPartRunner->stop();
 }
 
 ExecutionContext* SourceBuffer::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
 const AtomicString& SourceBuffer::interfaceName() const {
@@ -1215,7 +1213,7 @@ void SourceBuffer::appendBufferAsyncPart() {
   if (!appendSuccess) {
     m_pendingAppendData.clear();
     m_pendingAppendDataOffset = 0;
-    appendError(DecodeError);
+    appendError();
   } else {
     m_pendingAppendDataOffset += appendSize;
 
@@ -1271,8 +1269,8 @@ void SourceBuffer::removeAsyncPart() {
   scheduleEvent(EventTypeNames::updateend);
 }
 
-void SourceBuffer::appendError(AppendError err) {
-  BLINK_SBLOG << __func__ << " this=" << this << " AppendError=" << err;
+void SourceBuffer::appendError() {
+  BLINK_SBLOG << __func__ << " this=" << this;
   // Section 3.5.3 Append Error Algorithm
   // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#sourcebuffer-append-error
 
@@ -1292,12 +1290,7 @@ void SourceBuffer::appendError(AppendError err) {
 
   // 5. If decode error is true, then run the end of stream algorithm with the
   // error parameter set to "decode".
-  if (err == DecodeError) {
-    m_source->endOfStream("decode", ASSERT_NO_EXCEPTION);
-  } else {
-    DCHECK_EQ(err, NoDecodeError);
-    // Nothing else to do in this case.
-  }
+  m_source->endOfStream("decode", ASSERT_NO_EXCEPTION);
 }
 
 DEFINE_TRACE(SourceBuffer) {
@@ -1309,7 +1302,7 @@ DEFINE_TRACE(SourceBuffer) {
   visitor->trace(m_audioTracks);
   visitor->trace(m_videoTracks);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

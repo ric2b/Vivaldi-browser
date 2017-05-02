@@ -55,8 +55,7 @@ SurfacesInstance::SurfacesInstance()
   surface_factory_.reset(
       new cc::SurfaceFactory(frame_sink_id_, surface_manager_.get(), this));
 
-  std::unique_ptr<cc::BeginFrameSource> begin_frame_source(
-      new cc::StubBeginFrameSource);
+  begin_frame_source_.reset(new cc::StubBeginFrameSource);
   std::unique_ptr<cc::TextureMailboxDeleter> texture_mailbox_deleter(
       new cc::TextureMailboxDeleter(nullptr));
   std::unique_ptr<ParentOutputSurface> output_surface_holder(
@@ -65,12 +64,11 @@ SurfacesInstance::SurfacesInstance()
           DeferredGpuCommandService::GetInstance())));
   output_surface_ = output_surface_holder.get();
   std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
-      begin_frame_source.get(), nullptr,
-      output_surface_holder->capabilities().max_frames_pending));
+      nullptr, output_surface_holder->capabilities().max_frames_pending));
   display_.reset(new cc::Display(
       nullptr /* shared_bitmap_manager */,
       nullptr /* gpu_memory_buffer_manager */, settings, frame_sink_id_,
-      std::move(begin_frame_source), std::move(output_surface_holder),
+      begin_frame_source_.get(), std::move(output_surface_holder),
       std::move(scheduler), std::move(texture_mailbox_deleter)));
   display_->Initialize(this, surface_manager_.get());
   display_->SetVisible(true);
@@ -85,8 +83,7 @@ SurfacesInstance::~SurfacesInstance() {
   g_surfaces_instance = nullptr;
 
   DCHECK(child_ids_.empty());
-  if (root_id_.is_valid())
-    surface_factory_->Destroy(root_id_);
+  surface_factory_->EvictSurface();
 
   surface_manager_->InvalidateFrameSinkId(frame_sink_id_);
 }
@@ -115,8 +112,8 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   // Create a frame with a single SurfaceDrawQuad referencing the child
   // Surface and transformed using the given transform.
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  render_pass->SetAll(cc::RenderPassId(1, 1), gfx::Rect(viewport), clip,
-                      gfx::Transform(), false);
+  render_pass->SetNew(1, gfx::Rect(viewport), clip, gfx::Transform());
+  render_pass->has_transparent_background = false;
 
   cc::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
@@ -132,16 +129,12 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   surface_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_bounds),
                        gfx::Rect(quad_state->quad_layer_bounds), child_id);
 
-  std::unique_ptr<cc::DelegatedFrameData> delegated_frame(
-      new cc::DelegatedFrameData);
-  delegated_frame->render_pass_list.push_back(std::move(render_pass));
   cc::CompositorFrame frame;
-  frame.delegated_frame_data = std::move(delegated_frame);
+  frame.render_pass_list.push_back(std::move(render_pass));
   frame.metadata.referenced_surfaces = child_ids_;
 
   if (!root_id_.is_valid()) {
     root_id_ = surface_id_allocator_->GenerateId();
-    surface_factory_->Create(root_id_);
     display_->SetLocalFrameId(root_id_, 1.f);
   }
   surface_factory_->SubmitCompositorFrame(root_id_, std::move(frame),
@@ -169,8 +162,6 @@ void SurfacesInstance::RemoveChildId(const cc::SurfaceId& child_id) {
 
 void SurfacesInstance::SetEmptyRootFrame() {
   cc::CompositorFrame empty_frame;
-  empty_frame.delegated_frame_data =
-      base::WrapUnique(new cc::DelegatedFrameData);
   empty_frame.metadata.referenced_surfaces = child_ids_;
   surface_factory_->SubmitCompositorFrame(root_id_, std::move(empty_frame),
                                           cc::SurfaceFactory::DrawCallback());

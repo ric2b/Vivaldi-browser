@@ -98,7 +98,7 @@ void ReadDatabaseContents(LevelDBWrapper* db, DatabaseContents* contents) {
         continue;
       }
 
-      contents->file_metadata.push_back(metadata.release());
+      contents->file_metadata.push_back(std::move(metadata));
       continue;
     }
 
@@ -117,7 +117,7 @@ void ReadDatabaseContents(LevelDBWrapper* db, DatabaseContents* contents) {
                   "Failed to parse a Tracker");
         continue;
       }
-      contents->file_trackers.push_back(tracker.release());
+      contents->file_trackers.push_back(std::move(tracker));
       continue;
     }
   }
@@ -168,12 +168,11 @@ void RemoveUnreachableItemsFromDB(DatabaseContents* contents,
   }
 
   // Delete all unreachable trackers.
-  ScopedVector<FileTracker> reachable_trackers;
+  std::vector<std::unique_ptr<FileTracker>> reachable_trackers;
   for (size_t i = 0; i < contents->file_trackers.size(); ++i) {
-    FileTracker* tracker = contents->file_trackers[i];
+    std::unique_ptr<FileTracker>& tracker = contents->file_trackers[i];
     if (base::ContainsKey(visited_trackers, tracker->tracker_id())) {
-      reachable_trackers.push_back(tracker);
-      contents->file_trackers[i] = nullptr;
+      reachable_trackers.push_back(std::move(tracker));
     } else {
       PutFileTrackerDeletionToDB(tracker->tracker_id(), db);
     }
@@ -186,12 +185,11 @@ void RemoveUnreachableItemsFromDB(DatabaseContents* contents,
     referred_file_ids.insert(contents->file_trackers[i]->file_id());
 
   // Delete all unreferred metadata.
-  ScopedVector<FileMetadata> referred_file_metadata;
+  std::vector<std::unique_ptr<FileMetadata>> referred_file_metadata;
   for (size_t i = 0; i < contents->file_metadata.size(); ++i) {
-    FileMetadata* metadata = contents->file_metadata[i];
+    std::unique_ptr<FileMetadata>& metadata = contents->file_metadata[i];
     if (base::ContainsKey(referred_file_ids, metadata->file_id())) {
-      referred_file_metadata.push_back(metadata);
-      contents->file_metadata[i] = nullptr;
+      referred_file_metadata.push_back(std::move(metadata));
     } else {
       PutFileMetadataDeletionToDB(metadata->file_id(), db);
     }
@@ -238,12 +236,12 @@ void MetadataDatabaseIndex::Initialize(
   service_metadata_ = std::move(service_metadata);
 
   for (size_t i = 0; i < contents->file_metadata.size(); ++i)
-    StoreFileMetadata(base::WrapUnique(contents->file_metadata[i]));
-  contents->file_metadata.weak_clear();
+    StoreFileMetadata(std::move(contents->file_metadata[i]));
+  contents->file_metadata.clear();
 
   for (size_t i = 0; i < contents->file_trackers.size(); ++i)
-    StoreFileTracker(base::WrapUnique(contents->file_trackers[i]));
-  contents->file_trackers.weak_clear();
+    StoreFileTracker(std::move(contents->file_trackers[i]));
+  contents->file_trackers.clear();
 
   UMA_HISTOGRAM_COUNTS("SyncFileSystem.MetadataNumber", metadata_by_id_.size());
   UMA_HISTOGRAM_COUNTS("SyncFileSystem.TrackerNumber", tracker_by_id_.size());
@@ -262,9 +260,10 @@ void MetadataDatabaseIndex::RemoveUnreachableItems() {
 
 bool MetadataDatabaseIndex::GetFileMetadata(
     const std::string& file_id, FileMetadata* metadata) const {
-  FileMetadata* identified = metadata_by_id_.get(file_id);
-  if (!identified)
+  auto it = metadata_by_id_.find(file_id);
+  if (it == metadata_by_id_.end())
     return false;
+  FileMetadata* identified = it->second.get();
   if (metadata)
     metadata->CopyFrom(*identified);
   return true;
@@ -272,9 +271,10 @@ bool MetadataDatabaseIndex::GetFileMetadata(
 
 bool MetadataDatabaseIndex::GetFileTracker(int64_t tracker_id,
                                            FileTracker* tracker) const {
-  FileTracker* identified = tracker_by_id_.get(tracker_id);
-  if (!identified)
+  auto it = tracker_by_id_.find(tracker_id);
+  if (it == tracker_by_id_.end())
     return false;
+  FileTracker* identified = it->second.get();
   if (tracker)
     tracker->CopyFrom(*identified);
   return true;
@@ -289,7 +289,7 @@ void MetadataDatabaseIndex::StoreFileMetadata(
   }
 
   std::string file_id = metadata->file_id();
-  metadata_by_id_.set(file_id, std::move(metadata));
+  metadata_by_id_[file_id] = std::move(metadata);
 }
 
 void MetadataDatabaseIndex::StoreFileTracker(
@@ -301,9 +301,9 @@ void MetadataDatabaseIndex::StoreFileTracker(
   }
 
   int64_t tracker_id = tracker->tracker_id();
-  FileTracker* old_tracker = tracker_by_id_.get(tracker_id);
+  auto old_tracker_it = tracker_by_id_.find(tracker_id);
 
-  if (!old_tracker) {
+  if (old_tracker_it == tracker_by_id_.end()) {
     DVLOG(3) << "Adding new tracker: " << tracker->tracker_id()
              << " " << GetTrackerTitle(*tracker);
 
@@ -315,13 +315,14 @@ void MetadataDatabaseIndex::StoreFileTracker(
     DVLOG(3) << "Updating tracker: " << tracker->tracker_id()
              << " " << GetTrackerTitle(*tracker);
 
+    FileTracker* old_tracker = old_tracker_it->second.get();
     UpdateInAppIDIndex(*old_tracker, *tracker);
     UpdateInPathIndexes(*old_tracker, *tracker);
     UpdateInFileIDIndexes(*old_tracker, *tracker);
     UpdateInDirtyTrackerIndexes(*old_tracker, *tracker);
   }
 
-  tracker_by_id_.set(tracker_id, std::move(tracker));
+  tracker_by_id_[tracker_id] = std::move(tracker);
 }
 
 void MetadataDatabaseIndex::RemoveFileMetadata(const std::string& file_id) {
@@ -332,11 +333,12 @@ void MetadataDatabaseIndex::RemoveFileMetadata(const std::string& file_id) {
 void MetadataDatabaseIndex::RemoveFileTracker(int64_t tracker_id) {
   PutFileTrackerDeletionToDB(tracker_id, db_);
 
-  FileTracker* tracker = tracker_by_id_.get(tracker_id);
-  if (!tracker) {
+  auto tracker_it = tracker_by_id_.find(tracker_id);
+  if (tracker_it == tracker_by_id_.end()) {
     NOTREACHED();
     return;
   }
+  FileTracker* tracker = tracker_it->second.get();
 
   DVLOG(3) << "Removing tracker: "
            << tracker->tracker_id() << " " << GetTrackerTitle(*tracker);
@@ -491,27 +493,22 @@ int64_t MetadataDatabaseIndex::GetNextTrackerID() const {
 std::vector<std::string> MetadataDatabaseIndex::GetRegisteredAppIDs() const {
   std::vector<std::string> result;
   result.reserve(app_root_by_app_id_.size());
-  for (TrackerIDByAppID::const_iterator itr = app_root_by_app_id_.begin();
-       itr != app_root_by_app_id_.end(); ++itr)
-    result.push_back(itr->first);
+  for (const auto& pair : app_root_by_app_id_)
+    result.push_back(pair.first);
   return result;
 }
 
 std::vector<int64_t> MetadataDatabaseIndex::GetAllTrackerIDs() const {
   std::vector<int64_t> result;
-  for (TrackerByID::const_iterator itr = tracker_by_id_.begin();
-       itr != tracker_by_id_.end(); ++itr) {
-    result.push_back(itr->first);
-  }
+  for (const auto& pair : tracker_by_id_)
+    result.push_back(pair.first);
   return result;
 }
 
 std::vector<std::string> MetadataDatabaseIndex::GetAllMetadataIDs() const {
   std::vector<std::string> result;
-  for (MetadataByID::const_iterator itr = metadata_by_id_.begin();
-       itr != metadata_by_id_.end(); ++itr) {
-    result.push_back(itr->first);
-  }
+  for (const auto& pair : metadata_by_id_)
+    result.push_back(pair.first);
   return result;
 }
 

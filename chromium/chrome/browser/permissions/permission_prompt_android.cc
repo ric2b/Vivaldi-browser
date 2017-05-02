@@ -20,9 +20,11 @@ PermissionPromptAndroid::PermissionPromptAndroid(
 }
 
 PermissionPromptAndroid::~PermissionPromptAndroid() {
-  GroupedPermissionInfoBarDelegate* infobar_delegate =
-      static_cast<GroupedPermissionInfoBarDelegate*>(infobar_->delegate());
-  infobar_delegate->PermissionPromptDestroyed();
+  if (infobar_) {
+    GroupedPermissionInfoBarDelegate* infobar_delegate =
+        static_cast<GroupedPermissionInfoBarDelegate*>(infobar_->delegate());
+    infobar_delegate->PermissionPromptDestroyed();
+  }
 }
 
 void PermissionPromptAndroid::SetDelegate(Delegate* delegate) {
@@ -68,7 +70,6 @@ gfx::NativeWindow PermissionPromptAndroid::GetNativeWindow() {
 }
 
 void PermissionPromptAndroid::Closing() {
-  infobar_ = nullptr;
   if (delegate_)
     delegate_->Closing();
 }

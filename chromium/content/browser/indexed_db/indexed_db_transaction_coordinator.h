@@ -13,21 +13,22 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "content/browser/indexed_db/list_set.h"
+#include "content/common/content_export.h"
 
 namespace content {
 
 class IndexedDBTransaction;
 
 // Transactions are executed in the order the were created.
-class IndexedDBTransactionCoordinator {
+class CONTENT_EXPORT IndexedDBTransactionCoordinator {
  public:
   IndexedDBTransactionCoordinator();
   ~IndexedDBTransactionCoordinator();
 
   // Called by transactions as they start and finish.
-  void DidCreateTransaction(scoped_refptr<IndexedDBTransaction> transaction);
+  void DidCreateTransaction(IndexedDBTransaction* transaction);
+  void DidCreateObserverTransaction(IndexedDBTransaction* transaction);
   void DidFinishTransaction(IndexedDBTransaction* transaction);
 
   bool IsRunningVersionChangeTransaction() const;
@@ -40,6 +41,8 @@ class IndexedDBTransactionCoordinator {
   std::vector<const IndexedDBTransaction*> GetTransactions() const;
 
  private:
+  friend class IndexedDBTransactionCoordinatorTest;
+
   void ProcessQueuedTransactions();
   bool CanStartTransaction(IndexedDBTransaction* const transaction,
                            const std::set<int64_t>& locked_scope) const;
@@ -47,8 +50,8 @@ class IndexedDBTransactionCoordinator {
   // Transactions in different states are grouped below.
   // list_set is used to provide stable ordering; required by spec
   // for the queue, convenience for diagnostics for the rest.
-  list_set<scoped_refptr<IndexedDBTransaction>> queued_transactions_;
-  list_set<scoped_refptr<IndexedDBTransaction>> started_transactions_;
+  list_set<IndexedDBTransaction*> queued_transactions_;
+  list_set<IndexedDBTransaction*> started_transactions_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBTransactionCoordinator);
 };

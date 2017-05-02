@@ -39,7 +39,7 @@
 #include "core/dom/StyleEngine.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
-#include "core/style/StyleInheritedData.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/Histogram.h"
 
 namespace blink {
@@ -58,7 +58,7 @@ class LoadFontPromiseResolver final
     return new LoadFontPromiseResolver(faces, scriptState);
   }
 
-  void loadFonts(ExecutionContext*);
+  void loadFonts();
   ScriptPromise promise() { return m_resolver->promise(); }
 
   void notifyLoaded(FontFace*) override;
@@ -80,14 +80,14 @@ class LoadFontPromiseResolver final
   Member<ScriptPromiseResolver> m_resolver;
 };
 
-void LoadFontPromiseResolver::loadFonts(ExecutionContext* context) {
+void LoadFontPromiseResolver::loadFonts() {
   if (!m_numLoading) {
     m_resolver->resolve(m_fontFaces);
     return;
   }
 
   for (size_t i = 0; i < m_fontFaces.size(); i++)
-    m_fontFaces[i]->loadWithCallback(this, context);
+    m_fontFaces[i]->loadWithCallback(this);
 }
 
 void LoadFontPromiseResolver::notifyLoaded(FontFace* fontFace) {
@@ -113,7 +113,8 @@ DEFINE_TRACE(LoadFontPromiseResolver) {
 }
 
 FontFaceSet::FontFaceSet(Document& document)
-    : ActiveDOMObject(&document),
+    : Supplement<Document>(document),
+      SuspendableObject(&document),
       m_shouldFireLoadingEvent(false),
       m_isLoading(false),
       m_ready(
@@ -146,7 +147,7 @@ const AtomicString& FontFaceSet::interfaceName() const {
 }
 
 ExecutionContext* FontFaceSet::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
 AtomicString FontFaceSet::status() const {
@@ -195,7 +196,7 @@ void FontFaceSet::resume() {
   m_asyncRunner->resume();
 }
 
-void FontFaceSet::contextDestroyed() {
+void FontFaceSet::contextDestroyed(ExecutionContext*) {
   m_asyncRunner->stop();
 }
 
@@ -206,13 +207,13 @@ void FontFaceSet::beginFontLoading(FontFace* fontFace) {
 
 void FontFaceSet::notifyLoaded(FontFace* fontFace) {
   m_histogram.updateStatus(fontFace);
-  m_loadedFonts.append(fontFace);
+  m_loadedFonts.push_back(fontFace);
   removeFromLoadingFonts(fontFace);
 }
 
 void FontFaceSet::notifyError(FontFace* fontFace) {
   m_histogram.updateStatus(fontFace);
-  m_failedFonts.append(fontFace);
+  m_failedFonts.push_back(fontFace);
   removeFromLoadingFonts(fontFace);
 }
 
@@ -310,9 +311,9 @@ bool FontFaceSet::hasForBinding(ScriptState*,
 
 const HeapListHashSet<Member<FontFace>>& FontFaceSet::cssConnectedFontFaceList()
     const {
-  Document* d = document();
-  d->ensureStyleResolver();  // Flush pending style changes.
-  return d->styleEngine()
+  Document* document = this->document();
+  document->updateActiveStyle();
+  return document->styleEngine()
       .fontSelector()
       ->fontFaceCache()
       ->cssConnectedFontFaces();
@@ -395,7 +396,7 @@ ScriptPromise FontFaceSet::load(ScriptState* scriptState,
       LoadFontPromiseResolver::create(faces, scriptState);
   ScriptPromise promise = resolver->promise();
   // After this, resolver->promise() may return null.
-  resolver->loadFonts(getExecutionContext());
+  resolver->loadFonts();
   return promise;
 }
 
@@ -445,7 +446,7 @@ bool FontFaceSet::resolveFontStyle(const String& fontString, Font& font) {
   // CanvasRenderingContext2D.
   MutableStylePropertySet* parsedStyle =
       MutableStylePropertySet::create(HTMLStandardMode);
-  CSSParser::parseValue(parsedStyle, CSSPropertyFont, fontString, true, 0);
+  CSSParser::parseValue(parsedStyle, CSSPropertyFont, fontString, true);
   if (parsedStyle->isEmpty())
     return false;
 
@@ -467,6 +468,7 @@ bool FontFaceSet::resolveFontStyle(const String& fontString, Font& font) {
 
   style->font().update(style->font().getFontSelector());
 
+  document()->updateActiveStyle();
   document()->ensureStyleResolver().computeFont(style.get(), *parsedStyle);
 
   font = style->font();
@@ -535,9 +537,9 @@ FontFaceSetIterable::IterationSource* FontFaceSet::startIteration(
     fontFaces.reserveInitialCapacity(cssConnectedFaces.size() +
                                      m_nonCSSConnectedFaces.size());
     for (const auto& fontFace : cssConnectedFaces)
-      fontFaces.append(fontFace);
+      fontFaces.push_back(fontFace);
     for (const auto& fontFace : m_nonCSSConnectedFaces)
-      fontFaces.append(fontFace);
+      fontFaces.push_back(fontFace);
   }
   return new IterationSource(fontFaces);
 }
@@ -561,7 +563,7 @@ DEFINE_TRACE(FontFaceSet) {
   visitor->trace(m_asyncRunner);
   EventTargetWithInlineData::trace(visitor);
   Supplement<Document>::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
   FontFace::LoadFontCallback::trace(visitor);
 }
 

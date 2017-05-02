@@ -4,10 +4,11 @@ include_rules = [
   "+gpu/ipc/client",
   "+gpu/ipc/common",
   "+services/ui/gpu/interfaces",
+  "-services/ui/surfaces",
 ]
 
 specific_include_rules = {
-  "gpu_service_proxy.h": [
+  "gpu_host.h": [
     "+services/ui/gpu/gpu_main.h",
   ],
 }

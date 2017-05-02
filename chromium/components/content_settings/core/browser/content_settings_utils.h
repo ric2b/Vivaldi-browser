@@ -18,13 +18,9 @@ namespace base {
 class Value;
 }
 
-class GURL;
 class HostContentSettingsMap;
 
 namespace content_settings {
-
-class ProviderInterface;
-class RuleIterator;
 
 typedef std::pair<ContentSettingsPattern, ContentSettingsPattern> PatternPair;
 
@@ -85,6 +81,9 @@ std::unique_ptr<base::Value> ContentSettingToValue(ContentSetting setting);
 // handled by the renderer.
 void GetRendererContentSettingRules(const HostContentSettingsMap* map,
                                     RendererContentSettingRules* rules);
+
+// Returns true if setting |a| is more permissive than setting |b|.
+bool IsMorePermissive(ContentSetting a, ContentSetting b);
 
 }  // namespace content_settings
 

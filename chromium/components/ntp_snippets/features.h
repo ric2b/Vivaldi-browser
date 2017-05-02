@@ -5,9 +5,16 @@
 #ifndef COMPONENTS_NTP_SNIPPETS_FEATURES_H_
 #define COMPONENTS_NTP_SNIPPETS_FEATURES_H_
 
+#include <memory>
 #include <string>
 
 #include "base/feature_list.h"
+#include "components/ntp_snippets/category_rankers/category_ranker.h"
+#include "components/prefs/pref_service.h"
+
+namespace base {
+class Clock;
+}
 
 namespace ntp_snippets {
 
@@ -38,16 +45,30 @@ extern const base::Feature kIncreasedVisibility;
 // Feature to enable the Fetch More action
 extern const base::Feature kFetchMoreFeature;
 
-// Returns a feature param as an int instead of a string.
-int GetParamAsInt(const base::Feature& feature,
-                  const std::string& param_name,
-                  int default_value);
+// Feature to prefer AMP URLs over regular URLs when available.
+extern const base::Feature kPreferAmpUrlsFeature;
 
-// Returns a feature param as a bool instead of a string.
-// TODO(jkrcal): Use this function in other code in the ntp_snippets component.
-bool GetParamAsBool(const base::Feature& feature,
-                    const std::string& param_name,
-                    bool default_value);
+// Feature to choose a category ranker.
+extern const base::Feature kCategoryRanker;
+
+// Parameter for a kCategoryRanker feature flag.
+extern const char kCategoryRankerParameter[];
+// Possible values of the parameter above.
+extern const char kCategoryRankerConstantRanker[];
+extern const char kCategoryRankerClickBasedRanker[];
+
+enum class CategoryRankerChoice {
+  CONSTANT,
+  CLICK_BASED,
+};
+
+// Returns which CategoryRanker to use according to kCategoryRanker feature.
+CategoryRankerChoice GetSelectedCategoryRanker();
+
+// Builds a CategoryRanker according to kCategoryRanker feature.
+std::unique_ptr<CategoryRanker> BuildSelectedCategoryRanker(
+    PrefService* pref_service,
+    std::unique_ptr<base::Clock> clock);
 
 }  // namespace ntp_snippets
 

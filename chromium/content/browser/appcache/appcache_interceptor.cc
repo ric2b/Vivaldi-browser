@@ -13,6 +13,7 @@
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/loader/resource_message_filter.h"
+#include "content/browser/loader/resource_requester_info.h"
 #include "content/common/appcache_interfaces.h"
 #include "net/url_request/url_request.h"
 
@@ -31,13 +32,12 @@ AppCacheRequestHandler* AppCacheInterceptor::GetHandler(
       request->GetUserData(&kHandlerKey));
 }
 
-void AppCacheInterceptor::SetExtraRequestInfo(
-    net::URLRequest* request,
-    AppCacheServiceImpl* service,
-    int process_id,
-    int host_id,
-    ResourceType resource_type,
-    bool should_reset_appcache) {
+void AppCacheInterceptor::SetExtraRequestInfo(net::URLRequest* request,
+                                              AppCacheServiceImpl* service,
+                                              int process_id,
+                                              int host_id,
+                                              ResourceType resource_type,
+                                              bool should_reset_appcache) {
   if (!service || (host_id == kAppCacheNoHostId))
     return;
 
@@ -51,6 +51,15 @@ void AppCacheInterceptor::SetExtraRequestInfo(
   if (!host)
     return;
 
+  SetExtraRequestInfoForHost(request, host, resource_type,
+                             should_reset_appcache);
+}
+
+void AppCacheInterceptor::SetExtraRequestInfoForHost(
+    net::URLRequest* request,
+    AppCacheHost* host,
+    ResourceType resource_type,
+    bool should_reset_appcache) {
   // Create a handler for this request and associate it with the request.
   AppCacheRequestHandler* handler =
       host->CreateRequestHandler(request, resource_type, should_reset_appcache);
@@ -81,11 +90,13 @@ void AppCacheInterceptor::CompleteCrossSiteTransfer(
     net::URLRequest* request,
     int new_process_id,
     int new_host_id,
-    ResourceMessageFilter* filter) {
+    ResourceRequesterInfo* requester_info) {
+  // AppCache is supported only for renderer initiated requests.
+  DCHECK(requester_info->IsRenderer());
   AppCacheRequestHandler* handler = GetHandler(request);
   if (!handler)
     return;
-  if (!handler->SanityCheckIsSameService(filter->appcache_service())) {
+  if (!handler->SanityCheckIsSameService(requester_info->appcache_service())) {
     // This can happen when V2 apps and web pages end up in the same storage
     // partition.
     const GURL& first_party_url_for_cookies =
@@ -98,7 +109,7 @@ void AppCacheInterceptor::CompleteCrossSiteTransfer(
       // No need to explicitly call DumpWithoutCrashing(), since
       // bad_message::ReceivedBadMessage() below will do that.
     }
-    bad_message::ReceivedBadMessage(filter,
+    bad_message::ReceivedBadMessage(requester_info->filter(),
                                     bad_message::ACI_WRONG_STORAGE_PARTITION);
     return;
   }

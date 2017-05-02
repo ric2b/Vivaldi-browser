@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -131,9 +132,9 @@ class MimeHandlerViewTest : public ExtensionApiTest,
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
 
-    ASSERT_TRUE(StartEmbeddedTestServer());
     embedded_test_server()->ServeFilesFromDirectory(
         test_data_dir_.AppendASCII("mime_handler_view"));
+    ASSERT_TRUE(StartEmbeddedTestServer());
   }
 
   // TODO(ekaramad): These tests run for OOPIF guests too, except that they

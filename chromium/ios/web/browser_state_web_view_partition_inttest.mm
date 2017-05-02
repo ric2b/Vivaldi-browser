@@ -10,16 +10,16 @@
 #include "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
-#include "base/test/ios/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/test/http_server.h"
 #import "ios/web/public/test/js_test_util.h"
-#include "ios/web/public/test/response_providers/string_response_provider.h"
+#import "ios/web/public/test/response_providers/string_response_provider.h"
 #import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/test/web_int_test.h"
 #import "net/base/mac/url_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
+#import "testing/gtest_mac.h"
 
 // A WKNavigationDelegate that is used to check if a WKWebView has finished
 // a navigation. Used for testing purposes.
@@ -134,14 +134,12 @@ class BrowserStateWebViewPartitionTest : public web::WebIntTest {
 // Tests that cookies are partitioned between web views created with a
 // non-OTR BrowserState and an OTR BrowserState.
 TEST_F(BrowserStateWebViewPartitionTest, Cookies) {
-  base::scoped_nsobject<WKWebView> web_view_1(
-      web::CreateWKWebView(CGRectZero, GetBrowserState()));
+  WKWebView* web_view_1 = web::BuildWKWebView(CGRectZero, GetBrowserState());
   LoadTestWebPage(web_view_1);
   SetCookie(@"someCookieName1", @"someCookieValue1", web_view_1);
   EXPECT_NSEQ(@"someCookieName1=someCookieValue1", GetCookies(web_view_1));
 
-  base::scoped_nsobject<WKWebView> web_view_2(
-      web::CreateWKWebView(CGRectZero, GetOtrBrowserState()));
+  WKWebView* web_view_2 = web::BuildWKWebView(CGRectZero, GetOtrBrowserState());
   LoadTestWebPage(web_view_2);
 
   // Test that the cookie has not leaked over to |web_view_2|.
@@ -158,14 +156,12 @@ TEST_F(BrowserStateWebViewPartitionTest, Cookies) {
 // Tests that localStorage is partitioned between web views created with a
 // non-OTR BrowserState and an OTR BrowserState.
 TEST_F(BrowserStateWebViewPartitionTest, LocalStorage) {
-  base::scoped_nsobject<WKWebView> web_view_1(
-      web::CreateWKWebView(CGRectZero, GetBrowserState()));
+  WKWebView* web_view_1 = web::BuildWKWebView(CGRectZero, GetBrowserState());
   LoadTestWebPage(web_view_1);
   SetLocalStorageItem(@"someKey1", @"someValue1", web_view_1);
   EXPECT_NSEQ(@"someValue1", GetLocalStorageItem(@"someKey1", web_view_1));
 
-  base::scoped_nsobject<WKWebView> web_view_2(
-      web::CreateWKWebView(CGRectZero, GetOtrBrowserState()));
+  WKWebView* web_view_2 = web::BuildWKWebView(CGRectZero, GetOtrBrowserState());
   LoadTestWebPage(web_view_2);
 
   // Test that LocalStorage has not leaked over to |web_view_2|.

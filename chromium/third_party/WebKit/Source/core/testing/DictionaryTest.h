@@ -7,7 +7,6 @@
 
 #include "bindings/core/v8/DoubleOrString.h"
 #include "bindings/core/v8/Nullable.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/Element.h"
@@ -20,6 +19,7 @@ namespace blink {
 class InternalDictionary;
 class InternalDictionaryDerived;
 class InternalDictionaryDerivedDerived;
+class ScriptState;
 
 class DictionaryTest : public GarbageCollectedFinalized<DictionaryTest>,
                        public ScriptWrappable {
@@ -43,7 +43,7 @@ class DictionaryTest : public GarbageCollectedFinalized<DictionaryTest>,
   void setDerivedDerived(const InternalDictionaryDerivedDerived&);
   void getDerivedDerived(InternalDictionaryDerivedDerived&);
 
-  String stringFromIterable(ExecutionContext*,
+  String stringFromIterable(ScriptState*,
                             Dictionary iterable,
                             ExceptionState&) const;
 
@@ -91,6 +91,7 @@ class DictionaryTest : public GarbageCollectedFinalized<DictionaryTest>,
   String m_derivedDerivedStringMember;
   bool m_requiredBooleanMember;
   Nullable<HashMap<String, String>> m_dictionaryMemberProperties;
+  ScriptValue m_prefixGetMember;
 };
 
 }  // namespace blink

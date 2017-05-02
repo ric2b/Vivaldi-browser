@@ -7,7 +7,7 @@ package org.chromium.android_webview.test;
 import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.LocaleList;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.text.TextUtils;
 
 import org.chromium.android_webview.AwContents;
@@ -19,7 +19,6 @@ import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -48,7 +47,6 @@ public class AcceptLanguageTest extends AwTestBase {
 
     private static final Pattern COMMA_AND_OPTIONAL_Q_VALUE =
             Pattern.compile("(?:;q=[^,]+)?(?:,|$)");
-    private static final Pattern MAYBE_QUOTED_STRING = Pattern.compile("^(\"?)(.*)\\1$");
 
     /**
      * Extract the languages from the Accept-Language header.
@@ -67,10 +65,7 @@ public class AcceptLanguageTest extends AwTestBase {
      * @return A list of languages as Strings.
      */
     private String[] getAcceptLanguages(String raw) {
-        assertNotNull(raw);
-        Matcher m = MAYBE_QUOTED_STRING.matcher(raw);
-        assertTrue(m.matches());
-        return COMMA_AND_OPTIONAL_Q_VALUE.split(m.group(2));
+        return COMMA_AND_OPTIONAL_Q_VALUE.split(maybeStripDoubleQuotes(raw));
     }
 
     /**

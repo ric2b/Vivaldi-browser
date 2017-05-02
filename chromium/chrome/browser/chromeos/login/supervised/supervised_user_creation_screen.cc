@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
 #include "base/memory/ptr_util.h"
@@ -98,13 +97,14 @@ void ConfigureErrorScreen(ErrorScreen* screen,
 SupervisedUserCreationScreen* SupervisedUserCreationScreen::Get(
     ScreenManager* manager) {
   return static_cast<SupervisedUserCreationScreen*>(
-      manager->GetScreen(WizardController::kSupervisedUserCreationScreenName));
+      manager->GetScreen(OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW));
 }
 
 SupervisedUserCreationScreen::SupervisedUserCreationScreen(
     BaseScreenDelegate* base_screen_delegate,
     SupervisedUserCreationScreenHandler* actor)
-    : BaseScreen(base_screen_delegate),
+    : BaseScreen(base_screen_delegate,
+                 OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW),
       actor_(actor),
       on_error_screen_(false),
       manager_signin_in_progress_(false),
@@ -126,11 +126,6 @@ SupervisedUserCreationScreen::~SupervisedUserCreationScreen() {
   if (actor_)
     actor_->SetDelegate(NULL);
   network_portal_detector::GetInstance()->RemoveObserver(this);
-}
-
-void SupervisedUserCreationScreen::PrepareToShow() {
-  if (actor_)
-    actor_->PrepareToShow();
 }
 
 void SupervisedUserCreationScreen::Show() {
@@ -196,10 +191,6 @@ void SupervisedUserCreationScreen::Hide() {
     actor_->Hide();
   if (!on_error_screen_)
     network_portal_detector::GetInstance()->RemoveObserver(this);
-}
-
-std::string SupervisedUserCreationScreen::GetName() const {
-  return WizardController::kSupervisedUserCreationScreenName;
 }
 
 void SupervisedUserCreationScreen::AbortFlow() {
@@ -377,8 +368,6 @@ void SupervisedUserCreationScreen::OnManagerFullyAuthenticated(
   // For manager user, move wallpaper to locked container so that windows
   // created during the user image picker step are below it.
   ash::WmShell::Get()->wallpaper_controller()->MoveToLockedContainer();
-  ash::WmShelf::ForWindow(ash::WmShell::Get()->GetPrimaryRootWindow())
-      ->SetAlignment(ash::ShelfAlignment::SHELF_ALIGNMENT_BOTTOM_LOCKED);
 
   controller_->SetManagerProfile(manager_profile);
   if (actor_)
@@ -499,8 +488,8 @@ void SupervisedUserCreationScreen::ApplyPicture() {
         apply_photo_after_decoding_ = true;
         return;
       }
-      image_manager->SaveUserImage(
-          user_manager::UserImage::CreateAndEncode(user_photo_));
+      image_manager->SaveUserImage(user_manager::UserImage::CreateAndEncode(
+          user_photo_, user_manager::UserImage::FORMAT_JPEG));
       break;
     case user_manager::User::USER_IMAGE_PROFILE:
       NOTREACHED() << "Supervised users have no profile pictures";

@@ -155,8 +155,6 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
     m_missingGlyphData = glyphData;
   }
 
-  bool canRenderCombiningCharacterSequence(const UChar*, size_t) const;
-
   CustomFontData* customFontData() const { return m_customFontData.get(); }
 
  protected:
@@ -237,7 +235,7 @@ ALWAYS_INLINE FloatRect SimpleFontData::boundsForGlyph(Glyph glyph) const {
 
   boundsResult = platformBoundsForGlyph(glyph);
   if (!m_glyphToBoundsMap)
-    m_glyphToBoundsMap = wrapUnique(new GlyphMetricsMap<FloatRect>);
+    m_glyphToBoundsMap = WTF::wrapUnique(new GlyphMetricsMap<FloatRect>);
   m_glyphToBoundsMap->setMetricsForGlyph(glyph, boundsResult);
 
   return boundsResult;

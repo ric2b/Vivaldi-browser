@@ -29,18 +29,18 @@
 #include "chrome/browser/ui/proximity_auth/proximity_auth_error_bubble.h"
 #include "chrome/common/extensions/api/easy_unlock_private.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/cryptauth/bluetooth_throttler_impl.h"
+#include "components/cryptauth/cryptauth_device_manager.h"
+#include "components/cryptauth/cryptauth_enrollment_manager.h"
+#include "components/cryptauth/cryptauth_enrollment_utils.h"
+#include "components/cryptauth/proto/cryptauth_api.pb.h"
+#include "components/cryptauth/remote_device.h"
+#include "components/cryptauth/secure_message_delegate.h"
 #include "components/proximity_auth/ble/bluetooth_low_energy_connection.h"
 #include "components/proximity_auth/ble/bluetooth_low_energy_connection_finder.h"
-#include "components/proximity_auth/bluetooth_throttler_impl.h"
 #include "components/proximity_auth/bluetooth_util.h"
-#include "components/proximity_auth/cryptauth/cryptauth_device_manager.h"
-#include "components/proximity_auth/cryptauth/cryptauth_enrollment_manager.h"
-#include "components/proximity_auth/cryptauth/cryptauth_enrollment_utils.h"
-#include "components/proximity_auth/cryptauth/proto/cryptauth_api.pb.h"
-#include "components/proximity_auth/cryptauth/secure_message_delegate.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/proximity_auth_client.h"
-#include "components/proximity_auth/remote_device.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/proximity_auth/screenlock_state.h"
 #include "components/proximity_auth/switches.h"
@@ -600,7 +600,7 @@ void EasyUnlockPrivateGetPermitAccessFunction::GetKeyPairForExperiment(
     std::string* user_public_key,
     std::string* user_private_key) {
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  proximity_auth::CryptAuthEnrollmentManager* enrollment_manager =
+  cryptauth::CryptAuthEnrollmentManager* enrollment_manager =
       EasyUnlockService::Get(profile)
           ->proximity_auth_client()
           ->GetCryptAuthEnrollmentManager();
@@ -718,7 +718,7 @@ std::string EasyUnlockPrivateGetRemoteDevicesFunction::GetUserPrivateKey() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   proximity_auth::ProximityAuthClient* client =
       EasyUnlockService::Get(profile)->proximity_auth_client();
-  proximity_auth::CryptAuthEnrollmentManager* enrollment_manager =
+  cryptauth::CryptAuthEnrollmentManager* enrollment_manager =
       client->GetCryptAuthEnrollmentManager();
   return enrollment_manager->GetUserPrivateKey();
 }
@@ -728,9 +728,9 @@ EasyUnlockPrivateGetRemoteDevicesFunction::GetUnlockKeys() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   proximity_auth::ProximityAuthClient* client =
       EasyUnlockService::Get(profile)->proximity_auth_client();
-  proximity_auth::CryptAuthDeviceManager* device_manager =
+  cryptauth::CryptAuthDeviceManager* device_manager =
       client->GetCryptAuthDeviceManager();
-  return device_manager->unlock_keys();
+  return device_manager->GetUnlockKeys();
 }
 
 void EasyUnlockPrivateGetRemoteDevicesFunction::ReturnDevicesForExperiment() {
@@ -909,7 +909,7 @@ ExtensionFunction::ResponseAction EasyUnlockPrivateGetUserInfoFunction::Run() {
         EasyUnlockService::GetUserSettings(account_id);
     user.require_close_proximity = user_settings.require_close_proximity;
 
-    user.device_user_id = proximity_auth::CalculateDeviceUserId(
+    user.device_user_id = cryptauth::CalculateDeviceUserId(
         EasyUnlockService::GetDeviceId(), account_id.GetUserEmail());
 
     user.ble_discovery_enabled =
@@ -1050,7 +1050,7 @@ EasyUnlockPrivateSetAutoPairingResultFunction::Run() {
 
 EasyUnlockPrivateFindSetupConnectionFunction::
     EasyUnlockPrivateFindSetupConnectionFunction()
-    : bluetooth_throttler_(new proximity_auth::BluetoothThrottlerImpl(
+    : bluetooth_throttler_(new cryptauth::BluetoothThrottlerImpl(
           base::MakeUnique<base::DefaultTickClock>())) {}
 
 EasyUnlockPrivateFindSetupConnectionFunction::
@@ -1069,7 +1069,7 @@ void EasyUnlockPrivateFindSetupConnectionFunction::
 }
 
 void EasyUnlockPrivateFindSetupConnectionFunction::OnConnectionFound(
-    std::unique_ptr<proximity_auth::Connection> connection) {
+    std::unique_ptr<cryptauth::Connection> connection) {
   // Connection are not persistent by default.
   std::string device_address = connection->remote_device().bluetooth_address;
   bool persistent = false;
@@ -1090,7 +1090,7 @@ bool EasyUnlockPrivateFindSetupConnectionFunction::RunAsync() {
   // |params->setup_service_uuid|.
   connection_finder_.reset(
       new proximity_auth::BluetoothLowEnergyConnectionFinder(
-          proximity_auth::RemoteDevice(), params->setup_service_uuid,
+          cryptauth::RemoteDevice(), params->setup_service_uuid,
           proximity_auth::BluetoothLowEnergyConnectionFinder::FIND_ANY_DEVICE,
           nullptr, bluetooth_throttler_.get(), 3));
 

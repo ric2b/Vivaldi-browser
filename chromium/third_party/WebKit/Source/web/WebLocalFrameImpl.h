@@ -42,6 +42,7 @@
 #include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
 #include "web/WebFrameWidgetBase.h"
+#include "web/WebInputMethodControllerImpl.h"
 #include "wtf/Compiler.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
@@ -51,7 +52,6 @@ namespace blink {
 class ChromePrintContext;
 class IntSize;
 class KURL;
-class Range;
 class ScrollableArea;
 class SharedWorkerRepositoryClientImpl;
 class TextFinder;
@@ -68,7 +68,6 @@ class WebPerformance;
 class WebPlugin;
 class WebPluginContainerImpl;
 class WebScriptExecutionCallback;
-class WebSuspendableTask;
 class WebView;
 class WebViewImpl;
 enum class WebFrameLoadType;
@@ -81,19 +80,20 @@ class WebVector;
 // Implementation of WebFrame, note that this is a reference counted object.
 class WEB_EXPORT WebLocalFrameImpl final
     : public WebFrameImplBase,
-      WTF_NON_EXPORTED_BASE(public WebLocalFrame) {
+      NON_EXPORTED_BASE(public WebLocalFrame) {
  public:
   // WebFrame methods:
+  // TODO(dcheng): Fix sorting here; a number of method have been moved to
+  // WebLocalFrame but not correctly updated here.
   void close() override;
   WebString uniqueName() const override;
   WebString assignedName() const override;
   void setName(const WebString&) override;
   WebVector<WebIconURL> iconURLs(int iconTypesMask) const override;
-  void setRemoteWebLayer(WebLayer*) override;
   void setContentSettingsClient(WebContentSettingsClient*) override;
   void setSharedWorkerRepositoryClient(
       WebSharedWorkerRepositoryClient*) override;
-  WebSize scrollOffset() const override;
+  WebSize getScrollOffset() const override;
   void setScrollOffset(const WebSize&) override;
   WebSize contentsSize() const override;
   bool hasVisibleContent() const override;
@@ -107,8 +107,7 @@ class WEB_EXPORT WebLocalFrameImpl final
   void executeScript(const WebScriptSource&) override;
   void executeScriptInIsolatedWorld(int worldID,
                                     const WebScriptSource* sources,
-                                    unsigned numSources,
-                                    int extensionGroup) override;
+                                    unsigned numSources) override;
   void setIsolatedWorldSecurityOrigin(int worldID,
                                       const WebSecurityOrigin&) override;
   void setIsolatedWorldContentSecurityPolicy(int worldID,
@@ -132,13 +131,11 @@ class WEB_EXPORT WebLocalFrameImpl final
       int worldID,
       const WebScriptSource* sourcesIn,
       unsigned numSources,
-      int extensionGroup,
       WebVector<v8::Local<v8::Value>>* results) override;
   void requestExecuteScriptInIsolatedWorld(
       int worldID,
       const WebScriptSource* sourceIn,
       unsigned numSources,
-      int extensionGroup,
       bool userGesture,
       WebScriptExecutionCallback*) override;
   v8::Local<v8::Value> callFunctionEvenIfScriptDisabled(
@@ -264,15 +261,12 @@ class WEB_EXPORT WebLocalFrameImpl final
                 bool isClientRedirect) override;
   bool maybeRenderFallbackContent(const WebURLError&) const override;
   bool isLoading() const override;
-  bool isFrameDetachedForSpecialOneOffStopTheCrashingHackBug561873()
-      const override;
   bool isNavigationScheduledWithin(double interval) const override;
   void setCommittedFirstRealLoad() override;
   void setHasReceivedUserGesture() override;
   void sendOrientationChangeEvent() override;
   WebSandboxFlags effectiveSandboxFlags() const override;
   void forceSandboxFlags(WebSandboxFlags) override;
-  void requestRunTask(WebSuspendableTask*) const override;
   void didCallAddSearchProvider() override;
   void didCallIsSearchProviderInstalled() override;
   void replaceSelection(const WebString&) override;
@@ -296,8 +290,13 @@ class WEB_EXPORT WebLocalFrameImpl final
   WebFrameWidgetBase* frameWidget() const override;
   void copyImageAt(const WebPoint&) override;
   void saveImageAt(const WebPoint&) override;
+  void setEngagementLevel(mojom::EngagementLevel) override;
   void clearActiveFindMatch() override;
   void usageCountChromeLoadTimes(const WebString& metric) override;
+  base::SingleThreadTaskRunner* timerTaskRunner() override;
+  base::SingleThreadTaskRunner* loadingTaskRunner() override;
+  base::SingleThreadTaskRunner* unthrottledTaskRunner() override;
+  WebInputMethodControllerImpl* inputMethodController() const override;
 
   // WebFrameImplBase methods:
   void initializeCoreFrame(FrameHost*,
@@ -403,7 +402,6 @@ class WEB_EXPORT WebLocalFrameImpl final
   void setContextMenuNode(Node* node) { m_contextMenuNode = node; }
   void clearContextMenuNode() { m_contextMenuNode.clear(); }
 
-  WebInputMethodControllerImpl* inputMethodController() const;
 
   bool snapshotPage(SkBitmap&, bool, float, float) override;
 

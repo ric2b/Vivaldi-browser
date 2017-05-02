@@ -56,6 +56,7 @@ class LocalDOMWindow;
 class ExceptionState;
 class MessagePort;
 class Node;
+class ServiceWorker;
 
 struct FiringEventIterator {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -97,7 +98,8 @@ class CORE_EXPORT EventTargetData final
 //   file.
 // - Override EventTarget::interfaceName() and getExecutionContext(). The former
 //   will typically return EventTargetNames::YourClassName. The latter will
-//   return ActiveDOMObject::executionContext (if you are an ActiveDOMObject)
+//   return SuspendableObject::executionContext (if you are an
+//   SuspendableObject)
 //   or the document you're in.
 // - Your trace() method will need to call EventTargetWithInlineData::trace
 //   depending on the base class of your class.
@@ -118,6 +120,7 @@ class CORE_EXPORT EventTarget : public GarbageCollectedFinalized<EventTarget>,
   virtual const LocalDOMWindow* toLocalDOMWindow() const;
   virtual LocalDOMWindow* toLocalDOMWindow();
   virtual MessagePort* toMessagePort();
+  virtual ServiceWorker* toServiceWorker();
 
   bool addEventListener(const AtomicString& eventType,
                         EventListener*,

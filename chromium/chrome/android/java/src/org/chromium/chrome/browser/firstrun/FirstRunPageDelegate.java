@@ -64,6 +64,7 @@ public interface FirstRunPageDelegate {
 
     /**
      * Notifies all interested parties that the user has accepted Chrome Terms of Service.
+     * Must be called only after native has been initialized.
      * @param allowCrashUpload True if the user allows to upload crash dumps and collect stats.
      */
     void acceptTermsOfService(boolean allowCrashUpload);
@@ -75,9 +76,8 @@ public interface FirstRunPageDelegate {
     void openAccountAdder(Fragment fragment);
 
     /**
-     * Show an EmbedContentViewActivity with a given title and a URL.
-     * @param title Resource id for the title of the EmbedContentViewActivity.
-     * @param url Resource id for the URL of the EmbedContentViewActivity.
+     * Show an informational web page. The page doesn't show navigation control.
+     * @param url Resource id for the URL of the web page.
      */
-    void showEmbedContentViewActivity(int title, int url);
+    void showInfoPage(int url);
 }

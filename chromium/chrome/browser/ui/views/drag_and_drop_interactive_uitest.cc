@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <initializer_list>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -171,11 +174,10 @@ class DragAndDropSimulator {
 class DragStartWaiter : public aura::client::DragDropClient {
  public:
   // Starts monitoring |web_contents| for a start of a drag-and-drop.
-  // While alive, prevents a real, OS-level drag-and-drop from starting
-  // for this particular |web_contents|.
   explicit DragStartWaiter(content::WebContents* web_contents)
       : web_contents_(web_contents),
         message_loop_runner_(new content::MessageLoopRunner),
+        suppress_passing_of_start_drag_further_(false),
         drag_started_(false) {
     DCHECK(web_contents_);
 
@@ -193,27 +195,44 @@ class DragStartWaiter : public aura::client::DragDropClient {
     aura::client::SetDragDropClient(root_window, old_client_);
   }
 
-  // Waits until we almost report a drag-and-drop start to the OS
-  // (notifying the OS will be prevented to help the test continue
-  // without entering a nested message loop).
+  // Waits until we almost report a drag-and-drop start to the OS.
+  // At that point
+  // 1) the callback from PostTaskWhenDragStarts will be posted.
+  // 2) the drag-start request will be forwarded to the OS
+  //    (unless SuppressPassingStartDragFurther method was called).
   //
-  // Returns true if drag and drop has indeed started (and in this
-  // case populates |text|, |html| and other parameters with data
-  // that would have been passed to the OS).
-  void WaitUntilDragStartIsIntercepted(
-      std::string* text,
-      std::string* html,
-      int* operation,
-      gfx::Point* location_inside_web_contents) {
+  // Note that if SuppressPassingStartDragFurther was not called then
+  // WaitUntilDragStart can take a long time to return (it returns only after
+  // the OS decides that the drag-and-drop has ended).
+  //
+  // Before returning populates |text|, |html| and other parameters with data
+  // that would have been passed to the OS).  If the caller is not interested in
+  // this data, then the corresponding argument can be null.
+  void WaitUntilDragStart(std::string* text,
+                          std::string* html,
+                          int* operation,
+                          gfx::Point* location_inside_web_contents) {
     message_loop_runner_->Run();
 
     // message_loop_runner_->Quit is only called from StartDragAndDrop.
     DCHECK(drag_started_);
 
-    *text = text_;
-    *html = html_;
-    *operation = operation_;
-    *location_inside_web_contents = location_inside_web_contents_;
+    if (text)
+      *text = text_;
+    if (html)
+      *html = html_;
+    if (operation)
+      *operation = operation_;
+    if (location_inside_web_contents)
+      *location_inside_web_contents = location_inside_web_contents_;
+  }
+
+  void SuppressPassingStartDragFurther() {
+    suppress_passing_of_start_drag_further_ = true;
+  }
+
+  void PostTaskWhenDragStarts(const base::Closure& callback) {
+    callback_to_run_inside_drag_and_drop_message_loop_ = callback;
   }
 
   // aura::client::DragDropClient overrides:
@@ -250,12 +269,20 @@ class DragStartWaiter : public aura::client::DragDropClient {
       operation_ = operation;
     }
 
-    // Forwarding to |old_client_| is undesirable, because test cannot control
-    // next steps after a nested drag-and-drop loop is entered at the OS level
-    // (as is the case in Windows, via DoDragDrop).  Instead, in the test we
-    // kind of ignore renderer's request to start drag and drop and never
-    // forward this request to the OS-specific layers.
-    return 0;
+    if (!callback_to_run_inside_drag_and_drop_message_loop_.is_null()) {
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          std::move(callback_to_run_inside_drag_and_drop_message_loop_));
+      callback_to_run_inside_drag_and_drop_message_loop_.Reset();
+    }
+
+    if (suppress_passing_of_start_drag_further_)
+      return 0;
+
+    // Start a nested drag-and-drop loop (might not return for a long time).
+    return old_client_->StartDragAndDrop(data, root_window, source_window,
+                                         screen_location, operation, source,
+                                         cancelled);
   }
 
   void DragCancel() override {
@@ -268,6 +295,8 @@ class DragStartWaiter : public aura::client::DragDropClient {
   content::WebContents* web_contents_;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
   aura::client::DragDropClient* old_client_;
+  base::Closure callback_to_run_inside_drag_and_drop_message_loop_;
+  bool suppress_passing_of_start_drag_further_;
 
   // Data captured during the first intercepted StartDragAndDrop call.
   bool drag_started_;
@@ -283,8 +312,8 @@ class DragStartWaiter : public aura::client::DragDropClient {
 // content/test/data/drag_and_drop/event_monitoring.js
 class DOMDragEventWaiter {
  public:
-  explicit DOMDragEventWaiter(const std::string& event_type_to_wait_for,
-                              const content::ToRenderFrameHost& target)
+  DOMDragEventWaiter(const std::string& event_type_to_wait_for,
+                     const content::ToRenderFrameHost& target)
       : target_frame_name_(target.render_frame_host()->GetFrameName()),
         event_type_to_wait_for_(event_type_to_wait_for),
         dom_message_queue_(content::WebContents::FromRenderFrameHost(
@@ -308,13 +337,10 @@ class DOMDragEventWaiter {
       if (!dom_message_queue_.WaitForMessage(&candidate_event))
         return false;
 
-      got_right_event_type = base::MatchPattern(
-          candidate_event, base::StringPrintf("*\"event_type\":\"%s\"*",
-                                              event_type_to_wait_for_.c_str()));
-
-      got_right_window_name = base::MatchPattern(
-          candidate_event, base::StringPrintf("*\"window_name\":\"%s\"*",
-                                              target_frame_name_.c_str()));
+      got_right_event_type =
+          IsExpectedEventType(candidate_event, event_type_to_wait_for_);
+      got_right_window_name =
+          IsExpectedWindowName(candidate_event, target_frame_name_);
     } while (!got_right_event_type || !got_right_window_name);
 
     if (found_event)
@@ -323,7 +349,29 @@ class DOMDragEventWaiter {
     return true;
   }
 
+  static bool IsExpectedEventType(const std::string& actual_event_body,
+                                  const std::string& expected_event_type) {
+    return IsExpectedPropertyValue(actual_event_body, "event_type",
+                                   expected_event_type);
+  }
+
+  static bool IsExpectedWindowName(const std::string& actual_event_body,
+                                   const std::string& expected_window_name) {
+    return IsExpectedPropertyValue(actual_event_body, "window_name",
+                                   expected_window_name);
+  }
+
  private:
+  static bool IsExpectedPropertyValue(
+      const std::string& actual_event_body,
+      const std::string& property_name,
+      const std::string& expected_property_value) {
+    return base::MatchPattern(
+        actual_event_body,
+        base::StringPrintf("*\"%s\":\"%s\"*", property_name.c_str(),
+                           expected_property_value.c_str()));
+  }
+
   std::string target_frame_name_;
   std::string event_type_to_wait_for_;
   content::DOMMessageQueue dom_message_queue_;
@@ -388,6 +436,76 @@ class DOMDragEventVerifier {
   DISALLOW_COPY_AND_ASSIGN(DOMDragEventVerifier);
 };
 
+// Helper for monitoring event notifications from
+// content/test/data/drag_and_drop/event_monitoring.js
+// and counting how many events of a given type were received.
+class DOMDragEventCounter {
+ public:
+  explicit DOMDragEventCounter(const content::ToRenderFrameHost& target)
+      : target_frame_name_(target.render_frame_host()->GetFrameName()),
+        dom_message_queue_(content::WebContents::FromRenderFrameHost(
+            target.render_frame_host())) {}
+
+  // Resets all the accumulated event counts to zeros.
+  void Reset() {
+    StoreAccumulatedEvents();
+    received_events_.clear();
+  }
+
+  // Returns the number of events of the specified |event_type| received since
+  // construction, or since the last time Reset was called.  |event_type| should
+  // be one of possible |type| property values for a DOM drag-and-drop event -
+  // e.g.  "dragenter" or "dragover".
+  int GetNumberOfReceivedEvents(const std::string& event_type) {
+    std::vector<std::string> v({event_type});
+    return GetNumberOfReceivedEvents(v.begin(), v.end());
+  }
+
+  // Returns the number of events of the specified |event_types| received since
+  // construction, or since the last time Reset was called.  Elements of
+  // |event_types| should be one of possible |type| property values for a DOM
+  // drag-and-drop event - e.g.  "dragenter" or "dragover".
+  int GetNumberOfReceivedEvents(
+      std::initializer_list<const char*> event_types) {
+    return GetNumberOfReceivedEvents(event_types.begin(), event_types.end());
+  }
+
+ private:
+  template <typename T>
+  int GetNumberOfReceivedEvents(T event_types_begin, T event_types_end) {
+    StoreAccumulatedEvents();
+
+    auto received_event_has_matching_event_type =
+        [&event_types_begin,
+         &event_types_end](const std::string& received_event) {
+          return std::any_of(event_types_begin, event_types_end,
+                             [&received_event](const std::string& event_type) {
+                               return DOMDragEventWaiter::IsExpectedEventType(
+                                   received_event, event_type);
+                             });
+        };
+
+    return std::count_if(received_events_.begin(), received_events_.end(),
+                         received_event_has_matching_event_type);
+  }
+
+  void StoreAccumulatedEvents() {
+    std::string candidate_event;
+    while (dom_message_queue_.PopMessage(&candidate_event)) {
+      if (DOMDragEventWaiter::IsExpectedWindowName(candidate_event,
+                                                   target_frame_name_)) {
+        received_events_.push_back(candidate_event);
+      }
+    }
+  }
+
+  std::string target_frame_name_;
+  content::DOMMessageQueue dom_message_queue_;
+  std::vector<std::string> received_events_;
+
+  DISALLOW_COPY_AND_ASSIGN(DOMDragEventCounter);
+};
+
 const char kTestPagePath[] = "/drag_and_drop/page.html";
 
 }  // namespace
@@ -397,11 +515,19 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
  public:
   DragAndDropBrowserTest(){};
 
+  struct DragImageBetweenFrames_TestState;
+  void DragImageBetweenFrames_Step2(DragImageBetweenFrames_TestState*);
+  void DragImageBetweenFrames_Step3(DragImageBetweenFrames_TestState*);
+
+  struct CrossSiteDrag_TestState;
+  void CrossSiteDrag_Step2(CrossSiteDrag_TestState*);
+  void CrossSiteDrag_Step3(CrossSiteDrag_TestState*);
+
  protected:
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
     content::SetupCrossSiteRedirector(embedded_test_server());
+    ASSERT_TRUE(embedded_test_server()->Start());
     drag_simulator_.reset(new DragAndDropSimulator(web_contents()));
   }
 
@@ -455,8 +581,27 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
 
   bool SimulateMouseDownAndDragStartInLeftFrame() {
     AssertTestPageIsLoaded();
-    if (!SimulateMouseMove(kMiddleOfLeftFrame) || !SimulateMouseDown() ||
-        !SimulateMouseMove(expected_location_of_drag_start_in_left_frame()))
+
+    // Waiting until the mousemove and mousedown events reach the right renderer
+    // is needed to avoid flakiness reported in https://crbug.com/671445 (which
+    // has its root cause in https://crbug.com/647378).  Once the latter bug
+    // is fixed, we should no longer need to wait for these events (because
+    // fixing https://crbug.com/647378 should guarantee that events arrive
+    // to the renderer in the right order).
+    DOMDragEventWaiter mouse_move_event_waiter("mousemove", left_frame());
+    DOMDragEventWaiter mouse_down_event_waiter("mousedown", left_frame());
+
+    if (!SimulateMouseMove(kMiddleOfLeftFrame))
+      return false;
+    if (!mouse_move_event_waiter.WaitForNextMatchingEvent(nullptr))
+      return false;
+
+    if (!SimulateMouseDown())
+      return false;
+    if (!mouse_down_event_waiter.WaitForNextMatchingEvent(nullptr))
+      return false;
+
+    if (!SimulateMouseMove(expected_location_of_drag_start_in_left_frame()))
       return false;
 
     return true;
@@ -467,6 +612,16 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
     // kDragThresholdY from MouseEventManager.cpp in blink.  Ideally, it would
     // come from the OS instead.
     return kMiddleOfLeftFrame + gfx::Vector2d(10, 10);
+  }
+
+  bool SimulateMouseMoveToLeftFrame() {
+    AssertTestPageIsLoaded();
+    return SimulateMouseMove(kMiddleOfLeftFrame);
+  }
+
+  bool SimulateMouseMoveToRightFrame() {
+    AssertTestPageIsLoaded();
+    return SimulateMouseMove(kMiddleOfRightFrame);
   }
 
   bool SimulateMouseUp() {
@@ -489,6 +644,13 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
   }
 
  private:
+  // Constants with coordinates within content/test/data/drag_and_drop/page.html
+  // The precise frame center is at 200,200 and 400,200 coordinates, but slight
+  // differences between left and right frame hopefully make it easier to detect
+  // incorrect dom_drag_and_drop_event.clientX/Y values in test asserts.
+  const gfx::Point kMiddleOfLeftFrame = gfx::Point(155, 150);
+  const gfx::Point kMiddleOfRightFrame = gfx::Point(455, 250);
+
   bool SimulateMouseDown() {
     return ui_test_utils::SendMouseEventsSync(ui_controls::LEFT,
                                               ui_controls::DOWN);
@@ -570,13 +732,11 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
 
   std::unique_ptr<DragAndDropSimulator> drag_simulator_;
 
-  // Constants with coordinates within content/test/data/drag_and_drop/page.html
-  const gfx::Point kMiddleOfLeftFrame = gfx::Point(200, 200);
-  const gfx::Point kMiddleOfRightFrame = gfx::Point(400, 200);
-
   DISALLOW_COPY_AND_ASSIGN(DragAndDropBrowserTest);
 };
 
+// Scenario: drag text from outside the browser and drop to the right frame.
+// Test coverage: dragover, drop DOM events.
 IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DropTextFromOutside) {
   std::string frame_site = use_cross_site_subframe() ? "b.com" : "a.com";
   ASSERT_TRUE(NavigateToTestPage("a.com"));
@@ -584,11 +744,11 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DropTextFromOutside) {
 
   // Setup test expectations.
   DOMDragEventVerifier expected_dom_event_data;
-  expected_dom_event_data.set_expected_client_position("(100, 100)");
+  expected_dom_event_data.set_expected_client_position("(155, 150)");
   expected_dom_event_data.set_expected_drop_effect("none");
   expected_dom_event_data.set_expected_effect_allowed("all");
   expected_dom_event_data.set_expected_mime_types("text/plain");
-  expected_dom_event_data.set_expected_page_position("(100, 100)");
+  expected_dom_event_data.set_expected_page_position("(155, 150)");
 
   // Drag text from outside the browser into/over the right frame.
   {
@@ -611,23 +771,32 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DropTextFromOutside) {
   }
 }
 
+// Scenario: starting a drag in left frame
+// Test coverage: dragstart DOM event, dragstart data passed to the OS.
 IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DragStartInFrame) {
   std::string frame_site = use_cross_site_subframe() ? "b.com" : "a.com";
   ASSERT_TRUE(NavigateToTestPage("a.com"));
   ASSERT_TRUE(NavigateLeftFrame(frame_site, "image_source.html"));
 
   // Setup test expectations.
-  // (dragstart event handler in image_source.html is asking for "copy" only).
   DOMDragEventVerifier expected_dom_event_data;
-  expected_dom_event_data.set_expected_client_position("(100, 100)");
+  expected_dom_event_data.set_expected_client_position("(55, 50)");
   expected_dom_event_data.set_expected_drop_effect("none");
+  // (dragstart event handler in image_source.html is asking for "copy" only).
   expected_dom_event_data.set_expected_effect_allowed("copy");
+  expected_dom_event_data.set_expected_page_position("(55, 50)");
+
+  // TODO(lukasza): Figure out why the dragstart event
+  // - lists "Files" on the mime types list,
+  // - doesn't list "text/plain" on the mime types list.
+  // (i.e. why expectations below differ from expectations for dragenter,
+  // dragover, dragend and/or drop events in DragImageBetweenFrames test).
   expected_dom_event_data.set_expected_mime_types(
       "Files,text/html,text/uri-list");
-  expected_dom_event_data.set_expected_page_position("(100, 100)");
 
   // Start the drag in the left frame.
   DragStartWaiter drag_start_waiter(web_contents());
+  drag_start_waiter.SuppressPassingStartDragFurther();
   DOMDragEventWaiter dragstart_event_waiter("dragstart", left_frame());
   EXPECT_TRUE(SimulateMouseDownAndDragStartInLeftFrame());
 
@@ -645,8 +814,8 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DragStartInFrame) {
     std::string html;
     int operation = 0;
     gfx::Point location_inside_web_contents;
-    drag_start_waiter.WaitUntilDragStartIsIntercepted(
-        &text, &html, &operation, &location_inside_web_contents);
+    drag_start_waiter.WaitUntilDragStart(&text, &html, &operation,
+                                         &location_inside_web_contents);
     EXPECT_EQ(embedded_test_server()->GetURL(frame_site,
                                              "/image_decoding/droids.jpg"),
               text);
@@ -662,6 +831,338 @@ IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, DragStartInFrame) {
   // Try to leave everything in a clean state.
   SimulateMouseUp();
 }
+
+// There is no known way to execute test-controlled tasks during
+// a drag-and-drop loop run by Windows OS.
+#if defined(OS_WIN)
+#define MAYBE_DragImageBetweenFrames DISABLED_DragImageBetweenFrames
+#else
+#define MAYBE_DragImageBetweenFrames DragImageBetweenFrames
+#endif
+
+// Data that needs to be shared across multiple test steps below
+// (i.e. across DragImageBetweenFrames_Step2 and DragImageBetweenFrames_Step3).
+struct DragAndDropBrowserTest::DragImageBetweenFrames_TestState {
+  DOMDragEventVerifier expected_dom_event_data;
+  std::unique_ptr<DOMDragEventWaiter> dragstart_event_waiter;
+  std::unique_ptr<DOMDragEventWaiter> drop_event_waiter;
+  std::unique_ptr<DOMDragEventWaiter> dragend_event_waiter;
+  std::unique_ptr<DOMDragEventCounter> left_frame_events_counter;
+  std::unique_ptr<DOMDragEventCounter> right_frame_events_counter;
+};
+
+// Scenario: drag an image from the left into the right frame.
+// Test coverage: dragleave, dragenter, dragover, dragend, drop DOM events.
+IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, MAYBE_DragImageBetweenFrames) {
+  // Note that drag and drop will not expose data across cross-site frames on
+  // the same page - this is why the same |frame_site| is used below both for
+  // the left and the right frame.  See also https://crbug.com/59081.
+  std::string frame_site = use_cross_site_subframe() ? "b.com" : "a.com";
+  ASSERT_TRUE(NavigateToTestPage("a.com"));
+  ASSERT_TRUE(NavigateLeftFrame(frame_site, "image_source.html"));
+  ASSERT_TRUE(NavigateRightFrame(frame_site, "drop_target.html"));
+
+  // Setup test expectations.
+  DragAndDropBrowserTest::DragImageBetweenFrames_TestState state;
+  state.left_frame_events_counter.reset(new DOMDragEventCounter(left_frame()));
+  state.right_frame_events_counter.reset(
+      new DOMDragEventCounter(right_frame()));
+  state.expected_dom_event_data.set_expected_client_position("(55, 50)");
+  state.expected_dom_event_data.set_expected_drop_effect("none");
+  // (dragstart event handler in image_source.html is asking for "copy" only).
+  state.expected_dom_event_data.set_expected_effect_allowed("copy");
+  state.expected_dom_event_data.set_expected_mime_types(
+      "text/html,text/plain,text/uri-list");
+  state.expected_dom_event_data.set_expected_page_position("(55, 50)");
+
+  // Start the drag in the left frame.
+  DragStartWaiter drag_start_waiter(web_contents());
+  drag_start_waiter.PostTaskWhenDragStarts(
+      base::Bind(&DragAndDropBrowserTest::DragImageBetweenFrames_Step2,
+                 base::Unretained(this), base::Unretained(&state)));
+  state.dragstart_event_waiter.reset(
+      new DOMDragEventWaiter("dragstart", left_frame()));
+  EXPECT_TRUE(SimulateMouseDownAndDragStartInLeftFrame());
+
+  // The next step of the test (DragImageBetweenFrames_Step2) runs inside the
+  // nested drag-and-drop message loop - the call below won't return until the
+  // drag-and-drop has already ended.
+  drag_start_waiter.WaitUntilDragStart(nullptr, nullptr, nullptr, nullptr);
+
+  DragImageBetweenFrames_Step3(&state);
+}
+
+void DragAndDropBrowserTest::DragImageBetweenFrames_Step2(
+    DragAndDropBrowserTest::DragImageBetweenFrames_TestState* state) {
+  // Verify dragstart DOM event.
+  {
+    std::string dragstart_event;
+    EXPECT_TRUE(state->dragstart_event_waiter->WaitForNextMatchingEvent(
+        &dragstart_event));
+    state->dragstart_event_waiter.reset();
+
+    // Only a single "dragstart" should have fired in the left frame since the
+    // start of the test.  We also allow any number of "dragover" events.
+    EXPECT_EQ(1, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                     "dragstart"));
+    EXPECT_EQ(0, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                     {"dragleave", "dragenter", "drop", "dragend"}));
+
+    // No events should have fired in the right frame yet.
+    EXPECT_EQ(0, state->right_frame_events_counter->GetNumberOfReceivedEvents(
+                     {"dragstart", "dragleave", "dragenter", "dragover", "drop",
+                      "dragend"}));
+  }
+
+  // While dragging, move mouse within the left frame.
+  // Without this extra mouse move we wouldn't get a dragleave event later on.
+  ASSERT_TRUE(SimulateMouseMoveToLeftFrame());
+
+  // While dragging, move mouse from the left into the right frame.
+  // This should trigger dragleave and dragenter events.
+  {
+    DOMDragEventWaiter dragleave_event_waiter("dragleave", left_frame());
+    DOMDragEventWaiter dragenter_event_waiter("dragenter", right_frame());
+    state->left_frame_events_counter->Reset();
+    state->right_frame_events_counter->Reset();
+    ASSERT_TRUE(SimulateMouseMoveToRightFrame());
+
+    {  // Verify dragleave DOM event.
+      std::string dragleave_event;
+
+      // TODO(paulmeyer): https://crbug.com/669695: Need to unify coordinates
+      // passed to dragend when OOPIFs are present or not.
+      state->expected_dom_event_data.set_expected_client_position(
+          "<no expectation>");
+      state->expected_dom_event_data.set_expected_page_position(
+          "<no expectation>");
+
+      EXPECT_TRUE(
+          dragleave_event_waiter.WaitForNextMatchingEvent(&dragleave_event));
+      EXPECT_THAT(dragleave_event, state->expected_dom_event_data.Matches());
+    }
+
+    {  // Verify dragenter DOM event.
+      std::string dragenter_event;
+
+      // Update expected event coordinates after SimulateMouseMoveToRightFrame
+      // (these coordinates are relative to the right frame).
+      state->expected_dom_event_data.set_expected_client_position("(155, 150)");
+      state->expected_dom_event_data.set_expected_page_position("(155, 150)");
+
+      EXPECT_TRUE(
+          dragenter_event_waiter.WaitForNextMatchingEvent(&dragenter_event));
+      EXPECT_THAT(dragenter_event, state->expected_dom_event_data.Matches());
+    }
+
+    // Note that ash (unlike aura/x11) will not fire dragover event in response
+    // to the same mouse event that trigerred a dragenter.  Because of that, we
+    // postpone dragover testing until the next test step below.  See
+    // implementation of ash::DragDropController::DragUpdate for details.
+  }
+
+  // Move the mouse twice in the right frame.  The 1st move will ensure that
+  // allowed operations communicated by the renderer will be stored in
+  // WebContentsViewAura::current_drag_op_.  The 2nd move will ensure that this
+  // gets be copied into DesktopDragDropClientAuraX11::negotiated_operation_.
+  for (int i = 0; i < 2; i++) {
+    DOMDragEventWaiter dragover_event_waiter("dragover", right_frame());
+    ASSERT_TRUE(SimulateMouseMoveToRightFrame());
+
+    {  // Verify dragover DOM event.
+      std::string dragover_event;
+      EXPECT_TRUE(
+          dragover_event_waiter.WaitForNextMatchingEvent(&dragover_event));
+      EXPECT_THAT(dragover_event, state->expected_dom_event_data.Matches());
+    }
+  }
+
+  // Only a single "dragleave" should have fired in the left frame since the
+  // last checkpoint.  We also allow any number of "dragover" events.
+  EXPECT_EQ(1, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                   "dragleave"));
+  EXPECT_EQ(0, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                   {"dragstart", "dragenter", "drop", "dragend"}));
+
+  // A single "dragenter" + at least one "dragover" event should have fired in
+  // the right frame since the last checkpoint.
+  EXPECT_EQ(1, state->right_frame_events_counter->GetNumberOfReceivedEvents(
+                   "dragenter"));
+  EXPECT_LE(1, state->right_frame_events_counter->GetNumberOfReceivedEvents(
+                   "dragover"));
+  EXPECT_EQ(0, state->right_frame_events_counter->GetNumberOfReceivedEvents(
+                   {"dragstart", "dragleave", "drop", "dragend"}));
+
+  // Release the mouse button to end the drag.
+  state->drop_event_waiter.reset(new DOMDragEventWaiter("drop", right_frame()));
+  state->dragend_event_waiter.reset(
+      new DOMDragEventWaiter("dragend", left_frame()));
+  state->left_frame_events_counter->Reset();
+  state->right_frame_events_counter->Reset();
+  SimulateMouseUp();
+  // The test will continue in DragImageBetweenFrames_Step3.
+}
+
+void DragAndDropBrowserTest::DragImageBetweenFrames_Step3(
+    DragAndDropBrowserTest::DragImageBetweenFrames_TestState* state) {
+  // Verify drop DOM event.
+  {
+    std::string drop_event;
+    EXPECT_TRUE(
+        state->drop_event_waiter->WaitForNextMatchingEvent(&drop_event));
+    state->drop_event_waiter.reset();
+    EXPECT_THAT(drop_event, state->expected_dom_event_data.Matches());
+  }
+
+  // Verify dragend DOM event.
+  {
+    // TODO(lukasza): Figure out why the drop event sees different values of
+    // DataTransfer.dropEffect and DataTransfer.types properties.
+    state->expected_dom_event_data.set_expected_drop_effect("copy");
+    state->expected_dom_event_data.set_expected_mime_types("");
+
+    // TODO(paulmeyer): https://crbug.com/669695: Need to unify coordinates
+    // passed to dragend when OOPIFs are present or not.
+    state->expected_dom_event_data.set_expected_client_position(
+        "<no expectation>");
+    state->expected_dom_event_data.set_expected_page_position(
+        "<no expectation>");
+
+    std::string dragend_event;
+    EXPECT_TRUE(
+        state->dragend_event_waiter->WaitForNextMatchingEvent(&dragend_event));
+    state->dragend_event_waiter.reset();
+    EXPECT_THAT(dragend_event, state->expected_dom_event_data.Matches());
+  }
+
+  // Only a single "dragend" should have fired in the left frame since the last
+  // checkpoint.
+  EXPECT_EQ(1, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                   "dragend"));
+  EXPECT_EQ(0,
+            state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                {"dragstart", "dragleave", "dragenter", "dragover", "drop"}));
+
+  // A single "drop" + possibly some "dragover" events should have fired in the
+  // right frame since the last checkpoint.
+  EXPECT_EQ(
+      1, state->right_frame_events_counter->GetNumberOfReceivedEvents("drop"));
+  EXPECT_EQ(0, state->right_frame_events_counter->GetNumberOfReceivedEvents(
+                   {"dragstart", "dragleave", "dragenter", "dragend"}));
+}
+
+// There is no known way to execute test-controlled tasks during
+// a drag-and-drop loop run by Windows OS.
+#if defined(OS_WIN)
+#define MAYBE_CrossSiteDrag DISABLED_CrossSiteDrag
+#else
+#define MAYBE_CrossSiteDrag CrossSiteDrag
+#endif
+
+// Data that needs to be shared across multiple test steps below
+// (i.e. across CrossSiteDrag_Step2 and CrossSiteDrag_Step3).
+struct DragAndDropBrowserTest::CrossSiteDrag_TestState {
+  std::unique_ptr<DOMDragEventWaiter> dragend_event_waiter;
+  std::unique_ptr<DOMDragEventCounter> left_frame_events_counter;
+  std::unique_ptr<DOMDragEventCounter> right_frame_events_counter;
+};
+
+// Scenario: drag an image from the left into the right frame when the
+// left-vs-right frames are cross-site.  This is a regression test for
+// https://crbug.com/59081.
+//
+// Test coverage: absence of dragenter, dragover, drop DOM events
+// + presence of dragstart, dragleave and dragend.
+IN_PROC_BROWSER_TEST_P(DragAndDropBrowserTest, MAYBE_CrossSiteDrag) {
+  std::string left_frame_site = "c.com";  // Always cross-site VS main frame.
+  std::string right_frame_site = use_cross_site_subframe() ? "b.com" : "a.com";
+  ASSERT_TRUE(NavigateToTestPage("a.com"));
+  ASSERT_TRUE(NavigateLeftFrame(left_frame_site, "image_source.html"));
+  ASSERT_TRUE(NavigateRightFrame(right_frame_site, "drop_target.html"));
+
+  // Setup test expectations.
+  DragAndDropBrowserTest::CrossSiteDrag_TestState state;
+  state.left_frame_events_counter.reset(new DOMDragEventCounter(left_frame()));
+  state.right_frame_events_counter.reset(
+      new DOMDragEventCounter(right_frame()));
+
+  // Start the drag in the left frame.
+  DragStartWaiter drag_start_waiter(web_contents());
+  drag_start_waiter.PostTaskWhenDragStarts(
+      base::Bind(&DragAndDropBrowserTest::CrossSiteDrag_Step2,
+                 base::Unretained(this), base::Unretained(&state)));
+  EXPECT_TRUE(SimulateMouseDownAndDragStartInLeftFrame());
+
+  // The next step of the test (CrossSiteDrag_Step2) runs inside the
+  // nested drag-and-drop message loop - the call below won't return until the
+  // drag-and-drop has already ended.
+  drag_start_waiter.WaitUntilDragStart(nullptr, nullptr, nullptr, nullptr);
+
+  CrossSiteDrag_Step3(&state);
+}
+
+void DragAndDropBrowserTest::CrossSiteDrag_Step2(
+    DragAndDropBrowserTest::CrossSiteDrag_TestState* state) {
+  // While "dragleave" and "drop" events are not expected in this test, we
+  // simulate extra mouse operations for consistency with
+  // DragImageBetweenFrames_Step2.
+  ASSERT_TRUE(SimulateMouseMoveToLeftFrame());
+  for (int i = 0; i < 3; i++) {
+    content::DOMMessageQueue dom_message_queue(web_contents());
+    ASSERT_TRUE(SimulateMouseMoveToRightFrame());
+
+    // No events are expected from the right frame, so we can't wait for a
+    // dragover event here.  Still - we do want to wait until the right frame
+    // has had a chance to process any previous browser IPCs, so that in case
+    // there *is* a bug and a dragover event *does* happen, we won't terminate
+    // the test before the event has had a chance to be reported back to the
+    // browser.
+    std::string expected_response = base::StringPrintf("\"i%d\"", i);
+    right_frame()->ExecuteJavaScriptWithUserGestureForTests(base::UTF8ToUTF16(
+        base::StringPrintf("domAutomationController.setAutomationId(0);\n"
+                           "domAutomationController.send(%s);\n",
+                           expected_response.c_str())));
+
+    // Wait until our response comes back (it might be mixed with responses
+    // carrying events that are sent by event_monitoring.js).
+    std::string actual_response;
+    do {
+      ASSERT_TRUE(dom_message_queue.WaitForMessage(&actual_response));
+    } while (actual_response != expected_response);
+  }
+
+  // Release the mouse button to end the drag.
+  state->dragend_event_waiter.reset(
+      new DOMDragEventWaiter("dragend", left_frame()));
+  SimulateMouseUp();
+  // The test will continue in DragImageBetweenFrames_Step3.
+}
+
+void DragAndDropBrowserTest::CrossSiteDrag_Step3(
+    DragAndDropBrowserTest::CrossSiteDrag_TestState* state) {
+  EXPECT_TRUE(state->dragend_event_waiter->WaitForNextMatchingEvent(nullptr));
+
+  // Since the start of the test the left frame should have seen a single
+  // "dragstart",
+  // and a "dragend" event (and possibly a "dragleave" and some "dragover"
+  // events).
+  EXPECT_EQ(1, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                   "dragstart"));
+  EXPECT_EQ(1, state->left_frame_events_counter->GetNumberOfReceivedEvents(
+                   "dragend"));
+  EXPECT_EQ(
+      0, state->left_frame_events_counter->GetNumberOfReceivedEvents("drop"));
+
+  // No events should have fired in the right frame, because it is cross-site
+  // from the source of the drag.  This is the essence of this test.
+  EXPECT_EQ(0, state->right_frame_events_counter->GetNumberOfReceivedEvents(
+                   {"dragstart", "dragleave", "dragenter", "dragover", "drop",
+                    "dragend"}));
+}
+
+// TODO(paulmeyer): Should test the case of navigation happening in the middle
+// of a drag operation, and cross-site drags should be allowed across a
+// navigation.
 
 INSTANTIATE_TEST_CASE_P(
     SameSiteSubframe, DragAndDropBrowserTest, ::testing::Values(false));

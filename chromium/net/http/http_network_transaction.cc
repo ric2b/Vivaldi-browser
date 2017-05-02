@@ -21,7 +21,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -592,9 +591,10 @@ void HttpNetworkTransaction::GetConnectionAttempts(
   *out = connection_attempts_;
 }
 
-void HttpNetworkTransaction::OnThrottleStateChanged() {
+void HttpNetworkTransaction::OnThrottleUnblocked(
+    NetworkThrottleManager::Throttle* throttle) {
   // TODO(rdsmith): This DCHECK is dependent on the only transition
-  // being from throttled->unthrottled.  That is true right now, but may not
+  // being from blocked->unblocked.  That is true right now, but may not
   // be so in the future.
   DCHECK_EQ(STATE_THROTTLE_COMPLETE, next_state_);
 
@@ -797,11 +797,12 @@ int HttpNetworkTransaction::DoLoop(int result) {
 }
 
 int HttpNetworkTransaction::DoThrottle() {
+  DCHECK(!throttle_);
   throttle_ = session_->throttler()->CreateThrottle(
       this, priority_, (request_->load_flags & LOAD_IGNORE_LIMITS) != 0);
   next_state_ = STATE_THROTTLE_COMPLETE;
 
-  if (throttle_->IsThrottled()) {
+  if (throttle_->IsBlocked()) {
     net_log_.BeginEvent(NetLogEventType::HTTP_TRANSACTION_THROTTLED);
     return ERR_IO_PENDING;
   }
@@ -811,7 +812,7 @@ int HttpNetworkTransaction::DoThrottle() {
 
 int HttpNetworkTransaction::DoThrottleComplete() {
   DCHECK(throttle_);
-  DCHECK(!throttle_->IsThrottled());
+  DCHECK(!throttle_->IsBlocked());
 
   next_state_ = STATE_NOTIFY_BEFORE_CREATE_STREAM;
 

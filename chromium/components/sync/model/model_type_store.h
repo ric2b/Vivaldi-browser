@@ -11,10 +11,11 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
-#include "components/sync/model/sync_error.h"
+#include "components/sync/model/model_error.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -119,7 +120,7 @@ class ModelTypeStore {
   typedef base::Callback<void(Result result,
                               std::unique_ptr<RecordList> data_records)>
       ReadAllDataCallback;
-  typedef base::Callback<void(SyncError sync_error,
+  typedef base::Callback<void(base::Optional<ModelError> error,
                               std::unique_ptr<MetadataBatch> metadata_batch)>
       ReadMetadataCallback;
 
@@ -193,6 +194,10 @@ class ModelTypeStore {
   // virtual void DeleteAllMetadata(const CallbackWithResult& callback) = 0.
   // It will delete all metadata records and global metadata record.
 };
+
+// Typedef for a store factory that has all params bound except InitCallback.
+using ModelTypeStoreFactory =
+    base::Callback<void(const ModelTypeStore::InitCallback&)>;
 
 }  // namespace syncer
 

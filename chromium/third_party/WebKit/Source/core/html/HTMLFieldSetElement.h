@@ -29,25 +29,21 @@
 
 namespace blink {
 
-class HTMLFormControlsCollection;
+class HTMLCollection;
 
 class CORE_EXPORT HTMLFieldSetElement final : public HTMLFormControlElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static HTMLFieldSetElement* create(Document&, HTMLFormElement*);
-  DECLARE_VIRTUAL_TRACE();
+  static HTMLFieldSetElement* create(Document&);
   HTMLLegendElement* legend() const;
-
-  HTMLFormControlsCollection* elements();
-
-  const FormAssociatedElement::List& associatedElements() const;
+  HTMLCollection* elements();
 
  protected:
   void disabledAttributeChanged() override;
 
  private:
-  HTMLFieldSetElement(Document&, HTMLFormElement*);
+  explicit HTMLFieldSetElement(Document&);
 
   bool isEnumeratable() const override { return true; }
   bool supportsFocus() const override;
@@ -62,13 +58,7 @@ class CORE_EXPORT HTMLFieldSetElement final : public HTMLFormControlElement {
   bool isSubmittableElement() override;
   bool alwaysCreateUserAgentShadowRoot() const override { return false; }
 
-  static void invalidateDisabledStateUnder(Element&);
-  void refreshElementsIfNeeded() const;
-
-  mutable FormAssociatedElement::List m_associatedElements;
-  // When dom tree is modified, we have to refresh the m_associatedElements
-  // array.
-  mutable uint64_t m_documentVersion;
+  Element* invalidateDescendantDisabledStateAndFindFocusedOne(Element& base);
 };
 
 }  // namespace blink

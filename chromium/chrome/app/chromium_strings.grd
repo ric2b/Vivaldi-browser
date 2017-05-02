@@ -20,13 +20,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
     <output filename="chromium_strings_en-GB.pak" type="data_package" lang="en-GB" />
     <output filename="chromium_strings_en-US.pak" type="data_package" lang="en" />
     <output filename="chromium_strings_es.pak" type="data_package" lang="es" />
-    <if expr="is_ios">
-      <!-- iOS uses es-MX for es-419 -->
-      <output filename="chromium_strings_es-MX.pak" type="data_package" lang="es-419" />
-    </if>
-    <if expr="not is_ios">
-      <output filename="chromium_strings_es-419.pak" type="data_package" lang="es-419" />
-    </if>
+    <output filename="chromium_strings_es-419.pak" type="data_package" lang="es-419" />
     <output filename="chromium_strings_et.pak" type="data_package" lang="et" />
     <output filename="chromium_strings_fa.pak" type="data_package" lang="fa" />
     <output filename="chromium_strings_fake-bidi.pak" type="data_package" lang="fake-bidi" />
@@ -52,13 +46,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
     <output filename="chromium_strings_nb.pak" type="data_package" lang="no" />
     <!-- 'no' for Norwegian Bokmål. It should be 'nb'. -->
     <output filename="chromium_strings_pl.pak" type="data_package" lang="pl" />
-    <if expr="is_ios">
-      <!-- iOS uses pt for pt-BR -->
-      <output filename="chromium_strings_pt.pak" type="data_package" lang="pt-BR" />
-    </if>
-    <if expr="not is_ios">
-      <output filename="chromium_strings_pt-BR.pak" type="data_package" lang="pt-BR" />
-    </if>
+    <output filename="chromium_strings_pt-BR.pak" type="data_package" lang="pt-BR" />
     <output filename="chromium_strings_pt-PT.pak" type="data_package" lang="pt-PT" />
     <output filename="chromium_strings_ro.pak" type="data_package" lang="ro" />
     <output filename="chromium_strings_ru.pak" type="data_package" lang="ru" />
@@ -134,7 +122,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
       <!-- Settings specific strings -->
-      <if expr="not is_android and not is_ios">
+      <if expr="not is_android">
         <part file="settings_chromium_strings.grdp" />
       </if>
 
@@ -164,21 +152,6 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
         </message>
       </if>
       <if expr="is_win">
-        <message name="IDS_PRODUCT_APP_LAUNCHER_NAME" desc="The Chrome App Launcher application name">
-          Chromium App Launcher
-        </message>
-        <message name="IDS_PRODUCT_BINARIES_NAME" desc="The Chrome Binaries application name">
-          Chromium Binaries
-        </message>
-        <message name="IDS_CHROME_FRAME_TURNDOWN_LEARN_MORE_URL" desc="Link to knowledge-base article about Chromium Frame's turndown">
-          https://support.google.com/chrome/?p=ib_chromeframe
-        </message>
-        <message name="IDS_CHROME_FRAME_TURNDOWN_TEXT_IE_OLDER" desc="Text of Chromium Frame turndown prompt for IE 6, 7, and 8">
-          This site is using the Chromium Frame plugin which will soon be unsupported. Please uninstall it and upgrade to a modern browser.
-        </message>
-        <message name="IDS_CHROME_FRAME_TURNDOWN_TEXT_IE_NEWER" desc="Text of Chromium Frame turndown prompt for IE 9 and 10">
-          This site is using the Chromium Frame plugin that will soon be unsupported. Please uninstall it and download a compatible browser.
-        </message>
         <message name="IDS_SHORTCUT_NEW_WINDOW" desc="The text label of the New window shortcut context menu entry as of Windows 8">
           New window
         </message>
@@ -307,13 +280,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
           Get Started with Chromium OS
         </message>
       </if>
-      <if expr="is_ios">
-        <message name="IDS_NEW_TAB_CHROME_WELCOME_PAGE_TITLE"
-                 desc="Title for the hard-coded thumbnail that represents the Google Chrome Welcome page.  This is used on the NTP when there aren't enough thumbnails to show. [Length: 14em]">
-          Welcome
-        </message>
-      </if>
-      <if expr="not chromeos and not is_ios">
+      <if expr="not chromeos">
         <message name="IDS_NEW_TAB_CHROME_WELCOME_PAGE_TITLE"
                  desc="Title for the hard-coded thumbnail that represents the Google Chrome Welcome page.  This is used on the NTP when there aren't enough thumbnails to show.">
           Welcome to Chromium
@@ -397,9 +364,6 @@ Chromium is unable to recover your settings.
       <message name="IDS_PASSWORD_GENERATION_PROMPT" desc="Autofill dropdown text describing password generation. The link text is a separate string in the translation console and appears here as placeholder text.">
         Chromium will store this in your <ph name="SAVED_PASSWORD_LINK">$1<ex>Google saved passwords</ex></ph> and remember it the next time you need it.
       </message>
-      <message name="IDS_PASSWORD_GENERATION_SMART_LOCK_PROMPT" desc="Autofill dropdown text describing password generation. Used when we change the branding to SmartLock.  The link text is a separate string in the translation console and appears here as placeholder text.">
-        Chromium will store this with <ph name="SAVED_PASSWORD_LINK">$1<ex>Google Smart Lock for Passwords</ex></ph> and remember it the next time you need it.
-      </message>
       <message name="IDS_PASSWORD_GENERATION_SUGGESTION" desc="Text shown next to a generated password describing it as a suggestion.">
         Use password generated by Chromium
       </message>
@@ -447,12 +411,6 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_INSTALL_INSUFFICIENT_RIGHTS" desc="Error displayed when a non admin user tries to attempt system level install/uninstall.">
           You do not have appropriate rights for system-level install. Try running the installer again as Administrator.
-        </message>
-        <message name="IDS_INSTALL_NO_PRODUCTS_TO_UPDATE" desc="Error displayed if the installer is not provided one or more products to install/update.">
-          No installation of Chromium found to update.
-        </message>
-        <message name="IDS_INSTALL_MULTI_INSTALLATION_EXISTS" desc="Error during install if a multi-install Chromium is present, thereby preventing the installation of a single-install Chromium.">
-          A conflicting installation of Chromium was found on the system. Please uninstall it and try again.
         </message>
         <message name="IDS_INSTALL_EXISTING_VERSION_LAUNCHED" desc="A message shown to users who try to install Chrome in their user profile directory when their computer already has Chrome installed for all users. In this case, the installer silently launches the existing version of Chrome for all users rather than installing a second version of Chrome.">
           Chromium is already installed for all users on your computer.
@@ -785,33 +743,23 @@ Signing in anyway will merge Chromium information like bookmarks, history, and o
         </message>
       </if>
 
-      <!-- Enterprise sign-in profile linking -->
-      <if expr="not is_android">
+      <!-- Enterprise sign-in dialog -->
+      <if expr="toolkit_views or is_macosx">
         <message name="IDS_ENTERPRISE_SIGNIN_TITLE" desc="The title of the dialog to confirm linking the browser profile with the signed-in enterprise account">
-          Important information regarding your Chromium data
+          Link your Chromium data to this account?
         </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_EXPLANATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
-          You are signing in with a managed account and giving its administrator control over your Chromium profile. Your Chromium data, such as your apps, bookmarks, history, passwords, and other settings will become permanently tied to <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account.
+        <message name="IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITHOUT_PROFILE_CREATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
+          You are signing in with a managed account and giving its administrator control over your Chromium profile. Your Chromium data, such as your apps, bookmarks, history, passwords, and other settings will become permanently tied to <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>
         </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_CREATE_NEW_PROFILE_MESSAGE" desc="The text of the prompt to create a new profile after signing in to an enterprise account">
-          If you prefer to keep your existing Chromium data separate, you can create a new Chromium user for <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>.
-        </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_CONTINUE" desc="Text of the button to link the current profile with the signed-in enterprise account">
-          Link my Chromium data to this account
+        <message name="IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITH_PROFILE_CREATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. Additionally notifies the user that they can create a new profile instead. This message is followed by a 'Learn more' link.">
+          You are signing in with a managed account and giving its administrator control over your Chromium profile. Your Chromium data, such as your apps, bookmarks, history, passwords, and other settings will become permanently tied to <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. You can optionally create a new profile to keep your existing Chromium data separate. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>
         </message>
       </if>
 
-      <!-- Enterprise sign-in dialog (new-style) -->
-      <!-- TODO(crbug.com/660349): remove "new-style" once the old dialog is gone. -->
-      <if expr="toolkit_views or is_macosx">
-        <message name="IDS_ENTERPRISE_SIGNIN_TITLE_NEW_STYLE" desc="The title of the dialog to confirm linking the browser profile with the signed-in enterprise account">
-          Link your Chromium data to this account?
-        </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITHOUT_PROFILE_CREATION_NEW_STYLE" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
-          You are signing in with a managed account and giving its administrator control over your Chromium profile. Your Chromium data, such as your apps, bookmarks, history, passwords, and other settings will become permanently tied to <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>
-        </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITH_PROFILE_CREATION_NEW_STYLE" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. Additionally notifies the user that they can create a new profile instead. This message is followed by a 'Learn more' link.">
-          You are signing in with a managed account and giving its administrator control over your Chromium profile. Your Chromium data, such as your apps, bookmarks, history, passwords, and other settings will become permanently tied to <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. You can optionally create a new profile to keep your existing Chromium data separate. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>
+      <!-- Signin Email Confirmation tab modal dialog -->
+      <if expr="not chromeos">
+        <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_TITLE" desc="Title of the signin email confirmation tab modal dialog.">
+          <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph> was previously using Chromium
         </message>
       </if>
 
@@ -967,7 +915,7 @@ Signing in anyway will merge Chromium information like bookmarks, history, and o
       </if>
 
       <!-- Material Design User Manager -->
-      <if expr="not is_android and not is_ios and not chromeos">
+      <if expr="not is_android and not chromeos">
         <!-- Supervised user create confirmation page -->
         <message name="IDS_SUPERVISED_USER_CREATED_TEXT" desc="Informative text for the confirmation dialog that appears after a supervised user has been created.">
           To set which websites <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can view, you can configure restrictions and settings by visiting <ph name="BEGIN_LINK_1">&lt;a target="_blank" href="$3"&gt;</ph><ph name="DISPLAY_LINK">$4</ph><ph name="END_LINK_1">&lt;/a&gt;</ph>. If you do not change the default settings, <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can browse everything on the web.
@@ -1272,7 +1220,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       </if>
 
       <!-- Welcome page (chrome://welcome) strings -->
-      <if expr="not chromeos and not is_android and not is_ios">
+      <if expr="not chromeos and not is_android">
         <message name="IDS_WELCOME_HEADER" desc="A message which will appear as the header on the Welcome UI if the user has never run Chromium before.">
           Welcome to Chromium
         </message>

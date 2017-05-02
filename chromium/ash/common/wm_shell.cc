@@ -9,12 +9,15 @@
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accelerators/ash_focus_manager_factory.h"
 #include "ash/common/accessibility_delegate.h"
+#include "ash/common/cast_config_controller.h"
 #include "ash/common/devtools/ash_devtools_css_agent.h"
 #include "ash/common/devtools/ash_devtools_dom_agent.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/keyboard/keyboard_ui.h"
-#include "ash/common/new_window_client_proxy.h"
+#include "ash/common/media_controller.h"
+#include "ash/common/new_window_controller.h"
 #include "ash/common/palette_delegate.h"
+#include "ash/common/session/session_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/app_list_shelf_item_delegate.h"
 #include "ash/common/shelf/shelf_controller.h"
@@ -24,6 +27,10 @@
 #include "ash/common/shell_delegate.h"
 #include "ash/common/shutdown_controller.h"
 #include "ash/common/system/brightness_control_delegate.h"
+#include "ash/common/system/chromeos/brightness/brightness_controller_chromeos.h"
+#include "ash/common/system/chromeos/keyboard_brightness_controller.h"
+#include "ash/common/system/chromeos/network/vpn_list.h"
+#include "ash/common/system/chromeos/session/logout_confirmation_controller.h"
 #include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/locale/locale_notification_controller.h"
 #include "ash/common/system/toast/toast_manager.h"
@@ -39,26 +46,30 @@
 #include "ash/common/wm/root_window_finder.h"
 #include "ash/common/wm/system_modal_container_layout_manager.h"
 #include "ash/common/wm/window_cycle_controller.h"
-#include "ash/common/wm_root_window_controller.h"
+#include "ash/common/wm_activation_observer.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "ui/app_list/presenter/app_list_presenter.h"
+#include "services/preferences/public/cpp/pref_observer_store.h"
+#include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "ui/app_list/presenter/app_list.h"
 #include "ui/display/display.h"
 #include "ui/views/focus/focus_manager_factory.h"
-
-#if defined(OS_CHROMEOS)
-#include "ash/common/system/chromeos/brightness/brightness_controller_chromeos.h"
-#include "ash/common/system/chromeos/keyboard_brightness_controller.h"
-#include "ash/common/system/chromeos/session/logout_confirmation_controller.h"
-#endif
+#include "ui/wm/public/activation_client.h"
 
 namespace ash {
 
 // static
 WmShell* WmShell::instance_ = nullptr;
+
+WmShell::~WmShell() {
+  session_controller_->RemoveSessionStateObserver(this);
+}
 
 // static
 void WmShell::Set(WmShell* instance) {
@@ -76,7 +87,6 @@ void WmShell::Initialize(const scoped_refptr<base::SequencedWorkerPool>& pool) {
   // Some delegates access WmShell during their construction. Create them here
   // instead of the WmShell constructor.
   accessibility_delegate_.reset(delegate_->CreateAccessibilityDelegate());
-  media_delegate_.reset(delegate_->CreateMediaDelegate());
   palette_delegate_ = delegate_->CreatePaletteDelegate();
   toast_manager_.reset(new ToastManager);
 
@@ -104,6 +114,9 @@ void WmShell::Initialize(const scoped_refptr<base::SequencedWorkerPool>& pool) {
 }
 
 void WmShell::Shutdown() {
+  if (added_activation_observer_)
+    Shell::GetInstance()->activation_client()->RemoveObserver(this);
+
   // These members access WmShell in their destructors.
   wallpaper_controller_.reset();
   accessibility_delegate_.reset();
@@ -118,6 +131,9 @@ void WmShell::Shutdown() {
 
   // Balances the Install() in Initialize().
   views::FocusManagerFactory::Install(nullptr);
+
+  // Removes itself as an observer of |pref_store_|.
+  shelf_controller_.reset();
 }
 
 ShelfModel* WmShell::shelf_model() {
@@ -137,19 +153,14 @@ void WmShell::ShowContextMenu(const gfx::Point& location_in_screen,
                                                    source_type);
 }
 
-void WmShell::CreateShelf() {
+void WmShell::CreateShelfView() {
   // Must occur after SessionStateDelegate creation and user login.
   DCHECK(GetSessionStateDelegate());
   DCHECK_GT(GetSessionStateDelegate()->NumberOfLoggedInUsers(), 0);
   CreateShelfDelegate();
 
   for (WmWindow* root_window : GetAllRootWindows())
-    root_window->GetRootWindowController()->CreateShelf();
-}
-
-void WmShell::ShowShelf() {
-  for (WmWindow* root_window : GetAllRootWindows())
-    root_window->GetRootWindowController()->ShowShelf();
+    root_window->GetRootWindowController()->CreateShelfView();
 }
 
 void WmShell::CreateShelfDelegate() {
@@ -213,6 +224,18 @@ void WmShell::NotifyShelfAutoHideBehaviorChanged(WmWindow* root_window) {
     observer.OnShelfAutoHideBehaviorChanged(root_window);
 }
 
+void WmShell::AddActivationObserver(WmActivationObserver* observer) {
+  if (!added_activation_observer_) {
+    added_activation_observer_ = true;
+    Shell::GetInstance()->activation_client()->AddObserver(this);
+  }
+  activation_observers_.AddObserver(observer);
+}
+
+void WmShell::RemoveActivationObserver(WmActivationObserver* observer) {
+  activation_observers_.RemoveObserver(observer);
+}
+
 void WmShell::AddShellObserver(ShellObserver* observer) {
   shell_observers_.AddObserver(observer);
 }
@@ -246,30 +269,40 @@ void WmShell::SetPaletteDelegateForTesting(
 
 WmShell::WmShell(std::unique_ptr<ShellDelegate> shell_delegate)
     : delegate_(std::move(shell_delegate)),
+      app_list_(base::MakeUnique<app_list::AppList>()),
+      brightness_control_delegate_(
+          base::MakeUnique<system::BrightnessControllerChromeos>()),
+      cast_config_(base::MakeUnique<CastConfigController>()),
       focus_cycler_(base::MakeUnique<FocusCycler>()),
       immersive_context_(base::MakeUnique<ImmersiveContextAsh>()),
+      keyboard_brightness_control_delegate_(
+          base::MakeUnique<KeyboardBrightnessController>()),
       locale_notification_controller_(
           base::MakeUnique<LocaleNotificationController>()),
-      new_window_client_(base::MakeUnique<NewWindowClientProxy>(
-          delegate_->GetShellConnector())),
+      media_controller_(base::MakeUnique<MediaController>()),
+      new_window_controller_(base::MakeUnique<NewWindowController>()),
+      session_controller_(base::MakeUnique<SessionController>()),
       shelf_controller_(base::MakeUnique<ShelfController>()),
       shutdown_controller_(base::MakeUnique<ShutdownController>()),
-      system_tray_controller_(base::MakeUnique<SystemTrayController>(
-          delegate_->GetShellConnector())),
+      system_tray_controller_(base::MakeUnique<SystemTrayController>()),
       system_tray_notifier_(base::MakeUnique<SystemTrayNotifier>()),
+      vpn_list_(base::MakeUnique<VpnList>()),
       wallpaper_delegate_(delegate_->CreateWallpaperDelegate()),
       window_cycle_controller_(base::MakeUnique<WindowCycleController>()),
       window_selector_controller_(
           base::MakeUnique<WindowSelectorController>()) {
-#if defined(OS_CHROMEOS)
-  brightness_control_delegate_.reset(new system::BrightnessControllerChromeos);
-  keyboard_brightness_control_delegate_.reset(new KeyboardBrightnessController);
-#endif
+  session_controller_->AddSessionStateObserver(this);
+
+  prefs::mojom::PreferencesFactoryPtr pref_factory_ptr;
+  // Can be null in tests.
+  if (!delegate_->GetShellConnector())
+    return;
+  delegate_->GetShellConnector()->BindInterface(prefs::mojom::kServiceName,
+                                                &pref_factory_ptr);
+  pref_store_ = new preferences::PrefObserverStore(std::move(pref_factory_ptr));
 }
 
-WmShell::~WmShell() {}
-
-WmRootWindowController* WmShell::GetPrimaryRootWindowController() {
+RootWindowController* WmShell::GetPrimaryRootWindowController() {
   return GetPrimaryRootWindow()->GetRootWindowController();
 }
 
@@ -325,28 +358,25 @@ void WmShell::OnModalWindowRemoved(WmWindow* removed) {
 
 void WmShell::ShowAppList() {
   // Show the app list on the default display for new windows.
-  int64_t display_id =
-      GetRootWindowForNewWindows()->GetDisplayNearestWindow().id();
-  delegate_->GetAppListPresenter()->Show(display_id);
+  app_list_->Show(GetRootWindowForNewWindows()->GetDisplayNearestWindow().id());
 }
 
 void WmShell::DismissAppList() {
-  delegate_->GetAppListPresenter()->Dismiss();
+  app_list_->Dismiss();
 }
 
 void WmShell::ToggleAppList() {
-  // Show the app list on the default display for new windows.
-  int64_t display_id =
-      GetRootWindowForNewWindows()->GetDisplayNearestWindow().id();
-  delegate_->GetAppListPresenter()->ToggleAppList(display_id);
+  // Toggle the app list on the default display for new windows.
+  app_list_->ToggleAppList(
+      GetRootWindowForNewWindows()->GetDisplayNearestWindow().id());
 }
 
 bool WmShell::IsApplistVisible() const {
-  return delegate_->GetAppListPresenter()->IsVisible();
+  return app_list_->IsVisible();
 }
 
 bool WmShell::GetAppListTargetVisibility() const {
-  return delegate_->GetAppListPresenter()->GetTargetVisibility();
+  return app_list_->GetTargetVisibility();
 }
 
 void WmShell::SetKeyboardUI(std::unique_ptr<KeyboardUI> keyboard_ui) {
@@ -358,20 +388,16 @@ void WmShell::SetSystemTrayDelegate(
   DCHECK(delegate);
   system_tray_delegate_ = std::move(delegate);
   system_tray_delegate_->Initialize();
-#if defined(OS_CHROMEOS)
   // Accesses WmShell in its constructor.
   logout_confirmation_controller_.reset(new LogoutConfirmationController(
       base::Bind(&SystemTrayController::SignOut,
                  base::Unretained(system_tray_controller_.get()))));
-#endif
 }
 
 void WmShell::DeleteSystemTrayDelegate() {
   DCHECK(system_tray_delegate_);
-#if defined(OS_CHROMEOS)
   // Accesses WmShell in its destructor.
   logout_confirmation_controller_.reset();
-#endif
   system_tray_delegate_.reset();
 }
 
@@ -406,6 +432,33 @@ void WmShell::DeleteToastManager() {
 void WmShell::SetAcceleratorController(
     std::unique_ptr<AcceleratorController> accelerator_controller) {
   accelerator_controller_ = std::move(accelerator_controller);
+}
+
+void WmShell::SessionStateChanged(session_manager::SessionState state) {
+  // Create the shelf when a session becomes active. It's safe to do this
+  // multiple times (e.g. initial login vs. multiprofile add session).
+  if (state == session_manager::SessionState::ACTIVE)
+    CreateShelfView();
+}
+
+void WmShell::OnWindowActivated(
+    aura::client::ActivationChangeObserver::ActivationReason reason,
+    aura::Window* gained_active,
+    aura::Window* lost_active) {
+  WmWindow* gained_active_wm = WmWindow::Get(gained_active);
+  WmWindow* lost_active_wm = WmWindow::Get(lost_active);
+  if (gained_active_wm)
+    set_root_window_for_new_windows(gained_active_wm->GetRootWindow());
+  for (auto& observer : activation_observers_)
+    observer.OnWindowActivated(gained_active_wm, lost_active_wm);
+}
+
+void WmShell::OnAttemptToReactivateWindow(aura::Window* request_active,
+                                          aura::Window* actual_active) {
+  for (auto& observer : activation_observers_) {
+    observer.OnAttemptToReactivateWindow(WmWindow::Get(request_active),
+                                         WmWindow::Get(actual_active));
+  }
 }
 
 }  // namespace ash

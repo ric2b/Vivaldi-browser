@@ -46,11 +46,8 @@ RTCSessionDescriptionRequestImpl* RTCSessionDescriptionRequestImpl::create(
     RTCPeerConnection* requester,
     RTCSessionDescriptionCallback* successCallback,
     RTCPeerConnectionErrorCallback* errorCallback) {
-  RTCSessionDescriptionRequestImpl* request =
-      new RTCSessionDescriptionRequestImpl(context, requester, successCallback,
-                                           errorCallback);
-  request->suspendIfNeeded();
-  return request;
+  return new RTCSessionDescriptionRequestImpl(context, requester,
+                                              successCallback, errorCallback);
 }
 
 RTCSessionDescriptionRequestImpl::RTCSessionDescriptionRequestImpl(
@@ -58,7 +55,7 @@ RTCSessionDescriptionRequestImpl::RTCSessionDescriptionRequestImpl(
     RTCPeerConnection* requester,
     RTCSessionDescriptionCallback* successCallback,
     RTCPeerConnectionErrorCallback* errorCallback)
-    : ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_successCallback(successCallback),
       m_errorCallback(errorCallback),
       m_requester(requester) {
@@ -86,7 +83,7 @@ void RTCSessionDescriptionRequestImpl::requestFailed(const String& error) {
   clear();
 }
 
-void RTCSessionDescriptionRequestImpl::contextDestroyed() {
+void RTCSessionDescriptionRequestImpl::contextDestroyed(ExecutionContext*) {
   clear();
 }
 
@@ -101,7 +98,7 @@ DEFINE_TRACE(RTCSessionDescriptionRequestImpl) {
   visitor->trace(m_errorCallback);
   visitor->trace(m_requester);
   RTCSessionDescriptionRequest::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

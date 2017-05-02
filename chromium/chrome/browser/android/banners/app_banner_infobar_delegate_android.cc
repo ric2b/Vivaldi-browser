@@ -9,6 +9,7 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/timer/elapsed_timer.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/shortcut_info.h"
 #include "chrome/browser/android/tab_android.h"
@@ -20,7 +21,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/android/infobars/app_banner_infobar_android.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/manifest.h"
 #include "jni/AppBannerInfoBarDelegateAndroid_jni.h"
@@ -53,14 +55,12 @@ bool AppBannerInfoBarDelegateAndroid::Create(
     std::unique_ptr<SkBitmap> icon,
     int event_request_id,
     webapk::InstallSource webapk_install_source) {
-  bool is_webapk = ChromeWebApkHost::AreWebApkEnabled();
+  bool is_webapk = ChromeWebApkHost::CanInstallWebApk();
   std::string webapk_package_name = "";
-  if (is_webapk) {
-    webapk_package_name = ShortcutHelper::QueryWebApkPackage(
-        web_contents->GetLastCommittedURL());
-  }
-  bool is_webapk_already_installed = !webapk_package_name.empty();
   const GURL& url = shortcut_info->url;
+  if (is_webapk)
+    webapk_package_name = ShortcutHelper::QueryWebApkPackage(url);
+  bool is_webapk_already_installed = !webapk_package_name.empty();
   auto infobar_delegate =
       base::WrapUnique(new banners::AppBannerInfoBarDelegateAndroid(
           weak_manager, app_title, std::move(shortcut_info), std::move(icon),
@@ -327,6 +327,7 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
 
   // If the WebAPK is not installed and the "Add to Home Screen" button is
   // clicked, install the WebAPK.
+  timer_.reset(new base::ElapsedTimer());
   install_state_ = INSTALLING;
   webapk::TrackInstallSource(webapk_install_source_);
 
@@ -334,6 +335,17 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
     TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
     AppBannerSettingsHelper::RecordBannerInstallEvent(
         web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
+  } else if (is_webapk_) {
+    // This branch will be entered if we are a WebAPK that was triggered from
+    // the add to homescreen menu item. Manually record the app banner added to
+    // homescreen event in this case. Don't call
+    // AppBannerSettingsHelper::RecordBannerInstallEvent as that records
+    // banner-specific metrics in addition to this event.
+    AppBannerSettingsHelper::RecordBannerEvent(
+        web_contents, web_contents->GetLastCommittedURL(),
+        shortcut_info_->url.spec(),
+        AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
+        AppBannerManager::GetCurrentTime());
   }
 
   Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
@@ -357,8 +369,13 @@ bool AppBannerInfoBarDelegateAndroid::TriggeredFromBanner() const {
 }
 
 void AppBannerInfoBarDelegateAndroid::SendBannerAccepted() {
-  if (weak_manager_ && TriggeredFromBanner())
+  if (weak_manager_ && TriggeredFromBanner()) {
     weak_manager_->SendBannerAccepted(event_request_id_);
+    // TODO(mgiuca): Send the appinstalled event for WebAPKs (but just removing
+    // this check won't be sufficient).
+    if (!is_webapk_)
+      weak_manager_->OnInstall();
+  }
 }
 
 void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished(
@@ -375,6 +392,8 @@ void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished(
   }
 
   UpdateStateForInstalledWebAPK(webapk_package_name);
+  webapk::TrackInstallDuration(timer_->Elapsed());
+  timer_.reset();
   webapk::TrackInstallEvent(webapk::INSTALL_COMPLETED);
 }
 

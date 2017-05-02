@@ -57,10 +57,10 @@ HTMLAreaElement::~HTMLAreaElement() {}
 
 DEFINE_NODE_FACTORY(HTMLAreaElement)
 
-void HTMLAreaElement::parseAttribute(const QualifiedName& name,
-                                     const AtomicString& oldValue,
-                                     const AtomicString& value) {
-  if (name == shapeAttr) {
+void HTMLAreaElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const AtomicString& value = params.newValue;
+  if (params.name == shapeAttr) {
     if (equalIgnoringASCIICase(value, "default")) {
       m_shape = Default;
     } else if (equalIgnoringASCIICase(value, "circle") ||
@@ -75,13 +75,13 @@ void HTMLAreaElement::parseAttribute(const QualifiedName& name,
       m_shape = Rect;
     }
     invalidateCachedPath();
-  } else if (name == coordsAttr) {
+  } else if (params.name == coordsAttr) {
     m_coords = parseHTMLListOfFloatingPointNumbers(value.getString());
     invalidateCachedPath();
-  } else if (name == altAttr || name == accesskeyAttr) {
+  } else if (params.name == altAttr || params.name == accesskeyAttr) {
     // Do nothing.
   } else {
-    HTMLAnchorElement::parseAttribute(name, oldValue, value);
+    HTMLAnchorElement::parseAttribute(params);
   }
 }
 
@@ -166,7 +166,7 @@ Path HTMLAreaElement::getPath(const LayoutObject* containerObject) const {
     }
 
     // Cache the original path, not depending on containerObject.
-    m_path = makeUnique<Path>(path);
+    m_path = WTF::makeUnique<Path>(path);
   }
 
   // Zoom the path into coordinates of the container object.
@@ -197,7 +197,7 @@ bool HTMLAreaElement::isMouseFocusable() const {
 bool HTMLAreaElement::layoutObjectIsFocusable() const {
   HTMLImageElement* image = imageElement();
   if (!image || !image->layoutObject() ||
-      image->layoutObject()->style()->visibility() != EVisibility::Visible)
+      image->layoutObject()->style()->visibility() != EVisibility::kVisible)
     return false;
 
   return supportsFocus() && Element::tabIndex() >= 0;

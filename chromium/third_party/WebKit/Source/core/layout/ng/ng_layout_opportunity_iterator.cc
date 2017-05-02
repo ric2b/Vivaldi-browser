@@ -4,7 +4,6 @@
 
 #include "core/layout/ng/ng_layout_opportunity_iterator.h"
 
-#include "core/layout/ng/ng_physical_constraint_space.h"
 #include "core/layout/ng/ng_units.h"
 #include "wtf/NonCopyingSort.h"
 
@@ -17,7 +16,7 @@ void CollectAllOpportunities(const NGLayoutOpportunityTreeNode* node,
   if (!node)
     return;
   if (node->IsLeafNode())
-    opportunities.append(node->opportunity);
+    opportunities.push_back(node->opportunity);
   CollectAllOpportunities(node->left, opportunities);
   CollectAllOpportunities(node->bottom, opportunities);
   CollectAllOpportunities(node->right, opportunities);
@@ -29,7 +28,7 @@ NGLayoutOpportunity CreateLayoutOpportunityFromConstraintSpace(
     const NGLogicalOffset& origin_point) {
   NGLayoutOpportunity opportunity;
   opportunity.offset = space.Offset();
-  opportunity.size = space.Size();
+  opportunity.size = space.AvailableSize();
 
   // adjust to the origin_point.
   opportunity.offset += origin_point;
@@ -177,7 +176,7 @@ void InsertExclusion(NGLayoutOpportunityTreeNode* node,
   NGLayoutOpportunity top_layout_opp =
       GetTopSpace(node->opportunity, exclusion->rect);
   if (!top_layout_opp.IsEmpty())
-    opportunities.append(top_layout_opp);
+    opportunities.push_back(top_layout_opp);
 
   node->exclusion = exclusion;
 }
@@ -255,8 +254,8 @@ NGLayoutOpportunityIterator::NGLayoutOpportunityIterator(
   RunPreconditionChecks(*space, opt_origin_point, opt_leader_point);
 
   // TODO(chrome-layout-team): Combine exclusions that shadow each other.
-  auto& exclusions = constraint_space_->PhysicalSpace()->Exclusions();
-  DCHECK(std::is_sorted(exclusions.begin(), exclusions.end(),
+  auto& exclusions = constraint_space_->Exclusions();
+  DCHECK(std::is_sorted(exclusions->storage.begin(), exclusions->storage.end(),
                         &CompareNGExclusionsByTopAsc))
       << "Exclusions are expected to be sorted by TOP";
 
@@ -273,7 +272,7 @@ NGLayoutOpportunityIterator::NGLayoutOpportunityIterator(
                     opportunities_);
   }
 
-  for (const auto& exclusion : exclusions) {
+  for (const auto& exclusion : exclusions->storage) {
     InsertExclusion(MutableOpportunityTreeRoot(), exclusion.get(),
                     opportunities_);
   }

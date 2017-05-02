@@ -8,6 +8,7 @@
 #include "net/quic/core/crypto/chacha20_poly1305_encrypter.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/crypto/null_encrypter.h"
+#include "net/quic/platform/api/quic_logging.h"
 
 namespace net {
 
@@ -18,10 +19,8 @@ QuicEncrypter* QuicEncrypter::Create(QuicTag algorithm) {
       return new Aes128Gcm12Encrypter();
     case kCC20:
       return new ChaCha20Poly1305Encrypter();
-    case kNULL:
-      return new NullEncrypter();
     default:
-      LOG(FATAL) << "Unsupported algorithm: " << algorithm;
+      QUIC_LOG(FATAL) << "Unsupported algorithm: " << algorithm;
       return nullptr;
   }
 }

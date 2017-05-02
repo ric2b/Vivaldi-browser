@@ -15,7 +15,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/leak_annotations.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -77,6 +77,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/crash_keys.h"
 #include "chrome/common/extensions/chrome_extensions_client.h"
 #include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/common/features.h"
@@ -98,6 +99,8 @@
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service_delegate.h"
@@ -118,8 +121,10 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
+#include "media/media_features.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "ui/base/idle/idle.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -161,7 +166,7 @@
 #include "chrome/browser/plugins/plugins_resource_service.h"
 #endif
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #endif
 
@@ -198,6 +203,12 @@ using content::ChildProcessSecurityPolicy;
 using content::PluginService;
 using content::ResourceDispatcherHost;
 
+rappor::RapporService* GetBrowserRapporService() {
+  if (g_browser_process != nullptr)
+    return g_browser_process->rappor_service();
+  return nullptr;
+}
+
 BrowserProcessImpl::BrowserProcessImpl(
     base::SequencedTaskRunner* local_state_task_runner,
     const base::CommandLine& command_line)
@@ -216,6 +227,7 @@ BrowserProcessImpl::BrowserProcessImpl(
       local_state_task_runner_(local_state_task_runner),
       cached_default_web_client_state_(shell_integration::UNKNOWN_DEFAULT) {
   g_browser_process = this;
+  rappor::SetDefaultServiceAccessor(&GetBrowserRapporService);
   platform_part_.reset(new BrowserProcessPlatformPart());
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -354,7 +366,7 @@ void BrowserProcessImpl::StartTearDown() {
 
   platform_part()->StartTearDown();
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   // Cancel any uploads to release the system url request context references.
   if (webrtc_log_uploader_)
     webrtc_log_uploader_->StartShutdown();
@@ -368,7 +380,7 @@ void BrowserProcessImpl::PostDestroyThreads() {
   // With the file_thread_ flushed, we can release any icon resources.
   icon_manager_.reset();
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   // Must outlive the file thread.
   webrtc_log_uploader_.reset();
 #endif
@@ -526,9 +538,9 @@ metrics::MetricsService* BrowserProcessImpl::metrics_service() {
   return GetMetricsServicesManager()->GetMetricsService();
 }
 
-rappor::RapporService* BrowserProcessImpl::rappor_service() {
+rappor::RapporServiceImpl* BrowserProcessImpl::rappor_service() {
   DCHECK(CalledOnValidThread());
-  return GetMetricsServicesManager()->GetRapporService();
+  return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
 IOThread* BrowserProcessImpl::io_thread() {
@@ -746,7 +758,7 @@ bool BrowserProcessImpl::created_local_state() const {
   return created_local_state_;
 }
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 WebRtcLogUploader* BrowserProcessImpl::webrtc_log_uploader() {
   if (!webrtc_log_uploader_.get())
     webrtc_log_uploader_.reset(new WebRtcLogUploader());
@@ -787,7 +799,8 @@ BrowserProcessImpl::CachedDefaultWebClientState() {
   return cached_default_web_client_state_;
 }
 
-PhysicalWebDataSource* BrowserProcessImpl::GetPhysicalWebDataSource() {
+physical_web::PhysicalWebDataSource*
+BrowserProcessImpl::GetPhysicalWebDataSource() {
   DCHECK(CalledOnValidThread());
 #if defined(OS_ANDROID)
   if (!physical_web_data_source_) {
@@ -831,10 +844,10 @@ void BrowserProcessImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
                                 GoogleUpdateSettings::GetCollectStatsConsent());
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   registry->RegisterBooleanPref(
       prefs::kCrashReportingEnabled, false);
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
 }
 
 DownloadRequestLimiter* BrowserProcessImpl::download_request_limiter() {
@@ -1049,14 +1062,9 @@ void BrowserProcessImpl::PreCreateThreads() {
     // commit (including in iframes) in extension processes.
     ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
         extensions::kExtensionScheme, true);
-    // TODO(nick): Kill off kExtensionResourceScheme.
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
-        extensions::kExtensionResourceScheme, false);
   } else {
     ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
         extensions::kExtensionScheme);
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-        extensions::kExtensionResourceScheme);
   }
 #endif
 
@@ -1085,7 +1093,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   ApplyMetricsReportingPolicy();
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   PluginService* plugin_service = PluginService::GetInstance();
   plugin_service->SetFilter(ChromePluginServiceFilter::GetInstance());
 
@@ -1097,7 +1105,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   plugins_resource_service_.reset(new PluginsResourceService(local_state()));
   plugins_resource_service_->Init();
 #endif
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if !defined(OS_ANDROID)
   storage_monitor::StorageMonitor::Create();
@@ -1131,7 +1139,7 @@ void BrowserProcessImpl::CreateIntranetRedirectDetector() {
 }
 
 void BrowserProcessImpl::CreateNotificationPlatformBridge() {
-#if (defined(OS_ANDROID) || defined(OS_MACOSX)) && defined(ENABLE_NOTIFICATIONS)
+#if (defined(OS_ANDROID) || defined(OS_MACOSX))
   DCHECK(!notification_bridge_);
   notification_bridge_.reset(NotificationPlatformBridge::Create());
   created_notification_bridge_ = true;
@@ -1141,7 +1149,7 @@ void BrowserProcessImpl::CreateNotificationPlatformBridge() {
 void BrowserProcessImpl::CreateNotificationUIManager() {
 // Android does not use the NotificationUIManager anymore
 // All notification traffic is routed through NotificationPlatformBridge.
-#if defined(ENABLE_NOTIFICATIONS) && !defined(OS_ANDROID)
+#if !defined(OS_ANDROID)
   DCHECK(!notification_ui_manager_);
   notification_ui_manager_.reset(NotificationUIManager::Create());
   created_notification_ui_manager_ = true;
@@ -1305,10 +1313,9 @@ void BrowserProcessImpl::Pin() {
 
   // CHECK(!IsShuttingDown());
   if (IsShuttingDown()) {
-    // Copy the stacktrace which released the final reference onto our stack so
-    // it will be available in the crash report for inspection.
-    base::debug::StackTrace callstack = release_last_reference_callstack_;
-    base::debug::Alias(&callstack);
+    // TODO(crbug.com/113031, crbug.com/625646): Temporary instrumentation.
+    base::debug::SetCrashKeyToStackTrace(crash_keys::kBrowserUnpinTrace,
+                                         release_last_reference_callstack_);
     CHECK(false);
   }
 }

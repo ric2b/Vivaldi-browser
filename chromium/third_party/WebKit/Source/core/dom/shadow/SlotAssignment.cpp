@@ -15,7 +15,7 @@
 
 namespace blink {
 
-void SlotAssignment::slotAdded(HTMLSlotElement& slot) {
+void SlotAssignment::didAddSlot(HTMLSlotElement& slot) {
   // Relevant DOM Standard:
   // https://dom.spec.whatwg.org/#concept-node-insert
   // 6.4:  Run assign slotables for a tree with node's tree and a set containing
@@ -90,8 +90,8 @@ void SlotAssignment::slotRenamed(const AtomicString& oldSlotName,
     slot.didSlotChange(SlotChangeType::Initial);
 }
 
-void SlotAssignment::hostChildSlotNameChanged(const AtomicString& oldValue,
-                                              const AtomicString& newValue) {
+void SlotAssignment::didChangeHostChildSlotName(const AtomicString& oldValue,
+                                                const AtomicString& newValue) {
   if (HTMLSlotElement* slot =
           findSlotByName(HTMLSlotElement::normalizeSlotName(oldValue))) {
     slot->didSlotChange(SlotChangeType::Initial);
@@ -170,7 +170,7 @@ void SlotAssignment::collectSlots() {
   m_slots.reserveCapacity(m_slotCount);
   for (HTMLSlotElement& slot :
        Traversal<HTMLSlotElement>::descendantsOf(*m_owner)) {
-    m_slots.append(&slot);
+    m_slots.push_back(&slot);
   }
   m_needsCollectSlots = false;
   DCHECK_EQ(m_slots.size(), m_slotCount);

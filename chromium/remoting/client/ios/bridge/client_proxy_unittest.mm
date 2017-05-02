@@ -61,7 +61,7 @@
 - (void)applyFrame:(const webrtc::DesktopSize&)size
             stride:(NSInteger)stride
               data:(uint8_t*)data
-           rects:(const std::vector<webrtc::DesktopRect>&)rects {
+             rects:(const std::vector<webrtc::DesktopRect>&)rects {
   _size = size;
   _stride = stride;
   _data = data;
@@ -173,12 +173,12 @@ class ClientProxyTest : public ::testing::Test {
                  kErrorHOST_OVERLOAD);
     TestForError(state, protocol::ErrorCode::INCOMPATIBLE_PROTOCOL,
                  expectedStatusMsg, kErrorINCOMPATIBLE_PROTOCOL);
-    TestForError(state, protocol::ErrorCode::PEER_IS_OFFLINE,
-                 expectedStatusMsg, kErrorPEER_IS_OFFLINE);
+    TestForError(state, protocol::ErrorCode::PEER_IS_OFFLINE, expectedStatusMsg,
+                 kErrorPEER_IS_OFFLINE);
     TestForError(state, protocol::ErrorCode::SESSION_REJECTED,
                  expectedStatusMsg, kErrorSESSION_REJECTED);
-    TestForError(state, protocol::ErrorCode::SIGNALING_ERROR,
-                 expectedStatusMsg, kErrorSIGNALING_ERROR);
+    TestForError(state, protocol::ErrorCode::SIGNALING_ERROR, expectedStatusMsg,
+                 kErrorSIGNALING_ERROR);
     TestForError(state, protocol::ErrorCode::SIGNALING_TIMEOUT,
                  expectedStatusMsg, kErrorSIGNALING_TIMEOUT);
     TestForError(state, protocol::ErrorCode::UNKNOWN_ERROR, expectedStatusMsg,
@@ -198,7 +198,7 @@ class ClientProxyTest : public ::testing::Test {
     if (existingHost != nil) {
       existingHost.pairId = @"";
       existingHost.pairSecret = @"";
-      [existingHost saveToSSOKeychain];
+      [existingHost saveToKeychain];
     }
 
     clientProxy_->CommitPairingCredentials(hostName, pairingId, pairingSecret);
@@ -230,7 +230,7 @@ class ClientProxyTest : public ::testing::Test {
   ClientProxyDelegateWrapper* delegateWrapper_;
 };
 
-// TODO(nicholss): Removing these tests for now until we settle on a
+// TODO(nicholss): Commenting these tests out for now until we settle on
 // what the final strings will be.
 // TEST_F(ClientProxyTest, ReportConnectionStatusINITIALIZING) {
 //   TestConnnectionStatus(protocol::ConnectionToHost::State::INITIALIZING,
@@ -280,11 +280,12 @@ TEST_F(ClientProxyTest, CommitPairingCredentialsBasic) {
 
 TEST_F(ClientProxyTest, CommitPairingCredentialsExtended) {
   ValidateHost(base::SysNSStringToUTF8(kHostName),
-      base::SysNSStringToUTF8(kPairingId),
-      base::SysNSStringToUTF8(kPairingSecret));
+               base::SysNSStringToUTF8(kPairingId),
+               base::SysNSStringToUTF8(kPairingSecret));
 }
 
-// TODO(nicholss): Re-enable these tests.
+// TODO(nicholss): Re-enable these tests. Activly changing how rendering
+// is done for the app at the moment.
 // TEST_F(ClientProxyTest, RedrawCanvasBasic) {
 //   webrtc::BasicDesktopFrame frame(webrtc::DesktopSize(1, 1));
 //   webrtc::DesktopRegion regions;

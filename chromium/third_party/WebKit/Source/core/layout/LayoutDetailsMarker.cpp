@@ -34,15 +34,15 @@ LayoutDetailsMarker::LayoutDetailsMarker(Element* element)
 
 LayoutDetailsMarker::Orientation LayoutDetailsMarker::getOrientation() const {
   switch (style()->getWritingMode()) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       if (style()->isLeftToRightDirection())
         return isOpen() ? Down : Right;
       return isOpen() ? Down : Left;
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       if (style()->isLeftToRightDirection())
         return isOpen() ? Left : Down;
       return isOpen() ? Left : Up;
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       if (style()->isLeftToRightDirection())
         return isOpen() ? Right : Down;
       return isOpen() ? Right : Up;

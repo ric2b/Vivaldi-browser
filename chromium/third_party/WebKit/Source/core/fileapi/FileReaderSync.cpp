@@ -31,40 +31,75 @@
 #include "core/fileapi/FileReaderSync.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReaderLoader.h"
+#include "core/frame/Deprecation.h"
+#include "platform/Histogram.h"
 
 namespace blink {
 
-FileReaderSync::FileReaderSync() {}
+namespace {
+// These values are written to logs.  New enum values can be added, but existing
+// enums must never be renumbered or deleted and reused.
+enum class WorkerType {
+  OTHER = 0,
+  DEDICATED_WORKER = 1,
+  SHARED_WORKER = 2,
+  SERVICE_WORKER = 3,
+  MAX
+};
+}  // namespace
+
+FileReaderSync::FileReaderSync(ExecutionContext* context) {
+  if (context->isServiceWorkerGlobalScope()) {
+    Deprecation::countDeprecation(context,
+                                  UseCounter::FileReaderSyncInServiceWorker);
+  }
+
+  WorkerType type = WorkerType::OTHER;
+  if (context->isDedicatedWorkerGlobalScope())
+    type = WorkerType::DEDICATED_WORKER;
+  else if (context->isSharedWorkerGlobalScope())
+    type = WorkerType::SHARED_WORKER;
+  else if (context->isServiceWorkerGlobalScope())
+    type = WorkerType::SERVICE_WORKER;
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, workerTypeHistogram,
+      new EnumerationHistogram("FileReaderSync.WorkerType",
+                               static_cast<int>(WorkerType::MAX)));
+  workerTypeHistogram.count(static_cast<int>(type));
+}
 
 DOMArrayBuffer* FileReaderSync::readAsArrayBuffer(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     Blob* blob,
     ExceptionState& exceptionState) {
   ASSERT(blob);
 
   std::unique_ptr<FileReaderLoader> loader =
       FileReaderLoader::create(FileReaderLoader::ReadAsArrayBuffer, nullptr);
-  startLoading(executionContext, *loader, *blob, exceptionState);
+  startLoading(scriptState->getExecutionContext(), *loader, *blob,
+               exceptionState);
 
   return loader->arrayBufferResult();
 }
 
-String FileReaderSync::readAsBinaryString(ExecutionContext* executionContext,
+String FileReaderSync::readAsBinaryString(ScriptState* scriptState,
                                           Blob* blob,
                                           ExceptionState& exceptionState) {
   ASSERT(blob);
 
   std::unique_ptr<FileReaderLoader> loader =
       FileReaderLoader::create(FileReaderLoader::ReadAsBinaryString, nullptr);
-  startLoading(executionContext, *loader, *blob, exceptionState);
+  startLoading(scriptState->getExecutionContext(), *loader, *blob,
+               exceptionState);
   return loader->stringResult();
 }
 
-String FileReaderSync::readAsText(ExecutionContext* executionContext,
+String FileReaderSync::readAsText(ScriptState* scriptState,
                                   Blob* blob,
                                   const String& encoding,
                                   ExceptionState& exceptionState) {
@@ -73,11 +108,12 @@ String FileReaderSync::readAsText(ExecutionContext* executionContext,
   std::unique_ptr<FileReaderLoader> loader =
       FileReaderLoader::create(FileReaderLoader::ReadAsText, nullptr);
   loader->setEncoding(encoding);
-  startLoading(executionContext, *loader, *blob, exceptionState);
+  startLoading(scriptState->getExecutionContext(), *loader, *blob,
+               exceptionState);
   return loader->stringResult();
 }
 
-String FileReaderSync::readAsDataURL(ExecutionContext* executionContext,
+String FileReaderSync::readAsDataURL(ScriptState* scriptState,
                                      Blob* blob,
                                      ExceptionState& exceptionState) {
   ASSERT(blob);
@@ -85,7 +121,8 @@ String FileReaderSync::readAsDataURL(ExecutionContext* executionContext,
   std::unique_ptr<FileReaderLoader> loader =
       FileReaderLoader::create(FileReaderLoader::ReadAsDataURL, nullptr);
   loader->setDataType(blob->type());
-  startLoading(executionContext, *loader, *blob, exceptionState);
+  startLoading(scriptState->getExecutionContext(), *loader, *blob,
+               exceptionState);
   return loader->stringResult();
 }
 

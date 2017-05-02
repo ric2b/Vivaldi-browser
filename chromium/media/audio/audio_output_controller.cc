@@ -16,6 +16,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "media/base/audio_timestamp_helper.h"
 
 using base::TimeDelta;
 
@@ -137,14 +138,14 @@ void AudioOutputController::DoCreate(bool is_for_device_change) {
       audio_manager_->MakeAudioOutputStreamProxy(params_, output_device_id_);
   if (!stream_) {
     state_ = kError;
-    handler_->OnError();
+    handler_->OnControllerError();
     return;
   }
 
   if (!stream_->Open()) {
     DoStopCloseAndClearStream();
     state_ = kError;
-    handler_->OnError();
+    handler_->OnControllerError();
     return;
   }
 
@@ -161,7 +162,7 @@ void AudioOutputController::DoCreate(bool is_for_device_change) {
 
   // And then report we have been created if we haven't done so already.
   if (!is_for_device_change)
-    handler_->OnCreated();
+    handler_->OnControllerCreated();
 }
 
 void AudioOutputController::DoPlay() {
@@ -174,7 +175,7 @@ void AudioOutputController::DoPlay() {
     return;
 
   // Ask for first packet.
-  sync_reader_->UpdatePendingBytes(0, 0);
+  sync_reader_->RequestMoreData(base::TimeDelta(), base::TimeTicks(), 0);
 
   state_ = kPlaying;
 
@@ -196,7 +197,7 @@ void AudioOutputController::DoPlay() {
       FROM_HERE, TimeDelta::FromSeconds(5), this,
       &AudioOutputController::WedgeCheck);
 
-  handler_->OnPlaying();
+  handler_->OnControllerPlaying();
 }
 
 void AudioOutputController::StopStream() {
@@ -227,9 +228,9 @@ void AudioOutputController::DoPause() {
   // Let the renderer know we've stopped.  Necessary to let PPAPI clients know
   // audio has been shutdown.  TODO(dalecurtis): This stinks.  PPAPI should have
   // a better way to know when it should exit PPB_Audio_Shared::Run().
-  sync_reader_->UpdatePendingBytes(std::numeric_limits<uint32_t>::max(), 0);
+  sync_reader_->RequestMoreData(base::TimeDelta::Max(), base::TimeTicks(), 0);
 
-  handler_->OnPaused();
+  handler_->OnControllerPaused();
 }
 
 void AudioOutputController::DoClose() {
@@ -290,7 +291,7 @@ void AudioOutputController::DoSwitchOutputDevice(
 void AudioOutputController::DoReportError() {
   DCHECK(message_loop_->BelongsToCurrentThread());
   if (state_ != kClosed)
-    handler_->OnError();
+    handler_->OnControllerError();
 }
 
 int AudioOutputController::OnMoreData(base::TimeDelta delay,
@@ -308,12 +309,10 @@ int AudioOutputController::OnMoreData(base::TimeDelta delay,
 
   sync_reader_->Read(dest);
 
-  const int total_bytes_delay =
-      delay.InSecondsF() * params_.GetBytesPerSecond();
   const int frames = dest->frames();
-  sync_reader_->UpdatePendingBytes(
-      total_bytes_delay + frames * params_.GetBytesPerFrame(),
-      prior_frames_skipped);
+  delay += AudioTimestampHelper::FramesToTime(frames, params_.sample_rate());
+
+  sync_reader_->RequestMoreData(delay, delay_timestamp, prior_frames_skipped);
 
   bool need_to_duplicate = false;
   {

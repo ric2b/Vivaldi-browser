@@ -41,13 +41,14 @@ NetworkPortalDetector::CaptivePortalStatus GetCaptivePortalStatus() {
 AutoEnrollmentCheckScreen* AutoEnrollmentCheckScreen::Get(
     ScreenManager* manager) {
   return static_cast<AutoEnrollmentCheckScreen*>(
-      manager->GetScreen(WizardController::kAutoEnrollmentCheckScreenName));
+      manager->GetScreen(OobeScreen::SCREEN_AUTO_ENROLLMENT_CHECK));
 }
 
 AutoEnrollmentCheckScreen::AutoEnrollmentCheckScreen(
     BaseScreenDelegate* base_screen_delegate,
     AutoEnrollmentCheckScreenActor* actor)
-    : BaseScreen(base_screen_delegate),
+    : BaseScreen(base_screen_delegate,
+                 OobeScreen::SCREEN_AUTO_ENROLLMENT_CHECK),
       actor_(actor),
       auto_enrollment_controller_(nullptr),
       captive_portal_status_(
@@ -72,9 +73,6 @@ void AutoEnrollmentCheckScreen::ClearState() {
 
   auto_enrollment_state_ = policy::AUTO_ENROLLMENT_STATE_IDLE;
   captive_portal_status_ = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN;
-}
-
-void AutoEnrollmentCheckScreen::PrepareToShow() {
 }
 
 void AutoEnrollmentCheckScreen::Show() {
@@ -121,10 +119,6 @@ void AutoEnrollmentCheckScreen::Show() {
 }
 
 void AutoEnrollmentCheckScreen::Hide() {
-}
-
-std::string AutoEnrollmentCheckScreen::GetName() const {
-  return WizardController::kAutoEnrollmentCheckScreenName;
 }
 
 void AutoEnrollmentCheckScreen::OnActorDestroyed(

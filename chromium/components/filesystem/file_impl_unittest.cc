@@ -11,7 +11,6 @@
 #include "components/filesystem/files_test_base.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 namespace filesystem {
 namespace {
@@ -29,7 +28,7 @@ TEST_F(FileImplTest, CreateWriteCloseRenameOpenRead) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagWrite | mojom::kFlagCreate, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -67,7 +66,7 @@ TEST_F(FileImplTest, CreateWriteCloseRenameOpenRead) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("your_file", GetProxy(&file),
+        directory->OpenFile("your_file", MakeRequest(&file),
                             mojom::kFlagRead | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -105,7 +104,7 @@ TEST_F(FileImplTest, CantWriteInReadMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagWrite | mojom::kFlagCreate, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -131,7 +130,7 @@ TEST_F(FileImplTest, CantWriteInReadMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagRead | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -164,7 +163,7 @@ TEST_F(FileImplTest, OpenInAppendMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagWrite | mojom::kFlagCreate, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -196,7 +195,7 @@ TEST_F(FileImplTest, OpenInAppendMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagAppend | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -230,7 +229,7 @@ TEST_F(FileImplTest, OpenInAppendMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagRead | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -260,7 +259,7 @@ TEST_F(FileImplTest, OpenInTruncateMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagWrite | mojom::kFlagCreate, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -292,7 +291,7 @@ TEST_F(FileImplTest, OpenInTruncateMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled = directory->OpenFile(
-        "my_file", GetProxy(&file),
+        "my_file", MakeRequest(&file),
         mojom::kFlagWrite | mojom::kFlagOpenTruncated, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -326,7 +325,7 @@ TEST_F(FileImplTest, OpenInTruncateMode) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file),
+        directory->OpenFile("my_file", MakeRequest(&file),
                             mojom::kFlagRead | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -357,7 +356,7 @@ TEST_F(FileImplTest, StatTouch) {
   mojom::FilePtr file;
   error = mojom::FileError::FAILED;
   bool handled =
-      directory->OpenFile("my_file", GetProxy(&file),
+      directory->OpenFile("my_file", MakeRequest(&file),
                           mojom::kFlagWrite | mojom::kFlagCreate, &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
@@ -428,7 +427,7 @@ TEST_F(FileImplTest, TellSeek) {
   mojom::FilePtr file;
   error = mojom::FileError::FAILED;
   bool handled =
-      directory->OpenFile("my_file", GetProxy(&file),
+      directory->OpenFile("my_file", MakeRequest(&file),
                           mojom::kFlagWrite | mojom::kFlagCreate, &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
@@ -514,7 +513,7 @@ TEST_F(FileImplTest, Dup) {
   mojom::FilePtr file1;
   error = mojom::FileError::FAILED;
   bool handled = directory->OpenFile(
-      "my_file", GetProxy(&file1),
+      "my_file", MakeRequest(&file1),
       mojom::kFlagRead | mojom::kFlagWrite | mojom::kFlagCreate, &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
@@ -538,7 +537,7 @@ TEST_F(FileImplTest, Dup) {
   // Dup it.
   mojom::FilePtr file2;
   error = mojom::FileError::FAILED;
-  handled = file1->Dup(GetProxy(&file2), &error);
+  handled = file1->Dup(MakeRequest(&file2), &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
 
@@ -608,7 +607,7 @@ TEST_F(FileImplTest, Truncate) {
   mojom::FilePtr file;
   error = mojom::FileError::FAILED;
   bool handled =
-      directory->OpenFile("my_file", GetProxy(&file),
+      directory->OpenFile("my_file", MakeRequest(&file),
                           mojom::kFlagWrite | mojom::kFlagCreate, &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
@@ -658,26 +657,18 @@ TEST_F(FileImplTest, AsHandle) {
     mojom::FilePtr file1;
     error = mojom::FileError::FAILED;
     bool handled = directory->OpenFile(
-        "my_file", GetProxy(&file1),
+        "my_file", MakeRequest(&file1),
         mojom::kFlagRead | mojom::kFlagWrite | mojom::kFlagCreate, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
 
-    // Fetch the handle
+    // Fetch the file.
     error = mojom::FileError::FAILED;
-    mojo::ScopedHandle handle;
-    handled = file1->AsHandle(&error, &handle);
+    base::File raw_file;
+    handled = file1->AsHandle(&error, &raw_file);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
 
-    // Pull a file descriptor out of the scoped handle.
-    base::PlatformFile platform_file;
-    MojoResult unwrap_result = mojo::UnwrapPlatformFile(std::move(handle),
-                                                        &platform_file);
-    EXPECT_EQ(MOJO_RESULT_OK, unwrap_result);
-
-    // Pass this raw file descriptor to a base::File.
-    base::File raw_file(platform_file);
     ASSERT_TRUE(raw_file.IsValid());
     EXPECT_EQ(5, raw_file.WriteAtCurrentPos("hello", 5));
   }
@@ -687,7 +678,7 @@ TEST_F(FileImplTest, AsHandle) {
     mojom::FilePtr file2;
     error = mojom::FileError::FAILED;
     bool handled =
-        directory->OpenFile("my_file", GetProxy(&file2),
+        directory->OpenFile("my_file", MakeRequest(&file2),
                             mojom::kFlagRead | mojom::kFlagOpen, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -717,7 +708,7 @@ TEST_F(FileImplTest, SimpleLockUnlock) {
   mojom::FilePtr file;
   error = mojom::FileError::FAILED;
   bool handled = directory->OpenFile(
-      "my_file", GetProxy(&file),
+      "my_file", MakeRequest(&file),
       mojom::kFlagRead | mojom::kFlagWrite | mojom::kFlagCreate, &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
@@ -744,7 +735,7 @@ TEST_F(FileImplTest, CantDoubleLock) {
   mojom::FilePtr file;
   error = mojom::FileError::FAILED;
   bool handled = directory->OpenFile(
-      "my_file", GetProxy(&file),
+      "my_file", MakeRequest(&file),
       mojom::kFlagRead | mojom::kFlagWrite | mojom::kFlagCreate, &error);
   ASSERT_TRUE(handled);
   EXPECT_EQ(mojom::FileError::OK, error);
@@ -772,7 +763,7 @@ TEST_F(FileImplTest, ClosingFileClearsLock) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled = directory->OpenFile(
-        "my_file", GetProxy(&file),
+        "my_file", MakeRequest(&file),
         mojom::kFlagRead | mojom::kFlagWrite | mojom::kFlagOpenAlways, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);
@@ -789,7 +780,7 @@ TEST_F(FileImplTest, ClosingFileClearsLock) {
     mojom::FilePtr file;
     error = mojom::FileError::FAILED;
     bool handled = directory->OpenFile(
-        "my_file", GetProxy(&file),
+        "my_file", MakeRequest(&file),
         mojom::kFlagRead | mojom::kFlagWrite | mojom::kFlagOpenAlways, &error);
     ASSERT_TRUE(handled);
     EXPECT_EQ(mojom::FileError::OK, error);

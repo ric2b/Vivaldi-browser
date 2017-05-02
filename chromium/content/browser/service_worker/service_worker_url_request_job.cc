@@ -234,6 +234,7 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
     RequestContextFrameType frame_type,
     scoped_refptr<ResourceRequestBodyImpl> body,
     ServiceWorkerFetchType fetch_type,
+    const base::Optional<base::TimeDelta>& timeout,
     Delegate* delegate)
     : net::URLRequestJob(request, network_delegate),
       delegate_(delegate),
@@ -252,6 +253,7 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
       fall_back_required_(false),
       body_(body),
       fetch_type_(fetch_type),
+      timeout_(timeout),
       weak_factory_(this) {
   DCHECK(delegate_) << "ServiceWorkerURLRequestJob requires a delegate";
 }
@@ -292,6 +294,12 @@ void ServiceWorkerURLRequestJob::FallbackToNetworkOrRenderer() {
 void ServiceWorkerURLRequestJob::ForwardToServiceWorker() {
   DCHECK_EQ(NOT_DETERMINED, response_type_);
   response_type_ = FORWARD_TO_SERVICE_WORKER;
+  MaybeStartRequest();
+}
+
+void ServiceWorkerURLRequestJob::FailDueToLostController() {
+  DCHECK_EQ(NOT_DETERMINED, response_type_);
+  response_type_ = FAIL_DUE_TO_LOST_CONTROLLER;
   MaybeStartRequest();
 }
 
@@ -425,6 +433,12 @@ void ServiceWorkerURLRequestJob::StartRequest() {
       NOTREACHED();
       return;
 
+    case FAIL_DUE_TO_LOST_CONTROLLER:
+      request()->net_log().AddEvent(
+          net::NetLogEventType::SERVICE_WORKER_ERROR_NO_ACTIVE_VERSION);
+      NotifyStartError(net::URLRequestStatus::FromError(net::ERR_FAILED));
+      return;
+
     case FALLBACK_TO_NETWORK:
       FinalizeFallbackToNetwork();
       return;
@@ -541,9 +555,11 @@ void ServiceWorkerURLRequestJob::DidPrepareFetchEvent(
   }
   if (version->should_exclude_from_uma())
     return;
-  ServiceWorkerMetrics::RecordActivatedWorkerPreparationTimeForMainFrame(
+  worker_start_situation_ = version->embedded_worker()->start_situation();
+  ServiceWorkerMetrics::RecordActivatedWorkerPreparationForMainFrame(
       worker_ready_time_ - request()->creation_time(), initial_worker_status_,
-      version->embedded_worker()->start_situation());
+      worker_start_situation_, did_navigation_preload_);
+  MaybeReportNavigationPreloadMetrics();
 }
 
 void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
@@ -551,7 +567,13 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
     ServiceWorkerFetchEventResult fetch_result,
     const ServiceWorkerResponse& response,
     const scoped_refptr<ServiceWorkerVersion>& version) {
-  fetch_dispatcher_.reset();
+  // Do not clear |fetch_dispatcher_| if it has dispatched a navigation preload
+  // request to keep the mojom::URLLoader related objects in it, because the
+  // preload response might still need to be streamed even after calling
+  // respondWith().
+  if (!did_navigation_preload_) {
+    fetch_dispatcher_.reset();
+  }
   ServiceWorkerMetrics::RecordFetchEventStatus(IsMainResourceLoad(), status);
 
   ServiceWorkerMetrics::URLRequestJobResult result =
@@ -606,14 +628,8 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
   DCHECK(version);
   const net::HttpResponseInfo* main_script_http_info =
       version->GetMainScriptHttpResponseInfo();
-  if (main_script_http_info) {
-    // In normal case |main_script_http_info| must be set while starting the
-    // ServiceWorker. But when the ServiceWorker registration database was not
-    // written correctly, it may be null.
-    // TODO(horo): Change this line to DCHECK when crbug.com/485900 is fixed.
-    http_response_info_.reset(
-        new net::HttpResponseInfo(*main_script_http_info));
-  }
+  DCHECK(main_script_http_info);
+  http_response_info_.reset(new net::HttpResponseInfo(*main_script_http_info));
 
   // Set up a request for reading the stream.
   if (response.stream_url.is_valid()) {
@@ -649,7 +665,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
 
 void ServiceWorkerURLRequestJob::SetResponse(
     const ServiceWorkerResponse& response) {
-  response_url_ = response.url;
+  response_url_list_ = response.url_list;
   service_worker_response_type_ = response.response_type;
   cors_exposed_header_names_ = response.cors_exposed_header_names;
   response_time_ = response.response_time;
@@ -782,35 +798,50 @@ void ServiceWorkerURLRequestJob::NotifyStartError(
 
 void ServiceWorkerURLRequestJob::NotifyRestartRequired() {
   ServiceWorkerResponseInfo::ForRequest(request_, true)
-      ->OnPrepareToRestart(worker_start_time_, worker_ready_time_);
+      ->OnPrepareToRestart(worker_start_time_, worker_ready_time_,
+                           did_navigation_preload_);
   delegate_->OnPrepareToRestart();
   URLRequestJob::NotifyRestartRequired();
 }
 
 void ServiceWorkerURLRequestJob::OnStartCompleted() const {
-  if (response_type_ != FORWARD_TO_SERVICE_WORKER &&
-      response_type_ != FALLBACK_TO_RENDERER) {
-    ServiceWorkerResponseInfo::ForRequest(request_, true)
-        ->OnStartCompleted(
-            false /* was_fetched_via_service_worker */,
-            false /* was_fetched_via_foreign_fetch */,
-            false /* was_fallback_required */,
-            GURL() /* original_url_via_service_worker */,
-            blink::WebServiceWorkerResponseTypeDefault,
-            base::TimeTicks() /* service_worker_start_time */,
-            base::TimeTicks() /* service_worker_ready_time */,
-            false /* respons_is_in_cache_storage */,
-            std::string() /* response_cache_storage_cache_name */,
-            ServiceWorkerHeaderList() /* cors_exposed_header_names */);
-    return;
+  switch (response_type_) {
+    case NOT_DETERMINED:
+      NOTREACHED();
+      return;
+    case FAIL_DUE_TO_LOST_CONTROLLER:
+    case FALLBACK_TO_NETWORK:
+      // Indicate that the service worker did not respond to the request.
+      ServiceWorkerResponseInfo::ForRequest(request_, true)
+          ->OnStartCompleted(
+              false /* was_fetched_via_service_worker */,
+              false /* was_fetched_via_foreign_fetch */,
+              false /* was_fallback_required */,
+              std::vector<GURL>() /* url_list_via_service_worker */,
+              blink::WebServiceWorkerResponseTypeDefault,
+              base::TimeTicks() /* service_worker_start_time */,
+              base::TimeTicks() /* service_worker_ready_time */,
+              false /* response_is_in_cache_storage */,
+              std::string() /* response_cache_storage_cache_name */,
+              ServiceWorkerHeaderList() /* cors_exposed_header_names */,
+              did_navigation_preload_);
+      break;
+    case FALLBACK_TO_RENDERER:
+    case FORWARD_TO_SERVICE_WORKER:
+      // Indicate that the service worker responded to the request, which is
+      // considered true if "fallback to renderer" was required since the
+      // renderer expects that.
+      ServiceWorkerResponseInfo::ForRequest(request_, true)
+          ->OnStartCompleted(
+              true /* was_fetched_via_service_worker */,
+              fetch_type_ == ServiceWorkerFetchType::FOREIGN_FETCH,
+              fall_back_required_, response_url_list_,
+              service_worker_response_type_, worker_start_time_,
+              worker_ready_time_, response_is_in_cache_storage_,
+              response_cache_storage_cache_name_, cors_exposed_header_names_,
+              did_navigation_preload_);
+      break;
   }
-  ServiceWorkerResponseInfo::ForRequest(request_, true)
-      ->OnStartCompleted(
-          true /* was_fetched_via_service_worker */,
-          fetch_type_ == ServiceWorkerFetchType::FOREIGN_FETCH,
-          fall_back_required_, response_url_, service_worker_response_type_,
-          worker_start_time_, worker_ready_time_, response_is_in_cache_storage_,
-          response_cache_storage_cache_name_, cors_exposed_header_names_);
 }
 
 bool ServiceWorkerURLRequestJob::IsMainResourceLoad() const {
@@ -852,14 +883,38 @@ void ServiceWorkerURLRequestJob::RequestBodyFileSizesResolved(bool success) {
 
   DCHECK(!fetch_dispatcher_);
   fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
-      CreateFetchRequest(), active_worker, resource_type_, request()->net_log(),
+      CreateFetchRequest(), active_worker, resource_type_, timeout_,
+      request()->net_log(),
       base::Bind(&ServiceWorkerURLRequestJob::DidPrepareFetchEvent,
                  weak_factory_.GetWeakPtr(), active_worker),
       base::Bind(&ServiceWorkerURLRequestJob::DidDispatchFetchEvent,
                  weak_factory_.GetWeakPtr())));
   worker_start_time_ = base::TimeTicks::Now();
-  fetch_dispatcher_->MaybeStartNavigationPreload(request());
+  did_navigation_preload_ = fetch_dispatcher_->MaybeStartNavigationPreload(
+      request(),
+      base::BindOnce(&ServiceWorkerURLRequestJob::OnNavigationPreloadResponse,
+                     weak_factory_.GetWeakPtr()));
   fetch_dispatcher_->Run();
+}
+
+void ServiceWorkerURLRequestJob::OnNavigationPreloadResponse() {
+  DCHECK(navigation_preload_response_time_.is_null());
+  navigation_preload_response_time_ = base::TimeTicks::Now();
+  MaybeReportNavigationPreloadMetrics();
+}
+
+void ServiceWorkerURLRequestJob::MaybeReportNavigationPreloadMetrics() {
+  if (worker_start_time_.is_null() || worker_ready_time_.is_null() ||
+      navigation_preload_response_time_.is_null()) {
+    return;
+  }
+  DCHECK(!reported_navigation_preload_metrics_);
+  reported_navigation_preload_metrics_ = true;
+
+  ServiceWorkerMetrics::RecordNavigationPreloadResponse(
+      worker_ready_time_ - worker_start_time_,
+      navigation_preload_response_time_ - worker_start_time_,
+      initial_worker_status_, worker_start_situation_);
 }
 
 }  // namespace content

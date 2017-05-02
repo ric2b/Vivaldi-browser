@@ -9,7 +9,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/prefs/pref_service.h"
 
@@ -222,6 +222,7 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {
                   BrowsingDataRemover::REMOVE_WEBSQL) |
         GetAsMask(data_to_remove, "serverBoundCertificates",
                   BrowsingDataRemover::REMOVE_CHANNEL_IDS);
+
     EXPECT_EQ(expected_removal_mask, removal_mask);
   }
 
@@ -249,22 +250,6 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {
 };
 
 }  // namespace
-
-IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, OneAtATime) {
-  BrowsingDataRemover* browsing_data_remover =
-      BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
-  browsing_data_remover->SetRemoving(true);
-  scoped_refptr<BrowsingDataRemoveFunction> function =
-      new BrowsingDataRemoveFunction();
-  EXPECT_TRUE(base::MatchPattern(
-      RunFunctionAndReturnError(function.get(), kRemoveEverythingArguments,
-                                browser()),
-      extension_browsing_data_api_constants::kOneAtATimeError));
-  browsing_data_remover->SetRemoving(false);
-
-  EXPECT_EQ(base::Time(), GetBeginTime());
-  EXPECT_EQ(-1, GetRemovalMask());
-}
 
 IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, RemovalProhibited) {
   PrefService* prefs = browser()->profile()->GetPrefs();
@@ -304,21 +289,25 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, RemoveBrowsingDataAll) {
                                                    browser()));
 
   EXPECT_EQ(base::Time::FromDoubleT(1.0), GetBeginTime());
-  EXPECT_EQ((BrowsingDataRemover::REMOVE_SITE_DATA |
-             BrowsingDataRemover::REMOVE_CACHE |
-             BrowsingDataRemover::REMOVE_DOWNLOADS |
-             BrowsingDataRemover::REMOVE_FORM_DATA |
-             BrowsingDataRemover::REMOVE_HISTORY |
-             BrowsingDataRemover::REMOVE_PASSWORDS) &
-             // TODO(benwells): implement clearing of site usage data via the
-             // browsing data API. https://crbug.com/500801.
-             ~BrowsingDataRemover::REMOVE_SITE_USAGE_DATA &
-             // TODO(dmurph): implement clearing of durable storage permission
-             // via the browsing data API. https://crbug.com/500801.
-             ~BrowsingDataRemover::REMOVE_DURABLE_PERMISSION &
-             // We can't remove plugin data inside a test profile.
-             ~BrowsingDataRemover::REMOVE_PLUGIN_DATA,
-            GetRemovalMask());
+  EXPECT_EQ(
+      (BrowsingDataRemover::REMOVE_SITE_DATA |
+       BrowsingDataRemover::REMOVE_CACHE |
+       BrowsingDataRemover::REMOVE_DOWNLOADS |
+       BrowsingDataRemover::REMOVE_FORM_DATA |
+       BrowsingDataRemover::REMOVE_HISTORY |
+       BrowsingDataRemover::REMOVE_PASSWORDS) &
+          // TODO(benwells): implement clearing of site usage data via the
+          // browsing data API. https://crbug.com/500801.
+          ~BrowsingDataRemover::REMOVE_SITE_USAGE_DATA &
+          // TODO(dmurph): implement clearing of durable storage permission
+          // via the browsing data API. https://crbug.com/500801.
+          ~BrowsingDataRemover::REMOVE_DURABLE_PERMISSION &
+          // We can't remove plugin data inside a test profile.
+          ~BrowsingDataRemover::REMOVE_PLUGIN_DATA &
+          // TODO(ramyasharma): implement clearing of external protocol data
+          // via the browsing data API. https://crbug.com/692850.
+          ~BrowsingDataRemover::REMOVE_EXTERNAL_PROTOCOL_DATA,
+      GetRemovalMask());
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, BrowsingDataOriginTypeMask) {
@@ -494,46 +483,46 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SettingsFunctionSimple) {
 
 // Test cookie and app data settings.
 IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SettingsFunctionSiteData) {
-  int site_data_no_durable_or_usage =
+  int site_data_no_durable_or_usage_or_external =
       BrowsingDataRemover::REMOVE_SITE_DATA &
       ~BrowsingDataRemover::REMOVE_SITE_USAGE_DATA &
-      ~BrowsingDataRemover::REMOVE_DURABLE_PERMISSION;
-  int site_data_no_plugins_durable_usage =
-      site_data_no_durable_or_usage & ~BrowsingDataRemover::REMOVE_PLUGIN_DATA;
+      ~BrowsingDataRemover::REMOVE_DURABLE_PERMISSION &
+      ~BrowsingDataRemover::REMOVE_EXTERNAL_PROTOCOL_DATA;
+  int site_data_no_plugins_durable_usage_external =
+      site_data_no_durable_or_usage_or_external &
+      ~BrowsingDataRemover::REMOVE_PLUGIN_DATA;
 
   SetPrefsAndVerifySettings(BrowsingDataRemover::REMOVE_COOKIES,
                             UNPROTECTED_WEB,
-                            site_data_no_plugins_durable_usage);
+                            site_data_no_plugins_durable_usage_external);
   SetPrefsAndVerifySettings(
-      BrowsingDataRemover::REMOVE_HOSTED_APP_DATA_TESTONLY,
-      PROTECTED_WEB,
-      site_data_no_plugins_durable_usage);
+      BrowsingDataRemover::REMOVE_HOSTED_APP_DATA_TESTONLY, PROTECTED_WEB,
+      site_data_no_plugins_durable_usage_external);
   SetPrefsAndVerifySettings(
       BrowsingDataRemover::REMOVE_COOKIES |
           BrowsingDataRemover::REMOVE_HOSTED_APP_DATA_TESTONLY,
       PROTECTED_WEB | UNPROTECTED_WEB,
-      site_data_no_plugins_durable_usage);
-  SetPrefsAndVerifySettings(
-      BrowsingDataRemover::REMOVE_COOKIES |
-          BrowsingDataRemover::REMOVE_PLUGIN_DATA,
-      UNPROTECTED_WEB,
-      site_data_no_durable_or_usage);
+      site_data_no_plugins_durable_usage_external);
+  SetPrefsAndVerifySettings(BrowsingDataRemover::REMOVE_COOKIES |
+                                BrowsingDataRemover::REMOVE_PLUGIN_DATA,
+                            UNPROTECTED_WEB,
+                            site_data_no_durable_or_usage_or_external);
 }
 
 // Test an arbitrary assortment of settings.
 IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SettingsFunctionAssorted) {
-  int site_data_no_plugins_durable_usage =
+  int site_data_no_plugins_durable_usage_external =
       BrowsingDataRemover::REMOVE_SITE_DATA &
       ~BrowsingDataRemover::REMOVE_DURABLE_PERMISSION &
       ~BrowsingDataRemover::REMOVE_SITE_USAGE_DATA &
-      ~BrowsingDataRemover::REMOVE_PLUGIN_DATA;
+      ~BrowsingDataRemover::REMOVE_PLUGIN_DATA &
+      ~BrowsingDataRemover::REMOVE_EXTERNAL_PROTOCOL_DATA;
 
-  SetPrefsAndVerifySettings(
-      BrowsingDataRemover::REMOVE_COOKIES |
-          BrowsingDataRemover::REMOVE_HISTORY |
-          BrowsingDataRemover::REMOVE_DOWNLOADS,
-    UNPROTECTED_WEB,
-    site_data_no_plugins_durable_usage |
-        BrowsingDataRemover::REMOVE_HISTORY |
-        BrowsingDataRemover::REMOVE_DOWNLOADS);
+  SetPrefsAndVerifySettings(BrowsingDataRemover::REMOVE_COOKIES |
+                                BrowsingDataRemover::REMOVE_HISTORY |
+                                BrowsingDataRemover::REMOVE_DOWNLOADS,
+                            UNPROTECTED_WEB,
+                            site_data_no_plugins_durable_usage_external |
+                                BrowsingDataRemover::REMOVE_HISTORY |
+                                BrowsingDataRemover::REMOVE_DOWNLOADS);
 }

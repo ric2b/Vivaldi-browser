@@ -10,6 +10,7 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/EventTargetModules.h"
@@ -46,8 +47,7 @@ RemotePlayback* RemotePlayback::create(HTMLMediaElement& element) {
 }
 
 RemotePlayback::RemotePlayback(HTMLMediaElement& element)
-    : ActiveScriptWrappable(this),
-      m_state(element.isPlayingRemotely()
+    : m_state(element.isPlayingRemotely()
                   ? WebRemotePlaybackState::Connected
                   : WebRemotePlaybackState::Disconnected),
       m_availability(WebRemotePlaybackAvailability::Unknown),
@@ -90,7 +90,7 @@ ScriptPromise RemotePlayback::watchAvailability(
 
   // Report the current availability via the callback.
   getExecutionContext()->postTask(
-      BLINK_FROM_HERE,
+      TaskType::MediaElementEvent, BLINK_FROM_HERE,
       createSameThreadTask(&RemotePlayback::notifyInitialAvailability,
                            wrapPersistent(this), id),
       "watchAvailabilityCallback");

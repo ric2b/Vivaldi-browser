@@ -26,7 +26,6 @@
 #include "core/inspector/InspectorCSSAgent.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/css/CSSAnimationData.h"
@@ -51,6 +50,7 @@
 #include "core/css/StyleSheetContents.h"
 #include "core/css/StyleSheetList.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/dom/DOMException.h"
@@ -110,13 +110,13 @@ String createShorthandValue(Document* document,
   StyleSheetContents* styleSheetContents =
       StyleSheetContents::create(strictCSSParserContext());
   String text = " div { " + shorthand + ": " + oldText + "; }";
-  CSSParser::parseSheet(CSSParserContext(*document, nullptr),
-                        styleSheetContents, text);
+  CSSParser::parseSheet(CSSParserContext::create(*document), styleSheetContents,
+                        text);
 
   CSSStyleSheet* styleSheet = CSSStyleSheet::create(styleSheetContents);
   CSSStyleRule* rule = toCSSStyleRule(styleSheet->item(0));
   CSSStyleDeclaration* style = rule->style();
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   style->setProperty(longhand, newValue, style->getPropertyPriority(longhand),
                      exceptionState);
   return style->getPropertyValue(shorthand);
@@ -131,7 +131,7 @@ HeapVector<Member<CSSStyleRule>> filterDuplicateRules(CSSRuleList* ruleList) {
         uniqRulesSet.contains(rule))
       continue;
     uniqRulesSet.add(rule);
-    uniqRules.append(toCSSStyleRule(rule));
+    uniqRules.push_back(toCSSStyleRule(rule));
   }
   uniqRules.reverse();
   return uniqRules;
@@ -173,12 +173,12 @@ void blendWithColorsFromGradient(CSSGradientValue* gradient,
       return;
     }
 
-    Color existingColor = colors.first();
+    Color existingColor = colors.front();
     colors.clear();
     for (auto stopColor : stopColors) {
       foundNonTransparentColor =
           foundNonTransparentColor || (stopColor.alpha() != 0);
-      colors.append(existingColor.blend(stopColor));
+      colors.push_back(existingColor.blend(stopColor));
     }
   }
   foundOpaqueColor =
@@ -262,11 +262,11 @@ bool getColorsFromRect(LayoutRect rect,
       if (colors.isEmpty()) {
         if (!backgroundColor.hasAlpha())
           foundOpaqueColor = true;
-        colors.append(backgroundColor);
+        colors.push_back(backgroundColor);
       } else {
         if (!backgroundColor.hasAlpha()) {
           colors.clear();
-          colors.append(backgroundColor);
+          colors.push_back(backgroundColor);
           foundOpaqueColor = true;
         } else {
           for (size_t i = 0; i < colors.size(); i++)
@@ -376,7 +376,7 @@ struct InspectorCSSAgent::VectorStringHashTraits
 
   static void constructDeletedValue(Vector<String>& vec, bool) {
     vec.clear();
-    vec.append(String(WTF::HashTableDeletedValue));
+    vec.push_back(String(WTF::HashTableDeletedValue));
   }
 
   static bool isDeletedValue(const Vector<String>& vec) {
@@ -699,7 +699,7 @@ void InspectorCSSAgent::flushPendingProtocolNotifications() {
   HeapHashSet<Member<Document>> invalidatedDocuments;
   m_invalidatedDocuments.swap(invalidatedDocuments);
   for (Document* document : invalidatedDocuments)
-    updateActiveStyleSheets(document, ExistingFrontendRefresh);
+    updateActiveStyleSheets(document);
 }
 
 void InspectorCSSAgent::reset() {
@@ -726,7 +726,7 @@ void InspectorCSSAgent::enable(std::unique_ptr<EnableCallback> prpCallback) {
   m_resourceContentLoader->ensureResourcesContentLoaded(
       m_resourceContentLoaderClientId,
       WTF::bind(&InspectorCSSAgent::resourceContentLoaded, wrapPersistent(this),
-                passed(std::move(prpCallback))));
+                WTF::passed(std::move(prpCallback))));
 }
 
 void InspectorCSSAgent::resourceContentLoaded(
@@ -745,7 +745,7 @@ void InspectorCSSAgent::wasEnabled() {
   m_domAgent->setDOMListener(this);
   HeapVector<Member<Document>> documents = m_domAgent->documents();
   for (Document* document : documents)
-    updateActiveStyleSheets(document, InitialFrontendLoad);
+    updateActiveStyleSheets(document);
 }
 
 Response InspectorCSSAgent::disable() {
@@ -778,20 +778,15 @@ void InspectorCSSAgent::activeStyleSheetsUpdated(Document* document) {
   m_invalidatedDocuments.add(document);
 }
 
-void InspectorCSSAgent::updateActiveStyleSheets(
-    Document* document,
-    StyleSheetsUpdateType styleSheetsUpdateType) {
+void InspectorCSSAgent::updateActiveStyleSheets(Document* document) {
   HeapVector<Member<CSSStyleSheet>> newSheetsVector;
   InspectorCSSAgent::collectAllDocumentStyleSheets(document, newSheetsVector);
-  setActiveStyleSheets(document, newSheetsVector, styleSheetsUpdateType);
+  setActiveStyleSheets(document, newSheetsVector);
 }
 
 void InspectorCSSAgent::setActiveStyleSheets(
     Document* document,
-    const HeapVector<Member<CSSStyleSheet>>& allSheetsVector,
-    StyleSheetsUpdateType styleSheetsUpdateType) {
-  bool isInitialFrontendLoad = styleSheetsUpdateType == InitialFrontendLoad;
-
+    const HeapVector<Member<CSSStyleSheet>>& allSheetsVector) {
   HeapHashSet<Member<CSSStyleSheet>>* documentCSSStyleSheets =
       m_documentToCSSStyleSheets.get(document);
   if (!documentCSSStyleSheets) {
@@ -804,10 +799,8 @@ void InspectorCSSAgent::setActiveStyleSheets(
   for (CSSStyleSheet* cssStyleSheet : allSheetsVector) {
     if (removedSheets.contains(cssStyleSheet)) {
       removedSheets.remove(cssStyleSheet);
-      if (isInitialFrontendLoad)
-        addedSheets.append(cssStyleSheet);
     } else {
-      addedSheets.append(cssStyleSheet);
+      addedSheets.push_back(cssStyleSheet);
     }
   }
 
@@ -819,21 +812,18 @@ void InspectorCSSAgent::setActiveStyleSheets(
     documentCSSStyleSheets->remove(cssStyleSheet);
     if (m_idToInspectorStyleSheet.contains(inspectorStyleSheet->id())) {
       String id = unbindStyleSheet(inspectorStyleSheet);
-      if (frontend() && !isInitialFrontendLoad)
+      if (frontend())
         frontend()->styleSheetRemoved(id);
     }
   }
 
   for (CSSStyleSheet* cssStyleSheet : addedSheets) {
-    bool isNew = isInitialFrontendLoad ||
-                 !m_cssStyleSheetToInspectorStyleSheet.contains(cssStyleSheet);
-    if (isNew) {
       InspectorStyleSheet* newStyleSheet = bindStyleSheet(cssStyleSheet);
       documentCSSStyleSheets->add(cssStyleSheet);
-      if (frontend())
+      if (frontend()) {
         frontend()->styleSheetAdded(
             newStyleSheet->buildObjectForStyleSheetInfo());
-    }
+      }
   }
 
   if (documentCSSStyleSheets->isEmpty())
@@ -842,8 +832,7 @@ void InspectorCSSAgent::setActiveStyleSheets(
 
 void InspectorCSSAgent::documentDetached(Document* document) {
   m_invalidatedDocuments.remove(document);
-  setActiveStyleSheets(document, HeapVector<Member<CSSStyleSheet>>(),
-                       ExistingFrontendRefresh);
+  setActiveStyleSheets(document, HeapVector<Member<CSSStyleSheet>>());
 }
 
 bool InspectorCSSAgent::forcePseudoState(Element* element,
@@ -1233,7 +1222,7 @@ Response InspectorCSSAgent::setStyleSheetText(
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   m_domAgent->history()->perform(
       new SetStyleSheetTextAction(inspectorStyleSheet, text), exceptionState);
   response = InspectorDOMAgent::toResponse(exceptionState);
@@ -1291,7 +1280,7 @@ Response InspectorCSSAgent::setRuleSelector(
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ModifyRuleAction* action =
       new ModifyRuleAction(ModifyRuleAction::SetRuleSelector,
                            inspectorStyleSheet, selectorRange, selector);
@@ -1323,7 +1312,7 @@ Response InspectorCSSAgent::setKeyframeKey(
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ModifyRuleAction* action = new ModifyRuleAction(
       ModifyRuleAction::SetKeyframeKey, inspectorStyleSheet, keyRange, keyText);
   bool success = m_domAgent->history()->perform(action, exceptionState);
@@ -1373,13 +1362,13 @@ Response InspectorCSSAgent::multipleStyleTextsActions(
           static_cast<InspectorStyleSheetForInlineStyle*>(inspectorStyleSheet);
       SetElementStyleAction* action =
           new SetElementStyleAction(inlineStyleSheet, edit->getText());
-      actions->append(action);
+      actions->push_back(action);
     } else {
       ModifyRuleAction* action = new ModifyRuleAction(
           ModifyRuleAction::SetStyleText,
           static_cast<InspectorStyleSheet*>(inspectorStyleSheet), range,
           edit->getText());
-      actions->append(action);
+      actions->push_back(action);
     }
   }
   return Response::OK();
@@ -1394,7 +1383,7 @@ Response InspectorCSSAgent::setStyleTexts(
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
 
   int n = actions.size();
   std::unique_ptr<protocol::Array<protocol::CSS::CSSStyle>> serializedStyles =
@@ -1405,7 +1394,7 @@ Response InspectorCSSAgent::setStyleTexts(
     if (!success) {
       for (int j = i - 1; j >= 0; --j) {
         Member<StyleSheetAction> revert = actions.at(j);
-        TrackExceptionState undoExceptionState;
+        DummyExceptionStateForTesting undoExceptionState;
         revert->undo(undoExceptionState);
         ASSERT(!undoExceptionState.hadException());
       }
@@ -1429,7 +1418,7 @@ Response InspectorCSSAgent::setStyleText(
     const SourceRange& range,
     const String& text,
     CSSStyleDeclaration*& result) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   if (inspectorStyleSheet->isInlineStyle()) {
     InspectorStyleSheetForInlineStyle* inlineStyleSheet =
         static_cast<InspectorStyleSheetForInlineStyle*>(inspectorStyleSheet);
@@ -1477,7 +1466,7 @@ Response InspectorCSSAgent::setMediaText(
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ModifyRuleAction* action = new ModifyRuleAction(
       ModifyRuleAction::SetMediaRuleText, inspectorStyleSheet, textRange, text);
   bool success = m_domAgent->history()->perform(action, exceptionState);
@@ -1508,7 +1497,7 @@ Response InspectorCSSAgent::createStyleSheet(
   if (!inspectorStyleSheet)
     return Response::Error("No target stylesheet found");
 
-  updateActiveStyleSheets(document, ExistingFrontendRefresh);
+  updateActiveStyleSheets(document);
 
   *outStyleSheetId = inspectorStyleSheet->id();
   return Response::OK();
@@ -1531,7 +1520,7 @@ Response InspectorCSSAgent::addRule(
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   AddRuleAction* action =
       new AddRuleAction(inspectorStyleSheet, ruleText, ruleLocation);
   bool success = m_domAgent->history()->perform(action, exceptionState);
@@ -1784,19 +1773,16 @@ InspectorStyleSheetForInlineStyle* InspectorCSSAgent::asInspectorStyleSheet(
 void InspectorCSSAgent::collectAllDocumentStyleSheets(
     Document* document,
     HeapVector<Member<CSSStyleSheet>>& result) {
-  const HeapVector<Member<CSSStyleSheet>> activeStyleSheets =
-      document->styleEngine().activeStyleSheetsForInspector();
-  for (const auto& style : activeStyleSheets) {
-    CSSStyleSheet* styleSheet = style.get();
-    InspectorCSSAgent::collectStyleSheets(styleSheet, result);
-  }
+  for (const auto& style :
+       document->styleEngine().activeStyleSheetsForInspector())
+    InspectorCSSAgent::collectStyleSheets(style.first, result);
 }
 
 // static
 void InspectorCSSAgent::collectStyleSheets(
     CSSStyleSheet* styleSheet,
     HeapVector<Member<CSSStyleSheet>>& result) {
-  result.append(styleSheet);
+  result.push_back(styleSheet);
   for (unsigned i = 0, size = styleSheet->length(); i < size; ++i) {
     CSSRule* rule = styleSheet->item(i);
     if (rule->type() == CSSRule::kImportRule) {
@@ -1974,7 +1960,7 @@ InspectorCSSAgent::buildArrayForMatchedRuleList(CSSRuleList* ruleList,
             selector, elementPseudoId);  // Modifies |selector|.
       else
         matched = element->matches(firstTagHistorySelector->selectorText(),
-                                   IGNORE_EXCEPTION);
+                                   IGNORE_EXCEPTION_FOR_TESTING);
       if (matched)
         matchingSelectors->addItem(index);
       ++index;
@@ -2084,12 +2070,12 @@ HeapVector<Member<CSSStyleDeclaration>> InspectorCSSAgent::matchingStyles(
           element, pseudoId, StyleResolver::AllCSSRules));
   HeapVector<Member<CSSStyleDeclaration>> styles;
   if (!pseudoId && element->style())
-    styles.append(element->style());
+    styles.push_back(element->style());
   for (unsigned i = rules.size(); i > 0; --i) {
     CSSStyleSheet* parentStyleSheet = rules.at(i - 1)->parentStyleSheet();
     if (!parentStyleSheet || !parentStyleSheet->ownerNode())
       continue;  // User agent.
-    styles.append(rules.at(i - 1)->style());
+    styles.push_back(rules.at(i - 1)->style());
   }
   return styles;
 }
@@ -2116,11 +2102,32 @@ CSSStyleDeclaration* InspectorCSSAgent::findEffectiveDeclaration(
   return foundStyle ? foundStyle : styles.at(0).get();
 }
 
-Response InspectorCSSAgent::setLayoutEditorValue(Element* element,
-                                                 CSSStyleDeclaration* style,
-                                                 CSSPropertyID propertyId,
-                                                 const String& value,
-                                                 bool forceImportant) {
+Response InspectorCSSAgent::setEffectivePropertyValueForNode(
+    int nodeId,
+    const String& propertyName,
+    const String& value) {
+  Element* element = nullptr;
+  Response response = m_domAgent->assertElement(nodeId, element);
+  if (!response.isSuccess())
+    return response;
+  if (element->getPseudoId())
+    return Response::Error("Elements is pseudo");
+
+  CSSPropertyID property = cssPropertyID(propertyName);
+  if (!property)
+    return Response::Error("Invalid property name");
+
+  Document* ownerDocument = element->ownerDocument();
+  if (!ownerDocument->isActive())
+    return Response::Error("Can't edit a node from a non-active document");
+
+  CSSPropertyID propertyId = cssPropertyID(propertyName);
+  CSSStyleDeclaration* style =
+      findEffectiveDeclaration(propertyId, matchingStyles(element));
+  if (!style)
+    return Response::Error("Can't find a style to edit");
+
+  bool forceImportant = false;
   InspectorStyleSheetBase* inspectorStyleSheet = nullptr;
   RefPtr<CSSRuleSourceData> sourceData;
   // An absence of the parent rule means that given style is an inline style.
@@ -2196,65 +2203,8 @@ Response InspectorCSSAgent::setLayoutEditorValue(Element* element,
     changeRange.start = declaration.range.start;
     changeRange.end = changeRange.start + newPropertyText.length();
   }
-  CSSStyleDeclaration* resultStyle = nullptr;
-  Response response =
-      setStyleText(inspectorStyleSheet, bodyRange, styleText, resultStyle);
-  if (!response.isSuccess())
-    return response;
-  frontend()->layoutEditorChange(
-      inspectorStyleSheet->id(),
-      inspectorStyleSheet->buildSourceRangeObject(changeRange));
-  return Response::OK();
-}
-
-void InspectorCSSAgent::layoutEditorItemSelected(Element* element,
-                                                 CSSStyleDeclaration* style) {
-  InspectorStyleSheetBase* inspectorStyleSheet = nullptr;
-  RefPtr<CSSRuleSourceData> sourceData;
-  if (style->parentRule()) {
-    InspectorStyleSheet* styleSheet = bindStyleSheet(style->parentStyleSheet());
-    inspectorStyleSheet = styleSheet;
-    sourceData = styleSheet->sourceDataForRule(style->parentRule());
-  } else {
-    InspectorStyleSheetForInlineStyle* inlineStyleSheet =
-        asInspectorStyleSheet(element);
-    inspectorStyleSheet = inlineStyleSheet;
-    sourceData = inlineStyleSheet->ruleSourceData();
-  }
-
-  if (sourceData)
-    frontend()->layoutEditorChange(inspectorStyleSheet->id(),
-                                   inspectorStyleSheet->buildSourceRangeObject(
-                                       sourceData->ruleHeaderRange));
-}
-
-Response InspectorCSSAgent::setEffectivePropertyValueForNode(
-    int nodeId,
-    const String& propertyName,
-    const String& value) {
-  // TODO: move testing from CSSAgent to layout editor.
-  Element* element = nullptr;
-  Response response = m_domAgent->assertElement(nodeId, element);
-  if (!response.isSuccess())
-    return response;
-  if (element->getPseudoId())
-    return Response::Error("Elements is pseudo");
-
-  CSSPropertyID property = cssPropertyID(propertyName);
-  if (!property)
-    return Response::Error("Invalid property name");
-
-  Document* ownerDocument = element->ownerDocument();
-  if (!ownerDocument->isActive())
-    return Response::Error("Can't edit a node from a non-active document");
-
-  CSSPropertyID propertyId = cssPropertyID(propertyName);
-  CSSStyleDeclaration* style =
-      findEffectiveDeclaration(propertyId, matchingStyles(element));
-  if (!style)
-    return Response::Error("Can't find a style to edit");
-
-  return setLayoutEditorValue(element, style, propertyId, value);
+  CSSStyleDeclaration* resultStyle;
+  return setStyleText(inspectorStyleSheet, bodyRange, styleText, resultStyle);
 }
 
 Response InspectorCSSAgent::getBackgroundColors(
@@ -2289,7 +2239,7 @@ Response InspectorCSSAgent::getBackgroundColors(
   if (isMainFrame && !view->isTransparent()) {
     // Start with the "default" page color (typically white).
     Color baseBackgroundColor = view->baseBackgroundColor();
-    colors.append(view->baseBackgroundColor());
+    colors.push_back(view->baseBackgroundColor());
     foundOpaqueColor = !baseBackgroundColor.hasAlpha();
   }
 
@@ -2325,7 +2275,7 @@ Response InspectorCSSAgent::getLayoutTreeAndStyles(
     CSSPropertyID propertyId = cssPropertyID(styleWhitelist->get(i));
     if (propertyId == CSSPropertyInvalid)
       continue;
-    cssPropertyWhitelist.append(
+    cssPropertyWhitelist.push_back(
         std::make_pair(styleWhitelist->get(i), propertyId));
   }
 
@@ -2353,7 +2303,7 @@ int InspectorCSSAgent::getStyleIndexForNode(
     String value = computedStyleInfo->getPropertyValue(pair.second);
     if (!value.isEmpty())
       allPropertiesEmpty = false;
-    style.append(value);
+    style.push_back(value);
   }
 
   // -1 means an empty style.
@@ -2408,10 +2358,12 @@ void InspectorCSSAgent::visitLayoutTreeNodes(
     if (node->isFrameOwnerElement()) {
       Document* contentDocument =
           toHTMLFrameOwnerElement(node)->contentDocument();
-      contentDocument->updateStyleAndLayoutTree();
-      visitLayoutTreeNodes(contentDocument->documentElement(), layoutTreeNodes,
-                           cssPropertyWhitelist, styleToIndexMap,
-                           computedStyles);
+      if (contentDocument) {
+        contentDocument->updateStyleAndLayoutTree();
+        visitLayoutTreeNodes(contentDocument->documentElement(),
+                             layoutTreeNodes, cssPropertyWhitelist,
+                             styleToIndexMap, computedStyles);
+      }
     }
 
     LayoutObject* layoutObject = node->layoutObject();
@@ -2444,7 +2396,7 @@ void InspectorCSSAgent::visitLayoutTreeNodes(
                 protocol::Array<protocol::CSS::InlineTextBox>::create();
         for (const InlineTextBox* textBox = layoutText->firstTextBox(); textBox;
              textBox = textBox->nextTextBox()) {
-          FloatRect localCoordsTextBoxRect(textBox->calculateBoundaries());
+          FloatRect localCoordsTextBoxRect(textBox->frameRect());
           FloatRect absoluteCoordsTextBoxRect =
               layoutObject->localToAbsoluteQuad(localCoordsTextBoxRect)
                   .boundingBox();

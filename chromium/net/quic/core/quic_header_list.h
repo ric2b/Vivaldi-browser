@@ -2,23 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_HEADER_LIST_H_
-#define NET_QUIC_QUIC_HEADER_LIST_H_
+#ifndef NET_QUIC_CORE_QUIC_HEADER_LIST_H_
+#define NET_QUIC_CORE_QUIC_HEADER_LIST_H_
 
 #include <algorithm>
 #include <deque>
 #include <functional>
 
 #include "base/strings/string_piece.h"
-#include "net/base/net_export.h"
-#include "net/quic/core/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_export.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_headers_handler_interface.h"
 
 namespace net {
 
 // A simple class that accumulates header pairs
-class NET_EXPORT_PRIVATE QuicHeaderList : public SpdyHeadersHandlerInterface {
+class QUIC_EXPORT_PRIVATE QuicHeaderList : public SpdyHeadersHandlerInterface {
  public:
   typedef std::deque<std::pair<std::string, std::string>> ListType;
   typedef ListType::const_iterator const_iterator;
@@ -36,6 +36,7 @@ class NET_EXPORT_PRIVATE QuicHeaderList : public SpdyHeadersHandlerInterface {
   void OnHeaderBlockEnd(size_t uncompressed_header_bytes) override;
   void OnHeaderBlockEnd(size_t uncompressed_header_bytes,
                         size_t compressed_header_bytes) override;
+
   void Clear();
 
   const_iterator begin() const { return header_list_.begin(); }
@@ -45,7 +46,6 @@ class NET_EXPORT_PRIVATE QuicHeaderList : public SpdyHeadersHandlerInterface {
   size_t uncompressed_header_bytes() const {
     return uncompressed_header_bytes_;
   }
-
   size_t compressed_header_bytes() const { return compressed_header_bytes_; }
 
   void set_max_uncompressed_header_bytes(size_t max_uncompressed_header_bytes) {
@@ -71,4 +71,4 @@ inline bool operator==(const QuicHeaderList& l1, const QuicHeaderList& l2) {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_HEADER_LIST_H_
+#endif  // NET_QUIC_CORE_QUIC_HEADER_LIST_H_

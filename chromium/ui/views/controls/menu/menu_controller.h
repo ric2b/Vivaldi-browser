@@ -14,7 +14,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "ui/events/event.h"
@@ -57,7 +57,9 @@ class MenuControllerTestApi;
 // MenuController is used internally by the various menu classes to manage
 // showing, selecting and drag/drop for menus. All relevant events are
 // forwarded to the MenuController from SubmenuView and MenuHost.
-class VIEWS_EXPORT MenuController : public WidgetObserver {
+class VIEWS_EXPORT MenuController
+    : public base::SupportsWeakPtr<MenuController>,
+      public WidgetObserver {
  public:
   // Enumeration of how the menu should exit.
   enum ExitType {
@@ -186,6 +188,10 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
 
   // Only used for testing.
   bool IsCancelAllTimerRunningForTest();
+
+  // Only used for testing. Clears |state_| and |pending_state_| without
+  // notifying any menu items.
+  void ClearStateForTest();
 
   void VivaldiSelectItem(MenuItemView* item);
 
@@ -595,7 +601,8 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   // If not empty, it means we're nested. When Run is invoked from within
   // Run, the current state (state_) is pushed onto menu_stack_. This allows
   // MenuController to restore the state when the nested run returns.
-  typedef std::pair<State, linked_ptr<MenuButton::PressedLock> > NestedState;
+  using NestedState =
+      std::pair<State, std::unique_ptr<MenuButton::PressedLock>>;
   std::list<NestedState> menu_stack_;
 
   // When Run is invoked during an active Run, it may be called from a separate

@@ -43,6 +43,7 @@ class CORE_EXPORT PaintTiming final
   void markFirstTextPaint();
   void markFirstImagePaint();
 
+  void markFirstMeaningfulPaintCandidate();
   void setFirstMeaningfulPaint(double stamp);
   void notifyPaint(bool isFirstPaint, bool textPainted, bool imagePainted);
 
@@ -69,7 +70,14 @@ class CORE_EXPORT PaintTiming final
   // was painted.
   double firstMeaningfulPaint() const { return m_firstMeaningfulPaint; }
 
-  Document* document() { return m_document.get(); }
+  // firstMeaningfulPaintCandidate indicates the first time we considered a
+  // paint to qualify as the potentially first meaningful paint. Unlike
+  // firstMeaningfulPaint, this signal is available in real time, but it may be
+  // an optimistic (i.e., too early) estimate.
+  double firstMeaningfulPaintCandidate() const {
+    return m_firstMeaningfulPaintCandidate;
+  }
+
   FirstMeaningfulPaintDetector& firstMeaningfulPaintDetector() {
     return *m_fmpDetector;
   }
@@ -98,8 +106,8 @@ class CORE_EXPORT PaintTiming final
   double m_firstImagePaint = 0.0;
   double m_firstContentfulPaint = 0.0;
   double m_firstMeaningfulPaint = 0.0;
+  double m_firstMeaningfulPaintCandidate = 0.0;
 
-  Member<Document> m_document;
   Member<FirstMeaningfulPaintDetector> m_fmpDetector;
 };
 

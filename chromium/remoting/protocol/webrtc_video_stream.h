@@ -23,8 +23,6 @@
 namespace webrtc {
 class MediaStreamInterface;
 class PeerConnectionInterface;
-class PeerConnectionFactoryInterface;
-class VideoTrackInterface;
 }  // namespace webrtc
 
 namespace remoting {
@@ -33,7 +31,6 @@ namespace protocol {
 class HostVideoStatsDispatcher;
 class WebrtcFrameScheduler;
 class WebrtcTransport;
-class WebrtcVideoCapturerAdapter;
 
 class WebrtcVideoStream : public VideoStream,
                           public webrtc::DesktopCapturer::Callback,
@@ -92,6 +89,11 @@ class WebrtcVideoStream : public VideoStream,
   scoped_refptr<webrtc::MediaStreamInterface> stream_;
 
   HostVideoStatsDispatcher video_stats_dispatcher_;
+
+  // In case when the capturer failed to capture a frame the corresponding event
+  // timestamps are saved in |next_frame_input_event_timestamps_| to be used for
+  // the following frame.
+  InputEventTimestamps next_frame_input_event_timestamps_;
 
   // Timestamps for the frame that's being captured.
   std::unique_ptr<FrameTimestamps> captured_frame_timestamps_;

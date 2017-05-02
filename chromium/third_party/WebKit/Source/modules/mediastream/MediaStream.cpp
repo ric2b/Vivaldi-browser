@@ -27,6 +27,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Deprecation.h"
 #include "modules/mediastream/MediaStreamRegistry.h"
 #include "modules/mediastream/MediaStreamTrackEvent.h"
@@ -51,7 +52,7 @@ static void processTrack(MediaStreamTrack* track,
 
   MediaStreamSource* source = track->component()->source();
   if (!containsSource(trackVector, source))
-    trackVector.append(track);
+    trackVector.push_back(track);
 }
 
 MediaStream* MediaStream::create(ExecutionContext* context) {
@@ -96,10 +97,12 @@ MediaStream* MediaStream::create(ExecutionContext* context,
 
 MediaStream::MediaStream(ExecutionContext* context,
                          MediaStreamDescriptor* streamDescriptor)
-    : ContextLifecycleObserver(context),
-      m_stopped(false),
+    : ContextClient(context),
       m_descriptor(streamDescriptor),
-      m_scheduledEventTimer(this, &MediaStream::scheduledEventTimerFired) {
+      m_scheduledEventTimer(
+          TaskRunnerHelper::get(TaskType::MediaElementEvent, context),
+          this,
+          &MediaStream::scheduledEventTimerFired) {
   m_descriptor->setClient(this);
 
   size_t numberOfAudioTracks = m_descriptor->numberOfAudioComponents();
@@ -108,7 +111,7 @@ MediaStream::MediaStream(ExecutionContext* context,
     MediaStreamTrack* newTrack =
         MediaStreamTrack::create(context, m_descriptor->audioComponent(i));
     newTrack->registerMediaStream(this);
-    m_audioTracks.append(newTrack);
+    m_audioTracks.push_back(newTrack);
   }
 
   size_t numberOfVideoTracks = m_descriptor->numberOfVideoComponents();
@@ -117,7 +120,7 @@ MediaStream::MediaStream(ExecutionContext* context,
     MediaStreamTrack* newTrack =
         MediaStreamTrack::create(context, m_descriptor->videoComponent(i));
     newTrack->registerMediaStream(this);
-    m_videoTracks.append(newTrack);
+    m_videoTracks.push_back(newTrack);
   }
 
   if (emptyOrOnlyEndedTracks()) {
@@ -128,20 +131,22 @@ MediaStream::MediaStream(ExecutionContext* context,
 MediaStream::MediaStream(ExecutionContext* context,
                          const MediaStreamTrackVector& audioTracks,
                          const MediaStreamTrackVector& videoTracks)
-    : ContextLifecycleObserver(context),
-      m_stopped(false),
-      m_scheduledEventTimer(this, &MediaStream::scheduledEventTimerFired) {
+    : ContextClient(context),
+      m_scheduledEventTimer(
+          TaskRunnerHelper::get(TaskType::MediaElementEvent, context),
+          this,
+          &MediaStream::scheduledEventTimerFired) {
   MediaStreamComponentVector audioComponents;
   MediaStreamComponentVector videoComponents;
 
   MediaStreamTrackVector::const_iterator iter;
   for (iter = audioTracks.begin(); iter != audioTracks.end(); ++iter) {
     (*iter)->registerMediaStream(this);
-    audioComponents.append((*iter)->component());
+    audioComponents.push_back((*iter)->component());
   }
   for (iter = videoTracks.begin(); iter != videoTracks.end(); ++iter) {
     (*iter)->registerMediaStream(this);
-    videoComponents.append((*iter)->component());
+    videoComponents.push_back((*iter)->component());
   }
 
   m_descriptor =
@@ -179,10 +184,10 @@ MediaStreamTrackVector MediaStream::getTracks() {
   MediaStreamTrackVector tracks;
   for (MediaStreamTrackVector::iterator iter = m_audioTracks.begin();
        iter != m_audioTracks.end(); ++iter)
-    tracks.append(iter->get());
+    tracks.push_back(iter->get());
   for (MediaStreamTrackVector::iterator iter = m_videoTracks.begin();
        iter != m_videoTracks.end(); ++iter)
-    tracks.append(iter->get());
+    tracks.push_back(iter->get());
   return tracks;
 }
 
@@ -199,10 +204,10 @@ void MediaStream::addTrack(MediaStreamTrack* track,
 
   switch (track->component()->source()->type()) {
     case MediaStreamSource::TypeAudio:
-      m_audioTracks.append(track);
+      m_audioTracks.push_back(track);
       break;
     case MediaStreamSource::TypeVideo:
-      m_videoTracks.append(track);
+      m_videoTracks.push_back(track);
       break;
   }
   track->registerMediaStream(this);
@@ -273,10 +278,10 @@ MediaStream* MediaStream::clone(ExecutionContext* context) {
   MediaStreamTrackVector tracks;
   for (MediaStreamTrackVector::iterator iter = m_audioTracks.begin();
        iter != m_audioTracks.end(); ++iter)
-    tracks.append((*iter)->clone(context));
+    tracks.push_back((*iter)->clone(context));
   for (MediaStreamTrackVector::iterator iter = m_videoTracks.begin();
        iter != m_videoTracks.end(); ++iter)
-    tracks.append((*iter)->clone(context));
+    tracks.push_back((*iter)->clone(context));
   return MediaStream::create(context, tracks);
 }
 
@@ -297,7 +302,7 @@ void MediaStream::trackEnded() {
 }
 
 void MediaStream::streamEnded() {
-  if (m_stopped)
+  if (!getExecutionContext())
     return;
 
   if (active()) {
@@ -319,32 +324,23 @@ bool MediaStream::addEventListenerInternal(
                                                              listener, options);
 }
 
-void MediaStream::contextDestroyed() {
-  ContextLifecycleObserver::contextDestroyed();
-  m_stopped = true;
-}
-
 const AtomicString& MediaStream::interfaceName() const {
   return EventTargetNames::MediaStream;
 }
 
-ExecutionContext* MediaStream::getExecutionContext() const {
-  return ContextLifecycleObserver::getExecutionContext();
-}
-
 void MediaStream::addRemoteTrack(MediaStreamComponent* component) {
   DCHECK(component);
-  if (m_stopped)
+  if (!getExecutionContext())
     return;
 
   MediaStreamTrack* track =
       MediaStreamTrack::create(getExecutionContext(), component);
   switch (component->source()->type()) {
     case MediaStreamSource::TypeAudio:
-      m_audioTracks.append(track);
+      m_audioTracks.push_back(track);
       break;
     case MediaStreamSource::TypeVideo:
-      m_videoTracks.append(track);
+      m_videoTracks.push_back(track);
       break;
   }
   track->registerMediaStream(this);
@@ -361,7 +357,7 @@ void MediaStream::addRemoteTrack(MediaStreamComponent* component) {
 
 void MediaStream::removeRemoteTrack(MediaStreamComponent* component) {
   DCHECK(component);
-  if (m_stopped)
+  if (!getExecutionContext())
     return;
 
   MediaStreamTrackVector* tracks = 0;
@@ -399,14 +395,14 @@ void MediaStream::removeRemoteTrack(MediaStreamComponent* component) {
 }
 
 void MediaStream::scheduleDispatchEvent(Event* event) {
-  m_scheduledEvents.append(event);
+  m_scheduledEvents.push_back(event);
 
   if (!m_scheduledEventTimer.isActive())
     m_scheduledEventTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
 void MediaStream::scheduledEventTimerFired(TimerBase*) {
-  if (m_stopped)
+  if (!getExecutionContext())
     return;
 
   HeapVector<Member<Event>> events;
@@ -429,7 +425,7 @@ DEFINE_TRACE(MediaStream) {
   visitor->trace(m_descriptor);
   visitor->trace(m_scheduledEvents);
   EventTargetWithInlineData::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
+  ContextClient::trace(visitor);
   MediaStreamDescriptorClient::trace(visitor);
 }
 

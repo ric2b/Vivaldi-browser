@@ -45,17 +45,14 @@ static void removeWorkerIsolate(v8::Isolate* isolate) {
 }
 
 WorkerBackingThread::WorkerBackingThread(const char* name,
-                                         bool shouldCallGCOnShutdown,
-                                         BlinkGC::ThreadHeapMode threadHeapMode)
-    : m_backingThread(WebThreadSupportingGC::create(name, threadHeapMode)),
+                                         bool shouldCallGCOnShutdown)
+    : m_backingThread(WebThreadSupportingGC::create(name)),
       m_isOwningThread(true),
       m_shouldCallGCOnShutdown(shouldCallGCOnShutdown) {}
 
 WorkerBackingThread::WorkerBackingThread(WebThread* thread,
                                          bool shouldCallGCOnShutdown)
-    : m_backingThread(
-          WebThreadSupportingGC::createForThread(thread,
-                                                 BlinkGC::PerThreadHeapMode)),
+    : m_backingThread(WebThreadSupportingGC::createForThread(thread)),
       m_isOwningThread(false),
       m_shouldCallGCOnShutdown(shouldCallGCOnShutdown) {}
 
@@ -64,24 +61,27 @@ WorkerBackingThread::~WorkerBackingThread() {}
 void WorkerBackingThread::initialize() {
   DCHECK(!m_isolate);
   m_backingThread->initialize();
-  m_isolate = V8PerIsolateData::initialize();
+  m_isolate = V8PerIsolateData::initialize(
+      m_backingThread->platformThread().getWebTaskRunner());
   addWorkerIsolate(m_isolate);
   V8Initializer::initializeWorker(m_isolate);
 
   std::unique_ptr<V8IsolateInterruptor> interruptor =
-      makeUnique<V8IsolateInterruptor>(m_isolate);
+      WTF::makeUnique<V8IsolateInterruptor>(m_isolate);
   ThreadState::current()->addInterruptor(std::move(interruptor));
   ThreadState::current()->registerTraceDOMWrappers(
-      m_isolate, V8GCController::traceDOMWrappers, nullptr, nullptr);
+      m_isolate, V8GCController::traceDOMWrappers,
+      ScriptWrappableVisitor::invalidateDeadObjectsInMarkingDeque,
+      ScriptWrappableVisitor::performCleanup);
   if (RuntimeEnabledFeatures::v8IdleTasksEnabled())
     V8PerIsolateData::enableIdleTasks(
-        m_isolate, wrapUnique(new V8IdleTaskRunner(
+        m_isolate, WTF::wrapUnique(new V8IdleTaskRunner(
                        backingThread().platformThread().scheduler())));
   if (m_isOwningThread)
     Platform::current()->didStartWorkerThread();
 
   V8PerIsolateData::from(m_isolate)->setThreadDebugger(
-      makeUnique<WorkerThreadDebugger>(m_isolate));
+      WTF::makeUnique<WorkerThreadDebugger>(m_isolate));
 }
 
 void WorkerBackingThread::shutdown() {

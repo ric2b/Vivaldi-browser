@@ -8,7 +8,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.view.View;
 
 import org.chromium.base.ApplicationStatus;
@@ -73,9 +73,9 @@ public class WebappModeTest extends MultiActivityTestBase {
             intent.putExtra(ShortcutHelper.EXTRA_MAC, mac);
         }
 
-        WebappInfo webappInfo = WebappInfo.create(id, url, null, icon, title, null,
-                WebDisplayMode.Standalone, ScreenOrientationValues.PORTRAIT, ShortcutSource.UNKNOWN,
-                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
+        WebappInfo webappInfo = WebappInfo.create(id, url, null, new WebappInfo.Icon(icon), title,
+                null, WebDisplayMode.Standalone, ScreenOrientationValues.PORTRAIT,
+                ShortcutSource.UNKNOWN, ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
                 ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, false);
         webappInfo.setWebappIntentExtras(intent);
 
@@ -83,7 +83,7 @@ public class WebappModeTest extends MultiActivityTestBase {
     }
 
     private void fireWebappIntent(String id, String url, String title, String icon,
-            boolean addMac) throws Exception {
+            boolean addMac) {
         Intent intent = createIntent(id, url, title, icon, addMac);
 
         getInstrumentation().getTargetContext().startActivity(intent);
@@ -122,7 +122,7 @@ public class WebappModeTest extends MultiActivityTestBase {
      */
     @MediumTest
     @Feature({"Webapps"})
-    public void testWebappLaunches() throws Exception {
+    public void testWebappLaunches() {
         final WebappActivity firstActivity =
                 startWebappActivity(WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON);
         final int firstTabId = firstActivity.getActivityTab().getId();
@@ -160,7 +160,7 @@ public class WebappModeTest extends MultiActivityTestBase {
      */
     @MediumTest
     @Feature({"Webapps"})
-    public void testWebappTabIdsProperlyAssigned() throws Exception {
+    public void testWebappTabIdsProperlyAssigned() {
         SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = prefs.edit();
         editor.putInt(TabIdManager.PREF_NEXT_ID, 11684);
@@ -215,7 +215,7 @@ public class WebappModeTest extends MultiActivityTestBase {
      */
     @MediumTest
     @Feature({"Webapps"})
-    public void testWebappRequiresValidMac() throws Exception {
+    public void testWebappRequiresValidMac() {
         // Try to start a WebappActivity.  Fail because the Intent is insecure.
         fireWebappIntent(WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, false);
         CriteriaHelper.pollUiThread(new Criteria() {
@@ -312,8 +312,7 @@ public class WebappModeTest extends MultiActivityTestBase {
      * ActivityUtils.waitForActivity() because of the way WebappActivity is instanced on pre-L
      * devices.
      */
-    private WebappActivity startWebappActivity(String id, String url, String title, String icon)
-            throws Exception {
+    private WebappActivity startWebappActivity(String id, String url, String title, String icon) {
         fireWebappIntent(id, url, title, icon, true);
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override

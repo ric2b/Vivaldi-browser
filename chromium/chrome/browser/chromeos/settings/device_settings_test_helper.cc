@@ -139,6 +139,10 @@ void DeviceSettingsTestHelper::RetrieveDevicePolicy(
   device_policy_.retrieve_callbacks_.push_back(callback);
 }
 
+std::string DeviceSettingsTestHelper::BlockingRetrieveDevicePolicy() {
+  return device_policy_.policy_blob_;
+}
+
 void DeviceSettingsTestHelper::RetrievePolicyForUser(
     const cryptohome::Identification& cryptohome_id,
     const RetrievePolicyCallback& callback) {}
@@ -153,6 +157,11 @@ void DeviceSettingsTestHelper::RetrieveDeviceLocalAccountPolicy(
     const RetrievePolicyCallback& callback) {
   device_local_account_policy_[account_id].retrieve_callbacks_.push_back(
       callback);
+}
+
+std::string DeviceSettingsTestHelper::BlockingRetrieveDeviceLocalAccountPolicy(
+    const std::string& account_id) {
+  return "";
 }
 
 void DeviceSettingsTestHelper::StoreDevicePolicy(
@@ -193,6 +202,10 @@ void DeviceSettingsTestHelper::StartArcInstance(
 void DeviceSettingsTestHelper::StopArcInstance(const ArcCallback& callback) {}
 
 void DeviceSettingsTestHelper::PrioritizeArcInstance(
+    const ArcCallback& callback) {}
+
+void DeviceSettingsTestHelper::SetArcCpuRestriction(
+    login_manager::ContainerCpuRestrictionState restriction_state,
     const ArcCallback& callback) {}
 
 void DeviceSettingsTestHelper::EmitArcBooted() {}

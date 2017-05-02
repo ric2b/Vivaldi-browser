@@ -25,9 +25,9 @@
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/compositor/owned_mailbox.h"
-#include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
+#include "content/browser/renderer_host/resize_lock.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
@@ -43,15 +43,12 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/selection_bound.h"
 #include "ui/wm/public/activation_delegate.h"
+#include "ui/wm/public/window_types.h"
 
 namespace aura {
 namespace client {
 class ScopedTooltipDisabler;
 }
-}
-
-namespace cc {
-class DelegatedFrameData;
 }
 
 namespace gfx {
@@ -66,7 +63,6 @@ class LocatedEvent;
 #if defined(OS_WIN)
 class OnScreenKeyboardObserver;
 #endif
-class TouchSelectionController;
 }
 
 namespace content {
@@ -74,7 +70,8 @@ namespace content {
 class LegacyRenderWidgetHostHWND;
 #endif
 
-class OverscrollController;
+class DelegatedFrameHost;
+class DelegatedFrameHostClient;
 class RenderFrameHostImpl;
 class RenderWidgetHostImpl;
 class RenderWidgetHostView;
@@ -85,7 +82,6 @@ struct TextInputState;
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
       NON_EXPORTED_BASE(public RenderWidgetHostViewEventHandler::Delegate),
-      public DelegatedFrameHostClient,
       public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
@@ -228,7 +224,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   bool ChangeTextDirectionAndLayoutAlignment(
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
-  void EnsureCaretInRect(const gfx::Rect& rect) override;
+  void EnsureCaretNotInRect(const gfx::Rect& rect) override;
   bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 
@@ -276,8 +272,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                        aura::Window* lost_focus) override;
 
   // Overridden from aura::WindowTreeHostObserver:
-  void OnHostMoved(const aura::WindowTreeHost* host,
-                   const gfx::Point& new_origin) override;
+  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+                           const gfx::Point& new_origin_in_pixels) override;
 
 #if defined(OS_WIN)
   // Gets the HWND of the host window.
@@ -339,7 +335,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   }
 
  private:
+  friend class DelegatedFrameHostClientAura;
   friend class InputMethodAuraTestBase;
+  friend class RenderWidgetHostViewAuraTest;
   friend class RenderWidgetHostViewAuraCopyRequestTest;
   friend class TestInputMethodObserver;
   FRIEND_TEST_ALL_PREFIXES(InputMethodResultAuraTest,
@@ -379,7 +377,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   class WindowAncestorObserver;
   friend class WindowAncestorObserver;
 
-  void CreateAuraWindow();
+  void CreateAuraWindow(ui::wm::WindowType type);
+
+  void CreateDelegatedFrameHostClient();
 
   void UpdateCursorIfOverSelf();
 
@@ -419,22 +419,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // Called prior to removing |window_| from a WindowEventDispatcher.
   void RemovingFromRootWindow();
-
-  // DelegatedFrameHostClient implementation.
-  ui::Layer* DelegatedFrameHostGetLayer() const override;
-  bool DelegatedFrameHostIsVisible() const override;
-  SkColor DelegatedFrameHostGetGutterColor(SkColor color) const override;
-  gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
-  bool DelegatedFrameCanCreateResizeLock() const override;
-  std::unique_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
-      bool defer_compositor_lock) override;
-  void DelegatedFrameHostResizeLockWasReleased() override;
-  void DelegatedFrameHostSendReclaimCompositorResources(
-      int compositor_frame_sink_id,
-      bool is_swap_ack,
-      const cc::ReturnedResourceArray& resources) override;
-  void SetBeginFrameSource(cc::BeginFrameSource* source) override;
-  bool IsAutoResizeEnabled() const override;
 
   // TextInputManager::Observer implementation.
   void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
@@ -494,6 +478,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   aura::Window* window_;
 
+  std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client_;
+  // NOTE: this may be null.
   std::unique_ptr<DelegatedFrameHost> delegated_frame_host_;
 
   std::unique_ptr<WindowObserver> window_observer_;

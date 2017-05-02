@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -376,10 +377,12 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
     return false;
   }
 
-  base::CommandLine* cmd_line = new base::CommandLine(exe_path);
+  std::unique_ptr<base::CommandLine> cmd_line =
+      base::MakeUnique<base::CommandLine>(exe_path);
   cmd_line->AppendSwitchASCII(switches::kProcessType,
                               is_broker_ ? switches::kPpapiBrokerProcess
                                          : switches::kPpapiPluginProcess);
+  BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line.get());
 
 #if defined(OS_WIN)
   cmd_line->AppendArg(is_broker_ ? switches::kPrefetchArgumentPpapiBroker
@@ -411,7 +414,7 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
     cmd_line->CopySwitchesFrom(browser_command_line, kPluginForwardSwitches,
                                arraysize(kPluginForwardSwitches));
 
-    // Copy any flash args over and introduce field trials if necessary.
+    // Copy any flash args over if necessary.
     // TODO(vtl): Stop passing flash args in the command line, or windows is
     // going to explode.
     std::string existing_args =
@@ -444,8 +447,9 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   // On posix, never use the zygote for the broker. Also, only use the zygote if
   // we are not using a plugin launcher - having a plugin launcher means we need
   // to use another process instead of just forking the zygote.
-  process_->Launch(new PpapiPluginSandboxedProcessLauncherDelegate(is_broker_),
-                   cmd_line, true);
+  process_->Launch(
+      base::MakeUnique<PpapiPluginSandboxedProcessLauncherDelegate>(is_broker_),
+      std::move(cmd_line), true);
   return true;
 }
 
@@ -488,6 +492,8 @@ bool PpapiPluginProcessHost::OnMessageReceived(const IPC::Message& msg) {
   IPC_BEGIN_MESSAGE_MAP(PpapiPluginProcessHost, msg)
     IPC_MESSAGE_HANDLER(PpapiHostMsg_ChannelCreated,
                         OnRendererPluginChannelCreated)
+    IPC_MESSAGE_HANDLER(PpapiHostMsg_FieldTrialActivated,
+                        OnFieldTrialActivated);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   DCHECK(handled);
@@ -505,6 +511,14 @@ void PpapiPluginProcessHost::OnChannelConnected(int32_t peer_pid) {
   for (size_t i = 0; i < pending_requests_.size(); i++)
     RequestPluginChannel(pending_requests_[i]);
   pending_requests_.clear();
+}
+
+void PpapiPluginProcessHost::OnFieldTrialActivated(
+    const std::string& trial_name) {
+  // Activate the trial in the browser process to match its state in the
+  // PPAPI process. This is done by calling FindFullName which finalizes the
+  // group and activates the trial.
+  base::FieldTrialList::FindFullName(trial_name);
 }
 
 // Called when the browser <--> plugin channel has an error. This normally

@@ -251,24 +251,29 @@ void HTMLAnchorElement::setActive(bool down) {
   ContainerNode::setActive(down);
 }
 
-void HTMLAnchorElement::parseAttribute(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& value) {
-  if (name == hrefAttr) {
+void HTMLAnchorElement::attributeChanged(
+    const AttributeModificationParams& params) {
+  HTMLElement::attributeChanged(params);
+  if (params.reason != AttributeModificationReason::kDirectly)
+    return;
+  if (params.name != hrefAttr)
+    return;
+  if (!isLink() && adjustedFocusedElementInTreeScope() == this)
+    blur();
+}
+
+void HTMLAnchorElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == hrefAttr) {
     bool wasLink = isLink();
-    setIsLink(!value.isNull());
+    setIsLink(!params.newValue.isNull());
     if (wasLink || isLink()) {
       pseudoStateChanged(CSSSelector::PseudoLink);
       pseudoStateChanged(CSSSelector::PseudoVisited);
       pseudoStateChanged(CSSSelector::PseudoAnyLink);
     }
-    if (wasLink && !isLink() && adjustedFocusedElementInTreeScope() == this) {
-      // We might want to call blur(), but it's dangerous to dispatch
-      // events here.
-      document().setNeedsFocusedElementCheck();
-    }
     if (isLink()) {
-      String parsedURL = stripLeadingAndTrailingHTMLSpaces(value);
+      String parsedURL = stripLeadingAndTrailingHTMLSpaces(params.newValue);
       if (document().isDNSPrefetchEnabled()) {
         if (protocolIs(parsedURL, "http") || protocolIs(parsedURL, "https") ||
             parsedURL.startsWith("//"))
@@ -276,14 +281,13 @@ void HTMLAnchorElement::parseAttribute(const QualifiedName& name,
       }
     }
     invalidateCachedVisitedLinkHash();
-    logUpdateAttributeIfIsolatedWorldAndInDocument("a", hrefAttr, oldValue,
-                                                   value);
-  } else if (name == nameAttr || name == titleAttr) {
+    logUpdateAttributeIfIsolatedWorldAndInDocument("a", params);
+  } else if (params.name == nameAttr || params.name == titleAttr) {
     // Do nothing.
-  } else if (name == relAttr) {
-    setRel(value);
+  } else if (params.name == relAttr) {
+    setRel(params.newValue);
   } else {
-    HTMLElement::parseAttribute(name, oldValue, value);
+    HTMLElement::parseAttribute(params);
   }
 }
 
@@ -372,7 +376,7 @@ bool HTMLAnchorElement::isLiveLink() const {
 void HTMLAnchorElement::sendPings(const KURL& destinationURL) const {
   const AtomicString& pingValue = getAttribute(pingAttr);
   if (pingValue.isNull() || !document().settings() ||
-      !document().settings()->hyperlinkAuditingEnabled())
+      !document().settings()->getHyperlinkAuditingEnabled())
     return;
 
   UseCounter::count(document(), UseCounter::HTMLAnchorElementPingAttribute);
@@ -401,7 +405,8 @@ void HTMLAnchorElement::handleClick(Event* event) {
   sendPings(completedURL);
 
   ResourceRequest request(completedURL);
-  request.setUIStartTime(event->platformTimeStamp());
+  request.setUIStartTime(
+      (event->platformTimeStamp() - TimeTicks()).InSecondsF());
   request.setInputPerfMetricReportPolicy(
       InputToLoadPerfMetricReportPolicy::ReportLink);
 
@@ -410,6 +415,8 @@ void HTMLAnchorElement::handleClick(Event* event) {
       SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
           fastGetAttribute(referrerpolicyAttr), &policy) &&
       !hasRel(RelationNoReferrer)) {
+    UseCounter::count(document(),
+                      UseCounter::HTMLAnchorElementReferrerPolicyAttribute);
     request.setHTTPReferrer(SecurityPolicy::generateReferrer(
         policy, completedURL, document().outgoingReferrer()));
   }
@@ -421,6 +428,7 @@ void HTMLAnchorElement::handleClick(Event* event) {
         document().getSecurityOrigin()->canRequest(completedURL);
     const AtomicString& suggestedName =
         (isSameOrigin ? fastGetAttribute(downloadAttr) : nullAtom);
+    request.setRequestorOrigin(SecurityOrigin::create(document().url()));
 
     frame->loader().client()->loadURLExternally(
         request, NavigationPolicyDownload, suggestedName, false);

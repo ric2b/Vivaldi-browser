@@ -72,6 +72,9 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
+
 using content::WebContents;
 using extensions::AppSorting;
 using extensions::CrxInstaller;
@@ -160,25 +163,12 @@ void AppLauncherHandler::CreateAppInfo(
       service->profile())->management_policy()->UserMayModifySettings(
       extension, NULL));
 
-  bool icon_big_exists = true;
   // Instead of setting grayscale here, we do it in apps_page.js.
-  GURL icon_big = extensions::ExtensionIconSource::GetIconURL(
-      extension,
-      extension_misc::EXTENSION_ICON_LARGE,
-      ExtensionIconSet::MATCH_BIGGER,
-      false,
-      &icon_big_exists);
-  value->SetString("icon_big", icon_big.spec());
-  value->SetBoolean("icon_big_exists", icon_big_exists);
-  bool icon_small_exists = true;
-  GURL icon_small = extensions::ExtensionIconSource::GetIconURL(
-      extension,
-      extension_misc::EXTENSION_ICON_BITTY,
-      ExtensionIconSet::MATCH_BIGGER,
-      false,
-      &icon_small_exists);
-  value->SetString("icon_small", icon_small.spec());
-  value->SetBoolean("icon_small_exists", icon_small_exists);
+  GURL icon = extensions::ExtensionIconSource::GetIconURL(
+      extension, extension_misc::EXTENSION_ICON_LARGE,
+      ExtensionIconSet::MATCH_BIGGER, false);
+  DCHECK_NE(GURL(), icon);
+  value->SetString("icon", icon.spec());
   value->SetInteger("launch_container",
                     extensions::AppLaunchInfo::GetLaunchContainer(extension));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(service->profile());
@@ -870,6 +860,11 @@ AppLauncherHandler::GetExtensionUninstallDialog() {
   if (!extension_uninstall_dialog_.get()) {
     Browser* browser = chrome::FindBrowserWithWebContents(
         web_ui()->GetWebContents());
+    if (!browser && vivaldi::IsVivaldiRunning()) {
+      // Needed for web panels.
+      browser = vivaldi::FindBrowserWithWebContents(web_ui()->GetWebContents());
+      DCHECK(browser);
+    }
     extension_uninstall_dialog_.reset(
         extensions::ExtensionUninstallDialog::Create(
             extension_service_->profile(),

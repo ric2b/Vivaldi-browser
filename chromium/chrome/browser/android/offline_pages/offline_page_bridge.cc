@@ -22,13 +22,13 @@
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
-#include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/background/request_queue_results.h"
-#include "components/offline_pages/background/save_page_request.h"
-#include "components/offline_pages/offline_page_feature.h"
-#include "components/offline_pages/offline_page_item.h"
-#include "components/offline_pages/offline_page_model.h"
-#include "components/offline_pages/request_header/offline_page_header.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/background/request_queue_results.h"
+#include "components/offline_pages/core/background/save_page_request.h"
+#include "components/offline_pages/core/offline_page_feature.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/OfflinePageBridge_jni.h"
@@ -278,10 +278,13 @@ void OfflinePageBridge::OfflinePageModelLoaded(OfflinePageModel* model) {
   NotifyIfDoneLoading();
 }
 
-void OfflinePageBridge::OfflinePageModelChanged(OfflinePageModel* model) {
+void OfflinePageBridge::OfflinePageAdded(OfflinePageModel* model,
+                                         const OfflinePageItem& added_page) {
   DCHECK_EQ(offline_page_model_, model);
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_OfflinePageBridge_offlinePageModelChanged(env, java_ref_);
+
+  Java_OfflinePageBridge_offlinePageAdded(
+      env, java_ref_, ToJavaOfflinePageItem(env, added_page));
 }
 
 void OfflinePageBridge::OfflinePageDeleted(int64_t offline_id,
@@ -442,6 +445,7 @@ void OfflinePageBridge::SavePage(
   save_page_params.client_id.name_space =
       ConvertJavaStringToUTF8(env, j_namespace);
   save_page_params.client_id.id = ConvertJavaStringToUTF8(env, j_client_id);
+  save_page_params.is_background = false;
 
   offline_page_model_->SavePage(
       save_page_params, std::move(archiver),
@@ -505,6 +509,18 @@ jboolean OfflinePageBridge::IsShowingOfflinePreview(
   if (!web_contents)
     return false;
   return offline_pages::OfflinePageUtils::IsShowingOfflinePreview(web_contents);
+}
+
+jboolean OfflinePageBridge::IsShowingDownloadButtonInErrorPage(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_web_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(j_web_contents);
+  if (!web_contents)
+    return false;
+  return offline_pages::OfflinePageUtils::IsShowingDownloadButtonInErrorPage(
+      web_contents);
 }
 
 void OfflinePageBridge::GetRequestsInQueue(

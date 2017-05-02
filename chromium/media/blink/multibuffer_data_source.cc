@@ -450,7 +450,6 @@ void MultibufferDataSource::StopLoader() {
 
 void MultibufferDataSource::SetBitrateTask(int bitrate) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
-  DCHECK(reader_.get());
 
   bitrate_ = bitrate;
   UpdateBufferSizes();
@@ -476,6 +475,7 @@ void MultibufferDataSource::StartCallback() {
     {
       base::AutoLock auto_lock(lock_);
       total_bytes_ = url_data_->length();
+      mime_type_ = url_data_->mime_type();
     }
     streaming_ =
         !assume_fully_buffered() && (total_bytes_ == kPositionNotSpecified ||

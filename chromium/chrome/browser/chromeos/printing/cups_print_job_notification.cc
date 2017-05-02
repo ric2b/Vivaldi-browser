@@ -4,6 +4,10 @@
 
 #include "chrome/browser/chromeos/printing/cups_print_job_notification.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -101,12 +105,14 @@ void CupsPrintJobNotification::ClickOnNotificationButton(int button_index) {
 
   switch (button_command) {
     case ButtonCommand::CANCEL_PRINTING:
-      print_job_manager->CancelPrintJob(print_job_);
-      g_browser_process->notification_ui_manager()->CancelById(
-          GetNotificationId(), profile_id);
-      // |print_job_| is deleted by CupsPrintManager when the print job is
-      // cancelled, thus set it to nullptr.
-      print_job_ = nullptr;
+      if (print_job_manager->CancelPrintJob(print_job_)) {
+        // only clean up the nofitication if cancel was successful.
+        g_browser_process->notification_ui_manager()->CancelById(
+            GetNotificationId(), profile_id);
+        // |print_job_| is deleted by CupsPrintManager when the print job is
+        // cancelled, thus set it to nullptr.
+        print_job_ = nullptr;
+      }
       break;
     case ButtonCommand::PAUSE_PRINTING:
       print_job_manager->SuspendPrintJob(print_job_);
@@ -269,11 +275,8 @@ CupsPrintJobNotification::GetButtonCommands() const {
     case CupsPrintJob::State::STATE_STARTED:
     case CupsPrintJob::State::STATE_PAGE_DONE:
     case CupsPrintJob::State::STATE_RESUMED:
-      commands->push_back(ButtonCommand::PAUSE_PRINTING);
-      commands->push_back(ButtonCommand::CANCEL_PRINTING);
-      break;
     case CupsPrintJob::State::STATE_SUSPENDED:
-      commands->push_back(ButtonCommand::RESUME_PRINTING);
+      // TODO(crbug.com/679927): Add PAUSE and RESUME buttons.
       commands->push_back(ButtonCommand::CANCEL_PRINTING);
       break;
     case CupsPrintJob::State::STATE_ERROR:

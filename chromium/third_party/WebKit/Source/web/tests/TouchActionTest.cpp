@@ -150,7 +150,7 @@ void TouchActionTest::runShadowDOMTest(std::string file) {
 
   WebView* webView = setupTest(file, client);
 
-  TrackExceptionState es;
+  DummyExceptionStateForTesting es;
 
   // Oilpan: see runTouchActionTest() comment why these are persistent
   // references.
@@ -228,7 +228,7 @@ void TouchActionTest::runTestOnTree(
     WebView* webView,
     TouchActionTrackingWebWidgetClient& client) {
   // Find all elements to test the touch-action of in the document.
-  TrackExceptionState es;
+  DummyExceptionStateForTesting es;
 
   // Oilpan: see runTouchActionTest() comment why these are persistent
   // references.
@@ -372,8 +372,8 @@ void TouchActionTest::sendTouchEvent(WebView* webView,
   ASSERT_TRUE(type == WebInputEvent::TouchStart ||
               type == WebInputEvent::TouchCancel);
 
-  WebTouchEvent webTouchEvent;
-  webTouchEvent.type = type;
+  WebTouchEvent webTouchEvent(type, WebInputEvent::NoModifiers,
+                              WebInputEvent::TimeStampForTesting);
   if (type == WebInputEvent::TouchCancel)
     webTouchEvent.dispatchType = WebInputEvent::EventNonBlocking;
   webTouchEvent.touchesLength = 1;

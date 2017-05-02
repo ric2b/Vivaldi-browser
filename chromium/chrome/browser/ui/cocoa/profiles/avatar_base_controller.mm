@@ -20,7 +20,6 @@
 #import "chrome/browser/ui/cocoa/base_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
-#import "chrome/browser/ui/cocoa/profiles/avatar_menu_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_chooser_controller.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
@@ -159,7 +158,7 @@ bool ProfileUpdateObserver::HasAvatarError() {
 
   // The new avatar bubble does not have an arrow, and it should be anchored
   // to the edge of the avatar button.
-  int anchorX = cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+  int anchorX = cocoa_l10n_util::ShouldFlipWindowControlsInRTL()
                     ? NSMinX([anchor bounds]) + kMenuXOffsetAdjust
                     : NSMaxX([anchor bounds]) - kMenuXOffsetAdjust;
   NSPoint point = NSMakePoint(anchorX,

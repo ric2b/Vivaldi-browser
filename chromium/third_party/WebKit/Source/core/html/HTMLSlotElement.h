@@ -53,12 +53,12 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   Node* firstDistributedNode() const {
     DCHECK(supportsDistribution());
     return m_distributedNodes.isEmpty() ? nullptr
-                                        : m_distributedNodes.first().get();
+                                        : m_distributedNodes.front().get();
   }
   Node* lastDistributedNode() const {
     DCHECK(supportsDistribution());
     return m_distributedNodes.isEmpty() ? nullptr
-                                        : m_distributedNodes.last().get();
+                                        : m_distributedNodes.back().get();
   }
 
   Node* distributedNodeNextTo(const Node&) const;
@@ -77,10 +77,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   void attachLayoutTree(const AttachContext& = AttachContext()) final;
   void detachLayoutTree(const AttachContext& = AttachContext()) final;
 
-  void attributeChanged(const QualifiedName&,
-                        const AtomicString& oldValue,
-                        const AtomicString& newValue,
-                        AttributeModificationReason = ModifiedDirectly) final;
+  void attributeChanged(const AttributeModificationParams&) final;
 
   int tabIndex() const override;
   AtomicString name() const;
@@ -96,6 +93,8 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   bool supportsDistribution() const { return isInV1ShadowTree(); }
   void didSlotChange(SlotChangeType);
+  void dispatchSlotChangeEvent();
+  void clearSlotChangeEventEnqueued() { m_slotchangeEventEnqueued = false; }
 
   static AtomicString normalizeSlotName(const AtomicString&);
 
@@ -109,7 +108,6 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   void willRecalcStyle(StyleRecalcChange) final;
 
   void enqueueSlotChangeEvent();
-  void dispatchSlotChangeEvent();
 
   HeapVector<Member<Node>> m_assignedNodes;
   HeapVector<Member<Node>> m_distributedNodes;

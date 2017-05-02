@@ -263,7 +263,7 @@ WebContentsImpl* BrowserPluginGuest::CreateNewGuestWindow(
     const WebContents::CreateParams& params) {
   WebContentsImpl* new_contents =
       static_cast<WebContentsImpl*>(delegate_->CreateNewGuestWindow(params));
-//  DCHECK(new_contents);
+  DCHECK(new_contents);
   return new_contents;
 }
 
@@ -442,23 +442,14 @@ void BrowserPluginGuest::SetChildFrameSurface(
 void BrowserPluginGuest::OnSatisfySequence(
     int instance_id,
     const cc::SurfaceSequence& sequence) {
-  std::vector<uint32_t> sequences;
-  sequences.push_back(sequence.sequence);
-  cc::SurfaceManager* manager = GetSurfaceManager();
-  manager->DidSatisfySequences(sequence.frame_sink_id, &sequences);
+  GetSurfaceManager()->SatisfySequence(sequence);
 }
 
 void BrowserPluginGuest::OnRequireSequence(
     int instance_id,
     const cc::SurfaceId& id,
     const cc::SurfaceSequence& sequence) {
-  cc::SurfaceManager* manager = GetSurfaceManager();
-  cc::Surface* surface = manager->GetSurfaceForId(id);
-  if (!surface) {
-    LOG(ERROR) << "Attempting to require callback on nonexistent surface";
-    return;
-  }
-  surface->AddDestructionDependency(sequence);
+  GetSurfaceManager()->RequireSequence(id, sequence);
 }
 
 bool BrowserPluginGuest::HandleFindForEmbedder(
@@ -482,7 +473,7 @@ void BrowserPluginGuest::ResendEventToEmbedder(
       static_cast<RenderWidgetHostViewBase*>(GetOwnerRenderWidgetHostView());
 
   gfx::Vector2d offset_from_embedder = guest_window_rect_.OffsetFromOrigin();
-  if (event.type == blink::WebInputEvent::GestureScrollUpdate) {
+  if (event.type() == blink::WebInputEvent::GestureScrollUpdate) {
     blink::WebGestureEvent resent_gesture_event;
     memcpy(&resent_gesture_event, &event, sizeof(blink::WebGestureEvent));
     resent_gesture_event.x += offset_from_embedder.x();
@@ -494,7 +485,7 @@ void BrowserPluginGuest::ResendEventToEmbedder(
         ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
             resent_gesture_event);
     view->ProcessGestureEvent(resent_gesture_event, latency_info);
-  } else if (event.type == blink::WebInputEvent::MouseWheel) {
+  } else if (event.type() == blink::WebInputEvent::MouseWheel) {
     blink::WebMouseWheelEvent resent_wheel_event;
     memcpy(&resent_wheel_event, &event, sizeof(blink::WebMouseWheelEvent));
     resent_wheel_event.x += offset_from_embedder.x();
@@ -507,6 +498,21 @@ void BrowserPluginGuest::ResendEventToEmbedder(
   } else {
     NOTIMPLEMENTED();
   }
+}
+
+gfx::Point BrowserPluginGuest::GetCoordinatesInEmbedderWebContents(
+    const gfx::Point& relative_point) {
+  RenderWidgetHostView* owner_rwhv = GetOwnerRenderWidgetHostView();
+  if (!owner_rwhv)
+    return relative_point;
+
+  gfx::Point point(relative_point);
+
+  // Add the offset form the embedder web contents view.
+  point +=
+      owner_rwhv->TransformPointToRootCoordSpace(guest_window_rect_.origin())
+          .OffsetFromOrigin();
+  return point;
 }
 
 WebContentsImpl* BrowserPluginGuest::GetWebContents() const {
@@ -926,11 +932,13 @@ void BrowserPluginGuest::OnImeSetComposition(
                                       selection_start, selection_end));
 }
 
-void BrowserPluginGuest::OnImeCommitText(int browser_plugin_instance_id,
-                                         const std::string& text,
-                                         int relative_cursor_pos) {
+void BrowserPluginGuest::OnImeCommitText(
+    int browser_plugin_instance_id,
+    const std::string& text,
+    const std::vector<blink::WebCompositionUnderline>& underlines,
+    int relative_cursor_pos) {
   Send(new InputMsg_ImeCommitText(routing_id(), base::UTF8ToUTF16(text),
-                                  gfx::Range::InvalidRange(),
+                                  underlines, gfx::Range::InvalidRange(),
                                   relative_cursor_pos));
 }
 

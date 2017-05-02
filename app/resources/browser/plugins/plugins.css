@@ -275,11 +275,6 @@ body.show-tmi-mode .show-in-tmi-mode {
   float: right;
 }
 
-.always-allow {
-  -webkit-margin-start: 30px;
-  margin-bottom: 10px;
-}
-
 button {
   font-size: 104%;
 }

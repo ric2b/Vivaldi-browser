@@ -447,6 +447,7 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
 
     event_generator_.reset(
         new ui::test::EventGenerator(widget_->GetNativeWindow()));
+    event_generator_->set_target(ui::test::EventGenerator::Target::WINDOW);
   }
   ui::MenuModel* GetContextMenuModel() {
     test_api_->UpdateContextMenu();
@@ -597,6 +598,10 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
         gfx::SelectionModel(cursor_pos, gfx::CURSOR_FORWARD), false).x();
   }
 
+  int GetCursorYForTesting() {
+    return test_api_->GetRenderText()->GetLineOffset(0).y() + 1;
+  }
+
   // Get the current cursor bounds.
   gfx::Rect GetCursorBounds() {
     return test_api_->GetRenderText()->GetUpdatedCursorBounds();
@@ -653,31 +658,36 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
     EXPECT_TRUE(menu->IsEnabledAt(7 /* SELECT ALL */));
   }
 
-  void PressLeftMouseButton(int extra_flags) {
-    ui::MouseEvent click(ui::ET_MOUSE_PRESSED, mouse_position_, mouse_position_,
-                         ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
-                         ui::EF_LEFT_MOUSE_BUTTON | extra_flags);
-    textfield_->OnMousePressed(click);
+  void PressMouseButton(ui::EventFlags mouse_button_flags, int extra_flags) {
+    ui::MouseEvent press(ui::ET_MOUSE_PRESSED, mouse_position_, mouse_position_,
+                         ui::EventTimeForNow(), mouse_button_flags,
+                         mouse_button_flags | extra_flags);
+    textfield_->OnMousePressed(press);
   }
 
-  void PressLeftMouseButton() {
-    PressLeftMouseButton(0);
-  }
-
-  void ReleaseLeftMouseButton() {
+  void ReleaseMouseButton(ui::EventFlags mouse_button_flags) {
     ui::MouseEvent release(ui::ET_MOUSE_RELEASED, mouse_position_,
                            mouse_position_, ui::EventTimeForNow(),
-                           ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+                           mouse_button_flags, mouse_button_flags);
     textfield_->OnMouseReleased(release);
   }
 
-  void ClickLeftMouseButton(int extra_flags) {
+  void PressLeftMouseButton(int extra_flags = 0) {
+    PressMouseButton(ui::EF_LEFT_MOUSE_BUTTON, extra_flags);
+  }
+
+  void ReleaseLeftMouseButton() {
+    ReleaseMouseButton(ui::EF_LEFT_MOUSE_BUTTON);
+  }
+
+  void ClickLeftMouseButton(int extra_flags = 0) {
     PressLeftMouseButton(extra_flags);
     ReleaseLeftMouseButton();
   }
 
-  void ClickLeftMouseButton() {
-    ClickLeftMouseButton(0);
+  void ClickRightMouseButton() {
+    PressMouseButton(ui::EF_RIGHT_MOUSE_BUTTON, 0);
+    ReleaseMouseButton(ui::EF_RIGHT_MOUSE_BUTTON);
   }
 
   void DragMouseTo(const gfx::Point& where) {
@@ -1252,13 +1262,7 @@ TEST_F(TextfieldTest, OnKeyPress) {
 
   // F20 key won't be handled.
   SendKeyEvent(ui::VKEY_F20);
-#if defined(OS_MACOSX)
-  // On Mac, key combinations that don't map to editing commands are forwarded
-  // on to the next responder, usually ending up at the window, which will beep.
-  EXPECT_FALSE(textfield_->key_received());
-#else
   EXPECT_TRUE(textfield_->key_received());
-#endif
   EXPECT_FALSE(textfield_->key_handled());
   textfield_->clear();
 }
@@ -1391,7 +1395,7 @@ TEST_F(TextfieldTest, FocusTraversalTest) {
   // Test if clicking on textfield view sets the focus.
   widget_->GetFocusManager()->AdvanceFocus(true);
   EXPECT_EQ(3, GetFocusedView()->id());
-  MoveMouseTo(gfx::Point());
+  MoveMouseTo(gfx::Point(0, GetCursorYForTesting()));
   ClickLeftMouseButton();
   EXPECT_EQ(1, GetFocusedView()->id());
 
@@ -1443,7 +1447,7 @@ TEST_F(TextfieldTest, DoubleAndTripleClickTest) {
   textfield_->SetText(ASCIIToUTF16("hello world"));
 
   // Test for double click.
-  MoveMouseTo(gfx::Point());
+  MoveMouseTo(gfx::Point(0, GetCursorYForTesting()));
   ClickLeftMouseButton();
   EXPECT_TRUE(textfield_->GetSelectedText().empty());
   ClickLeftMouseButton(ui::EF_IS_DOUBLE_CLICK);
@@ -1458,20 +1462,43 @@ TEST_F(TextfieldTest, DoubleAndTripleClickTest) {
   EXPECT_STR_EQ("hello", textfield_->GetSelectedText());
 }
 
+// Tests text selection behavior on a right click.
+TEST_F(TextfieldTest, SelectWordOnRightClick) {
+  InitTextfield();
+  textfield_->SetText(ASCIIToUTF16("hello world"));
+
+  // Verify right clicking within the selection does not alter the selection.
+  textfield_->SelectRange(gfx::Range(1, 5));
+  EXPECT_STR_EQ("ello", textfield_->GetSelectedText());
+  const int cursor_y = GetCursorYForTesting();
+  MoveMouseTo(gfx::Point(GetCursorPositionX(3), cursor_y));
+  ClickRightMouseButton();
+  EXPECT_STR_EQ("ello", textfield_->GetSelectedText());
+
+  // Verify right clicking outside the selection, selects the word under the
+  // cursor on platforms where this is expected.
+  MoveMouseTo(gfx::Point(GetCursorPositionX(8), cursor_y));
+  const char* expected_right_click =
+      PlatformStyle::kSelectWordOnRightClick ? "world" : "ello";
+  ClickRightMouseButton();
+  EXPECT_STR_EQ(expected_right_click, textfield_->GetSelectedText());
+}
+
 TEST_F(TextfieldTest, DragToSelect) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
   const int kStart = GetCursorPositionX(5);
   const int kEnd = 500;
-  gfx::Point start_point(kStart, 0);
-  gfx::Point end_point(kEnd, 0);
+  const int cursor_y = GetCursorYForTesting();
+  gfx::Point start_point(kStart, cursor_y);
+  gfx::Point end_point(kEnd, cursor_y);
 
   MoveMouseTo(start_point);
   PressLeftMouseButton();
   EXPECT_TRUE(textfield_->GetSelectedText().empty());
 
   // Check that dragging left selects the beginning of the string.
-  DragMouseTo(gfx::Point());
+  DragMouseTo(gfx::Point(0, cursor_y));
   base::string16 text_left = textfield_->GetSelectedText();
   EXPECT_STR_EQ("hello", text_left);
 
@@ -1487,7 +1514,7 @@ TEST_F(TextfieldTest, DragToSelect) {
   // Check that dragging from beyond the text length works too.
   MoveMouseTo(end_point);
   PressLeftMouseButton();
-  DragMouseTo(gfx::Point());
+  DragMouseTo(gfx::Point(0, cursor_y));
   ReleaseLeftMouseButton();
   EXPECT_EQ(textfield_->text(), textfield_->GetSelectedText());
 }
@@ -1499,13 +1526,13 @@ TEST_F(TextfieldTest, DragUpOrDownSelectsToEnd) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
   const base::string16 expected_up = base::ASCIIToUTF16(
-      PlatformStyle::kTextDragVerticallyDragsToEnd ? "hello" : "lo");
+      gfx::RenderText::kDragToEndIfOutsideVerticalBounds ? "hello" : "lo");
   const base::string16 expected_down = base::ASCIIToUTF16(
-      PlatformStyle::kTextDragVerticallyDragsToEnd ? " world" : " w");
+      gfx::RenderText::kDragToEndIfOutsideVerticalBounds ? " world" : " w");
   const int kStartX = GetCursorPositionX(5);
   const int kDownX = GetCursorPositionX(7);
   const int kUpX = GetCursorPositionX(3);
-  gfx::Point start_point(kStartX, 0);
+  gfx::Point start_point(kStartX, GetCursorYForTesting());
   gfx::Point down_point(kDownX, 500);
   gfx::Point up_point(kUpX, -500);
 
@@ -1591,7 +1618,7 @@ TEST_F(TextfieldTest, DragAndDrop_InitiateDrag) {
   ui::OSExchangeData data;
   const gfx::Range kStringRange(6, 12);
   textfield_->SelectRange(kStringRange);
-  const gfx::Point kStringPoint(GetCursorPositionX(9), 0);
+  const gfx::Point kStringPoint(GetCursorPositionX(9), GetCursorYForTesting());
   textfield_->WriteDragDataForView(NULL, kStringPoint, &data);
   EXPECT_TRUE(data.GetString(&string));
   EXPECT_EQ(textfield_->GetSelectedText(), string);
@@ -1630,6 +1657,7 @@ TEST_F(TextfieldTest, DragAndDrop_InitiateDrag) {
 TEST_F(TextfieldTest, DragAndDrop_ToTheRight) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
+  const int cursor_y = GetCursorYForTesting();
 
   base::string16 string;
   ui::OSExchangeData data;
@@ -1639,7 +1667,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheRight) {
 
   // Start dragging "ello".
   textfield_->SelectRange(gfx::Range(1, 5));
-  gfx::Point point(GetCursorPositionX(3), 0);
+  gfx::Point point(GetCursorPositionX(3), cursor_y);
   MoveMouseTo(point);
   PressLeftMouseButton();
   EXPECT_TRUE(textfield_->CanStartDragForView(textfield_, point, point));
@@ -1654,7 +1682,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheRight) {
   EXPECT_TRUE(format_types.empty());
 
   // Drop "ello" after "w".
-  const gfx::Point kDropPoint(GetCursorPositionX(7), 0);
+  const gfx::Point kDropPoint(GetCursorPositionX(7), cursor_y);
   EXPECT_TRUE(textfield_->CanDrop(data));
   ui::DropTargetEvent drop_a(data, kDropPoint, kDropPoint, operations);
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnDragUpdated(drop_a));
@@ -1680,6 +1708,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheRight) {
 TEST_F(TextfieldTest, DragAndDrop_ToTheLeft) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
+  const int cursor_y = GetCursorYForTesting();
 
   base::string16 string;
   ui::OSExchangeData data;
@@ -1689,7 +1718,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheLeft) {
 
   // Start dragging " worl".
   textfield_->SelectRange(gfx::Range(5, 10));
-  gfx::Point point(GetCursorPositionX(7), 0);
+  gfx::Point point(GetCursorPositionX(7), cursor_y);
   MoveMouseTo(point);
   PressLeftMouseButton();
   EXPECT_TRUE(textfield_->CanStartDragForView(textfield_, point, gfx::Point()));
@@ -1705,7 +1734,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheLeft) {
 
   // Drop " worl" after "h".
   EXPECT_TRUE(textfield_->CanDrop(data));
-  gfx::Point drop_point(GetCursorPositionX(1), 0);
+  gfx::Point drop_point(GetCursorPositionX(1), cursor_y);
   ui::DropTargetEvent drop_a(data, drop_point, drop_point, operations);
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnDragUpdated(drop_a));
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnPerformDrop(drop_a));
@@ -1730,22 +1759,23 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheLeft) {
 TEST_F(TextfieldTest, DragAndDrop_Canceled) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
+  const int cursor_y = GetCursorYForTesting();
 
   // Start dragging "worl".
   textfield_->SelectRange(gfx::Range(6, 10));
-  gfx::Point point(GetCursorPositionX(8), 0);
+  gfx::Point point(GetCursorPositionX(8), cursor_y);
   MoveMouseTo(point);
   PressLeftMouseButton();
   ui::OSExchangeData data;
   textfield_->WriteDragDataForView(nullptr, point, &data);
   EXPECT_TRUE(textfield_->CanDrop(data));
   // Drag the text over somewhere valid, outside the current selection.
-  gfx::Point drop_point(GetCursorPositionX(2), 0);
+  gfx::Point drop_point(GetCursorPositionX(2), cursor_y);
   ui::DropTargetEvent drop(data, drop_point, drop_point,
                            ui::DragDropTypes::DRAG_MOVE);
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnDragUpdated(drop));
   // "Cancel" the drag, via move and release over the selection, and OnDragDone.
-  gfx::Point drag_point(GetCursorPositionX(9), 0);
+  gfx::Point drag_point(GetCursorPositionX(9), cursor_y);
   DragMouseTo(drag_point);
   ReleaseLeftMouseButton();
   EXPECT_EQ(ASCIIToUTF16("hello world"), textfield_->text());
@@ -2608,10 +2638,11 @@ TEST_F(TextfieldTest, KeepInitiallySelectedWord) {
 TEST_F(TextfieldTest, SelectionClipboard) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("0123"));
-  gfx::Point point_1(GetCursorPositionX(1), 0);
-  gfx::Point point_2(GetCursorPositionX(2), 0);
-  gfx::Point point_3(GetCursorPositionX(3), 0);
-  gfx::Point point_4(GetCursorPositionX(4), 0);
+  const int cursor_y = GetCursorYForTesting();
+  gfx::Point point_1(GetCursorPositionX(1), cursor_y);
+  gfx::Point point_2(GetCursorPositionX(2), cursor_y);
+  gfx::Point point_3(GetCursorPositionX(3), cursor_y);
+  gfx::Point point_4(GetCursorPositionX(4), cursor_y);
 
   // Text selected by the mouse should be placed on the selection clipboard.
   ui::MouseEvent press(ui::ET_MOUSE_PRESSED, point_1, point_1,
@@ -2709,7 +2740,7 @@ TEST_F(TextfieldTest, SelectionClipboard) {
 
   // Double and triple clicking should update the clipboard contents.
   textfield_->SetText(ASCIIToUTF16("ab cd ef"));
-  gfx::Point word(GetCursorPositionX(4), 0);
+  gfx::Point word(GetCursorPositionX(4), cursor_y);
   ui::MouseEvent press_word(ui::ET_MOUSE_PRESSED, word, word,
                             ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                             ui::EF_LEFT_MOUSE_BUTTON);
@@ -2794,7 +2825,7 @@ TEST_F(TextfieldTest, TestLongPressInitiatesDragDrop) {
 
   // Ensure the textfield will provide selected text for drag data.
   textfield_->SelectRange(gfx::Range(6, 12));
-  const gfx::Point kStringPoint(GetCursorPositionX(9), 0);
+  const gfx::Point kStringPoint(GetCursorPositionX(9), GetCursorYForTesting());
 
   // Enable touch-drag-drop to make long press effective.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(

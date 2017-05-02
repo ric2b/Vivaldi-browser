@@ -11,11 +11,12 @@
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_tracker.h"
+#include "ash/root_window_controller.h"
 #include "ui/display/display.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -128,7 +129,7 @@ void CenterWindow(WmWindow* window) {
 void SetBoundsInScreen(WmWindow* window,
                        const gfx::Rect& bounds_in_screen,
                        const display::Display& display) {
-  DCHECK_NE(display::Display::kInvalidDisplayID, display.id());
+  DCHECK_NE(display::kInvalidDisplayId, display.id());
   // Don't move a window to other root window if:
   // a) the window is a transient window. It moves when its
   //    transient parent moves.
@@ -137,7 +138,7 @@ void SetBoundsInScreen(WmWindow* window,
   //    display.
   if (!window->GetTransientParent() &&
       !IsWindowOrAncestorLockedToRoot(window)) {
-    WmRootWindowController* dst_root_window_controller =
+    RootWindowController* dst_root_window_controller =
         WmLookup::Get()->GetRootWindowControllerWithDisplayId(display.id());
     DCHECK(dst_root_window_controller);
     WmWindow* dst_root = dst_root_window_controller->GetWindow();

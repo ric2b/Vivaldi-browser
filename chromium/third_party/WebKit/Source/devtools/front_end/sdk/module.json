@@ -2,7 +2,8 @@
     "dependencies": [
         "common",
         "host",
-        "platform"
+        "platform",
+        "protocol"
     ],
     "extensions": [
         {
@@ -31,8 +32,14 @@
             "settingType": "boolean",
             "defaultValue": false,
             "options": [
-                { "value": true, "title": "Preserve log upon navigation" },
-                { "value": false, "title": "Do not preserve log upon navigation" }
+                {
+                    "value": true,
+                    "title": "Preserve log upon navigation"
+                },
+                {
+                    "value": false,
+                    "title": "Do not preserve log upon navigation"
+                }
             ]
         },
         {
@@ -42,8 +49,14 @@
             "settingType": "boolean",
             "defaultValue": false,
             "options": [
-                { "value": true, "title": "Pause on exceptions" },
-                { "value": false, "title": "Do not pause on exceptions" }
+                {
+                    "value": true,
+                    "title": "Pause on exceptions"
+                },
+                {
+                    "value": false,
+                    "title": "Do not pause on exceptions"
+                }
             ]
         },
         {
@@ -59,8 +72,14 @@
             "settingType": "boolean",
             "defaultValue": false,
             "options": [
-                { "value": true, "title": "Capture async stack traces" },
-                { "value": false, "title": "Do not capture async stack traces" }
+                {
+                    "value": true,
+                    "title": "Capture async stack traces"
+                },
+                {
+                    "value": false,
+                    "title": "Do not capture async stack traces"
+                }
             ]
         },
         {
@@ -71,9 +90,6 @@
         }
     ],
     "scripts": [
-        "InspectorBackend.js",
-        "../InspectorBackendCommands.js",
-        "InspectorBackendHostedMode.js",
         "Target.js",
         "TargetManager.js",
         "ApplicationCacheModel.js",
@@ -89,7 +105,6 @@
         "CSSMedia.js",
         "CSSMetadata.js",
         "CSSModel.js",
-        "CSSParser.js",
         "CSSProperty.js",
         "CSSRule.js",
         "CSSStyleDeclaration.js",
@@ -115,10 +130,10 @@
         "NetworkRequest.js",
         "PaintProfiler.js",
         "HeapProfilerModel.js",
-        "../SupportedCSSProperties.js"
+        "../SupportedCSSProperties.js",
+        "FilmStripModel.js"
     ],
     "skip_compilation": [
-        "../InspectorBackendCommands.js",
         "../SupportedCSSProperties.js"
     ]
 }

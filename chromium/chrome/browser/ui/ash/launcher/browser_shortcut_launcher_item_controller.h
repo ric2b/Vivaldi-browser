@@ -43,18 +43,13 @@ class BrowserShortcutLauncherItemController : public LauncherItemController {
   bool IsListOfActiveBrowserEmpty();
 
   // LauncherItemController overrides:
-  bool IsVisible() const override;
   void Launch(ash::LaunchSource source, int event_flags) override;
   ShelfItemDelegate::PerformedAction Activate(
       ash::LaunchSource source) override;
   ChromeLauncherAppMenuItems GetApplicationList(int event_flags) override;
   ash::ShelfItemDelegate::PerformedAction ItemSelected(
       const ui::Event& event) override;
-  base::string16 GetTitle() override;
   ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool CanPin() const override;
-  bool ShouldShowTooltip() override;
   void Close() override;
 
  private:

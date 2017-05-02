@@ -42,15 +42,17 @@ class InstanceCounters {
 
  public:
   enum CounterType {
-    ActiveDOMObjectCounter,
     AudioHandlerCounter,
     DocumentCounter,
     FrameCounter,
     JSEventListenerCounter,
     LayoutObjectCounter,
+    MediaKeySessionCounter,
+    MediaKeysCounter,
     NodeCounter,
     ResourceCounter,
     ScriptPromiseCounter,
+    SuspendableObjectCounter,
     V8PerContextDataCounter,
     WorkerGlobalScopeCounter,
 

@@ -9,7 +9,6 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
-#include "content/browser/accessibility/accessibility_mode_helper.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_thread.h"
@@ -18,8 +17,30 @@
 
 namespace content {
 
+// IMPORTANT!
+// These values are written to logs.  Do not renumber or delete
+// existing items; add new entries to the end of the list.
+enum ModeFlagHistogramValue {
+  UMA_AX_MODE_FLAG_NATIVE_APIS = 0,
+  UMA_AX_MODE_FLAG_WEB_CONTENTS = 1,
+  UMA_AX_MODE_FLAG_INLINE_TEXT_BOXES = 2,
+  UMA_AX_MODE_FLAG_SCREEN_READER = 3,
+  UMA_AX_MODE_FLAG_HTML = 4,
+
+  // This must always be the last enum. It's okay for its value to
+  // increase, but none of the other enum values may change.
+  UMA_AX_MODE_FLAG_MAX
+};
+
+// Record a histograms for an accessibility mode when it's enabled.
+void RecordNewAccessibilityModeFlags(ModeFlagHistogramValue mode_flag) {
+  UMA_HISTOGRAM_ENUMERATION("Accessibility.ModeFlag",
+                            mode_flag,
+                            UMA_AX_MODE_FLAG_MAX);
+}
+
 // Update the accessibility histogram 45 seconds after initialization.
-static const int kAccessibilityHistogramDelaySecs = 45;
+static const int ACCESSIBILITY_HISTOGRAM_DELAY_SECS = 45;
 
 // static
 BrowserAccessibilityState* BrowserAccessibilityState::GetInstance() {
@@ -55,7 +76,7 @@ BrowserAccessibilityStateImpl::BrowserAccessibilityStateImpl()
   BrowserThread::PostDelayedTask(
       update_histogram_thread, FROM_HERE,
       base::Bind(&BrowserAccessibilityStateImpl::UpdateHistograms, this),
-      base::TimeDelta::FromSeconds(kAccessibilityHistogramDelaySecs));
+      base::TimeDelta::FromSeconds(ACCESSIBILITY_HISTOGRAM_DELAY_SECS));
 }
 
 BrowserAccessibilityStateImpl::~BrowserAccessibilityStateImpl() {
@@ -70,7 +91,7 @@ void BrowserAccessibilityStateImpl::OnScreenReaderDetected() {
 }
 
 void BrowserAccessibilityStateImpl::EnableAccessibility() {
-  AddAccessibilityMode(AccessibilityModeComplete);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_COMPLETE);
 }
 
 void BrowserAccessibilityStateImpl::DisableAccessibility() {
@@ -81,7 +102,7 @@ void BrowserAccessibilityStateImpl::ResetAccessibilityModeValue() {
   accessibility_mode_ = AccessibilityModeOff;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceRendererAccessibility)) {
-    accessibility_mode_ = AccessibilityModeComplete;
+    accessibility_mode_ = ACCESSIBILITY_MODE_COMPLETE;
   }
 }
 
@@ -95,8 +116,8 @@ void BrowserAccessibilityStateImpl::ResetAccessibilityMode() {
 }
 
 bool BrowserAccessibilityStateImpl::IsAccessibleBrowser() {
-  return ((accessibility_mode_ & AccessibilityModeComplete) ==
-          AccessibilityModeComplete);
+  return ((accessibility_mode_ & ACCESSIBILITY_MODE_COMPLETE) ==
+          ACCESSIBILITY_MODE_COMPLETE);
 }
 
 void BrowserAccessibilityStateImpl::AddHistogramCallback(
@@ -114,7 +135,10 @@ void BrowserAccessibilityStateImpl::UpdateHistograms() {
   for (size_t i = 0; i < histogram_callbacks_.size(); ++i)
     histogram_callbacks_[i].Run();
 
+  // TODO(dmazzoni): remove this in M59 since Accessibility.ModeFlag
+  // supercedes it.  http://crbug.com/672205
   UMA_HISTOGRAM_BOOLEAN("Accessibility.State", IsAccessibleBrowser());
+
   UMA_HISTOGRAM_BOOLEAN("Accessibility.InvertedColors",
                         color_utils::IsInvertedColorScheme());
   UMA_HISTOGRAM_BOOLEAN("Accessibility.ManuallyEnabled",
@@ -127,44 +151,50 @@ void BrowserAccessibilityStateImpl::UpdatePlatformSpecificHistograms() {
 }
 #endif
 
-void BrowserAccessibilityStateImpl::AddAccessibilityMode(
+void BrowserAccessibilityStateImpl::AddAccessibilityModeFlags(
     AccessibilityMode mode) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableRendererAccessibility)) {
     return;
   }
 
-  accessibility_mode_ =
-      content::AddAccessibilityModeTo(accessibility_mode_, mode);
+  AccessibilityMode previous_mode = accessibility_mode_;
+  accessibility_mode_ |= mode;
+  if (accessibility_mode_ == previous_mode)
+    return;
 
-  AddOrRemoveFromAllWebContents(mode, true);
+  // Retrieve only newly added modes for the purposes of logging.
+  AccessibilityMode new_mode_flags = accessibility_mode_ & (~previous_mode);
+  if (new_mode_flags & ACCESSIBILITY_MODE_FLAG_NATIVE_APIS)
+    RecordNewAccessibilityModeFlags(UMA_AX_MODE_FLAG_NATIVE_APIS);
+  if (new_mode_flags & ACCESSIBILITY_MODE_FLAG_WEB_CONTENTS)
+    RecordNewAccessibilityModeFlags(UMA_AX_MODE_FLAG_WEB_CONTENTS);
+  if (new_mode_flags & ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES)
+    RecordNewAccessibilityModeFlags(UMA_AX_MODE_FLAG_INLINE_TEXT_BOXES);
+  if (new_mode_flags & ACCESSIBILITY_MODE_FLAG_SCREEN_READER)
+    RecordNewAccessibilityModeFlags(UMA_AX_MODE_FLAG_SCREEN_READER);
+  if (new_mode_flags & ACCESSIBILITY_MODE_FLAG_HTML)
+    RecordNewAccessibilityModeFlags(UMA_AX_MODE_FLAG_HTML);
+
+  std::vector<WebContentsImpl*> web_contents_vector =
+      WebContentsImpl::GetAllWebContents();
+  for (size_t i = 0; i < web_contents_vector.size(); ++i)
+    web_contents_vector[i]->AddAccessibilityMode(accessibility_mode_);
 }
 
-void BrowserAccessibilityStateImpl::RemoveAccessibilityMode(
+void BrowserAccessibilityStateImpl::RemoveAccessibilityModeFlags(
     AccessibilityMode mode) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceRendererAccessibility) &&
-      mode == AccessibilityModeComplete) {
+      mode == ACCESSIBILITY_MODE_COMPLETE) {
     return;
   }
 
-  accessibility_mode_ =
-      content::RemoveAccessibilityModeFrom(accessibility_mode_, mode);
-
-  AddOrRemoveFromAllWebContents(mode, false);
-}
-
-void BrowserAccessibilityStateImpl::AddOrRemoveFromAllWebContents(
-    AccessibilityMode mode,
-    bool add) {
+  accessibility_mode_ = accessibility_mode_ ^ (mode & accessibility_mode_);
   std::vector<WebContentsImpl*> web_contents_vector =
       WebContentsImpl::GetAllWebContents();
-  for (size_t i = 0; i < web_contents_vector.size(); ++i) {
-    if (add)
-      web_contents_vector[i]->AddAccessibilityMode(mode);
-    else
-      web_contents_vector[i]->RemoveAccessibilityMode(mode);
-  }
+  for (size_t i = 0; i < web_contents_vector.size(); ++i)
+    web_contents_vector[i]->SetAccessibilityMode(accessibility_mode());
 }
 
 }  // namespace content

@@ -6,8 +6,12 @@
 
 #include "base/logging.h"
 #include "ios/chrome/browser/infobars/infobar.h"
-#include "ios/public/provider/chrome/browser/ui/infobar_view_protocol.h"
+#include "ios/chrome/browser/ui/infobars/infobar_view.h"
 #include "ui/base/device_form_factor.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 @implementation InfoBarContainerView
 
@@ -38,7 +42,7 @@
 }
 
 - (void)layoutSubviews {
-  for (UIView<InfoBarViewProtocol>* view in self.subviews) {
+  for (InfoBarView* view in self.subviews) {
     [view sizeToFit];
     CGRect frame = view.frame;
     frame.origin.y = CGRectGetHeight(frame) - [view visibleHeight];
@@ -47,8 +51,7 @@
 }
 
 - (CGFloat)topmostVisibleInfoBarHeight {
-  for (UIView<InfoBarViewProtocol>* view in
-       [self.subviews reverseObjectEnumerator]) {
+  for (InfoBarView* view in [self.subviews reverseObjectEnumerator]) {
     return [view sizeThatFits:self.frame.size].height;
   }
   return 0;

@@ -156,7 +156,7 @@ void LayerTreeImpl::DidUpdateScrollOffset(int layer_id) {
   DidUpdateScrollState(layer_id);
   TransformTree& transform_tree = property_trees()->transform_tree;
   ScrollTree& scroll_tree = property_trees()->scroll_tree;
-  int transform_id = -1;
+  int transform_id = TransformTree::kInvalidNodeId;
 
   // If pending tree topology changed and we still want to notify the pending
   // tree about scroll offset in the active tree, we may not find the
@@ -171,7 +171,7 @@ void LayerTreeImpl::DidUpdateScrollOffset(int layer_id) {
     return;
   }
 
-  if (transform_id != -1) {
+  if (transform_id != TransformTree::kInvalidNodeId) {
     TransformNode* node = transform_tree.Node(transform_id);
     if (node->scroll_offset != scroll_tree.current_scroll_offset(layer_id)) {
       node->scroll_offset = scroll_tree.current_scroll_offset(layer_id);
@@ -368,7 +368,7 @@ static void UpdateClipTreeForBoundsDeltaOnLayer(LayerImpl* layer,
   if (layer && layer->masks_to_bounds()) {
     ClipNode* clip_node = clip_tree->Node(layer->clip_tree_index());
     if (clip_node) {
-      DCHECK_EQ(layer->id(), clip_node->owner_id);
+      DCHECK_EQ(layer->id(), clip_node->owning_layer_id);
       gfx::SizeF bounds = gfx::SizeF(layer->bounds());
       if (clip_node->clip.size() != bounds) {
         clip_node->clip.set_size(bounds);
@@ -379,7 +379,11 @@ static void UpdateClipTreeForBoundsDeltaOnLayer(LayerImpl* layer,
 }
 
 void LayerTreeImpl::SetPropertyTrees(PropertyTrees* property_trees) {
+  EffectTree::StableIdRenderSurfaceList stable_id_render_surface_list =
+      property_trees_.effect_tree.CreateStableIdRenderSurfaceList();
   property_trees_ = *property_trees;
+  property_trees_.effect_tree.UpdateRenderSurfaceEffectIds(
+      stable_id_render_surface_list, this);
   property_trees->effect_tree.PushCopyRequestsTo(&property_trees_.effect_tree);
   property_trees_.is_main_thread = false;
   property_trees_.is_active = IsActiveTree();
@@ -422,7 +426,8 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   LayerImpl* layer = target_tree->CurrentlyScrollingLayer();
   target_tree->SetPropertyTrees(&property_trees_);
   target_tree->SetCurrentlyScrollingLayer(layer);
-  target_tree->UpdatePropertyTreeScrollOffset(&property_trees_);
+  target_tree->property_trees()->scroll_tree.PushScrollUpdatesFromPendingTree(
+      &property_trees_, target_tree);
 
   // This needs to be called early so that we don't clamp with incorrect max
   // offsets when UpdateViewportContainerSizes is called from e.g.
@@ -538,18 +543,25 @@ LayerImpl* LayerTreeImpl::LayerByElementId(ElementId element_id) const {
 }
 
 void LayerTreeImpl::AddToElementMap(LayerImpl* layer) {
-  if (!layer->element_id())
+  ElementId element_id = layer->element_id();
+  if (!element_id)
     return;
 
   TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
                "LayerTreeImpl::AddToElementMap", "element",
-               layer->element_id().AsValue().release(), "layer_id",
-               layer->id());
+               element_id.AsValue().release(), "layer_id", layer->id());
 
-  element_layers_map_[layer->element_id()] = layer->id();
+#if DCHECK_IS_ON()
+  LayerImpl* existing_layer = LayerByElementId(element_id);
+  bool element_id_collision_detected =
+      existing_layer && existing_layer != layer;
+  DCHECK(!element_id_collision_detected);
+#endif
+
+  element_layers_map_[element_id] = layer->id();
 
   layer_tree_host_impl_->mutator_host()->RegisterElement(
-      layer->element_id(),
+      element_id,
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING);
 }
 
@@ -599,7 +611,8 @@ LayerImpl* LayerTreeImpl::CurrentlyScrollingLayer() const {
   DCHECK(IsActiveTree());
   const ScrollNode* scroll_node =
       property_trees_.scroll_tree.CurrentlyScrollingNode();
-  return LayerById(scroll_node ? scroll_node->owner_id : Layer::INVALID_ID);
+  return LayerById(scroll_node ? scroll_node->owning_layer_id
+                               : Layer::INVALID_ID);
 }
 
 int LayerTreeImpl::LastScrolledLayerId() const {
@@ -609,9 +622,10 @@ int LayerTreeImpl::LastScrolledLayerId() const {
 void LayerTreeImpl::SetCurrentlyScrollingLayer(LayerImpl* layer) {
   ScrollTree& scroll_tree = property_trees()->scroll_tree;
   ScrollNode* scroll_node = scroll_tree.CurrentlyScrollingNode();
-  int old_id = scroll_node ? scroll_node->owner_id : Layer::INVALID_ID;
+  int old_id = scroll_node ? scroll_node->owning_layer_id : Layer::INVALID_ID;
   int new_id = layer ? layer->id() : Layer::INVALID_ID;
-  int new_scroll_node_id = layer ? layer->scroll_tree_index() : -1;
+  int new_scroll_node_id =
+      layer ? layer->scroll_tree_index() : ScrollTree::kInvalidNodeId;
   if (layer)
     last_scrolled_layer_id_ = new_id;
 
@@ -657,7 +671,7 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
     const int id = layer_id_to_opacity.first;
     if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
       EffectNode* node = property_trees_.effect_tree.Node(
-          property_trees_.effect_id_to_index_map[id]);
+          property_trees_.layer_id_to_effect_node_index[id]);
       if (!node->is_currently_animating_opacity ||
           node->opacity == layer_id_to_opacity.second) {
         layer_ids_to_remove.push_back(id);
@@ -676,7 +690,7 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
     if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
                                          id)) {
       TransformNode* node = property_trees_.transform_tree.Node(
-          property_trees_.transform_id_to_index_map[id]);
+          property_trees_.layer_id_to_transform_node_index[id]);
       if (!node->is_currently_animating ||
           node->local == layer_id_to_transform.second) {
         layer_ids_to_remove.push_back(id);
@@ -695,7 +709,7 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
     const int id = layer_id_to_filters.first;
     if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
       EffectNode* node = property_trees_.effect_tree.Node(
-          property_trees_.effect_id_to_index_map[id]);
+          property_trees_.layer_id_to_effect_node_index[id]);
       if (!node->is_currently_animating_filter ||
           node->filters == layer_id_to_filters.second) {
         layer_ids_to_remove.push_back(id);
@@ -1281,8 +1295,8 @@ TileManager* LayerTreeImpl::tile_manager() const {
   return layer_tree_host_impl_->tile_manager();
 }
 
-ImageDecodeController* LayerTreeImpl::image_decode_controller() const {
-  return layer_tree_host_impl_->image_decode_controller();
+ImageDecodeCache* LayerTreeImpl::image_decode_cache() const {
+  return layer_tree_host_impl_->image_decode_cache();
 }
 
 FrameRateCounter* LayerTreeImpl::frame_rate_counter() const {
@@ -1449,10 +1463,8 @@ void LayerTreeImpl::AsValueInto(base::trace_event::TracedValue* state) const {
 
 bool LayerTreeImpl::DistributeRootScrollOffset(
     const gfx::ScrollOffset& root_offset) {
-  if (!InnerViewportScrollLayer())
+  if (!InnerViewportScrollLayer() || !OuterViewportScrollLayer())
     return false;
-
-  DCHECK(OuterViewportScrollLayer());
 
   // If we get here, we have both inner/outer viewports, and need to distribute
   // the scroll offset between them.
@@ -1515,10 +1527,17 @@ void LayerTreeImpl::AppendSwapPromises(
 
 void LayerTreeImpl::FinishSwapPromises(CompositorFrameMetadata* metadata) {
   for (const auto& swap_promise : swap_promise_list_)
-    swap_promise->DidSwap(metadata);
+    swap_promise->WillSwap(metadata);
+  for (const auto& swap_promise : pinned_swap_promise_list_)
+    swap_promise->WillSwap(metadata);
+}
+
+void LayerTreeImpl::ClearSwapPromises() {
+  for (const auto& swap_promise : swap_promise_list_)
+    swap_promise->DidSwap();
   swap_promise_list_.clear();
   for (const auto& swap_promise : pinned_swap_promise_list_)
-    swap_promise->DidSwap(metadata);
+    swap_promise->DidSwap();
   pinned_swap_promise_list_.clear();
 }
 
@@ -1778,7 +1797,8 @@ static bool PointIsClippedByAncestorClipNode(
     return true;
 
   for (const ClipNode* clip_node = clip_tree.Node(layer->clip_tree_index());
-       clip_node->id > 1; clip_node = clip_tree.parent(clip_node)) {
+       clip_node->id > ClipTree::kViewportNodeId;
+       clip_node = clip_tree.parent(clip_node)) {
     if (clip_node->clip_type == ClipNode::ClipType::APPLIES_LOCAL_CLIP) {
       const TransformNode* transform_node =
           transform_tree.Node(clip_node->target_transform_id);
@@ -1786,11 +1806,12 @@ static bool PointIsClippedByAncestorClipNode(
           gfx::ToEnclosingRect(clip_node->combined_clip_in_target_space);
 
       const LayerImpl* target_layer =
-          layer->layer_tree_impl()->LayerById(transform_node->owner_id);
-      DCHECK(transform_node->id == 0 || target_layer->render_surface() ||
+          layer->layer_tree_impl()->LayerById(transform_node->owning_layer_id);
+      DCHECK(transform_node->id == TransformTree::kRootNodeId ||
+             target_layer->render_surface() ||
              layer->layer_tree_impl()->is_in_resourceless_software_draw_mode());
       gfx::Transform surface_screen_space_transform =
-          transform_node->id == 0 ||
+          transform_node->id == TransformTree::kRootNodeId ||
                   (layer->layer_tree_impl()
                        ->is_in_resourceless_software_draw_mode())
               ? gfx::Transform()
@@ -1801,7 +1822,7 @@ static bool PointIsClippedByAncestorClipNode(
       }
     }
     const LayerImpl* clip_node_owner =
-        layer->layer_tree_impl()->LayerById(clip_node->owner_id);
+        layer->layer_tree_impl()->LayerById(clip_node->owning_layer_id);
     if (clip_node_owner->render_surface() &&
         !PointHitsRect(
             screen_space_point, SurfaceScreenSpaceTransform(clip_node_owner),
@@ -1858,32 +1879,37 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
                                      const Functor& func,
                                      FindClosestMatchingLayerState* state) {
   // We want to iterate from front to back when hit testing.
-  for (auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
-    if (!func(layer))
-      continue;
+  {
+    base::ElapsedTimer timer;
+    for (auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
+      if (!func(layer))
+        continue;
 
-    float distance_to_intersection = 0.f;
-    bool hit = false;
-    if (layer->Is3dSorted())
-      hit =
-          PointHitsLayer(layer, screen_space_point, &distance_to_intersection);
-    else
-      hit = PointHitsLayer(layer, screen_space_point, nullptr);
+      float distance_to_intersection = 0.f;
+      bool hit = false;
+      if (layer->Is3dSorted())
+        hit = PointHitsLayer(layer, screen_space_point,
+                             &distance_to_intersection);
+      else
+        hit = PointHitsLayer(layer, screen_space_point, nullptr);
 
-    if (!hit)
-      continue;
+      if (!hit)
+        continue;
 
-    bool in_front_of_previous_candidate =
-        state->closest_match &&
-        layer->sorting_context_id() ==
-            state->closest_match->sorting_context_id() &&
-        distance_to_intersection >
-            state->closest_distance + std::numeric_limits<float>::epsilon();
+      bool in_front_of_previous_candidate =
+          state->closest_match &&
+          layer->GetSortingContextId() ==
+              state->closest_match->GetSortingContextId() &&
+          distance_to_intersection >
+              state->closest_distance + std::numeric_limits<float>::epsilon();
 
-    if (!state->closest_match || in_front_of_previous_candidate) {
-      state->closest_distance = distance_to_intersection;
-      state->closest_match = layer;
+      if (!state->closest_match || in_front_of_previous_candidate) {
+        state->closest_distance = distance_to_intersection;
+        state->closest_match = layer;
+      }
     }
+    UMA_HISTOGRAM_COUNTS("Compositing.LayerTreeImpl.FindClosestMatchingLayerUs",
+                         timer.Elapsed().InMicroseconds());
   }
 }
 

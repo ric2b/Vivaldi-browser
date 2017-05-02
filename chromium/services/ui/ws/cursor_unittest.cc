@@ -11,7 +11,6 @@
 #include "services/ui/common/types.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/platform_display.h"
@@ -49,7 +48,8 @@ class CursorTest : public testing::Test {
  protected:
   // testing::Test:
   void SetUp() override {
-    window_server_delegate()->CreateDisplays(1);
+    screen_manager_.Init(window_server()->display_manager());
+    screen_manager_.AddDisplay();
 
     // As a side effect, this allocates Displays.
     AddWindowManager(window_server(), kTestId1);
@@ -103,6 +103,7 @@ class CursorTest : public testing::Test {
 
  private:
   WindowServerTestHelper ws_test_helper_;
+  TestScreenManager screen_manager_;
   DISALLOW_COPY_AND_ASSIGN(CursorTest);
 };
 

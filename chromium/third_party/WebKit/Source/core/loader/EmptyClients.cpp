@@ -71,22 +71,23 @@ class EmptyPopupMenu : public PopupMenu {
 
 class EmptyFrameScheduler : public WebFrameScheduler {
  public:
+  EmptyFrameScheduler() { DCHECK(isMainThread()); }
   void setFrameVisible(bool) override {}
-  WebTaskRunner* loadingTaskRunner() override;
-  WebTaskRunner* timerTaskRunner() override;
-  WebTaskRunner* unthrottledTaskRunner() override;
+  RefPtr<WebTaskRunner> loadingTaskRunner() override;
+  RefPtr<WebTaskRunner> timerTaskRunner() override;
+  RefPtr<WebTaskRunner> unthrottledTaskRunner() override;
 };
 
-WebTaskRunner* EmptyFrameScheduler::loadingTaskRunner() {
-  return Platform::current()->currentThread()->getWebTaskRunner();
+RefPtr<WebTaskRunner> EmptyFrameScheduler::loadingTaskRunner() {
+  return Platform::current()->mainThread()->getWebTaskRunner();
 }
 
-WebTaskRunner* EmptyFrameScheduler::timerTaskRunner() {
-  return Platform::current()->currentThread()->getWebTaskRunner();
+RefPtr<WebTaskRunner> EmptyFrameScheduler::timerTaskRunner() {
+  return Platform::current()->mainThread()->getWebTaskRunner();
 }
 
-WebTaskRunner* EmptyFrameScheduler::unthrottledTaskRunner() {
-  return Platform::current()->currentThread()->getWebTaskRunner();
+RefPtr<WebTaskRunner> EmptyFrameScheduler::unthrottledTaskRunner() {
+  return Platform::current()->mainThread()->getWebTaskRunner();
 }
 
 PopupMenu* EmptyChromeClient::openPopupMenu(LocalFrame&, HTMLSelectElement&) {
@@ -123,7 +124,7 @@ String EmptyChromeClient::acceptLanguages() {
 
 std::unique_ptr<WebFrameScheduler> EmptyChromeClient::createFrameScheduler(
     BlameContext*) {
-  return makeUnique<EmptyFrameScheduler>();
+  return WTF::makeUnique<EmptyFrameScheduler>();
 }
 
 NavigationPolicy EmptyFrameLoaderClient::decidePolicyForNavigation(
@@ -146,6 +147,8 @@ DocumentLoader* EmptyFrameLoaderClient::createDocumentLoader(
     const ResourceRequest& request,
     const SubstituteData& substituteData,
     ClientRedirectPolicy clientRedirectPolicy) {
+  DCHECK(frame);
+
   return DocumentLoader::create(frame, request, substituteData,
                                 clientRedirectPolicy);
 }
@@ -192,5 +195,7 @@ EmptyFrameLoaderClient::createApplicationCacheHost(
     WebApplicationCacheHostClient*) {
   return nullptr;
 }
+
+EmptyRemoteFrameClient::EmptyRemoteFrameClient() = default;
 
 }  // namespace blink

@@ -129,10 +129,10 @@ void Reverb::initialize(AudioBus* impulseResponseBuffer,
   for (size_t i = 0; i < numResponseChannels; ++i) {
     AudioChannel* channel = impulseResponseBuffer->channel(i);
 
-    std::unique_ptr<ReverbConvolver> convolver = wrapUnique(
+    std::unique_ptr<ReverbConvolver> convolver = WTF::wrapUnique(
         new ReverbConvolver(channel, renderSliceSize, maxFFTSize,
                             convolverRenderPhase, useBackgroundThreads));
-    m_convolvers.append(std::move(convolver));
+    m_convolvers.push_back(std::move(convolver));
 
     convolverRenderPhase += renderSliceSize;
   }
@@ -268,7 +268,7 @@ void Reverb::reset() {
 }
 
 size_t Reverb::latencyFrames() const {
-  return !m_convolvers.isEmpty() ? m_convolvers.first()->latencyFrames() : 0;
+  return !m_convolvers.isEmpty() ? m_convolvers.front()->latencyFrames() : 0;
 }
 
 }  // namespace blink

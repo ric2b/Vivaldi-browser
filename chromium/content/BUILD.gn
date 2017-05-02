@@ -4,6 +4,7 @@
 
 import("//tools/grit/grit_rule.gni")
 import("//build/config/nacl/config.gni")
+import("//ppapi/features/features.gni")
 
 # Applied by targets internal to content.
 config("content_implementation") {
@@ -89,14 +90,16 @@ if (is_component_build) {
       "common/sandbox_linux/sandbox_seccomp_bpf_linux.cc",
       "common/send_zygote_child_ping_linux.cc",
       "public/common/content_switches.cc",
+      "public/common/content_switches.h",
       "public/common/mojo_channel_switches.cc",
+      "public/common/mojo_channel_switches.h",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
 
-    defines = [ "USE_SECCOMP_BPF=1" ]
-
     deps = [
       "//base",
+      "//media:media_features",
+      "//sandbox:sandbox_features",
       "//sandbox/linux:sandbox",
     ]
   }

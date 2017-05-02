@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/ref_counted_delete_on_message_loop.h"
+#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata.h"
@@ -39,7 +39,7 @@ class CreditCard;
 // WebDataService.
 // This class is destroyed on the DB thread.
 class AutofillWebDataBackendImpl
-    : public base::RefCountedDeleteOnMessageLoop<AutofillWebDataBackendImpl>,
+    : public base::RefCountedDeleteOnSequence<AutofillWebDataBackendImpl>,
       public AutofillWebDataBackend {
  public:
   // |web_database_backend| is used to access the WebDatabase directly for
@@ -152,17 +152,11 @@ class AutofillWebDataBackendImpl
   WebDatabase::State MaskServerCreditCard(const std::string& id,
                                           WebDatabase* db);
 
-  WebDatabase::State UpdateServerCardUsageStats(
-      const CreditCard& credit_card,
-      WebDatabase* db);
+  WebDatabase::State UpdateServerCardMetadata(const CreditCard& credit_card,
+                                              WebDatabase* db);
 
-  WebDatabase::State UpdateServerAddressUsageStats(
-      const AutofillProfile& profile,
-      WebDatabase* db);
-
-  WebDatabase::State UpdateServerCardBillingAddress(
-      const CreditCard& card,
-      WebDatabase* db);
+  WebDatabase::State UpdateServerAddressMetadata(const AutofillProfile& profile,
+                                                 WebDatabase* db);
 
   WebDatabase::State ClearAllServerData(WebDatabase* db);
 
@@ -184,7 +178,7 @@ class AutofillWebDataBackendImpl
   ~AutofillWebDataBackendImpl() override;
 
  private:
-  friend class base::RefCountedDeleteOnMessageLoop<AutofillWebDataBackendImpl>;
+  friend class base::RefCountedDeleteOnSequence<AutofillWebDataBackendImpl>;
   friend class base::DeleteHelper<AutofillWebDataBackendImpl>;
 
   // This makes the destructor public, and thus allows us to aggregate

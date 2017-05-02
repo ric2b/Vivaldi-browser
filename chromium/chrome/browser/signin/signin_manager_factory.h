@@ -15,6 +15,10 @@ class SigninManagerBase;
 class PrefRegistrySimple;
 class Profile;
 
+namespace vivaldi {
+class VivaldiSigninManagerFactory;
+}
+
 // Singleton that owns all SigninManagers and associates them with
 // Profiles. Listens for the Profile's destruction notification and cleans up
 // the associated SigninManager.
@@ -75,6 +79,7 @@ class SigninManagerFactory : public BrowserContextKeyedServiceFactory {
 
  private:
   friend struct base::DefaultSingletonTraits<SigninManagerFactory>;
+  friend vivaldi::VivaldiSigninManagerFactory;
 
   SigninManagerFactory();
   ~SigninManagerFactory() override;

@@ -12,14 +12,16 @@
 namespace base {
 class ListValue;
 }
-class PhysicalWebListener;
+class PrefService;
 
 @class PhysicalWebScanner;
+@class PhysicalWebInitialStateRecorder;
 
 // iOS implementation of PhysicalWebDataSource
-class IOSChromePhysicalWebDataSource : public PhysicalWebDataSourceImpl {
+class IOSChromePhysicalWebDataSource
+    : public physical_web::PhysicalWebDataSourceImpl {
  public:
-  IOSChromePhysicalWebDataSource();
+  IOSChromePhysicalWebDataSource(PrefService* pref_service);
   ~IOSChromePhysicalWebDataSource() override;
 
   // Starts scanning for Physical Web URLs. If |network_request_enabled| is
@@ -33,6 +35,10 @@ class IOSChromePhysicalWebDataSource : public PhysicalWebDataSourceImpl {
   // requests are disabled, the list will be empty.
   std::unique_ptr<base::ListValue> GetMetadata() override;
 
+  // Returns a list of resolved URLs and associated page metadata. If network
+  // requests are disabled, the list will be empty.
+  std::unique_ptr<physical_web::MetadataList> GetMetadataList() override;
+
   // Returns boolean |true| if network requests are disabled and there are one
   // or more discovered URLs that have not been sent to the resolution service.
   bool HasUnresolvedDiscoveries() override;
@@ -41,7 +47,10 @@ class IOSChromePhysicalWebDataSource : public PhysicalWebDataSourceImpl {
   // Scanner for nearby Physical Web URL devices.
   base::scoped_nsobject<PhysicalWebScanner> scanner_;
 
+  // Utility for fetching initial application state for logging purposes.
+  base::scoped_nsobject<PhysicalWebInitialStateRecorder> initialStateRecorder_;
+
   DISALLOW_COPY_AND_ASSIGN(IOSChromePhysicalWebDataSource);
 };
 
-#endif  // IOS_CHROME_COMMON_PHYSICAL_WEB_IOS_CHROME_PHYSICAL_WEB_DATA_SOURCE_H_
+#endif  // IOS_CHROME_BROWSER_PHYSICAL_WEB_IOS_CHROME_PHYSICAL_WEB_DATA_SOURCE_H_

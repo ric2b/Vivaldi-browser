@@ -13,7 +13,8 @@
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
-#include "services/ui/ws/gpu_service_proxy.h"
+#include "services/ui/ws/frame_generator.h"
+#include "services/ui/ws/gpu_host.h"
 #include "services/ui/ws/operation.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
@@ -45,7 +46,7 @@ struct WindowServer::CurrentDragLoopState {
 };
 
 // TODO(fsamuel): DisplayCompositor should be a mojo interface dispensed by
-// GpuServiceProxy.
+// GpuHost.
 WindowServer::WindowServer(WindowServerDelegate* delegate)
     : delegate_(delegate),
       next_client_id_(1),
@@ -53,13 +54,14 @@ WindowServer::WindowServer(WindowServerDelegate* delegate)
       current_operation_(nullptr),
       in_destructor_(false),
       next_wm_change_id_(0),
-      gpu_proxy_(new GpuServiceProxy(this)),
+      gpu_host_(new GpuHost(this)),
       window_manager_window_tree_factory_set_(this, &user_id_tracker_),
-      display_compositor_client_binding_(this),
-      display_compositor_(new DisplayCompositor(
-          display_compositor_client_binding_.CreateInterfacePtrAndBind())) {
+      display_compositor_client_binding_(this) {
   user_id_tracker_.AddObserver(this);
   OnUserIdAdded(user_id_tracker_.active_id());
+  gpu_host_->CreateDisplayCompositor(
+      mojo::MakeRequest(&display_compositor_),
+      display_compositor_client_binding_.CreateInterfacePtrAndBind());
 }
 
 WindowServer::~WindowServer() {
@@ -106,7 +108,7 @@ WindowTree* WindowServer::EmbedAtWindow(
     tree->set_embedder_intercepts_events();
 
   mojom::WindowTreePtr window_tree_ptr;
-  mojom::WindowTreeRequest window_tree_request = GetProxy(&window_tree_ptr);
+  mojom::WindowTreeRequest window_tree_request(&window_tree_ptr);
   std::unique_ptr<WindowTreeBinding> binding =
       delegate_->CreateWindowTreeBinding(
           WindowServerDelegate::BindingType::EMBED, this, tree,
@@ -313,19 +315,29 @@ void WindowServer::WindowManagerCreatedTopLevelWindow(
   InFlightWindowManagerChange change;
   if (!GetAndClearInFlightWindowManagerChange(window_manager_change_id,
                                               &change)) {
-    return;
-  }
-  if (!window) {
-    WindowManagerSentBogusMessage();
+    DVLOG(1) << "WindowManager responded with invalid change id; most "
+             << "likely bug in WindowManager processing WmCreateTopLevelWindow "
+             << "change_id=" << window_manager_change_id;
     return;
   }
 
   WindowTree* tree = GetTreeWithId(change.client_id);
   // The window manager should have created the window already, and it should
   // be ready for embedding.
-  if (!tree->IsWaitingForNewTopLevelWindow(window_manager_change_id) ||
-      !window || window->id().client_id != wm_tree->id() ||
-      !window->children().empty() || GetTreeWithRoot(window)) {
+  if (!tree->IsWaitingForNewTopLevelWindow(window_manager_change_id)) {
+    DVLOG(1) << "WindowManager responded with valid change id, but client "
+             << "is not waiting for top-level; possible bug in mus, change_id="
+             << window_manager_change_id;
+    WindowManagerSentBogusMessage();
+    return;
+  }
+  if (window && (window->id().client_id != wm_tree->id() ||
+                 !window->children().empty() || GetTreeWithRoot(window))) {
+    DVLOG(1)
+        << "WindowManager responded with invalid window; window should "
+        << "not have any children, not be the root of a client and should be "
+        << "created by the WindowManager, window_manager_change_id="
+        << window_manager_change_id;
     WindowManagerSentBogusMessage();
     return;
   }
@@ -495,10 +507,15 @@ WindowTree* WindowServer::GetCurrentDragLoopInitiator() {
 }
 
 void WindowServer::OnDisplayReady(Display* display, bool is_first) {
-  if (gpu_channel_)
-    display->platform_display()->OnGpuChannelEstablished(gpu_channel_);
   if (is_first)
     delegate_->OnFirstDisplayReady();
+  gpu_host_->OnAcceleratedWidgetAvailable(
+      display->platform_display()->GetAcceleratedWidget());
+}
+
+void WindowServer::OnDisplayDestroyed(Display* display) {
+  gpu_host_->OnAcceleratedWidgetDestroyed(
+      display->platform_display()->GetAcceleratedWidget());
 }
 
 void WindowServer::OnNoMoreDisplays() {
@@ -511,7 +528,7 @@ WindowManagerState* WindowServer::GetWindowManagerStateForUser(
       user_id);
 }
 
-ui::DisplayCompositor* WindowServer::GetDisplayCompositor() {
+cc::mojom::DisplayCompositor* WindowServer::GetDisplayCompositor() {
   return display_compositor_.get();
 }
 
@@ -744,25 +761,15 @@ void WindowServer::OnTransientWindowRemoved(ServerWindow* window,
   }
 }
 
-void WindowServer::OnGpuChannelEstablished(
-    scoped_refptr<gpu::GpuChannelHost> gpu_channel) {
-  gpu_channel_ = std::move(gpu_channel);
-  const std::set<Display*>& displays = display_manager()->displays();
-  for (auto* display : displays)
-    display->platform_display()->OnGpuChannelEstablished(gpu_channel_);
+void WindowServer::OnGpuServiceInitialized() {
   // TODO(kylechar): When gpu channel is removed, this can instead happen
-  // earlier, after GpuServiceProxy::OnInitialized().
+  // earlier, after GpuHost::OnInitialized().
   delegate_->StartDisplayInit();
 }
 
-void WindowServer::OnSurfaceCreated(const cc::SurfaceId& surface_id,
-                                    const gfx::Size& frame_size,
-                                    float device_scale_factor) {
+void WindowServer::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
   WindowId window_id(
-      WindowIdFromTransportId(surface_id.frame_sink_id().client_id()));
-  mojom::CompositorFrameSinkType compositor_frame_sink_type(
-      static_cast<mojom::CompositorFrameSinkType>(
-          surface_id.frame_sink_id().sink_id()));
+      WindowIdFromTransportId(surface_info.id().frame_sink_id().client_id()));
   ServerWindow* window = GetWindow(window_id);
   // If the window doesn't have a parent then we have nothing to propagate.
   if (!window)
@@ -772,24 +779,26 @@ void WindowServer::OnSurfaceCreated(const cc::SurfaceId& surface_id,
   // DisplayCompositorFrameSink may submit a CompositorFrame without
   // creating a CompositorFrameSinkManager.
   window->GetOrCreateCompositorFrameSinkManager()->SetLatestSurfaceInfo(
-      compositor_frame_sink_type, surface_id, frame_size);
+      surface_info);
+
+  // FrameGenerator will add an appropriate reference for the new surface.
+  DCHECK(display_manager_->GetDisplayContaining(window));
+  display_manager_->GetDisplayContaining(window)
+      ->platform_display()
+      ->GetFrameGenerator()
+      ->OnSurfaceCreated(surface_info.id(), window);
 
   // This is only used for testing to observe that a window has a
   // CompositorFrame.
   if (!window_paint_callback_.is_null())
     window_paint_callback_.Run(window);
 
-  // We only care about propagating default surface IDs.
-  // TODO(fsamuel, sadrul): we should get rid of CompositorFrameSinkTypes.
-  if (compositor_frame_sink_type != mojom::CompositorFrameSinkType::DEFAULT ||
-      !window->parent()) {
+  if (!window->parent())
     return;
-  }
+
   WindowTree* window_tree = GetTreeWithId(window->parent()->id().client_id);
-  if (window_tree) {
-    window_tree->ProcessWindowSurfaceChanged(window, surface_id, frame_size,
-                                             device_scale_factor);
-  }
+  if (window_tree)
+    window_tree->ProcessWindowSurfaceChanged(window, surface_info);
 }
 
 void WindowServer::OnActiveUserIdChanged(const UserId& previously_active_id,

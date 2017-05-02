@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/http/bidirectional_stream_request_info.h"
@@ -210,7 +211,7 @@ bool BidirectionalStreamSpdyImpl::GetLoadTimingInfo(
   return stream_->GetLoadTimingInfo(load_timing_info);
 }
 
-void BidirectionalStreamSpdyImpl::OnRequestHeadersSent() {
+void BidirectionalStreamSpdyImpl::OnHeadersSent() {
   DCHECK(stream_);
 
   negotiated_protocol_ = kProtoHTTP2;
@@ -218,14 +219,12 @@ void BidirectionalStreamSpdyImpl::OnRequestHeadersSent() {
     delegate_->OnStreamReady(/*request_headers_sent=*/true);
 }
 
-SpdyResponseHeadersStatus BidirectionalStreamSpdyImpl::OnResponseHeadersUpdated(
+void BidirectionalStreamSpdyImpl::OnHeadersReceived(
     const SpdyHeaderBlock& response_headers) {
   DCHECK(stream_);
 
   if (delegate_)
     delegate_->OnHeadersReceived(response_headers);
-
-  return RESPONSE_HEADERS_ARE_COMPLETE;
 }
 
 void BidirectionalStreamSpdyImpl::OnDataReceived(
@@ -317,7 +316,7 @@ void BidirectionalStreamSpdyImpl::OnStreamInitialized(int rv) {
     stream_->SetDelegate(this);
     rv = SendRequestHeadersHelper();
     if (rv == OK) {
-      OnRequestHeadersSent();
+      OnHeadersSent();
       return;
     } else if (rv == ERR_IO_PENDING) {
       return;

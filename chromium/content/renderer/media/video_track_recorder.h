@@ -14,6 +14,7 @@
 #include "base/threading/thread_checker.h"
 #include "content/public/common/features.h"
 #include "content/public/renderer/media_stream_video_sink.h"
+#include "media/muxers/webm_muxer.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 
 namespace media {
@@ -36,18 +37,24 @@ namespace content {
 class CONTENT_EXPORT VideoTrackRecorder
     : NON_EXPORTED_BASE(public MediaStreamVideoSink) {
  public:
+  // Do not change the order of codecs; add new ones right before LAST.
   enum class CodecId {
     VP8,
     VP9,
+#if BUILDFLAG(RTC_USE_H264)
     H264,
+#endif
+    LAST
   };
   class Encoder;
 
   using OnEncodedVideoCB =
-      base::Callback<void(const scoped_refptr<media::VideoFrame>& video_frame,
+      base::Callback<void(const media::WebmMuxer::VideoParameters& params,
                           std::unique_ptr<std::string> encoded_data,
                           base::TimeTicks capture_timestamp,
                           bool is_key_frame)>;
+
+  static CodecId GetPreferredCodecId();
 
   VideoTrackRecorder(CodecId codec,
                      const blink::WebMediaStreamTrack& track,

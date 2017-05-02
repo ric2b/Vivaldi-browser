@@ -218,11 +218,11 @@ void CoreOobeHandler::ShowDeviceResetScreen() {
     WizardController* wizard_controller =
         WizardController::default_controller();
     if (wizard_controller && !wizard_controller->login_screen_started()) {
-      wizard_controller->AdvanceToScreen(WizardController::kResetScreenName);
+      wizard_controller->AdvanceToScreen(OobeScreen::SCREEN_OOBE_RESET);
     } else {
       DCHECK(LoginDisplayHost::default_host());
       LoginDisplayHost::default_host()->StartWizard(
-          WizardController::kResetScreenName);
+          OobeScreen::SCREEN_OOBE_RESET);
     }
   }
 }
@@ -233,8 +233,13 @@ void CoreOobeHandler::ShowEnableDebuggingScreen() {
       WizardController::default_controller();
   if (wizard_controller && !wizard_controller->login_screen_started()) {
     wizard_controller->AdvanceToScreen(
-        WizardController::kEnableDebuggingScreenName);
+        OobeScreen::SCREEN_OOBE_ENABLE_DEBUGGING);
   }
+}
+
+void CoreOobeHandler::ShowActiveDirectoryPasswordChangeScreen(
+    const std::string& username) {
+  CallJSOrDefer("showActiveDirectoryPasswordChangeScreen", username);
 }
 
 void CoreOobeHandler::ShowSignInUI(const std::string& email) {
@@ -304,13 +309,15 @@ void CoreOobeHandler::HandleSkipUpdateEnrollAfterEula() {
     controller->SkipUpdateEnrollAfterEula();
 }
 
-void CoreOobeHandler::HandleUpdateCurrentScreen(const std::string& screen) {
+void CoreOobeHandler::HandleUpdateCurrentScreen(
+    const std::string& screen_name) {
+  const OobeScreen screen = GetOobeScreenFromName(screen_name);
   if (delegate_)
     delegate_->OnCurrentScreenChanged(screen);
   // TODO(mash): Support EventRewriterController; see crbug.com/647781
   if (!chrome::IsRunningInMash()) {
     KeyboardDrivenEventRewriter::GetInstance()->SetArrowToTabRewritingEnabled(
-      screen == WizardController::kEulaScreenName);
+        screen == OobeScreen::SCREEN_OOBE_EULA);
   }
 }
 
@@ -452,10 +459,14 @@ void CoreOobeHandler::UpdateLabel(const std::string& id,
 }
 
 void CoreOobeHandler::UpdateDeviceRequisition() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  CallJSOrDefer("updateDeviceRequisition",
-         connector->GetDeviceCloudPolicyManager()->GetDeviceRequisition());
+  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+  if (policy_manager) {
+    CallJSOrDefer("updateDeviceRequisition",
+                  policy_manager->GetDeviceRequisition());
+  }
 }
 
 void CoreOobeHandler::UpdateKeyboardState() {
@@ -469,7 +480,7 @@ void CoreOobeHandler::UpdateKeyboardState() {
 }
 
 void CoreOobeHandler::UpdateClientAreaSize() {
-  const gfx::Size& size =
+  const gfx::Size size =
       display::Screen::GetScreen()->GetPrimaryDisplay().size();
   SetClientAreaSize(size.width(), size.height());
 }

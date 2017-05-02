@@ -20,8 +20,6 @@
 namespace chromeos {
 
 class CoreOobeActor;
-class IdleDetector;
-class InputEventsBlocker;
 
 // WebUI implementation of NetworkScreenActor. It is used to interact with
 // the welcome screen (part of the page) of the OOBE.
@@ -32,7 +30,6 @@ class NetworkScreenHandler : public NetworkView, public BaseScreenHandler {
 
  private:
   // NetworkView implementation:
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
   void Bind(NetworkModel& model) override;

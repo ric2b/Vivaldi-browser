@@ -60,7 +60,7 @@ bool WebHelperPluginImpl::initialize(const String& pluginType,
     return false;
 
   m_objectElement =
-      HTMLObjectElement::create(*frame->frame()->document(), 0, false);
+      HTMLObjectElement::create(*frame->frame()->document(), false);
   Vector<String> attributeNames;
   Vector<String> attributeValues;
   DCHECK(frame->frame()->document()->url().isValid());
@@ -86,10 +86,10 @@ void WebHelperPluginImpl::reallyDestroy(TimerBase*) {
 
 void WebHelperPluginImpl::destroy() {
   // Defer deletion so we don't do too much work when called via
-  // stopActiveDOMObjects().
+  // stopSuspendableObjects().
   // FIXME: It's not clear why we still need this. The original code held a
   // Page and a WebFrame, and destroying it would cause JavaScript triggered by
-  // frame detach to run, which isn't allowed inside stopActiveDOMObjects().
+  // frame detach to run, which isn't allowed inside stopSuspendableObjects().
   // Removing this causes one Chrome test to fail with a timeout.
   m_destructionTimer.startOneShot(0, BLINK_FROM_HERE);
 }

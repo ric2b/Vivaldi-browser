@@ -16,6 +16,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.widget.DateDividedAdapter.ItemGroup;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -105,10 +106,16 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
         }
     }
 
+    protected static class BasicViewHolder extends RecyclerView.ViewHolder {
+        public BasicViewHolder(View itemView) {
+            super(itemView);
+        }
+    }
+
     /**
      * A bucket of items with the same date.
      */
-    private static class ItemGroup {
+    protected static class ItemGroup {
         private final Date mDate;
         private final List<TimedItem> mItems = new ArrayList<>();
 
@@ -116,21 +123,25 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
         private int mIndex;
 
         private boolean mIsSorted;
+        private boolean mIsListHeaderOrFooter;
 
-        public ItemGroup(TimedItem item) {
-            mDate = new Date(item.getTimestamp());
-            mItems.add(item);
+        public ItemGroup(long timestamp) {
+            mDate = new Date(timestamp);
             mIsSorted = true;
         }
 
         public void addItem(TimedItem item) {
             mItems.add(item);
-            mIsSorted = false;
+            mIsSorted = mItems.size() == 1;
+        }
+
+        public void removeItem(TimedItem item) {
+            mItems.remove(item);
         }
 
         /** Records the position of all the TimedItems in this group, relative to the full list. */
         public void setPosition(int index) {
-            assert mIndex == 0;
+            assert mIndex == 0 || mIndex == TimedItem.INVALID_POSITION;
             mIndex = index;
 
             sortIfNeeded();
@@ -157,13 +168,15 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
          * @return The size of this group.
          */
         public int size() {
+            if (mIsListHeaderOrFooter) return 1;
+
             // Plus 1 to account for the date header.
             return mItems.size() + 1;
         }
 
         public TimedItem getItemAt(int index) {
-            // 0 is allocated to the date header.
-            if (index == 0) return null;
+            // 0 is allocated to the date header. The list header has no items.
+            if (index == 0 || mIsListHeaderOrFooter) return null;
 
             sortIfNeeded();
             return mItems.get(index - 1);
@@ -199,10 +212,15 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
     private static final AsyncTask<Void, Void, Calendar> sCal1 = createCalendar();
     private static final AsyncTask<Void, Void, Calendar> sCal2 = createCalendar();
 
+    public static final int TYPE_FOOTER = -2;
+    public static final int TYPE_HEADER = -1;
     public static final int TYPE_DATE = 0;
     public static final int TYPE_NORMAL = 1;
 
     private int mSize;
+    private boolean mHasListHeader;
+    private boolean mHasListFooter;
+
     private SortedSet<ItemGroup> mGroups = new TreeSet<>(new Comparator<ItemGroup>() {
         @Override
         public int compare(ItemGroup lhs, ItemGroup rhs) {
@@ -217,6 +235,22 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
     protected abstract ViewHolder createViewHolder(ViewGroup parent);
 
     /**
+     * Creates a {@link BasicViewHolder} in the given view parent for the header.
+     * @see #onCreateViewHolder(ViewGroup, int)
+     */
+    protected BasicViewHolder createHeader(ViewGroup parent) {
+        return null;
+    }
+
+    /**
+     * Creates a {@link BasicViewHolder} in the given view parent for the footer.
+     * @see #onCreateViewHolder(ViewGroup, int)
+     */
+    protected BasicViewHolder createFooter(ViewGroup parent) {
+        return null;
+    }
+
+    /**
      * Binds the {@link ViewHolder} with the given {@link TimedItem}.
      * @see #onBindViewHolder(ViewHolder, int)
      */
@@ -229,15 +263,10 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
     protected abstract int getTimedItemViewResId();
 
     /**
-     * Loads a list of {@link TimedItem}s to this adapter. Any previous data will be removed.
+     * Loads a list of {@link TimedItem}s to this adapter. Previous data will not be removed. Call
+     * {@link #clear(boolean)} to remove previous items.
      */
     public void loadItems(List<? extends TimedItem> timedItems) {
-        mSize = 0;
-
-        // Unset the positions of all items in the list.
-        for (ItemGroup group : mGroups) group.resetPosition();
-        mGroups.clear();
-
         for (TimedItem timedItem : timedItems) {
             Date date = new Date(timedItem.getTimestamp());
             boolean found = false;
@@ -252,28 +281,103 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
             if (!found) {
                 // Create a new ItemGroup with the date for the new item. This increases the
                 // size by two because we add new views for the date and the item itself.
-                mGroups.add(new ItemGroup(timedItem));
+                ItemGroup newGroup = new ItemGroup(timedItem.getTimestamp());
+                newGroup.addItem(timedItem);
+                mGroups.add(newGroup);
                 mSize += 2;
             }
         }
 
-        // Tell each group where they start in the list.
-        int startIndex = 0;
-        for (ItemGroup group : mGroups) {
-            group.setPosition(startIndex);
-            startIndex += group.size();
-        }
-
+        setGroupPositions();
         notifyDataSetChanged();
     }
 
     /**
-     * Removes all items from this adapter.
+     * Tells each group where they start in the list.
      */
-    public void clear() {
-        mSize = 0;
-        mGroups.clear();
+    private void setGroupPositions() {
+        int startIndex = 0;
+        for (ItemGroup group : mGroups) {
+            group.resetPosition();
+            group.setPosition(startIndex);
+            startIndex += group.size();
+        }
+    }
+
+    /**
+     * Adds a header as the first group in this adapter.
+     */
+    public void addHeader() {
+        assert mSize == 0;
+
+        ItemGroup header = new ItemGroup(Long.MAX_VALUE);
+        header.mIsListHeaderOrFooter = true;
+
+        mGroups.add(header);
+        mSize++;
+        mHasListHeader = true;
+    }
+
+    /**
+     * Removes the list headrer.
+     */
+    public void removeHeader() {
+        if (!mHasListHeader) return;
+
+        mGroups.remove(mGroups.first());
+        mSize--;
+        mHasListHeader = false;
+
+        setGroupPositions();
         notifyDataSetChanged();
+    }
+
+    /**
+     * Whether the adapter has a list header.
+     */
+    public boolean hasListHeader() {
+        return mHasListHeader;
+    }
+
+    /**
+     * Adds a footer as the last group in this adapter.
+     */
+    public void addFooter() {
+        if (mHasListFooter) return;
+
+        ItemGroup footer = new ItemGroup(Long.MIN_VALUE);
+        footer.mIsListHeaderOrFooter = true;
+
+        mGroups.add(footer);
+        mSize++;
+        mHasListFooter = true;
+    }
+
+    /**
+     * Removes the footer group if present.
+     */
+    public void removeFooter() {
+        if (!mHasListFooter) return;
+
+        mGroups.remove(mGroups.last());
+        mSize--;
+        mHasListFooter = false;
+    }
+
+    /**
+     * Removes all items from this adapter.
+     * @param notifyDataSetChanged Whether to notify that the data set has been changed.
+     */
+    public void clear(boolean notifyDataSetChanged) {
+        mSize = 0;
+        mHasListHeader = false;
+        mHasListFooter = false;
+
+        // Unset the positions of all items in the list.
+        for (ItemGroup group : mGroups) group.resetPosition();
+        mGroups.clear();
+
+        if (notifyDataSetChanged) notifyDataSetChanged();
     }
 
     @Override
@@ -285,8 +389,8 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
     }
 
     /**
-     * Gets the item at the given position. For date headers, {@link TimedItem} will be null; for
-     * normal items, {@link Date} will be null.
+     * Gets the item at the given position. For date headers and the list header, {@link TimedItem}
+     * will be null; for normal items, {@link Date} will be null.
      */
     public Pair<Date, TimedItem> getItemAt(int position) {
         Pair<ItemGroup, Integer> pair = getGroupAt(position);
@@ -297,7 +401,15 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
     @Override
     public final int getItemViewType(int position) {
         Pair<ItemGroup, Integer> pair = getGroupAt(position);
-        return pair.second == 0 ? TYPE_DATE : TYPE_NORMAL;
+        if (pair.second == TYPE_HEADER) {
+            return TYPE_HEADER;
+        } else if (pair.second == TYPE_FOOTER) {
+            return TYPE_FOOTER;
+        } else if (pair.second == 0) {
+            return TYPE_DATE;
+        } else {
+            return TYPE_NORMAL;
+        }
     }
 
     @Override
@@ -307,7 +419,12 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
                     getTimedItemViewResId(), parent, false));
         } else if (viewType == TYPE_NORMAL) {
             return createViewHolder(parent);
+        } else if (viewType == TYPE_HEADER) {
+            return createHeader(parent);
+        } else if (viewType == TYPE_FOOTER) {
+            return createFooter(parent);
         }
+        assert false;
         return null;
     }
 
@@ -316,7 +433,7 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
         Pair<Date, TimedItem> pair = getItemAt(position);
         if (holder instanceof DateViewHolder) {
             ((DateViewHolder) holder).setDate(pair.first);
-        } else {
+        } else if (!(holder instanceof BasicViewHolder)) {
             bindViewHolderForTimedItem(holder, pair.second);
         }
     }
@@ -329,8 +446,16 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
     /**
      * Utility method to traverse all groups and find the {@link ItemGroup} for the given position.
      */
-    private Pair<ItemGroup, Integer> getGroupAt(int position) {
+    protected Pair<ItemGroup, Integer> getGroupAt(int position) {
         // TODO(ianwen): Optimize the performance if the number of groups becomes too large.
+        if (mHasListHeader && position == 0) {
+            return new Pair<>(mGroups.first(), TYPE_HEADER);
+        }
+
+        if (mHasListFooter && position == mSize - 1) {
+            return new Pair<>(mGroups.last(), TYPE_FOOTER);
+        }
+
         int i = position;
         for (ItemGroup group : mGroups) {
             if (i >= group.size()) {
@@ -341,6 +466,24 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
         }
         assert false;
         return null;
+    }
+
+    /**
+     * @param item The item to remove from the adapter.
+     */
+    protected void removeItem(TimedItem item) {
+        ItemGroup group = getGroupAt(item.getPosition()).first;
+        group.removeItem(item);
+        mSize--;
+
+        // Remove the group if only the date header is left.
+        if (group.size() == 1) {
+            mGroups.remove(group);
+            mSize--;
+        }
+
+        setGroupPositions();
+        notifyDataSetChanged();
     }
 
     /**

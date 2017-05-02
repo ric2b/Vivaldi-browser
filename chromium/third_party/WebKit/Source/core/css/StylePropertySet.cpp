@@ -30,6 +30,7 @@
 #include "core/css/StylePropertySerializer.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/frame/UseCounter.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/text/StringBuilder.h"
@@ -296,7 +297,7 @@ bool StylePropertySet::isPropertyImplicit(CSSPropertyID propertyID) const {
   return propertyAt(foundPropertyIndex).isImplicit();
 }
 
-bool MutableStylePropertySet::setProperty(
+MutableStylePropertySet::SetResult MutableStylePropertySet::setProperty(
     CSSPropertyID unresolvedProperty,
     const String& value,
     bool important,
@@ -306,8 +307,11 @@ bool MutableStylePropertySet::setProperty(
   // Setting the value to an empty string just removes the property in both IE
   // and Gecko. Setting it to null seems to produce less consistent results, but
   // we treat it just the same.
-  if (value.isEmpty())
-    return removeProperty(resolveCSSPropertyID(unresolvedProperty));
+  if (value.isEmpty()) {
+    bool didParse = true;
+    bool didChange = removeProperty(resolveCSSPropertyID(unresolvedProperty));
+    return SetResult{didParse, didChange};
+  }
 
   // When replacing an existing property value, this moves the property to the
   // end of the list. Firefox preserves the position, and MSIE moves the
@@ -316,17 +320,21 @@ bool MutableStylePropertySet::setProperty(
                                contextStyleSheet);
 }
 
-bool MutableStylePropertySet::setProperty(
+MutableStylePropertySet::SetResult MutableStylePropertySet::setProperty(
     const AtomicString& customPropertyName,
+    const PropertyRegistry* registry,
     const String& value,
     bool important,
     StyleSheetContents* contextStyleSheet,
     bool isAnimationTainted) {
-  if (value.isEmpty())
-    return removeProperty(customPropertyName);
-  return CSSParser::parseValueForCustomProperty(this, customPropertyName, value,
-                                                important, contextStyleSheet,
-                                                isAnimationTainted);
+  if (value.isEmpty()) {
+    bool didParse = true;
+    bool didChange = removeProperty(customPropertyName);
+    return MutableStylePropertySet::SetResult{didParse, didChange};
+  }
+  return CSSParser::parseValueForCustomProperty(
+      this, customPropertyName, registry, value, important, contextStyleSheet,
+      isAnimationTainted);
 }
 
 void MutableStylePropertySet::setProperty(CSSPropertyID propertyID,
@@ -341,7 +349,7 @@ void MutableStylePropertySet::setProperty(CSSPropertyID propertyID,
   removePropertiesInSet(shorthand.properties(), shorthand.length());
 
   for (unsigned i = 0; i < shorthand.length(); ++i)
-    m_propertyVector.append(
+    m_propertyVector.push_back(
         CSSProperty(shorthand.properties()[i], value, important));
 }
 
@@ -359,7 +367,7 @@ bool MutableStylePropertySet::setProperty(const CSSProperty& property,
     *toReplace = property;
     return true;
   }
-  m_propertyVector.append(property);
+  m_propertyVector.push_back(property);
   return true;
 }
 
@@ -376,11 +384,13 @@ void MutableStylePropertySet::parseDeclarationList(
     StyleSheetContents* contextStyleSheet) {
   m_propertyVector.clear();
 
-  CSSParserContext context(cssParserMode(),
-                           UseCounter::getFrom(contextStyleSheet));
+  CSSParserContext* context;
   if (contextStyleSheet) {
-    context = contextStyleSheet->parserContext();
-    context.setMode(cssParserMode());
+    context = CSSParserContext::createWithStyleSheetContents(
+        contextStyleSheet->parserContext(), contextStyleSheet);
+    context->setMode(cssParserMode());
+  } else {
+    context = CSSParserContext::create(cssParserMode());
   }
 
   CSSParser::parseDeclarationList(context, this, styleDeclaration);
@@ -417,7 +427,7 @@ void MutableStylePropertySet::mergeAndOverrideOnConflict(
     if (old)
       setProperty(toMerge.toCSSProperty(), old);
     else
-      m_propertyVector.append(toMerge.toCSSProperty());
+      m_propertyVector.push_back(toMerge.toCSSProperty());
   }
 }
 
@@ -499,7 +509,7 @@ void MutableStylePropertySet::removeEquivalentProperties(
   for (unsigned i = 0; i < size; ++i) {
     PropertyReference property = propertyAt(i);
     if (style->propertyMatches(property.id(), property.value()))
-      propertiesToRemove.append(property.id());
+      propertiesToRemove.push_back(property.id());
   }
   // FIXME: This should use mass removal.
   for (unsigned i = 0; i < propertiesToRemove.size(); ++i)
@@ -513,7 +523,7 @@ void MutableStylePropertySet::removeEquivalentProperties(
   for (unsigned i = 0; i < size; ++i) {
     PropertyReference property = propertyAt(i);
     if (style->cssPropertyMatches(property.id(), &property.value()))
-      propertiesToRemove.append(property.id());
+      propertiesToRemove.push_back(property.id());
   }
   // FIXME: This should use mass removal.
   for (unsigned i = 0; i < propertiesToRemove.size(); ++i)
@@ -531,7 +541,7 @@ MutableStylePropertySet* StylePropertySet::copyPropertiesInSet(
   for (unsigned i = 0; i < properties.size(); ++i) {
     const CSSValue* value = getPropertyCSSValue(properties[i]);
     if (value)
-      list.append(CSSProperty(properties[i], *value, false));
+      list.push_back(CSSProperty(properties[i], *value, false));
   }
   return MutableStylePropertySet::create(list.data(), list.size());
 }

@@ -39,7 +39,6 @@ namespace blink {
 class FrameView;
 class PaintLayerCompositor;
 class LayoutQuote;
-class LayoutMedia;
 class ViewFragmentationContext;
 
 // LayoutView is the root of the layout tree and the Document's LayoutObject.
@@ -115,6 +114,9 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   FrameView* frameView() const { return m_frameView; }
 
+  // |ancestor| can be nullptr, which will map the rect to the main frame's
+  // space, even if the main frame is remote (or has intermediate remote
+  // frames in the chain).
   bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor,
                                       LayoutRect&,
                                       MapCoordinatesFlags,
@@ -152,7 +154,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   void absoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulatedOffset) const override;
-  void absoluteQuads(Vector<FloatQuad>&) const override;
+  void absoluteQuads(Vector<FloatQuad>&,
+                     MapCoordinatesFlags mode = 0) const override;
 
   LayoutRect viewRect() const override;
   LayoutRect overflowClipRect(
@@ -232,16 +235,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
     return false;
   }
 
-  // Some LayoutMedias want to know about their viewport visibility for
-  // crbug.com/487345,402044 .  This facility will be removed once those
-  // experiments complete.
-  // TODO(ojan): Merge this with IntersectionObserver once it lands.
-  void registerMediaForPositionChangeNotification(LayoutMedia&);
-  void unregisterMediaForPositionChangeNotification(LayoutMedia&);
-  // Notify all registered LayoutMedias that their position on-screen might
-  // have changed.  visibleRect is the clipping boundary.
-  void sendMediaPositionChangeNotifications(const IntRect& visibleRect);
-
   // The rootLayerScrolls setting will ultimately determine whether FrameView
   // or PaintLayerScrollableArea handle the scroll.
   ScrollResult scroll(ScrollGranularity, const FloatSize&) override;
@@ -264,7 +257,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
                                const LayoutPoint& layerOffset) const override;
 
   void layoutContent();
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void checkLayoutState();
 #endif
 
@@ -275,6 +268,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   int viewLogicalWidthForBoxSizing() const;
   int viewLogicalHeightForBoxSizing() const;
+
+  bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 
   UntracedMember<FrameView> m_frameView;
 
@@ -318,8 +313,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   unsigned m_hitTestCount;
   unsigned m_hitTestCacheHits;
   Persistent<HitTestCache> m_hitTestCache;
-
-  Vector<LayoutMedia*> m_mediaForPositionNotification;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutView, isLayoutView());

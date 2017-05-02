@@ -15,10 +15,6 @@ namespace cc {
 class SoftwareOutputDevice;
 }
 
-namespace ui {
-class CompositorVSyncManager;
-}
-
 namespace content {
 
 class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
@@ -26,8 +22,7 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
  public:
   SoftwareBrowserCompositorOutputSurface(
       std::unique_ptr<cc::SoftwareOutputDevice> software_device,
-      const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-      cc::SyntheticBeginFrameSource* begin_frame_source,
+      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   ~SoftwareBrowserCompositorOutputSurface() override;
@@ -40,7 +35,8 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override;
+               bool has_alpha,
+               bool use_stencil) override;
   void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;

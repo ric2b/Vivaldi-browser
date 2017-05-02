@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/common/common_type_converters.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
@@ -200,8 +200,8 @@ void Display::SetSize(const gfx::Size& size) {
   platform_display_->SetViewportSize(size);
 }
 
-void Display::SetTitle(const mojo::String& title) {
-  platform_display_->SetTitle(title.To<base::string16>());
+void Display::SetTitle(const std::string& title) {
+  platform_display_->SetTitle(base::UTF8ToUTF16(title));
 }
 
 void Display::InitWindowManagerDisplayRoots() {
@@ -262,8 +262,19 @@ void Display::CreateRootWindow(const gfx::Size& size) {
   focus_controller_->AddObserver(this);
 }
 
+display::Display Display::GetDisplay() {
+  return ToDisplay();
+}
+
 ServerWindow* Display::GetRootWindow() {
   return root_.get();
+}
+
+ServerWindow* Display::GetActiveRootWindow() {
+  WindowManagerDisplayRoot* display_root = GetActiveWindowManagerDisplayRoot();
+  if (display_root)
+    return display_root->root();
+  return nullptr;
 }
 
 void Display::OnAcceleratedWidgetAvailable() {

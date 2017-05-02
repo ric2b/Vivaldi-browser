@@ -4,7 +4,7 @@
 
 #include "web/TextFinder.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeList.h"
 #include "core/dom/Range.h"
@@ -308,10 +308,36 @@ TEST_F(TextFinderTest, ScopeTextMatchesSimple) {
   WebFindOptions findOptions;  // Default.
 
   textFinder().resetMatchCount();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 
+  EXPECT_EQ(2, textFinder().totalMatchCount());
+  WebVector<WebFloatRect> matchRects;
+  textFinder().findMatchRects(matchRects);
+  ASSERT_EQ(2u, matchRects.size());
+  EXPECT_EQ(findInPageRect(textNode, 4, textNode, 10), matchRects[0]);
+  EXPECT_EQ(findInPageRect(textNode, 14, textNode, 20), matchRects[1]);
+}
+
+TEST_F(TextFinderTest, ScopeTextMatchesRepeated) {
+  document().body()->setInnerHTML("XXXXFindMeYYYYfindmeZZZZ");
+  document().updateStyleAndLayout();
+
+  Node* textNode = document().body()->firstChild();
+
+  int identifier = 0;
+  WebString searchText1(String("XFindMe"));
+  WebString searchText2(String("FindMe"));
+  WebFindOptions findOptions;  // Default.
+
+  textFinder().resetMatchCount();
+  textFinder().startScopingStringMatches(identifier, searchText1, findOptions);
+  textFinder().startScopingStringMatches(identifier, searchText2, findOptions);
+  while (textFinder().scopingInProgress())
+    runPendingTasks();
+
+  // Only searchText2 should be highlighted.
   EXPECT_EQ(2, textFinder().totalMatchCount());
   WebVector<WebFloatRect> matchRects;
   textFinder().findMatchRects(matchRects);
@@ -336,7 +362,7 @@ TEST_F(TextFinderTest, ScopeTextMatchesWithShadowDOM) {
   WebFindOptions findOptions;  // Default.
 
   textFinder().resetMatchCount();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 
@@ -366,7 +392,7 @@ TEST_F(TextFinderTest, ScopeRepeatPatternTextMatches) {
   WebFindOptions findOptions;  // Default.
 
   textFinder().resetMatchCount();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 
@@ -389,7 +415,7 @@ TEST_F(TextFinderTest, OverlappingMatches) {
   WebFindOptions findOptions;  // Default.
 
   textFinder().resetMatchCount();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 
@@ -412,7 +438,7 @@ TEST_F(TextFinderTest, SequentialMatches) {
   WebFindOptions findOptions;  // Default.
 
   textFinder().resetMatchCount();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 
@@ -436,7 +462,7 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOM) {
   bool activeNow;
 
   textFinder().resetMatchCount();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 
@@ -466,7 +492,7 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOM) {
   findOptions.findNext = false;
   textFinder().resetMatchCount();
   textFinder().cancelPendingScopingEffort();
-  textFinder().scopeStringMatches(identifier, searchText, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
   EXPECT_EQ(2, textFinder().totalMatchCount());
@@ -480,6 +506,57 @@ TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOM) {
             matchRects[0]);
   EXPECT_EQ(findInPageRect(textInIElement, 2, textInIElement, 8),
             matchRects[1]);
+}
+
+TEST_F(TextFinderTest, FindTextJavaScriptUpdatesDOMAfterNoMatches) {
+  document().body()->setInnerHTML("<b>XXXXYYYY</b><i></i>");
+  document().updateStyleAndLayout();
+
+  int identifier = 0;
+  WebString searchText(String("FindMe"));
+  WebFindOptions findOptions;  // Default.
+  bool wrapWithinFrame = true;
+  bool activeNow = false;
+
+  textFinder().resetMatchCount();
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
+  while (textFinder().scopingInProgress())
+    runPendingTasks();
+
+  findOptions.findNext = true;
+  ASSERT_FALSE(textFinder().find(identifier, searchText, findOptions,
+                                 wrapWithinFrame, &activeNow));
+  EXPECT_FALSE(activeNow);
+
+  // Add new text to DOM and try FindNext.
+  Element* iElement = toElement(document().body()->lastChild());
+  ASSERT_TRUE(iElement);
+  iElement->setInnerHTML("ZZFindMe");
+  document().updateStyleAndLayout();
+
+  ASSERT_TRUE(textFinder().find(identifier, searchText, findOptions,
+                                wrapWithinFrame, &activeNow));
+  Range* activeMatch = textFinder().activeMatch();
+  ASSERT_TRUE(activeMatch);
+  EXPECT_FALSE(activeNow);
+  EXPECT_EQ(2, activeMatch->startOffset());
+  EXPECT_EQ(8, activeMatch->endOffset());
+
+  // Restart full search and check that added text is found.
+  findOptions.findNext = false;
+  textFinder().resetMatchCount();
+  textFinder().cancelPendingScopingEffort();
+  textFinder().startScopingStringMatches(identifier, searchText, findOptions);
+  while (textFinder().scopingInProgress())
+    runPendingTasks();
+  EXPECT_EQ(1, textFinder().totalMatchCount());
+
+  WebVector<WebFloatRect> matchRects;
+  textFinder().findMatchRects(matchRects);
+  ASSERT_EQ(1u, matchRects.size());
+  Node* textInIElement = document().body()->lastChild()->firstChild();
+  EXPECT_EQ(findInPageRect(textInIElement, 2, textInIElement, 8),
+            matchRects[0]);
 }
 
 class TextFinderFakeTimerTest : public TextFinderTest {
@@ -526,7 +603,8 @@ TEST_F(TextFinderFakeTimerTest, ScopeWithTimeouts) {
 
   // There will be only one iteration before timeout, because increment
   // of the TimeProxyPlatform timer is greater than timeout threshold.
-  textFinder().scopeStringMatches(identifier, searchPattern, findOptions, true);
+  textFinder().startScopingStringMatches(identifier, searchPattern,
+                                         findOptions);
   while (textFinder().scopingInProgress())
     runPendingTasks();
 

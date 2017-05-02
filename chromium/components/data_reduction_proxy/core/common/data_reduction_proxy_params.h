@@ -14,16 +14,13 @@
 #include "net/proxy/proxy_server.h"
 #include "url/gurl.h"
 
-namespace base {
-class TimeDelta;
-}
-
 namespace net {
-class HostPortPair;
 class ProxyServer;
 }
 
 namespace data_reduction_proxy {
+
+class DataReductionProxyServer;
 
 // The data_reduction_proxy::params namespace is a collection of methods to
 // determine the operating parameters of the Data Reduction Proxy as specified
@@ -121,6 +118,9 @@ const char* GetQuicFieldTrialName();
 // Returns true if zero RTT for QUIC is enabled.
 bool IsZeroRttQuicEnabled();
 
+// Returns true if Brotli should be added to the accept-encoding header.
+bool IsBrotliAcceptEncodingEnabled();
+
 // Returns true if the Data Reduction Proxy config client should be used.
 bool IsConfigClientEnabled();
 
@@ -136,10 +136,6 @@ GURL GetConfigServiceURL();
 // command line.
 bool ShouldForceEnableDataReductionProxy();
 
-// Returns true if the secure Data Reduction Proxy should be used until the
-// secure proxy check fails.
-bool ShouldUseSecureProxyByDefault();
-
 // Retrieves the int stored in |param_name| from the field trial group
 // |group|. If the value is not present, cannot be parsed, or is less than
 // |min_value|, returns |default_value|.
@@ -152,10 +148,16 @@ int GetFieldTrialParameterAsInteger(const std::string& group,
 // has been overridden on the command line, and if so, returns the override
 // proxy list in |override_proxies_for_http|.
 bool GetOverrideProxiesForHttpFromCommandLine(
-    std::vector<net::ProxyServer>* override_proxies_for_http);
+    std::vector<DataReductionProxyServer>* override_proxies_for_http);
 
 // Returns the name of the server side experiment field trial.
 const char* GetServerExperimentsFieldTrialName();
+
+// Returns true if fetching of the warmup URL is enabled.
+bool FetchWarmupURLEnabled();
+
+// Returns the warmup URL.
+GURL GetWarmupURL();
 
 }  // namespace params
 
@@ -177,36 +179,27 @@ struct DataReductionProxyTypeInfo {
 // Reduction Proxy.
 class DataReductionProxyParams : public DataReductionProxyConfigValues {
  public:
-  // Flags used during construction that specify if the data reduction proxy
-  // is allowed to be used, if the fallback proxy is allowed to be used, if the
-  // promotion is allowed to be shown, and if this instance is part of a
-  // holdback experiment.
-  static const unsigned int kAllowed = (1 << 0);
-  static const unsigned int kFallbackAllowed = (1 << 1);
-  static const unsigned int kAllowAllProxyConfigurations =
-      kAllowed | kFallbackAllowed;
+  // Flags used during construction that specify if the promotion is allowed to
+  // be shown, and if this instance is part of a holdback experiment.
   static const unsigned int kPromoAllowed = (1 << 2);
   static const unsigned int kHoldback = (1 << 3);
 
-  // Constructs configuration parameters. If |kAllowed|, then the standard
-  // data reduction proxy configuration is allowed to be used. If
-  // |kfallbackAllowed| a fallback proxy can be used if the primary proxy is
-  // bypassed or disabled. Finally if |kPromoAllowed|, the client may show a
-  // promotion for the data reduction proxy.
+  // Constructs configuration parameters. If |kPromoAllowed|, the client may
+  // show a promotion for the data reduction proxy.
   //
   // A standard configuration has a primary proxy, and a fallback proxy for
   // HTTP traffic.
   explicit DataReductionProxyParams(int flags);
 
+  // Updates |proxies_for_http_|.
+  void SetProxiesForHttpForTesting(
+      const std::vector<DataReductionProxyServer>& proxies_for_http);
+
   ~DataReductionProxyParams() override;
 
-  const std::vector<net::ProxyServer>& proxies_for_http() const override;
+  const std::vector<DataReductionProxyServer> proxies_for_http() const override;
 
   const GURL& secure_proxy_check_url() const override;
-
-  bool allowed() const override;
-
-  bool fallback_allowed() const override;
 
   bool promo_allowed() const override;
 
@@ -220,7 +213,7 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
   // Initialize the values of the proxies, and secure proxy check URL, from
   // command line flags and preprocessor constants, and check that there are
   // corresponding definitions for the allowed configurations.
-  bool Init(bool allowed, bool fallback_allowed);
+  bool Init();
 
   // Initialize the values of the proxies, and secure proxy check URL from
   // command line flags and preprocessor constants.
@@ -231,26 +224,20 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
   virtual std::string GetDefaultOrigin() const;
   virtual std::string GetDefaultFallbackOrigin() const;
   virtual std::string GetDefaultSecureProxyCheckURL() const;
-  virtual std::string GetDefaultWarmupURL() const;
-
-  std::vector<net::ProxyServer> proxies_for_http_;
 
  private:
+  std::vector<DataReductionProxyServer> proxies_for_http_;
+
   net::ProxyServer origin_;
   net::ProxyServer fallback_origin_;
 
   GURL secure_proxy_check_url_;
-  GURL warmup_url_;
 
-  bool allowed_;
-  bool fallback_allowed_;
   bool promo_allowed_;
   bool holdback_;
 
-  bool configured_on_command_line_;
-
   bool use_override_proxies_for_http_;
-  std::vector<net::ProxyServer> override_proxies_for_http_;
+  std::vector<DataReductionProxyServer> override_data_reduction_proxy_servers_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyParams);
 };

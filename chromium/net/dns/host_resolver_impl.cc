@@ -30,7 +30,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -44,6 +43,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/trace_constants.h"
 #include "net/base/url_util.h"
 #include "net/dns/address_sorter.h"
 #include "net/dns/dns_client.h"
@@ -181,6 +181,16 @@ enum DnsResolveStatus {
 //
 // For more details: https://www.icann.org/news/announcement-2-2014-08-01-en
 const uint8_t kIcanNameCollisionIp[] = {127, 0, 53, 53};
+
+bool ContainsIcannNameCollisionIp(const AddressList& addr_list) {
+  for (const auto& endpoint : addr_list) {
+    const IPAddress& addr = endpoint.address();
+    if (addr.IsIPv4() && IPAddressStartsWith(addr, kIcanNameCollisionIp)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 void UmaAsyncDnsResolveStatus(DnsResolveStatus result) {
   UMA_HISTOGRAM_ENUMERATION("AsyncDNS.ResolveStatus",
@@ -738,16 +748,6 @@ class HostResolverImpl::ProcTask
                                                &results,
                                                &os_error);
 
-    // Fail the resolution if the result contains 127.0.53.53. See the comment
-    // block of kIcanNameCollisionIp for details on why.
-    for (const auto& it : results) {
-      const IPAddress& cur = it.address();
-      if (cur.IsIPv4() && IPAddressStartsWith(cur, kIcanNameCollisionIp)) {
-        error = ERR_ICANN_NAME_COLLISION;
-        break;
-      }
-    }
-
     network_task_runner_->PostTask(
         FROM_HERE, base::Bind(&ProcTask::OnLookupComplete, this, results,
                               start_time, attempt_number, error, os_error));
@@ -770,7 +770,7 @@ class HostResolverImpl::ProcTask
                         const uint32_t attempt_number,
                         int error,
                         const int os_error) {
-    TRACE_EVENT0("net", "ProcTask::OnLookupComplete");
+    TRACE_EVENT0(kNetTracingCategory, "ProcTask::OnLookupComplete");
     DCHECK(network_task_runner_->BelongsToCurrentThread());
     // If results are empty, we should return an error.
     bool empty_list_on_ok = (error == OK && results.empty());
@@ -1457,9 +1457,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
                                   requests_.front()->info(),
                                   &addr_list)) {
       // This will destroy the Job.
-      CompleteRequests(
-          HostCache::Entry(OK, MakeAddressListForRequest(addr_list)),
-          base::TimeDelta());
+      CompleteRequests(MakeCacheEntry(OK, addr_list), base::TimeDelta());
       return true;
     }
     return false;
@@ -1497,6 +1495,25 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       --num_occupied_job_slots_;
     }
     DCHECK_EQ(1u, num_occupied_job_slots_);
+  }
+
+  // MakeCacheEntry() and MakeCacheEntryWithTTL() are helpers to build a
+  // HostCache::Entry(). The address list is omited from the cache entry
+  // for errors.
+  HostCache::Entry MakeCacheEntry(int net_error,
+                                  const AddressList& addr_list) const {
+    return HostCache::Entry(
+        net_error,
+        net_error == OK ? MakeAddressListForRequest(addr_list) : AddressList());
+  }
+
+  HostCache::Entry MakeCacheEntryWithTTL(int net_error,
+                                         const AddressList& addr_list,
+                                         base::TimeDelta ttl) const {
+    return HostCache::Entry(
+        net_error,
+        net_error == OK ? MakeAddressListForRequest(addr_list) : AddressList(),
+        ttl);
   }
 
   AddressList MakeAddressListForRequest(const AddressList& list) const {
@@ -1618,15 +1635,16 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       }
     }
 
+    if (ContainsIcannNameCollisionIp(addr_list))
+      net_error = ERR_ICANN_NAME_COLLISION;
+
     base::TimeDelta ttl =
         base::TimeDelta::FromSeconds(kNegativeCacheEntryTTLSeconds);
     if (net_error == OK)
       ttl = base::TimeDelta::FromSeconds(kCacheEntryTTLSeconds);
 
     // Don't store the |ttl| in cache since it's not obtained from the server.
-    CompleteRequests(
-        HostCache::Entry(net_error, MakeAddressListForRequest(addr_list)),
-        ttl);
+    CompleteRequests(MakeCacheEntry(net_error, addr_list), ttl);
   }
 
   void StartDnsTask() {
@@ -1708,9 +1726,12 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     base::TimeDelta bounded_ttl =
         std::max(ttl, base::TimeDelta::FromSeconds(kMinimumTTLSeconds));
 
-    CompleteRequests(
-        HostCache::Entry(net_error, MakeAddressListForRequest(addr_list), ttl),
-        bounded_ttl);
+    if (ContainsIcannNameCollisionIp(addr_list)) {
+      CompleteRequestsWithError(ERR_ICANN_NAME_COLLISION);
+    } else {
+      CompleteRequests(MakeCacheEntryWithTTL(net_error, addr_list, ttl),
+                       bounded_ttl);
+    }
   }
 
   void OnFirstDnsTransactionComplete() override {
@@ -1768,7 +1789,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
 
     DCHECK(!requests_.empty());
 
-    if (entry.error() == OK) {
+    if (entry.error() == OK || entry.error() == ERR_ICANN_NAME_COLLISION) {
       // Record this histogram here, when we know the system has a valid DNS
       // configuration.
       UMA_HISTOGRAM_BOOLEAN("AsyncDNS.HaveDnsConfig",
@@ -1895,9 +1916,9 @@ HostResolverImpl::HostResolverImpl(const Options& options, NetLog* net_log)
 HostResolverImpl::~HostResolverImpl() {
   // Prevent the dispatcher from starting new jobs.
   dispatcher_->SetLimitsToZero();
-  // It's now safe for Jobs to call KillDsnTask on destruction, because
+  // It's now safe for Jobs to call KillDnsTask on destruction, because
   // OnJobComplete will not start any new jobs.
-  base::STLDeleteValues(&jobs_);
+  jobs_.clear();
 
   NetworkChangeNotifier::RemoveIPAddressObserver(this);
   NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
@@ -1948,7 +1969,7 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   // Next we need to attach our request to a "job". This job is responsible for
   // calling "getaddrinfo(hostname)" on a worker thread.
 
-  JobMap::iterator jobit = jobs_.find(key);
+  auto jobit = jobs_.find(key);
   Job* job;
   if (jobit == jobs_.end()) {
     job = new Job(weak_ptr_factory_.GetWeakPtr(), key, priority,
@@ -1966,14 +1987,14 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
         return rv;
       }
     }
-    jobs_.insert(jobit, std::make_pair(key, job));
+    jobs_[key] = base::WrapUnique(job);
   } else {
-    job = jobit->second;
+    job = jobit->second.get();
   }
 
   // Can't complete synchronously. Create and attach request.
-  std::unique_ptr<RequestImpl> req(new RequestImpl(
-      source_net_log, info, priority, callback, addresses, job));
+  auto req = base::MakeUnique<RequestImpl>(source_net_log, info, priority,
+                                           callback, addresses, job);
   job->AddRequest(req.get());
   *out_req = std::move(req);
 
@@ -2302,9 +2323,11 @@ void HostResolverImpl::CacheResult(const Key& key,
 
 void HostResolverImpl::RemoveJob(Job* job) {
   DCHECK(job);
-  JobMap::iterator it = jobs_.find(job->key());
-  if (it != jobs_.end() && it->second == job)
+  auto it = jobs_.find(job->key());
+  if (it != jobs_.end() && it->second.get() == job) {
+    it->second.release();
     jobs_.erase(it);
+  }
 }
 
 HostResolverImpl::Key HostResolverImpl::GetEffectiveKeyForRequest(
@@ -2335,12 +2358,14 @@ HostResolverImpl::Key HostResolverImpl::GetEffectiveKeyForRequest(
 }
 
 bool HostResolverImpl::IsIPv6Reachable(const NetLogWithSource& net_log) {
-  base::TimeTicks now = base::TimeTicks::Now();
+  // Cache the result for kIPv6ProbePeriodMs (measured from after
+  // IsGloballyReachable() completes).
   bool cached = true;
-  if ((now - last_ipv6_probe_time_).InMilliseconds() > kIPv6ProbePeriodMs) {
+  if ((base::TimeTicks::Now() - last_ipv6_probe_time_).InMilliseconds() >
+      kIPv6ProbePeriodMs) {
     last_ipv6_probe_result_ =
         IsGloballyReachable(IPAddress(kIPv6ProbeAddress), net_log);
-    last_ipv6_probe_time_ = now;
+    last_ipv6_probe_time_ = base::TimeTicks::Now();
     cached = false;
   }
   net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_IPV6_REACHABILITY_CHECK,
@@ -2358,10 +2383,10 @@ void HostResolverImpl::AbortAllInProgressJobs() {
   // In Abort, a Request callback could spawn new Jobs with matching keys, so
   // first collect and remove all running jobs from |jobs_|.
   std::vector<std::unique_ptr<Job>> jobs_to_abort;
-  for (JobMap::iterator it = jobs_.begin(); it != jobs_.end(); ) {
-    Job* job = it->second;
+  for (auto it = jobs_.begin(); it != jobs_.end();) {
+    Job* job = it->second.get();
     if (job->is_running()) {
-      jobs_to_abort.push_back(base::WrapUnique(job));
+      jobs_to_abort.push_back(std::move(it->second));
       jobs_.erase(it++);
     } else {
       DCHECK(job->is_queued());
@@ -2398,7 +2423,7 @@ void HostResolverImpl::AbortDnsTasks() {
   dispatcher_->SetLimits(
       PrioritizedDispatcher::Limits(limits.reserved_slots.size(), 0));
 
-  for (JobMap::iterator it = jobs_.begin(); it != jobs_.end(); ++it)
+  for (auto it = jobs_.begin(); it != jobs_.end(); ++it)
     it->second->AbortDnsTask();
   dispatcher_->SetLimits(limits);
 }
@@ -2413,8 +2438,8 @@ void HostResolverImpl::TryServingAllJobsFromHosts() {
   // Life check to bail once |this| is deleted.
   base::WeakPtr<HostResolverImpl> self = weak_ptr_factory_.GetWeakPtr();
 
-  for (JobMap::iterator it = jobs_.begin(); self.get() && it != jobs_.end();) {
-    Job* job = it->second;
+  for (auto it = jobs_.begin(); self.get() && it != jobs_.end();) {
+    Job* job = it->second.get();
     ++it;
     // This could remove |job| from |jobs_|, but iterator will remain valid.
     job->ServeFromHosts();

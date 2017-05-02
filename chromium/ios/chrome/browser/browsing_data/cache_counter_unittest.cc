@@ -18,7 +18,7 @@
 #include "components/browsing_data/core/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
-#include "ios/web/public/test/test_browser_state.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "ios/web/public/web_thread.h"
 #include "net/disk_cache/disk_cache.h"
@@ -277,18 +277,6 @@ TEST_F(CacheCounterTest, PrefChanged) {
 
   WaitForIOThread();
   EXPECT_EQ(0u, GetResult());
-}
-
-// Tests that the counter does not count if the deletion preference is false.
-TEST_F(CacheCounterTest, PrefIsFalse) {
-  SetCacheDeletionPref(false);
-
-  CacheCounter counter(browser_state());
-  counter.Init(prefs(), base::Bind(&CacheCounterTest::CountingCallback,
-                                   base::Unretained(this)));
-  counter.Restart();
-
-  EXPECT_FALSE(counter.pending());
 }
 
 // Tests that the counting is restarted when the time period changes. Currently,

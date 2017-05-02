@@ -28,6 +28,9 @@
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/Path.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/testing/FontTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
+#include "platform/text/TextRun.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -115,8 +118,8 @@ TEST(GraphicsContextTest, UnboundedDrawsAreClipped) {
 
   // Make skia unable to compute fast bounds for our paths.
   DashArray dashArray;
-  dashArray.append(1);
-  dashArray.append(0);
+  dashArray.push_back(1);
+  dashArray.push_back(0);
   context.setLineDash(dashArray, 0);
 
   // Make the device opaque in 10,10 40x40.

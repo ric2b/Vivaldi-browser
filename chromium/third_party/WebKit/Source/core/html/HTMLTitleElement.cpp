@@ -22,7 +22,7 @@
 
 #include "core/html/HTMLTitleElement.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/dom/ChildListMutationScope.h"
 #include "core/dom/Document.h"
@@ -83,8 +83,10 @@ void HTMLTitleElement::setText(const String& value) {
     removeChildren(OmitSubtreeModifiedEvent);
   }
 
-  if (!value.isEmpty())
-    appendChild(document().createTextNode(value.impl()), IGNORE_EXCEPTION);
+  if (!value.isEmpty()) {
+    appendChild(document().createTextNode(value.impl()),
+                IGNORE_EXCEPTION_FOR_TESTING);
+  }
 }
 
 }  // namespace blink

@@ -4,10 +4,11 @@
 
 package org.chromium.net;
 
+import android.os.Build;
 import android.os.ConditionVariable;
 import android.os.StrictMode;
+import android.support.test.filters.SmallTest;
 import android.test.MoreAsserts;
-import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Log;
 
 import org.chromium.base.test.util.Feature;
@@ -40,6 +41,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
     private static final String TEST_URL = "http://127.0.0.1:8000";
 
     private CronetTestFramework mTestFramework;
+    private MockUrlRequestJobFactory mMockUrlRequestJobFactory;
 
     @Override
     protected void setUp() throws Exception {
@@ -47,11 +49,12 @@ public class CronetUrlRequestTest extends CronetTestBase {
         mTestFramework = startCronetTestFramework();
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
         // Add url interceptors after native application context is initialized.
-        MockUrlRequestJobFactory.setUp();
+        mMockUrlRequestJobFactory = new MockUrlRequestJobFactory(mTestFramework.mCronetEngine);
     }
 
     @Override
     protected void tearDown() throws Exception {
+        mMockUrlRequestJobFactory.shutdown();
         NativeTestServer.shutdownNativeTestServer();
         mTestFramework.mCronetEngine.shutdown();
         super.tearDown();
@@ -146,7 +149,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
         }
         UrlResponseInfoImpl unknown = new UrlResponseInfoImpl(
                 Arrays.asList(urls), statusCode, message, headersList, false, "unknown", ":0");
-        unknown.setReceivedBytesCount(receivedBytes);
+        unknown.setReceivedByteCount(receivedBytes);
         return unknown;
     }
 
@@ -312,8 +315,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
             }
 
             @Override
-            public void onFailed(
-                    UrlRequest request, UrlResponseInfo info, UrlRequestException error) {
+            public void onFailed(UrlRequest request, UrlResponseInfo info, CronetException error) {
                 failedExpectation.set(true);
                 fail();
             }
@@ -619,7 +621,8 @@ public class CronetUrlRequestTest extends CronetTestBase {
                         FailurePhase.START, arbitraryNetError));
         assertNull(callback.mResponseInfo);
         assertNotNull(callback.mError);
-        assertEquals(arbitraryNetError, callback.mError.getCronetInternalErrorCode());
+        assertEquals(arbitraryNetError,
+                ((NetworkException) callback.mError).getCronetInternalErrorCode());
         assertEquals(0, callback.mRedirectCount);
         assertTrue(callback.mOnErrorCalled);
         assertEquals(ResponseStep.ON_FAILED, callback.mResponseStep);
@@ -634,9 +637,10 @@ public class CronetUrlRequestTest extends CronetTestBase {
                 startAndWaitForComplete(MockUrlRequestJobFactory.getMockUrlWithFailure(
                         FailurePhase.READ_SYNC, arbitraryNetError));
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(0, callback.mResponseInfo.getReceivedBytesCount());
+        assertEquals(15, callback.mResponseInfo.getReceivedByteCount());
         assertNotNull(callback.mError);
-        assertEquals(arbitraryNetError, callback.mError.getCronetInternalErrorCode());
+        assertEquals(arbitraryNetError,
+                ((NetworkException) callback.mError).getCronetInternalErrorCode());
         assertEquals(0, callback.mRedirectCount);
         assertTrue(callback.mOnErrorCalled);
         assertEquals(ResponseStep.ON_FAILED, callback.mResponseStep);
@@ -651,9 +655,10 @@ public class CronetUrlRequestTest extends CronetTestBase {
                 startAndWaitForComplete(MockUrlRequestJobFactory.getMockUrlWithFailure(
                         FailurePhase.READ_ASYNC, arbitraryNetError));
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(0, callback.mResponseInfo.getReceivedBytesCount());
+        assertEquals(15, callback.mResponseInfo.getReceivedByteCount());
         assertNotNull(callback.mError);
-        assertEquals(arbitraryNetError, callback.mError.getCronetInternalErrorCode());
+        assertEquals(arbitraryNetError,
+                ((NetworkException) callback.mError).getCronetInternalErrorCode());
         assertEquals(0, callback.mRedirectCount);
         assertTrue(callback.mOnErrorCalled);
         assertEquals(ResponseStep.ON_FAILED, callback.mResponseStep);
@@ -688,7 +693,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
         assertNull(callback.mResponseInfo);
         assertNotNull(callback.mError);
         assertTrue(callback.mOnErrorCalled);
-        assertEquals(-201, callback.mError.getCronetInternalErrorCode());
+        assertEquals(-201, ((NetworkException) callback.mError).getCronetInternalErrorCode());
         assertContains("Exception in CronetUrlRequest: net::ERR_CERT_DATE_INVALID",
                 callback.mError.getMessage());
         assertEquals(ResponseStep.ON_FAILED, callback.mResponseStep);
@@ -1675,10 +1680,16 @@ public class CronetUrlRequestTest extends CronetTestBase {
         assertEquals(expectResponseInfo, callback.mResponseInfo != null);
         assertEquals(expectError, callback.mError != null);
         assertEquals(expectError, callback.mOnErrorCalled);
-        assertEquals(failureType == FailureType.CANCEL_SYNC
-                        || failureType == FailureType.CANCEL_ASYNC
-                        || failureType == FailureType.CANCEL_ASYNC_WITHOUT_PAUSE,
-                callback.mOnCanceledCalled);
+        // When failureType is FailureType.CANCEL_ASYNC_WITHOUT_PAUSE and failureStep is
+        // ResponseStep.ON_READ_COMPLETED, there might be an onSucceeded() task already posted. If
+        // that's the case, onCanceled() will not be invoked. See crbug.com/657415.
+        if (!(failureType == FailureType.CANCEL_ASYNC_WITHOUT_PAUSE
+                    && failureStep == ResponseStep.ON_READ_COMPLETED)) {
+            assertEquals(failureType == FailureType.CANCEL_SYNC
+                            || failureType == FailureType.CANCEL_ASYNC
+                            || failureType == FailureType.CANCEL_ASYNC_WITHOUT_PAUSE,
+                    callback.mOnCanceledCalled);
+        }
     }
 
     @SmallTest
@@ -1930,23 +1941,23 @@ public class CronetUrlRequestTest extends CronetTestBase {
     @OnlyRunNativeCronet // Java impl doesn't support MockUrlRequestJobFactory
     public void testErrorCodes() throws Exception {
         checkSpecificErrorCode(
-                -105, UrlRequestException.ERROR_HOSTNAME_NOT_RESOLVED, "NAME_NOT_RESOLVED", false);
-        checkSpecificErrorCode(-106, UrlRequestException.ERROR_INTERNET_DISCONNECTED,
-                "INTERNET_DISCONNECTED", false);
+                -105, NetworkException.ERROR_HOSTNAME_NOT_RESOLVED, "NAME_NOT_RESOLVED", false);
         checkSpecificErrorCode(
-                -21, UrlRequestException.ERROR_NETWORK_CHANGED, "NETWORK_CHANGED", true);
+                -106, NetworkException.ERROR_INTERNET_DISCONNECTED, "INTERNET_DISCONNECTED", false);
         checkSpecificErrorCode(
-                -100, UrlRequestException.ERROR_CONNECTION_CLOSED, "CONNECTION_CLOSED", true);
+                -21, NetworkException.ERROR_NETWORK_CHANGED, "NETWORK_CHANGED", true);
         checkSpecificErrorCode(
-                -102, UrlRequestException.ERROR_CONNECTION_REFUSED, "CONNECTION_REFUSED", false);
+                -100, NetworkException.ERROR_CONNECTION_CLOSED, "CONNECTION_CLOSED", true);
         checkSpecificErrorCode(
-                -101, UrlRequestException.ERROR_CONNECTION_RESET, "CONNECTION_RESET", true);
+                -102, NetworkException.ERROR_CONNECTION_REFUSED, "CONNECTION_REFUSED", false);
         checkSpecificErrorCode(
-                -118, UrlRequestException.ERROR_CONNECTION_TIMED_OUT, "CONNECTION_TIMED_OUT", true);
-        checkSpecificErrorCode(-7, UrlRequestException.ERROR_TIMED_OUT, "TIMED_OUT", true);
+                -101, NetworkException.ERROR_CONNECTION_RESET, "CONNECTION_RESET", true);
         checkSpecificErrorCode(
-                -109, UrlRequestException.ERROR_ADDRESS_UNREACHABLE, "ADDRESS_UNREACHABLE", false);
-        checkSpecificErrorCode(-2, UrlRequestException.ERROR_OTHER, "FAILED", false);
+                -118, NetworkException.ERROR_CONNECTION_TIMED_OUT, "CONNECTION_TIMED_OUT", true);
+        checkSpecificErrorCode(-7, NetworkException.ERROR_TIMED_OUT, "TIMED_OUT", true);
+        checkSpecificErrorCode(
+                -109, NetworkException.ERROR_ADDRESS_UNREACHABLE, "ADDRESS_UNREACHABLE", false);
+        checkSpecificErrorCode(-2, NetworkException.ERROR_OTHER, "FAILED", false);
     }
 
     /*
@@ -1978,12 +1989,76 @@ public class CronetUrlRequestTest extends CronetTestBase {
                         FailurePhase.START, NetError.ERR_QUIC_PROTOCOL_ERROR));
         assertNull(callback.mResponseInfo);
         assertNotNull(callback.mError);
-        assertEquals(
-                UrlRequestException.ERROR_QUIC_PROTOCOL_FAILED, callback.mError.getErrorCode());
+        assertEquals(NetworkException.ERROR_QUIC_PROTOCOL_FAILED,
+                ((NetworkException) callback.mError).getErrorCode());
         assertTrue(callback.mError instanceof QuicException);
         QuicException quicException = (QuicException) callback.mError;
         // 1 is QUIC_INTERNAL_ERROR
         assertEquals(1, quicException.getQuicDetailedErrorCode());
+    }
+
+    /**
+     * Tests that legacy onFailed callback is invoked with UrlRequestException if there
+     * is no onFailed callback implementation that takes CronetException.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunNativeCronet
+    public void testLegacyOnFailedCallback() throws Exception {
+        final int netError = -123;
+        final AtomicBoolean failedExpectation = new AtomicBoolean();
+        final ConditionVariable done = new ConditionVariable();
+        UrlRequest.Callback callback = new UrlRequest.Callback() {
+            @Override
+            public void onRedirectReceived(
+                    UrlRequest request, UrlResponseInfo info, String newLocationUrl) {
+                failedExpectation.set(true);
+                fail();
+            }
+
+            @Override
+            public void onResponseStarted(UrlRequest request, UrlResponseInfo info) {
+                failedExpectation.set(true);
+                fail();
+            }
+
+            @Override
+            public void onReadCompleted(
+                    UrlRequest request, UrlResponseInfo info, ByteBuffer byteBuffer) {
+                failedExpectation.set(true);
+                fail();
+            }
+
+            @Override
+            public void onSucceeded(UrlRequest request, UrlResponseInfo info) {
+                failedExpectation.set(true);
+                fail();
+            }
+
+            @Override
+            public void onFailed(UrlRequest request, UrlResponseInfo info, CronetException error) {
+                assertTrue(error instanceof NetworkException);
+                assertEquals(netError, ((NetworkException) error).getCronetInternalErrorCode());
+                failedExpectation.set(
+                        ((NetworkException) error).getCronetInternalErrorCode() != netError);
+                done.open();
+            }
+
+            @Override
+            public void onCanceled(UrlRequest request, UrlResponseInfo info) {
+                failedExpectation.set(true);
+                fail();
+            }
+        };
+
+        UrlRequest.Builder builder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                MockUrlRequestJobFactory.getMockUrlWithFailure(FailurePhase.START, netError),
+                callback, Executors.newSingleThreadExecutor());
+        final UrlRequest urlRequest = builder.build();
+        urlRequest.start();
+        done.block();
+        // Check that onFailed is called.
+        assertFalse(failedExpectation.get());
     }
 
     private void checkSpecificErrorCode(int netError, int errorCode, String name,
@@ -1992,8 +2067,8 @@ public class CronetUrlRequestTest extends CronetTestBase {
                 MockUrlRequestJobFactory.getMockUrlWithFailure(FailurePhase.START, netError));
         assertNull(callback.mResponseInfo);
         assertNotNull(callback.mError);
-        assertEquals(netError, callback.mError.getCronetInternalErrorCode());
-        assertEquals(errorCode, callback.mError.getErrorCode());
+        assertEquals(netError, ((NetworkException) callback.mError).getCronetInternalErrorCode());
+        assertEquals(errorCode, ((NetworkException) callback.mError).getErrorCode());
         assertContains(
                 "Exception in CronetUrlRequest: net::ERR_" + name, callback.mError.getMessage());
         assertEquals(0, callback.mRedirectCount);
@@ -2019,5 +2094,25 @@ public class CronetUrlRequestTest extends CronetTestBase {
                     "Unexpected response state: " + ResponseStep.ON_FAILED, callback.mError);
         }
         assertEquals(ResponseStep.ON_CANCELED, callback.mResponseStep);
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunNativeCronet
+    public void testCleartextTrafficBlocked() throws Exception {
+        // This feature only works starting from N.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            final int cleartextNotPermitted = -29;
+            // This hostname needs to match the one in network_security_config.xml and the one used
+            // by QuicTestServer.
+            // https requests to it are tested in QuicTest, so this checks that we're only blocking
+            // cleartext.
+            final String url = "http://example.com/simple.txt";
+            TestUrlRequestCallback callback = startAndWaitForComplete(url);
+            assertNull(callback.mResponseInfo);
+            assertNotNull(callback.mError);
+            assertEquals(cleartextNotPermitted,
+                    ((NetworkException) callback.mError).getCronetInternalErrorCode());
+        }
     }
 }

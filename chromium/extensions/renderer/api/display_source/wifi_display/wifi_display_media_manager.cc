@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/task_runner_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/renderer/media_stream_utils.h"
 #include "content/public/renderer/media_stream_video_sink.h"
 #include "content/public/renderer/render_thread.h"
@@ -474,7 +475,7 @@ void WiFiDisplayMediaManager::OnMediaPipelineInitialized(bool success) {
 // Note: invoked on IO thread
 void WiFiDisplayMediaManager::RegisterMediaService(
     const scoped_refptr<base::SingleThreadTaskRunner>& main_runner,
-    WiFiDisplayMediaServiceRequest request,
+    mojom::WiFiDisplayMediaServiceRequest request,
     const base::Closure& on_completed) {
   auto connect_service_callback =
       base::Bind(&WiFiDisplayMediaManager::ConnectToRemoteService,
@@ -486,7 +487,7 @@ void WiFiDisplayMediaManager::RegisterMediaService(
 }
 
 void WiFiDisplayMediaManager::ConnectToRemoteService(
-    WiFiDisplayMediaServiceRequest request) {
+    mojom::WiFiDisplayMediaServiceRequest request) {
   DCHECK(content::RenderThread::Get());
   interface_provider_->GetInterface(std::move(request));
 }

@@ -23,12 +23,11 @@ struct GpuProcessHostedCALayerTreeParamsMac;
 }
 
 namespace ui {
-class CompositorVSyncManager;
+class ContextProviderCommandBuffer;
 class LatencyInfo;
 }
 
 namespace content {
-class ContextProviderCommandBuffer;
 class ReflectorTexture;
 
 // Adapts a WebGraphicsContext3DCommandBufferImpl into a
@@ -38,11 +37,11 @@ class GpuBrowserCompositorOutputSurface
     : public BrowserCompositorOutputSurface {
  public:
   GpuBrowserCompositorOutputSurface(
-      scoped_refptr<ContextProviderCommandBuffer> context,
-      scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      cc::SyntheticBeginFrameSource* begin_frame_source,
+      scoped_refptr<ui::ContextProviderCommandBuffer> context,
+      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
-          overlay_candidate_validator);
+          overlay_candidate_validator,
+      bool support_stencil);
 
   ~GpuBrowserCompositorOutputSurface() override;
 
@@ -70,7 +69,8 @@ class GpuBrowserCompositorOutputSurface
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override;
+               bool has_alpha,
+               bool use_stencil) override;
   void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
   bool IsDisplayedAsOverlayPlane() const override;

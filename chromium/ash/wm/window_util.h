@@ -13,19 +13,11 @@ namespace aura {
 class Window;
 }
 
-namespace gfx {
-class Point;
-class Rect;
-class Size;
-}
-
 namespace ui {
 class Event;
 }
 
 namespace ash {
-
-class WmWindow;
 
 namespace wm {
 
@@ -55,7 +47,7 @@ ASH_EXPORT bool MoveWindowToEventRoot(aura::Window* window,
                                       const ui::Event& event);
 
 // Snap the window's layer to physical pixel boundary.
-void SnapWindowToPixelBoundary(aura::Window* window);
+ASH_EXPORT void SnapWindowToPixelBoundary(aura::Window* window);
 
 // Mark the container window so that InstallSnapLayoutManagerToContainers
 // installs the SnapToPixelLayoutManager.

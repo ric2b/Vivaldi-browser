@@ -20,15 +20,12 @@
 #include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/session_manager/core/session_manager_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-
-namespace content {
-class RenderViewHost;
-}
 
 class Profile;
 
@@ -36,6 +33,7 @@ namespace chromeos {
 
 class AccessibilityExtensionLoader;
 class AccessibilityHighlightManager;
+class SelectToSpeakEventHandler;
 
 enum AccessibilityNotificationType {
   ACCESSIBILITY_MANAGER_SHUTDOWN,
@@ -92,6 +90,7 @@ class AccessibilityManager
       public extensions::api::braille_display_private::BrailleObserver,
       public extensions::ExtensionRegistryObserver,
       public ash::SessionStateObserver,
+      public session_manager::SessionManagerObserver,
       public ash::ShellObserver,
       public input_method::InputMethodManager::Observer {
  public:
@@ -234,9 +233,6 @@ class AccessibilityManager
   // Initiates play of shutdown sound and returns it's duration.
   base::TimeDelta PlayShutdownSound();
 
-  // Injects ChromeVox scripts into given |render_view_host|.
-  void InjectChromeVox(content::RenderViewHost* render_view_host);
-
   // Register a callback to be notified when the status of an accessibility
   // option changes.
   std::unique_ptr<AccessibilityStatusSubscription> RegisterCallback(
@@ -248,6 +244,13 @@ class AccessibilityManager
 
   // Notify accessibility when locale changes occur.
   void OnLocaleChanged();
+
+  // Whether or not to enable toggling spoken feedback via holding down
+  // two fingers on the screen.
+  bool ShouldToggleSpokenFeedbackViaTouch();
+
+  // Play tick sound indicating spoken feedback will be toggled after countdown.
+  bool PlaySpokenFeedbackToggleCountdown(int tick_count);
 
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // when their mapped event has occurred. The sound key enums can be found in
@@ -290,6 +293,7 @@ class AccessibilityManager
   void PostLoadChromeVox();
   void PostUnloadChromeVox();
   void PostSwitchChromeVoxProfile();
+  void ReloadChromeVoxPanel();
 
   void UpdateLargeCursorFromPref();
   void UpdateStickyKeysFromPref();
@@ -341,6 +345,9 @@ class AccessibilityManager
                           Profile* profile,
                           bool show_message) override;
 
+  // session_manager::SessionManagerObserver
+  void OnSessionStateChanged() override;
+
   // Profile which has the current a11y context.
   Profile* profile_;
 
@@ -378,8 +385,6 @@ class AccessibilityManager
 
   ash::AccessibilityNotificationVisibility spoken_feedback_notification_;
 
-  bool should_speak_chrome_vox_announcements_on_user_screen_;
-
   bool system_sounds_enabled_;
 
   AccessibilityStatusCallbackList callback_list_;
@@ -408,6 +413,9 @@ class AccessibilityManager
   std::unique_ptr<AccessibilityExtensionLoader> chromevox_loader_;
 
   std::unique_ptr<AccessibilityExtensionLoader> select_to_speak_loader_;
+
+  std::unique_ptr<chromeos::SelectToSpeakEventHandler>
+      select_to_speak_event_handler_;
 
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_;
 

@@ -48,7 +48,6 @@ class APP_LIST_EXPORT SearchResultContainerView : public views::View,
   bool IsValidSelectionIndex(int index) const;
 
   int num_results() const { return num_results_; }
-  void set_num_results(int num_results) { num_results_ = num_results; }
 
   void set_container_score(double score) { container_score_ = score; }
   double container_score() const { return container_score_; }
@@ -62,9 +61,8 @@ class APP_LIST_EXPORT SearchResultContainerView : public views::View,
   // container.
   virtual int GetYSize() = 0;
 
-  // Schedules an Update call using |update_factory_|. Do nothing if there is a
-  // pending call.
-  void ScheduleUpdate();
+  // Batching method that actually performs the update and updates layout.
+  void Update();
 
   // Returns whether an update is currently scheduled for this container.
   bool UpdateScheduled();
@@ -84,14 +82,15 @@ class APP_LIST_EXPORT SearchResultContainerView : public views::View,
                                    bool directional_movement) = 0;
 
  private:
+  // Schedules an Update call using |update_factory_|. Do nothing if there is a
+  // pending call.
+  void ScheduleUpdate();
+
   // Updates UI with model. Returns the number of visible results.
-  virtual int Update() = 0;
+  virtual int DoUpdate() = 0;
 
   // Updates UI for a change in the selected index.
   virtual void UpdateSelectedIndex(int old_selected, int new_selected) = 0;
-
-  // Batching method that actually performs the update and updates layout.
-  void DoUpdate();
 
   Delegate* delegate_;
 

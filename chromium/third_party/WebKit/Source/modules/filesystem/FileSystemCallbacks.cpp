@@ -80,7 +80,7 @@ void FileSystemCallbacksBase::didFail(int code) {
 
 bool FileSystemCallbacksBase::shouldScheduleCallback() const {
   return !shouldBlockUntilCompletion() && m_executionContext &&
-         m_executionContext->activeDOMObjectsAreSuspended();
+         m_executionContext->isContextSuspended();
 }
 
 template <typename CB, typename CBArg>
@@ -88,12 +88,13 @@ void FileSystemCallbacksBase::invokeOrScheduleCallback(CB* callback,
                                                        CBArg arg) {
   DCHECK(callback);
   if (callback) {
-    if (shouldScheduleCallback())
+    if (shouldScheduleCallback()) {
       DOMFileSystem::scheduleCallback(
           m_executionContext.get(),
-          createSameThreadTask(&CB::invoke, wrapPersistent(callback), arg));
-    else
+          WTF::bind(&CB::invoke, wrapPersistent(callback), arg));
+    } else {
       callback->invoke(arg);
+    }
   }
   m_executionContext.clear();
 }
@@ -103,13 +104,14 @@ void FileSystemCallbacksBase::handleEventOrScheduleCallback(CB* callback,
                                                             CBArg* arg) {
   DCHECK(callback);
   if (callback) {
-    if (shouldScheduleCallback())
+    if (shouldScheduleCallback()) {
       DOMFileSystem::scheduleCallback(
           m_executionContext.get(),
-          createSameThreadTask(&CB::handleEvent, wrapPersistent(callback),
-                               wrapPersistent(arg)));
-    else
+          WTF::bind(&CB::handleEvent, wrapPersistent(callback),
+                    wrapPersistent(arg)));
+    } else {
       callback->handleEvent(arg);
+    }
   }
   m_executionContext.clear();
 }
@@ -118,12 +120,13 @@ template <typename CB>
 void FileSystemCallbacksBase::handleEventOrScheduleCallback(CB* callback) {
   DCHECK(callback);
   if (callback) {
-    if (shouldScheduleCallback())
+    if (shouldScheduleCallback()) {
       DOMFileSystem::scheduleCallback(
           m_executionContext.get(),
-          createSameThreadTask(&CB::handleEvent, wrapPersistent(callback)));
-    else
+          WTF::bind(&CB::handleEvent, wrapPersistent(callback)));
+    } else {
       callback->handleEvent();
+    }
   }
   m_executionContext.clear();
 }
@@ -161,8 +164,9 @@ std::unique_ptr<AsyncFileSystemCallbacks> EntryCallbacks::create(
     DOMFileSystemBase* fileSystem,
     const String& expectedPath,
     bool isDirectory) {
-  return wrapUnique(new EntryCallbacks(successCallback, errorCallback, context,
-                                       fileSystem, expectedPath, isDirectory));
+  return WTF::wrapUnique(new EntryCallbacks(successCallback, errorCallback,
+                                            context, fileSystem, expectedPath,
+                                            isDirectory));
 }
 
 EntryCallbacks::EntryCallbacks(EntryCallback* successCallback,
@@ -197,8 +201,8 @@ std::unique_ptr<AsyncFileSystemCallbacks> EntriesCallbacks::create(
     ExecutionContext* context,
     DirectoryReaderBase* directoryReader,
     const String& basePath) {
-  return wrapUnique(new EntriesCallbacks(successCallback, errorCallback,
-                                         context, directoryReader, basePath));
+  return WTF::wrapUnique(new EntriesCallbacks(
+      successCallback, errorCallback, context, directoryReader, basePath));
 }
 
 EntriesCallbacks::EntriesCallbacks(EntriesCallback* successCallback,
@@ -218,12 +222,13 @@ EntriesCallbacks::EntriesCallbacks(EntriesCallback* successCallback,
 void EntriesCallbacks::didReadDirectoryEntry(const String& name,
                                              bool isDirectory) {
   if (isDirectory)
-    m_entries.append(
+    m_entries.push_back(
         DirectoryEntry::create(m_directoryReader->filesystem(),
                                DOMFilePath::append(m_basePath, name)));
   else
-    m_entries.append(FileEntry::create(m_directoryReader->filesystem(),
-                                       DOMFilePath::append(m_basePath, name)));
+    m_entries.push_back(
+        FileEntry::create(m_directoryReader->filesystem(),
+                          DOMFilePath::append(m_basePath, name)));
 }
 
 void EntriesCallbacks::didReadDirectoryEntries(bool hasMore) {
@@ -242,7 +247,7 @@ std::unique_ptr<AsyncFileSystemCallbacks> FileSystemCallbacks::create(
     ErrorCallbackBase* errorCallback,
     ExecutionContext* context,
     FileSystemType type) {
-  return wrapUnique(
+  return WTF::wrapUnique(
       new FileSystemCallbacks(successCallback, errorCallback, context, type));
 }
 
@@ -268,7 +273,7 @@ std::unique_ptr<AsyncFileSystemCallbacks> ResolveURICallbacks::create(
     EntryCallback* successCallback,
     ErrorCallbackBase* errorCallback,
     ExecutionContext* context) {
-  return wrapUnique(
+  return WTF::wrapUnique(
       new ResolveURICallbacks(successCallback, errorCallback, context));
 }
 
@@ -311,8 +316,8 @@ std::unique_ptr<AsyncFileSystemCallbacks> MetadataCallbacks::create(
     ErrorCallbackBase* errorCallback,
     ExecutionContext* context,
     DOMFileSystemBase* fileSystem) {
-  return wrapUnique(new MetadataCallbacks(successCallback, errorCallback,
-                                          context, fileSystem));
+  return WTF::wrapUnique(new MetadataCallbacks(successCallback, errorCallback,
+                                               context, fileSystem));
 }
 
 MetadataCallbacks::MetadataCallbacks(MetadataCallback* successCallback,
@@ -335,8 +340,8 @@ std::unique_ptr<AsyncFileSystemCallbacks> FileWriterBaseCallbacks::create(
     FileWriterBaseCallback* successCallback,
     ErrorCallbackBase* errorCallback,
     ExecutionContext* context) {
-  return wrapUnique(new FileWriterBaseCallbacks(fileWriter, successCallback,
-                                                errorCallback, context));
+  return WTF::wrapUnique(new FileWriterBaseCallbacks(
+      fileWriter, successCallback, errorCallback, context));
 }
 
 FileWriterBaseCallbacks::FileWriterBaseCallbacks(
@@ -366,7 +371,7 @@ std::unique_ptr<AsyncFileSystemCallbacks> SnapshotFileCallback::create(
     BlobCallback* successCallback,
     ErrorCallbackBase* errorCallback,
     ExecutionContext* context) {
-  return wrapUnique(new SnapshotFileCallback(
+  return WTF::wrapUnique(new SnapshotFileCallback(
       filesystem, name, url, successCallback, errorCallback, context));
 }
 
@@ -407,7 +412,7 @@ std::unique_ptr<AsyncFileSystemCallbacks> VoidCallbacks::create(
     ErrorCallbackBase* errorCallback,
     ExecutionContext* context,
     DOMFileSystemBase* fileSystem) {
-  return wrapUnique(
+  return WTF::wrapUnique(
       new VoidCallbacks(successCallback, errorCallback, context, fileSystem));
 }
 

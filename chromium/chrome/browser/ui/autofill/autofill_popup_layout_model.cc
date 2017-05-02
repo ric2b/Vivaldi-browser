@@ -10,13 +10,20 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/popup_constants.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/grit/components_scaled_resources.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 
 namespace autofill {
 
@@ -31,6 +38,8 @@ const size_t kSeparatorHeight = 1;
 #if !defined(OS_ANDROID)
 // Size difference between the normal font and the smaller font, in pixels.
 const int kSmallerFontSizeDelta = -1;
+
+const int kHttpWarningIconWidth = 16;
 #endif
 
 const struct {
@@ -43,8 +52,11 @@ const struct {
     {"genericCC", IDR_AUTOFILL_CC_GENERIC},
     {"jcbCC", IDR_AUTOFILL_CC_GENERIC},
     {"masterCardCC", IDR_AUTOFILL_CC_MASTERCARD},
+    {"mirCC", IDR_AUTOFILL_CC_MIR},
     {"visaCC", IDR_AUTOFILL_CC_VISA},
 #if defined(OS_ANDROID)
+    {"httpWarning", IDR_AUTOFILL_HTTP_WARNING},
+    {"httpsInvalid", IDR_AUTOFILL_HTTPS_INVALID_WARNING},
     {"scanCreditCardIcon", IDR_AUTOFILL_CC_SCAN_NEW},
     {"settings", IDR_AUTOFILL_SETTINGS},
 #endif
@@ -60,18 +72,12 @@ int GetRowHeightFromId(int identifier) {
 }  // namespace
 
 AutofillPopupLayoutModel::AutofillPopupLayoutModel(
-    AutofillPopupViewDelegate* delegate)
-    : delegate_(delegate) {
+    AutofillPopupViewDelegate* delegate, bool is_credit_card_popup)
+    : delegate_(delegate), is_credit_card_popup_(is_credit_card_popup) {
 #if !defined(OS_ANDROID)
   smaller_font_list_ =
       normal_font_list_.DeriveWithSizeDelta(kSmallerFontSizeDelta);
   bold_font_list_ = normal_font_list_.DeriveWithWeight(gfx::Font::Weight::BOLD);
-#if defined(OS_MACOSX)
-  // There is no italic version of the system font.
-  warning_font_list_ = normal_font_list_;
-#else
-  warning_font_list_ = normal_font_list_.DeriveWithStyle(gfx::Font::ITALIC);
-#endif
 #endif
 }
 
@@ -108,19 +114,19 @@ int AutofillPopupLayoutModel::GetDesiredPopupWidth() const {
 int AutofillPopupLayoutModel::RowWidthWithoutText(int row,
                                                   bool with_label) const {
   std::vector<autofill::Suggestion> suggestions = delegate_->GetSuggestions();
+  bool is_warning_message = (suggestions[row].frontend_id ==
+                             POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE);
 
   int row_size = kEndPadding;
 
   if (with_label)
-    row_size += kNamePadding;
+    row_size += is_warning_message ? kHttpWarningNamePadding : kNamePadding;
 
   // Add the Autofill icon size, if required.
   const base::string16& icon = suggestions[row].icon;
   if (!icon.empty()) {
-    int icon_width = ui::ResourceBundle::GetSharedInstance()
-                         .GetImageNamed(GetIconResourceID(icon))
-                         .Width();
-    row_size += icon_width + kIconPadding;
+    row_size += GetIconImage(row).width() +
+                (is_warning_message ? kHttpWarningIconPadding : kIconPadding);
   }
 
   // Add the padding at the end.
@@ -157,26 +163,69 @@ const gfx::FontList& AutofillPopupLayoutModel::GetValueFontListForRow(
   // All other message types are defined here.
   PopupItemId id = static_cast<PopupItemId>(suggestions[index].frontend_id);
   switch (id) {
-    case POPUP_ITEM_ID_WARNING_MESSAGE:
-      return warning_font_list_;
+    case POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE:
     case POPUP_ITEM_ID_CLEAR_FORM:
     case POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO:
     case POPUP_ITEM_ID_AUTOFILL_OPTIONS:
     case POPUP_ITEM_ID_SCAN_CREDIT_CARD:
     case POPUP_ITEM_ID_SEPARATOR:
-      return normal_font_list_;
+    case POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE:
     case POPUP_ITEM_ID_TITLE:
+    case POPUP_ITEM_ID_PASSWORD_ENTRY:
+      return normal_font_list_;
     case POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY:
     case POPUP_ITEM_ID_DATALIST_ENTRY:
-    case POPUP_ITEM_ID_PASSWORD_ENTRY:
+    case POPUP_ITEM_ID_USERNAME_ENTRY:
       return bold_font_list_;
   }
   NOTREACHED();
   return normal_font_list_;
 }
 
-const gfx::FontList& AutofillPopupLayoutModel::GetLabelFontList() const {
+const gfx::FontList& AutofillPopupLayoutModel::GetLabelFontListForRow(
+    size_t index) const {
+  std::vector<autofill::Suggestion> suggestions = delegate_->GetSuggestions();
+  if (suggestions[index].frontend_id ==
+      POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE)
+    return normal_font_list_;
+
   return smaller_font_list_;
+}
+
+ui::NativeTheme::ColorId AutofillPopupLayoutModel::GetValueFontColorIDForRow(
+    size_t index) const {
+  std::vector<autofill::Suggestion> suggestions = delegate_->GetSuggestions();
+  switch (suggestions[index].frontend_id) {
+    case POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE:
+      return ui::NativeTheme::kColorId_AlertSeverityHigh;
+    case POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE:
+      return ui::NativeTheme::kColorId_ResultsTableNormalDimmedText;
+    default:
+      return ui::NativeTheme::kColorId_ResultsTableNormalText;
+  }
+}
+
+gfx::ImageSkia AutofillPopupLayoutModel::GetIconImage(size_t index) const {
+  std::vector<autofill::Suggestion> suggestions = delegate_->GetSuggestions();
+  const base::string16& icon_str = suggestions[index].icon;
+
+  // For http warning message, get icon images from VectorIconId, which is the
+  // same as security indicator icons in location bar.
+  if (suggestions[index].frontend_id ==
+      POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE) {
+    if (icon_str == base::ASCIIToUTF16("httpWarning")) {
+      return gfx::CreateVectorIcon(gfx::VectorIconId::LOCATION_BAR_HTTP,
+                                   kHttpWarningIconWidth, gfx::kChromeIconGrey);
+    }
+    DCHECK_EQ(icon_str, base::ASCIIToUTF16("httpsInvalid"));
+    return gfx::CreateVectorIcon(gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID,
+                                 kHttpWarningIconWidth, gfx::kGoogleRed700);
+  }
+
+  // For other suggestion entries, get icon from PNG files.
+  int icon_id = GetIconResourceID(icon_str);
+  DCHECK_NE(-1, icon_id);
+  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(icon_id);
 }
 #endif
 
@@ -218,16 +267,39 @@ int AutofillPopupLayoutModel::GetIconResourceID(
     }
   }
 
-#if defined(OS_ANDROID) && !defined(USE_AURA)
-  if (result == IDR_AUTOFILL_CC_SCAN_NEW && IsKeyboardAccessoryEnabled())
-    result = IDR_AUTOFILL_CC_SCAN_NEW_KEYBOARD_ACCESSORY;
-#endif
-
   return result;
 }
 
 const gfx::Rect AutofillPopupLayoutModel::RoundedElementBounds() const {
   return gfx::ToEnclosingRect(delegate_->element_bounds());
+}
+
+bool AutofillPopupLayoutModel::IsPopupLayoutExperimentEnabled() const {
+  return is_credit_card_popup_ &&
+      IsAutofillCreditCardPopupLayoutExperimentEnabled();
+}
+
+SkColor AutofillPopupLayoutModel::GetBackgroundColor() const {
+  return is_credit_card_popup_ ?
+      GetCreditCardPopupBackgroundColor() : SK_ColorTRANSPARENT;
+}
+
+SkColor AutofillPopupLayoutModel::GetDividerColor() const {
+  return is_credit_card_popup_ ?
+      GetCreditCardPopupDividerColor() : SK_ColorTRANSPARENT;
+}
+
+unsigned int AutofillPopupLayoutModel::GetDropdownItemHeight() const {
+  return GetPopupDropdownItemHeight();
+}
+
+bool AutofillPopupLayoutModel::IsIconAtStart(int frontend_id) const {
+  return frontend_id == POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE ||
+      (is_credit_card_popup_ && IsIconInCreditCardPopupAtStart());
+}
+
+unsigned int AutofillPopupLayoutModel::GetMargin() const {
+  return GetPopupMargin();
 }
 
 }  // namespace autofill

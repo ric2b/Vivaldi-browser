@@ -10,7 +10,10 @@ import("//vivaldi/base/deps_updates.gni")
 import("//vivaldi/browser/deps_updates.gni")
 import("//vivaldi/db/deps_updates.gni")
 import("//vivaldi/extensions/deps_updates.gni")
+import("//vivaldi/extraparts/deps_updates.gni")
 import("//vivaldi/importer/deps_updates.gni")
+import("//vivaldi/notes/deps_updates.gni")
+import("//vivaldi/sync/deps_updates.gni")
 import("//vivaldi/third_party/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
 
@@ -68,6 +71,12 @@ foreach(_target, [ "//chrome/common:common" ]) {
   }
 }
 
+post_process_template("//components/sync:sync") {
+  deps += [
+    "//components/sync/protocol",
+  ]
+}
+
 foreach(_target,
         [
           "//apps:apps",
@@ -76,5 +85,34 @@ foreach(_target,
         ]) {
   post_process_target(_target) {
     deps += [ "//components/version_info:generate_version_info" ]
+  }
+}
+
+foreach(_target,
+        [
+          "//chrome/test:browser_tests",
+          "//chrome/test:interactive_ui_tests",
+          "//chrome/test:sync_integration_tests",
+        ]) {
+  post_process_template(_target) {
+    deps += [
+      "//vivaldi/extraparts",
+      "//vivaldi/notes",
+      "//vivaldi/sync:browser",
+    ]
+  }
+}
+
+foreach(_target,
+        [
+          "//components:components_unittests",
+        ]) {
+  post_process_template(_target) {
+    deps += [
+      "//chrome/utility",
+      "//vivaldi/importer",
+      "//vivaldi/notes",
+      "//vivaldi/sync:sync",
+    ]
   }
 }

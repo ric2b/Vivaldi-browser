@@ -10,6 +10,7 @@ import android.view.ContextMenu;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
@@ -40,7 +41,7 @@ public class ContextualSearchTabHelper
      */
     private GestureStateListener mGestureStateListener;
 
-    private long mNativeHelper = 0;
+    private long mNativeHelper;
 
     private final Tab mTab;
 
@@ -216,6 +217,7 @@ public class ContextualSearchTabHelper
         if (manager == null) return false;
 
         return !cvc.getWebContents().isIncognito()
+                && FirstRunStatus.getFirstRunFlowComplete()
                 && !PrefServiceBridge.getInstance().isContextualSearchDisabled()
                 && TemplateUrlService.getInstance().isDefaultSearchEngineGoogle()
                 // Svelte and Accessibility devices are incompatible with the first-run flow and

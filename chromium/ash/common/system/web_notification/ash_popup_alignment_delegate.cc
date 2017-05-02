@@ -6,17 +6,18 @@
 
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/i18n/rtl.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/message_popup_collection.h"
+#include "ui/wm/core/shadow_types.h"
 
 namespace ash {
 
@@ -113,6 +114,8 @@ void AshPopupAlignmentDelegate::RecomputeAlignment(
 void AshPopupAlignmentDelegate::ConfigureWidgetInitParamsForContainer(
     views::Widget* widget,
     views::Widget::InitParams* init_params) {
+  init_params->shadow_type = views::Widget::InitParams::SHADOW_TYPE_DROP;
+  init_params->shadow_elevation = ::wm::ShadowElevation::MEDIUM;
   // On ash, popups go in the status container.
   shelf_->GetWindow()
       ->GetRootWindowController()

@@ -28,7 +28,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/resource/data_pack.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
@@ -49,7 +48,7 @@ namespace {
 // theme packs that aren't int-equal to this. Increment this number if you
 // change default theme assets or if you need themes to recreate their generated
 // images (which are cached).
-const int kThemePackVersion = 44;
+const int kThemePackVersion = 47;
 
 // IDs that are in the DataPack won't clash with the positive integer
 // uint16_t. kHeaderID should always have the maximum value because we want the
@@ -97,12 +96,12 @@ struct PersistingImagesTable {
 
   // String to check for when parsing theme manifests or NULL if this isn't
   // supposed to be changeable by the user.
-  const char* const key;
+  const char* key;
 };
 
 // IDR_* resource names change whenever new resources are added; use persistent
 // IDs when storing to a cached pack.
-PersistingImagesTable kPersistingImages[] = {
+const PersistingImagesTable kPersistingImages[] = {
     {PRS_THEME_FRAME, IDR_THEME_FRAME, "theme_frame"},
     {PRS_THEME_FRAME_INACTIVE, IDR_THEME_FRAME_INACTIVE,
      "theme_frame_inactive"},
@@ -206,12 +205,12 @@ std::string GetScaleFactorsAsString(
 }
 
 struct StringToIntTable {
-  const char* const key;
+  const char* key;
   ThemeProperties::OverwritableByUserThemeProperty id;
 };
 
 // Strings used by themes to identify tints in the JSON.
-StringToIntTable kTintTable[] = {
+const StringToIntTable kTintTable[] = {
   { "buttons", ThemeProperties::TINT_BUTTONS },
   { "frame", ThemeProperties::TINT_FRAME },
   { "frame_inactive", ThemeProperties::TINT_FRAME_INACTIVE },
@@ -223,7 +222,7 @@ StringToIntTable kTintTable[] = {
 const size_t kTintTableLength = arraysize(kTintTable);
 
 // Strings used by themes to identify colors in the JSON.
-StringToIntTable kColorTable[] = {
+const StringToIntTable kColorTable[] = {
   { "frame", ThemeProperties::COLOR_FRAME },
   { "frame_inactive", ThemeProperties::COLOR_FRAME_INACTIVE },
   { "frame_incognito", ThemeProperties::COLOR_FRAME_INCOGNITO },
@@ -248,7 +247,7 @@ StringToIntTable kColorTable[] = {
 const size_t kColorTableLength = arraysize(kColorTable);
 
 // Strings used by themes to identify display properties keys in JSON.
-StringToIntTable kDisplayProperties[] = {
+const StringToIntTable kDisplayProperties[] = {
   { "ntp_background_alignment",
     ThemeProperties::NTP_BACKGROUND_ALIGNMENT },
   { "ntp_background_repeat", ThemeProperties::NTP_BACKGROUND_TILING },
@@ -257,7 +256,7 @@ StringToIntTable kDisplayProperties[] = {
 const size_t kDisplayPropertiesSize = arraysize(kDisplayProperties);
 
 int GetIntForString(const std::string& key,
-                    StringToIntTable* table,
+                    const StringToIntTable* table,
                     size_t table_length) {
   for (size_t i = 0; i < table_length; ++i) {
     if (base::LowerCaseEqualsASCII(key, table[i].key)) {
@@ -275,7 +274,7 @@ struct IntToIntTable {
 
 // Mapping used in CreateFrameImages() to associate frame images with the
 // tint ID that should maybe be applied to it.
-IntToIntTable kFrameTintMap[] = {
+const IntToIntTable kFrameTintMap[] = {
   { PRS_THEME_FRAME, ThemeProperties::TINT_FRAME },
   { PRS_THEME_FRAME_INACTIVE, ThemeProperties::TINT_FRAME_INACTIVE },
   { PRS_THEME_FRAME_OVERLAY, ThemeProperties::TINT_FRAME },
@@ -288,7 +287,7 @@ IntToIntTable kFrameTintMap[] = {
 
 // Mapping used in GenerateTabBackgroundImages() to associate what frame image
 // goes with which tab background.
-IntToIntTable kTabBackgroundMap[] = {
+const IntToIntTable kTabBackgroundMap[] = {
   { PRS_THEME_TAB_BACKGROUND, PRS_THEME_FRAME },
   { PRS_THEME_TAB_BACKGROUND_INCOGNITO, PRS_THEME_FRAME_INCOGNITO },
 };
@@ -311,7 +310,7 @@ struct CropEntry {
 // change without the maximum heights having to be modified.
 // |kThemePackVersion| must be incremented if any of the maximum heights below
 // are modified.
-struct CropEntry kImagesToCrop[] = {
+const struct CropEntry kImagesToCrop[] = {
   { PRS_THEME_FRAME, 120, true },
   { PRS_THEME_FRAME_INACTIVE, 120, true },
   { PRS_THEME_FRAME_INCOGNITO, 120, true },
@@ -1096,7 +1095,7 @@ void BrowserThemePack::ParseImageNamesFromJSON(
 
   for (base::DictionaryValue::Iterator iter(*images_value); !iter.IsAtEnd();
        iter.Advance()) {
-    if (iter.value().IsType(base::Value::TYPE_DICTIONARY)) {
+    if (iter.value().IsType(base::Value::Type::DICTIONARY)) {
       const base::DictionaryValue* inner_value = NULL;
       if (iter.value().GetAsDictionary(&inner_value)) {
         for (base::DictionaryValue::Iterator inner_iter(*inner_value);
@@ -1105,7 +1104,7 @@ void BrowserThemePack::ParseImageNamesFromJSON(
           std::string name;
           ui::ScaleFactor scale_factor = ui::SCALE_FACTOR_NONE;
           if (GetScaleFactorFromManifestKey(inner_iter.key(), &scale_factor) &&
-              inner_iter.value().IsType(base::Value::TYPE_STRING) &&
+              inner_iter.value().IsType(base::Value::Type::STRING) &&
               inner_iter.value().GetAsString(&name)) {
             AddFileAtScaleToMap(iter.key(),
                                 scale_factor,
@@ -1114,7 +1113,7 @@ void BrowserThemePack::ParseImageNamesFromJSON(
           }
         }
       }
-    } else if (iter.value().IsType(base::Value::TYPE_STRING)) {
+    } else if (iter.value().IsType(base::Value::Type::STRING)) {
       std::string name;
       if (iter.value().GetAsString(&name)) {
         AddFileAtScaleToMap(iter.key(),
@@ -1239,54 +1238,31 @@ void BrowserThemePack::CropImages(ImageCache* images) const {
 }
 
 void BrowserThemePack::CreateFrameImages(ImageCache* images) const {
-  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-
   // Create all the output images in a separate cache and move them back into
   // the input images because there can be name collisions.
   ImageCache temp_output;
 
   for (size_t i = 0; i < arraysize(kFrameTintMap); ++i) {
     int prs_id = kFrameTintMap[i].key;
-    gfx::Image frame;
-    // If there's no frame image provided for the specified id, then load
-    // the default provided frame. If that's not provided, skip this whole
-    // thing and just use the default images.
-    int prs_base_id = 0;
+    if (!images->count(prs_id)) {
+      // Fall back from inactive incognito to active incognito.
+      if (prs_id == PRS_THEME_FRAME_INCOGNITO_INACTIVE)
+        prs_id = PRS_THEME_FRAME_INCOGNITO;
 
-    if (!prs_base_id) {
-      if (prs_id == PRS_THEME_FRAME_INCOGNITO_INACTIVE) {
-        prs_base_id = images->count(PRS_THEME_FRAME_INCOGNITO) ?
-                      PRS_THEME_FRAME_INCOGNITO : PRS_THEME_FRAME;
-      } else if (prs_id == PRS_THEME_FRAME_OVERLAY_INACTIVE) {
-        prs_base_id = PRS_THEME_FRAME_OVERLAY;
-      } else if (prs_id == PRS_THEME_FRAME_INACTIVE) {
-        prs_base_id = PRS_THEME_FRAME;
-      } else if (prs_id == PRS_THEME_FRAME_INCOGNITO &&
-                 !images->count(PRS_THEME_FRAME_INCOGNITO)) {
-        prs_base_id = PRS_THEME_FRAME;
-      } else {
-        prs_base_id = prs_id;
-      }
+      // From there, fall back to the normal frame.
+      if (!images->count(prs_id))
+        prs_id = PRS_THEME_FRAME;
+
+      // Fall back from inactive overlay to overlay, but stop there.
+      if (prs_id == PRS_THEME_FRAME_OVERLAY_INACTIVE)
+        prs_id = PRS_THEME_FRAME_OVERLAY;
     }
+
+    // Note that if the original ID and all the fallbacks are absent, the caller
+    // will rely on the frame colors instead.
     if (images->count(prs_id)) {
-      frame = (*images)[prs_id];
-    } else if (prs_base_id != prs_id && images->count(prs_base_id)) {
-      frame = (*images)[prs_base_id];
-    } else if (prs_base_id == PRS_THEME_FRAME_OVERLAY) {
-      if (images->count(PRS_THEME_FRAME)) {
-        // If there is no theme overlay, don't tint the default frame,
-        // because it will overwrite the custom frame image when we cache and
-        // reload from disk.
-        frame = gfx::Image();
-      }
-    } else {
-      // If the theme doesn't specify an image, then apply the tint to
-      // the default frame.
-      frame = rb.GetImageNamed(IDR_THEME_FRAME);
-    }
-    if (!frame.IsEmpty()) {
-      temp_output[prs_id] = CreateHSLShiftedImage(
-          frame, GetTintInternal(kFrameTintMap[i].value));
+      temp_output[kFrameTintMap[i].key] = CreateHSLShiftedImage(
+          (*images)[prs_id], GetTintInternal(kFrameTintMap[i].value));
     }
   }
   MergeImageCaches(temp_output, images);

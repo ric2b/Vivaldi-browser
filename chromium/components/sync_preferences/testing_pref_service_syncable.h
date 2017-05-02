@@ -15,8 +15,6 @@ class PrefRegistrySyncable;
 
 namespace sync_preferences {
 
-class PrefModelAssociatorClient;
-
 // Test version of PrefServiceSyncable.
 class TestingPrefServiceSyncable
     : public TestingPrefServiceBase<PrefServiceSyncable,
@@ -24,6 +22,7 @@ class TestingPrefServiceSyncable
  public:
   TestingPrefServiceSyncable();
   TestingPrefServiceSyncable(TestingPrefStore* managed_prefs,
+                             TestingPrefStore* extension_prefs,
                              TestingPrefStore* user_prefs,
                              TestingPrefStore* recommended_prefs,
                              user_prefs::PrefRegistrySyncable* pref_registry,
@@ -47,6 +46,7 @@ template <>
 TestingPrefServiceBase<sync_preferences::PrefServiceSyncable,
                        user_prefs::PrefRegistrySyncable>::
     TestingPrefServiceBase(TestingPrefStore* managed_prefs,
+                           TestingPrefStore* extension_prefs,
                            TestingPrefStore* user_prefs,
                            TestingPrefStore* recommended_prefs,
                            user_prefs::PrefRegistrySyncable* pref_registry,

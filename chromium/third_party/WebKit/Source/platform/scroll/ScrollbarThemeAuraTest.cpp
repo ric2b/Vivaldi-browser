@@ -5,6 +5,7 @@
 #include "platform/scroll/ScrollbarThemeAura.h"
 
 #include "platform/scroll/ScrollbarTestSuite.h"
+#include "platform/testing/TestingPlatformSupport.h"
 
 namespace blink {
 
@@ -28,9 +29,12 @@ class ScrollbarThemeAuraButtonOverride final : public ScrollbarThemeAura {
 
 }  // namespace
 
-class ScrollbarThemeAuraTest : public ScrollbarTestSuite {};
+using ScrollbarThemeAuraTest = testing::Test;
 
 TEST_F(ScrollbarThemeAuraTest, ButtonSizeHorizontal) {
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform;
+
   MockScrollableArea* mockScrollableArea = MockScrollableArea::create();
   ScrollbarThemeMock mockTheme;
   Scrollbar* scrollbar = Scrollbar::createForTesting(
@@ -53,6 +57,9 @@ TEST_F(ScrollbarThemeAuraTest, ButtonSizeHorizontal) {
 }
 
 TEST_F(ScrollbarThemeAuraTest, ButtonSizeVertical) {
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform;
+
   MockScrollableArea* mockScrollableArea = MockScrollableArea::create();
   ScrollbarThemeMock mockTheme;
   Scrollbar* scrollbar = Scrollbar::createForTesting(
@@ -75,6 +82,9 @@ TEST_F(ScrollbarThemeAuraTest, ButtonSizeVertical) {
 }
 
 TEST_F(ScrollbarThemeAuraTest, NoButtonsReturnsSize0) {
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform;
+
   MockScrollableArea* mockScrollableArea = MockScrollableArea::create();
   ScrollbarThemeMock mockTheme;
   Scrollbar* scrollbar = Scrollbar::createForTesting(

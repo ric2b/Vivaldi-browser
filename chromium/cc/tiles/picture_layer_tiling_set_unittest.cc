@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
@@ -276,7 +277,7 @@ class PictureLayerTilingSetTestWithResources : public testing::Test {
       ASSERT_TRUE(remaining.Contains(geometry_rect));
       remaining.Subtract(geometry_rect);
 
-      float scale = iter.CurrentTiling()->contents_scale_key();
+      float scale = iter.CurrentTiling()->contents_scale();
       EXPECT_EQ(expected_scale, scale);
 
       if (num_tilings)

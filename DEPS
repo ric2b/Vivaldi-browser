@@ -224,7 +224,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=55b5f3979e226101b1d4764ca024925ed42970bc',
+      '--revision=37f2efe2518802e568d2b620309c0c4a939e52f1',
       '--overwrite',
       '--copy-dia-binaries',
     ],
@@ -243,32 +243,6 @@ hooks = [
     ],
   },
   {
-    'name': 'apache_win32',
-    'pattern': '\\.sha1',
-    'action': [ 'download_from_google_storage',
-      '--no_resume',
-      '--platform=win32',
-      '--directory',
-      '--recursive',
-      '--no_auth',
-      '--num_threads=16',
-      '--bucket', 'chromium-apache-win32',
-      'vivaldi/chromium/third_party/apache-win32'
-    ],
-  },
-  {
-    'name': 'blimp_fonts',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-                '--no_resume',
-                '--platform=linux*',
-                '--extract',
-                '--no_auth',
-                '--bucket', 'chromium-fonts',
-                '-s', 'vivaldi/chromium/third_party/blimp_fonts/font_bundle.tar.gz.sha1',
-    ],
-  },
-  {
     # Pull sanitizer-instrumented third-party libraries if requested via
     # GYP_DEFINES.
     'name': 'instrumented_libraries',
@@ -276,6 +250,27 @@ hooks = [
     'action': [
       'python',
       'vivaldi/chromium/third_party/instrumented_libraries/scripts/download_binaries.py'
+    ],
+  },
+  {
+    'name': 'devtools_install_node',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/WebKit/Source/devtools/scripts/local_node/node.py',
+                '--running-as-hook',
+                '--version',
+    ],
+  },
+
+  # Pull down NPM dependencies for WebUI toolchain.
+  {
+    'name': 'webui_node_modules',
+    'pattern': '.',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--extract',
+                '--no_auth',
+                '--bucket', 'chromium-nodejs',
+                '-s', 'vivaldi/chromium/third_party/node/node_modules.tar.gz.sha1',
     ],
   },
   {

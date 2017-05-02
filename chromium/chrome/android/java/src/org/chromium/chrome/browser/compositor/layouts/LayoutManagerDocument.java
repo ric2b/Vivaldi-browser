@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.compositor.layouts;
 
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.graphics.RectF;
 import android.os.Build;
 import android.util.SparseArray;
 import android.view.MotionEvent;
@@ -186,11 +185,11 @@ public class LayoutManagerDocument extends LayoutManager
     }
 
     @Override
-    protected void onViewportChanged(RectF viewportDp) {
-        super.onViewportChanged(viewportDp);
+    public void onViewportChanged() {
+        super.onViewportChanged();
         for (int i = 0; i < mTabCache.size(); i++) {
             // This assumes that the content width/height is always the size of the host.
-            mTabCache.valueAt(i).setContentSize(viewportDp.width(), viewportDp.height());
+            mTabCache.valueAt(i).setContentSize(mHost.getWidth(), mHost.getHeight());
         }
     }
 
@@ -260,17 +259,13 @@ public class LayoutManagerDocument extends LayoutManager
         String url = tab.getUrl();
         boolean isNativePage = url != null && url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME);
         int themeColor = tab.getThemeColor();
-        // TODO(xingliu): Remove this override themeColor for Blimp tabs. See crbug.com/644774.
-        if (tab.isBlimpTab() && tab.getBlimpContents() != null) {
-            themeColor = tab.getBlimpContents().getThemeColor();
-        }
 
-        boolean canUseLiveTexture = tab.isBlimpTab()
-                || tab.getContentViewCore() != null && !tab.isShowingSadTab() && !isNativePage;
+        boolean canUseLiveTexture =
+                tab.getContentViewCore() != null && !tab.isShowingSadTab() && !isNativePage;
 
         boolean needsUpdate = layoutTab.initFromHost(tab.getBackgroundColor(), tab.shouldStall(),
                 canUseLiveTexture, themeColor, ColorUtils.getTextBoxColorForToolbarBackground(
-                                    mContext.getResources(), tab, themeColor),
+                                                       mContext.getResources(), tab, themeColor),
                 ColorUtils.getTextBoxAlphaForToolbarBackground(tab));
         if (needsUpdate) requestUpdate();
 
@@ -282,11 +277,11 @@ public class LayoutManagerDocument extends LayoutManager
             boolean isTitleNeeded, float maxContentWidth, float maxContentHeight) {
         LayoutTab tab = mTabCache.get(id);
         if (tab == null) {
-            tab = new LayoutTab(id, incognito, mLastContentWidthDp, mLastContentHeightDp,
+            tab = new LayoutTab(id, incognito, mHost.getWidth(), mHost.getHeight(),
                     showCloseButton, isTitleNeeded);
             mTabCache.put(id, tab);
         } else {
-            tab.init(mLastContentWidthDp, mLastContentHeightDp, showCloseButton, isTitleNeeded);
+            tab.init(mHost.getWidth(), mHost.getHeight(), showCloseButton, isTitleNeeded);
         }
         if (maxContentWidth > 0.f) tab.setMaxContentWidth(maxContentWidth);
         if (maxContentHeight > 0.f) tab.setMaxContentHeight(maxContentHeight);
@@ -317,7 +312,7 @@ public class LayoutManagerDocument extends LayoutManager
 
     @Override
     public void setOverlayPanelContentViewCore(ContentViewCore contentViewCore) {
-        mHost.onContentViewCoreAdded(contentViewCore);
+        mHost.onOverlayPanelContentViewCoreAdded(contentViewCore);
     }
 
     @Override

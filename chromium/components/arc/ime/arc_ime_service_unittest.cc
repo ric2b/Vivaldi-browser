@@ -11,7 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
+#include "components/arc/arc_bridge_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -133,7 +133,7 @@ class ArcImeServiceTest : public testing::Test {
   ArcImeServiceTest() {}
 
  protected:
-  std::unique_ptr<FakeArcBridgeService> fake_arc_bridge_service_;
+  std::unique_ptr<ArcBridgeService> arc_bridge_service_;
   std::unique_ptr<FakeInputMethod> fake_input_method_;
   std::unique_ptr<ArcImeService> instance_;
   FakeArcImeBridge* fake_arc_ime_bridge_;  // Owned by |instance_|
@@ -143,12 +143,12 @@ class ArcImeServiceTest : public testing::Test {
 
  private:
   void SetUp() override {
-    fake_arc_bridge_service_.reset(new FakeArcBridgeService);
-    instance_.reset(new ArcImeService(fake_arc_bridge_service_.get()));
-    fake_arc_ime_bridge_ = new FakeArcImeBridge;
+    arc_bridge_service_ = base::MakeUnique<ArcBridgeService>();
+    instance_ = base::MakeUnique<ArcImeService>(arc_bridge_service_.get());
+    fake_arc_ime_bridge_ = new FakeArcImeBridge();
     instance_->SetImeBridgeForTesting(base::WrapUnique(fake_arc_ime_bridge_));
 
-    fake_input_method_.reset(new FakeInputMethod);
+    fake_input_method_ = base::MakeUnique<FakeInputMethod>();
     instance_->SetInputMethodForTesting(fake_input_method_.get());
 
     fake_window_detector_ = new FakeArcWindowDetector();
@@ -162,7 +162,7 @@ class ArcImeServiceTest : public testing::Test {
     fake_window_detector_ = nullptr;
     fake_arc_ime_bridge_ = nullptr;
     instance_.reset();
-    fake_arc_bridge_service_.reset();
+    arc_bridge_service_.reset();
   }
 };
 

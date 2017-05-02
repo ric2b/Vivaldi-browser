@@ -197,10 +197,8 @@ const ui::Layer* NativeWidgetMac::GetLayer() const {
 }
 
 void NativeWidgetMac::ReorderNativeViews() {
-  if (bridge_) {
-    bridge_->SetRootView(GetWidget()->GetRootView());
+  if (bridge_)
     bridge_->ReorderChildViews();
-  }
 }
 
 void NativeWidgetMac::ViewRemoved(View* view) {
@@ -383,10 +381,6 @@ void NativeWidgetMac::Close() {
 void NativeWidgetMac::CloseNow() {
   if (!bridge_)
     return;
-
-  // Cocoa ignores -close calls on open sheets, so they should be closed
-  // asynchronously, using Widget::Close().
-  DCHECK(!IsWindowModalSheet());
 
   // NSWindows must be retained until -[NSWindow close] returns.
   base::scoped_nsobject<NSWindow> window(GetNativeWindow(),
@@ -599,12 +593,6 @@ void NativeWidgetMac::SetVisibilityAnimationTransition(
   NOTIMPLEMENTED();
 }
 
-ui::NativeTheme* NativeWidgetMac::GetNativeTheme() const {
-  return ui::NativeThemeMac::instance();
-}
-
-void NativeWidgetMac::OnRootViewLayout() {}
-
 bool NativeWidgetMac::IsTranslucentWindowOpacitySupported() const {
   return false;
 }
@@ -640,6 +628,10 @@ bool Widget::ConvertRect(const Widget* source,
                          const Widget* target,
                          gfx::Rect* rect) {
   return false;
+}
+
+const ui::NativeTheme* Widget::GetNativeTheme() const {
+  return ui::NativeTheme::GetInstanceForNativeUi();
 }
 
 namespace internal {
@@ -691,8 +683,26 @@ void NativeWidgetPrivate::GetAllChildWidgets(gfx::NativeView native_view,
                                              Widget::Widgets* children) {
   BridgedNativeWidget* bridge =
       NativeWidgetMac::GetBridgeForNativeWindow([native_view window]);
-  if (!bridge)
+  if (!bridge) {
+    // The NSWindow is not itself a views::Widget, but it may have children that
+    // are. Support returning Widgets that are parented to the NSWindow, except:
+    // - Ignore requests for children of an NSView that is not a contentView.
+    // - We do not add a Widget for |native_view| to |children| (there is none).
+    if ([[native_view window] contentView] != native_view)
+      return;
+
+    // Collect -sheets and -childWindows. A window should never appear in both,
+    // since that causes AppKit to glitch.
+    NSArray* sheet_children = [[native_view window] sheets];
+    for (NSWindow* native_child in sheet_children)
+      GetAllChildWidgets([native_child contentView], children);
+
+    for (NSWindow* native_child in [[native_view window] childWindows]) {
+      DCHECK(![sheet_children containsObject:native_child]);
+      GetAllChildWidgets([native_child contentView], children);
+    }
     return;
+  }
 
   // If |native_view| is a subview of the contentView, it will share an
   // NSWindow, but will itself be a native child of the Widget. That is, adding
@@ -707,6 +717,10 @@ void NativeWidgetPrivate::GetAllChildWidgets(gfx::NativeView native_view,
   if (bridge->native_widget_mac()->GetWidget())
     children->insert(bridge->native_widget_mac()->GetWidget());
 
+  // When the NSWindow *is* a Widget, only consider child_windows(). I.e. do not
+  // look through -[NSWindow childWindows] as done for the (!bridge) case above.
+  // -childWindows does not support hidden windows, and anything in there which
+  // is not in child_windows() would have been added by AppKit.
   for (BridgedNativeWidget* child : bridge->child_windows())
     GetAllChildWidgets(child->ns_view(), children);
 }
@@ -714,7 +728,16 @@ void NativeWidgetPrivate::GetAllChildWidgets(gfx::NativeView native_view,
 // static
 void NativeWidgetPrivate::GetAllOwnedWidgets(gfx::NativeView native_view,
                                              Widget::Widgets* owned) {
-  NOTIMPLEMENTED();
+  BridgedNativeWidget* bridge =
+      NativeWidgetMac::GetBridgeForNativeWindow([native_view window]);
+  if (!bridge) {
+    GetAllChildWidgets(native_view, owned);
+    return;
+  }
+  if (bridge->ns_view() != native_view)
+    return;
+  for (BridgedNativeWidget* child : bridge->child_windows())
+    GetAllChildWidgets(child->ns_view(), owned);
 }
 
 // static

@@ -9,13 +9,10 @@
 
 #include "base/macros.h"
 #include "components/prefs/value_map_pref_store.h"
-#include "mojo/common/common_custom_types.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/preferences/public/interfaces/preferences.mojom.h"
 
-namespace shell {
-class Connector;
-}
+namespace preferences {
 
 class PrefObserverStoreTest;
 
@@ -33,11 +30,11 @@ class PrefObserverStore : public ValueMapPrefStore,
                           public prefs::mojom::PreferencesObserver {
  public:
   explicit PrefObserverStore(
-      prefs::mojom::PreferencesManagerPtr prefs_manager_ptr);
+      prefs::mojom::PreferencesFactoryPtr pref_factory_ptr);
 
-  // Defines the set of |keys| which PrefOvserverStore will handle. Begins
-  // listening for changes to these from |prefs_manager_|.
-  void Init(const std::set<std::string>& keys);
+  // Adds a set of |keys| which PrefObserverStore will handle. Begins listening
+  // for changes to these from |prefs_manager_|.
+  void Subscribe(const std::set<std::string>& keys);
 
   // PrefStore:
   bool GetValue(const std::string& key,
@@ -66,9 +63,11 @@ class PrefObserverStore : public ValueMapPrefStore,
                                    base::Value const & value);
 
   // prefs::mojom::PreferenceObserver:
-  void OnPreferencesChanged(const base::DictionaryValue& preferences) override;
+  void OnPreferencesChanged(
+      std::unique_ptr<base::DictionaryValue> preferences) override;
 
   mojo::Binding<prefs::mojom::PreferencesObserver> prefs_binding_;
+  prefs::mojom::PreferencesFactoryPtr pref_factory_ptr_;
   prefs::mojom::PreferencesManagerPtr prefs_manager_ptr_;
 
   std::set<std::string> keys_;
@@ -79,4 +78,5 @@ class PrefObserverStore : public ValueMapPrefStore,
   DISALLOW_COPY_AND_ASSIGN(PrefObserverStore);
 };
 
+}  // namespace preferences
 #endif  // SERVICES_PREFERENCES_PUBLIC_CPP_PREFS_OBSERVER_STORE_H_

@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -31,12 +32,12 @@
 #include "base/sys_byteorder.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/nacl_browser_delegate.h"
 #include "components/nacl/browser/nacl_host_message_filter.h"
 #include "components/nacl/common/nacl_cmd_line.h"
+#include "components/nacl/common/nacl_constants.h"
 #include "components/nacl/common/nacl_host_messages.h"
 #include "components/nacl/common/nacl_messages.h"
 #include "components/nacl/common/nacl_process_type.h"
@@ -76,6 +77,7 @@
 
 #include "base/threading/thread.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/windows_version.h"
 #include "components/nacl/browser/nacl_broker_service_win.h"
 #include "components/nacl/common/nacl_debug_exception_handler_win.h"
 #include "content/public/common/sandbox_init.h"
@@ -228,11 +230,10 @@ NaClProcessHost::NaClProcessHost(
       process_type_(process_type),
       profile_directory_(profile_directory),
       render_view_id_(render_view_id),
-      mojo_child_token_(mojo::edk::GenerateRandomToken()),
       weak_factory_(this) {
   process_.reset(content::BrowserChildProcessHost::Create(
       static_cast<content::ProcessType>(PROCESS_TYPE_NACL_LOADER), this,
-      mojo_child_token_));
+      kNaClLoaderServiceName));
 
   // Set the display name so the user knows what plugin the process is running.
   // We aren't on the UI thread so getting the pref locale for language
@@ -500,15 +501,7 @@ void NaClProcessHost::LaunchNaClGdb() {
 }
 
 bool NaClProcessHost::LaunchSelLdr() {
-  DCHECK(!mojo_child_token_.empty());
-  std::string mojo_channel_token =
-      process_->GetHost()->CreateChannelMojo(mojo_child_token_);
-  // |mojo_child_token_| is no longer used.
-  base::STLClearObject(&mojo_child_token_);
-  if (mojo_channel_token.empty()) {
-    SendErrorToRenderer("CreateChannelMojo() failed");
-    return false;
-  }
+  process_->GetHost()->CreateChannelMojo();
 
   // Build command line for nacl.
 
@@ -566,7 +559,6 @@ bool NaClProcessHost::LaunchSelLdr() {
                               (uses_nonsfi_mode_ ?
                                switches::kNaClLoaderNonSfiProcess :
                                switches::kNaClLoaderProcess));
-  cmd_line->AppendSwitchASCII(switches::kMojoChannelToken, mojo_channel_token);
   if (NaClBrowser::GetDelegate()->DialogsAreSuppressed())
     cmd_line->AppendSwitch(switches::kNoErrorDialogs);
 
@@ -578,15 +570,16 @@ bool NaClProcessHost::LaunchSelLdr() {
 #if defined(OS_WIN)
   if (RunningOnWOW64()) {
     if (!NaClBrokerService::GetInstance()->LaunchLoader(
-            weak_factory_.GetWeakPtr(), mojo_channel_token)) {
+            weak_factory_.GetWeakPtr(),
+            process_->GetServiceRequestChannelToken())) {
       SendErrorToRenderer("broker service did not launch process");
       return false;
     }
     return true;
   }
 #endif
-  process_->Launch(new NaClSandboxedProcessLauncherDelegate(),
-                   cmd_line.release(), true);
+  process_->Launch(base::MakeUnique<NaClSandboxedProcessLauncherDelegate>(),
+                   std::move(cmd_line), true);
   return true;
 }
 

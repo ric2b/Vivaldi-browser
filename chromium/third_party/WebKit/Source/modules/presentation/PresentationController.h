@@ -5,7 +5,7 @@
 #ifndef PresentationController_h
 #define PresentationController_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/frame/LocalFrame.h"
 #include "modules/ModulesExport.h"
 #include "modules/presentation/Presentation.h"
@@ -18,16 +18,13 @@
 namespace blink {
 
 class PresentationConnection;
-class WebPresentationConnectionClient;
-enum class WebPresentationConnectionCloseReason;
-enum class WebPresentationConnectionState;
 
 // The coordinator between the various page exposed properties and the content
 // layer represented via |WebPresentationClient|.
 class MODULES_EXPORT PresentationController final
     : public GarbageCollectedFinalized<PresentationController>,
       public Supplement<LocalFrame>,
-      public DOMWindowProperty,
+      public ContextLifecycleObserver,
       public WebPresentationController {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationController);
   WTF_MAKE_NONCOPYABLE(PresentationController);
@@ -48,15 +45,15 @@ class MODULES_EXPORT PresentationController final
   DECLARE_VIRTUAL_TRACE();
 
   // Implementation of WebPresentationController.
-  void didStartDefaultSession(WebPresentationConnectionClient*) override;
-  void didChangeSessionState(WebPresentationConnectionClient*,
+  void didStartDefaultSession(const WebPresentationSessionInfo&) override;
+  void didChangeSessionState(const WebPresentationSessionInfo&,
                              WebPresentationConnectionState) override;
-  void didCloseConnection(WebPresentationConnectionClient*,
+  void didCloseConnection(const WebPresentationSessionInfo&,
                           WebPresentationConnectionCloseReason,
                           const WebString& message) override;
-  void didReceiveSessionTextMessage(WebPresentationConnectionClient*,
+  void didReceiveSessionTextMessage(const WebPresentationSessionInfo&,
                                     const WebString&) override;
-  void didReceiveSessionBinaryMessage(WebPresentationConnectionClient*,
+  void didReceiveSessionBinaryMessage(const WebPresentationSessionInfo&,
                                       const uint8_t* data,
                                       size_t length) override;
 
@@ -68,20 +65,27 @@ class MODULES_EXPORT PresentationController final
   // Called by the Presentation object when the default request is updated
   // in order to notify the client about the change of default presentation
   // url.
-  void setDefaultRequestUrl(const KURL&);
+  void setDefaultRequestUrl(const WTF::Vector<KURL>&);
 
   // Handling of running connections.
   void registerConnection(PresentationConnection*);
 
+  // Return a connection in |m_connections| with id equals to |presentationId|,
+  // url equals to one of |presentationUrls|, and state is not terminated.
+  // Return null if such a connection does not exist.
+  PresentationConnection* findExistingConnection(
+      const blink::WebVector<blink::WebURL>& presentationUrls,
+      const blink::WebString& presentationId);
+
  private:
   PresentationController(LocalFrame&, WebPresentationClient*);
 
-  // Implementation of DOMWindowProperty.
-  void frameDestroyed() override;
+  // Implementation of ContextLifecycleObserver.
+  void contextDestroyed(ExecutionContext*) override;
 
   // Return the connection associated with the given |connectionClient| or
   // null if it doesn't exist.
-  PresentationConnection* findConnection(WebPresentationConnectionClient*);
+  PresentationConnection* findConnection(const WebPresentationSessionInfo&);
 
   // The WebPresentationClient which allows communicating with the embedder.
   // It is not owned by the PresentationController but the controller will

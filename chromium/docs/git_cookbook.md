@@ -9,7 +9,7 @@ See also [Git Tips](git_tips.md).
 ## Introduction
 
 This is designed to be a cookbook for common command sequences/tasks relating to
-git, git-cl, and how they work with chromium development. It might be a little
+git, git-cl, and how they work with Chromium development. It might be a little
 light on explanations.
 
 If you are new to git, or do not have much experience with a distributed version
@@ -152,7 +152,7 @@ git cl issue 12345      # restore the rietveld issue that was cleared on commit
 ```
 
 And now you can continue hacking where you left off, and since you're reusing
-the Reitveld issue you don't have to rewrite the commit message. (You may want
+the Rietveld issue you don't have to rewrite the commit message. (You may want
 to go manually reopen the issue on the Rietveld site -- `git cl status` will
 give you the URL.)
 
@@ -178,7 +178,7 @@ understands relative paths.
 
 ## Checking out pristine branch from git-svn
 
-In the backend, git-svn keeps a remote tracking branch that points to the the
+In the backend, git-svn keeps a remote tracking branch that points to the
 commit tree representing the svn repository. The name of this branch is
 configured during `git svn init`. The git-svn remote branch is often named
 `origin/trunk` for Chromium, and `origin/master` for WebKit.
@@ -241,7 +241,7 @@ Date:   Mon Jul 19 19:09:41 2010 +0000
 
     BUG=38992
 
-    Review URL: http://codereview.chromium.org/3036004
+    Review URL: https://codereview.chromium.org/3036004
 
     git-svn-id: svn://svn.chromium.org/chrome/trunk/src@52935 0039d316-1c4b-4281-b951-d872f2087c98
 ```
@@ -268,7 +268,7 @@ from that one then adjust it to point it at the real upstream one.
 
 1.  Clone a nearby copy of the code you want: `git clone coworker-machine:/path/to/repo`
 1.  Change the URL your copy fetches from to point at the real git repo:
-    `git set-url origin http://src.chromium.org/git/chromium.git`
+    `git set-url origin https://src.chromium.org/git/chromium.git`
 1.  Update your copy: `git fetch`
 1.  Delete any extra branches that you picked up in the initial clone:
     `git prune origin`

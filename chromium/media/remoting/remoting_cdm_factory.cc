@@ -5,6 +5,7 @@
 #include "media/remoting/remoting_cdm_factory.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/cdm_config.h"
 #include "media/remoting/remoting_cdm.h"
@@ -29,19 +30,18 @@ RemotingCdmFactory::~RemotingCdmFactory() {}
 std::unique_ptr<RemotingCdmController>
 RemotingCdmFactory::CreateRemotingCdmController() {
   mojom::RemotingSourcePtr remoting_source;
-  mojom::RemotingSourceRequest remoting_source_request =
-      mojo::GetProxy(&remoting_source);
+  mojom::RemotingSourceRequest remoting_source_request(&remoting_source);
   mojom::RemoterPtr remoter;
   remoter_factory_->Create(std::move(remoting_source),
-                           mojo::GetProxy(&remoter));
+                           mojo::MakeRequest(&remoter));
   scoped_refptr<RemotingSourceImpl> remoting_source_impl =
       new RemotingSourceImpl(std::move(remoting_source_request),
                              std::move(remoter));
   // HACK: Copy-over the sink availability status from |sink_observer_| before
   // the RemotingCdmController would naturally get the notification. This is to
   // avoid the possible delay on OnSinkAvailable() call from browser.
-  if (sink_observer_->is_sink_available())
-    remoting_source_impl->OnSinkAvailable();
+  if (sink_observer_->is_remote_decryption_available())
+    remoting_source_impl->OnSinkAvailable(sink_observer_->sink_capabilities());
   return base::MakeUnique<RemotingCdmController>(remoting_source_impl);
 }
 
@@ -55,7 +55,7 @@ void RemotingCdmFactory::Create(
     const SessionKeysChangeCB& session_keys_change_cb,
     const SessionExpirationUpdateCB& session_expiration_update_cb,
     const CdmCreatedCB& cdm_created_cb) {
-  if (!sink_observer_->is_sink_available()) {
+  if (!sink_observer_->is_remote_decryption_available()) {
     CreateCdm(key_system, security_origin, cdm_config, session_message_cb,
               session_closed_cb, session_keys_change_cb,
               session_expiration_update_cb, cdm_created_cb, nullptr, false);

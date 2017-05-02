@@ -31,7 +31,7 @@
 
 #include "core/html/forms/RangeInputType.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/AXObjectCache.h"
@@ -190,7 +190,7 @@ void RangeInputType::handleKeydownEvent(KeyboardEvent* event) {
   const Decimal bigStep =
       std::max((stepRange.maximum() - stepRange.minimum()) / 10, step);
 
-  TextDirection dir = LTR;
+  TextDirection dir = TextDirection::kLtr;
   bool isVertical = false;
   if (element().layoutObject()) {
     dir = computedTextDirection();
@@ -199,31 +199,34 @@ void RangeInputType::handleKeydownEvent(KeyboardEvent* event) {
   }
 
   Decimal newValue;
-  if (key == "ArrowUp")
+  if (key == "ArrowUp") {
     newValue = current + step;
-  else if (key == "ArrowDown")
+  } else if (key == "ArrowDown") {
     newValue = current - step;
-  else if (key == "ArrowLeft")
-    newValue = (isVertical || dir == RTL) ? current + step : current - step;
-  else if (key == "ArrowRight")
-    newValue = (isVertical || dir == RTL) ? current - step : current + step;
-  else if (key == "PageUp")
+  } else if (key == "ArrowLeft") {
+    newValue = (isVertical || dir == TextDirection::kRtl) ? current + step
+                                                          : current - step;
+  } else if (key == "ArrowRight") {
+    newValue = (isVertical || dir == TextDirection::kRtl) ? current - step
+                                                          : current + step;
+  } else if (key == "PageUp") {
     newValue = current + bigStep;
-  else if (key == "PageDown")
+  } else if (key == "PageDown") {
     newValue = current - bigStep;
-  else if (key == "Home")
+  } else if (key == "Home") {
     newValue = isVertical ? stepRange.maximum() : stepRange.minimum();
-  else if (key == "End")
+  } else if (key == "End") {
     newValue = isVertical ? stepRange.minimum() : stepRange.maximum();
-  else
+  } else {
     return;  // Did not match any key binding.
+  }
 
   newValue = stepRange.clampValue(newValue);
 
   if (newValue != current) {
     EventQueueScope scope;
     TextFieldEventBehavior eventBehavior = DispatchInputAndChangeEvent;
-    setValueAsDecimal(newValue, eventBehavior, IGNORE_EXCEPTION);
+    setValueAsDecimal(newValue, eventBehavior, IGNORE_EXCEPTION_FOR_TESTING);
 
     if (AXObjectCache* cache = element().document().existingAXObjectCache())
       cache->handleValueChanged(&element());
@@ -363,7 +366,7 @@ void RangeInputType::updateTickMarkValues() {
     String optionValue = optionElement->value();
     if (!this->element().isValidValue(optionValue))
       continue;
-    m_tickMarkValues.append(parseToNumber(optionValue, Decimal::nan()));
+    m_tickMarkValues.push_back(parseToNumber(optionValue, Decimal::nan()));
   }
   m_tickMarkValues.shrinkToFit();
   nonCopyingSort(m_tickMarkValues.begin(), m_tickMarkValues.end(),

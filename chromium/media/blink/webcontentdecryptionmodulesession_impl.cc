@@ -13,10 +13,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/cdm_promise.h"
+#include "media/base/content_decryption_module.h"
 #include "media/base/key_system_names.h"
 #include "media/base/key_systems.h"
 #include "media/base/limits.h"
-#include "media/base/media_keys.h"
 #include "media/blink/cdm_result_promise.h"
 #include "media/blink/cdm_session_adapter.h"
 #include "media/blink/webmediaplayer_util.h"
@@ -42,15 +42,15 @@ const char kRemoveSessionUMAName[] = "RemoveSession";
 const char kUpdateSessionUMAName[] = "UpdateSession";
 
 blink::WebContentDecryptionModuleSession::Client::MessageType
-convertMessageType(MediaKeys::MessageType message_type) {
+convertMessageType(ContentDecryptionModule::MessageType message_type) {
   switch (message_type) {
-    case media::MediaKeys::LICENSE_REQUEST:
+    case ContentDecryptionModule::LICENSE_REQUEST:
       return blink::WebContentDecryptionModuleSession::Client::MessageType::
           LicenseRequest;
-    case media::MediaKeys::LICENSE_RENEWAL:
+    case ContentDecryptionModule::LICENSE_RENEWAL:
       return blink::WebContentDecryptionModuleSession::Client::MessageType::
           LicenseRenewal;
-    case media::MediaKeys::LICENSE_RELEASE:
+    case ContentDecryptionModule::LICENSE_RELEASE:
       return blink::WebContentDecryptionModuleSession::Client::MessageType::
           LicenseRelease;
   }
@@ -85,21 +85,21 @@ blink::WebEncryptedMediaKeyInformation::KeyStatus convertStatus(
   return blink::WebEncryptedMediaKeyInformation::KeyStatus::InternalError;
 }
 
-MediaKeys::SessionType convertSessionType(
+CdmSessionType convertSessionType(
     blink::WebEncryptedMediaSessionType session_type) {
   switch (session_type) {
     case blink::WebEncryptedMediaSessionType::Temporary:
-      return MediaKeys::TEMPORARY_SESSION;
+      return CdmSessionType::TEMPORARY_SESSION;
     case blink::WebEncryptedMediaSessionType::PersistentLicense:
-      return MediaKeys::PERSISTENT_LICENSE_SESSION;
+      return CdmSessionType::PERSISTENT_LICENSE_SESSION;
     case blink::WebEncryptedMediaSessionType::PersistentReleaseMessage:
-      return MediaKeys::PERSISTENT_RELEASE_MESSAGE_SESSION;
+      return CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION;
     case blink::WebEncryptedMediaSessionType::Unknown:
       break;
   }
 
   NOTREACHED();
-  return MediaKeys::TEMPORARY_SESSION;
+  return CdmSessionType::TEMPORARY_SESSION;
 }
 
 bool SanitizeInitData(EmeInitDataType init_data_type,
@@ -202,7 +202,7 @@ bool SanitizeResponse(const std::string& key_system,
   if (IsClearKey(key_system) || IsExternalClearKey(key_system)) {
     std::string key_string(response, response + response_length);
     KeyIdAndKeyPairs keys;
-    MediaKeys::SessionType session_type = MediaKeys::TEMPORARY_SESSION;
+    CdmSessionType session_type = CdmSessionType::TEMPORARY_SESSION;
     if (!ExtractKeysFromJWKSet(key_string, &keys, &session_type))
       return false;
 
@@ -391,7 +391,7 @@ void WebContentDecryptionModuleSessionImpl::load(
   // session type should be passed from blink. Type should also be passed in the
   // constructor (and removed from initializeNewSession()).
   adapter_->LoadSession(
-      MediaKeys::PERSISTENT_LICENSE_SESSION, sanitized_session_id,
+      CdmSessionType::PERSISTENT_LICENSE_SESSION, sanitized_session_id,
       std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
           result, adapter_->GetKeySystemUMAPrefix() + kLoadSessionUMAName,
           base::Bind(
@@ -434,14 +434,18 @@ void WebContentDecryptionModuleSessionImpl::update(
 
 void WebContentDecryptionModuleSessionImpl::close(
     blink::WebContentDecryptionModuleResult result) {
-  // close() shouldn't be called if the session is already closed. blink
-  // prevents a second call to close(), but since the operation is
-  // asynchronous, there is a window where close() was called just before
-  // the closed event arrives. The CDM should handle the case where
-  // close() is called after it has already closed the session.
   DCHECK(!session_id_.empty());
-  DCHECK(!has_close_been_called_);
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // close() shouldn't be called if the session is already closed. Since the
+  // operation is asynchronous, there is a window where close() was called
+  // just before the closed event arrives. The CDM should handle the case where
+  // close() is called after it has already closed the session. However, if
+  // we can tell the session is now closed, simply resolve the promise.
+  if (is_closed_) {
+    result.complete();
+    return;
+  }
 
   has_close_been_called_ = true;
   adapter_->CloseSession(
@@ -461,7 +465,7 @@ void WebContentDecryptionModuleSessionImpl::remove(
 }
 
 void WebContentDecryptionModuleSessionImpl::OnSessionMessage(
-    MediaKeys::MessageType message_type,
+    ContentDecryptionModule::MessageType message_type,
     const std::vector<uint8_t>& message) {
   DCHECK(client_) << "Client not set before message event";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -488,7 +492,7 @@ void WebContentDecryptionModuleSessionImpl::OnSessionKeysChange(
 }
 
 void WebContentDecryptionModuleSessionImpl::OnSessionExpirationUpdate(
-    const base::Time& new_expiry_time) {
+    base::Time new_expiry_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
   client_->expirationChanged(new_expiry_time.ToJsTime());
 }

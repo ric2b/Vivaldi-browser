@@ -116,7 +116,7 @@
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
-#include "chrome/browser/ui/cocoa/run_loop_testing.h"
+#include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
 #endif
 
 #if defined(OS_WIN)
@@ -2359,6 +2359,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, AboutVersion) {
   ASSERT_GT(ui_test_utils::FindInPage(tab, ASCIIToUTF16("JavaScript"), true,
                                       true, NULL, NULL),
             0);
+  ASSERT_GT(ui_test_utils::FindInPage(tab, ASCIIToUTF16("Flash"), true,
+                                      true, NULL, NULL),
+            0);
 }
 
 static const base::FilePath::CharType* kTestDir =
@@ -2386,11 +2389,11 @@ class ClickModifierTest : public InProcessBrowserTest {
       base::FilePath(FILE_PATH_LITERAL("href.html")));
   }
 
-  base::string16 getFirstPageTitle() {
+  base::string16 GetFirstPageTitle() {
     return ASCIIToUTF16(kFirstPageTitle);
   }
 
-  base::string16 getSecondPageTitle() {
+  base::string16 GetSecondPageTitle() {
     return ASCIIToUTF16(kSecondPageTitle);
   }
 
@@ -2418,15 +2421,14 @@ class ClickModifierTest : public InProcessBrowserTest {
       same_tab_observer.Wait();
       EXPECT_EQ(1u, chrome::GetBrowserCount(browser->profile()));
       EXPECT_EQ(1, browser->tab_strip_model()->count());
-      EXPECT_EQ(getSecondPageTitle(), web_contents->GetTitle());
+      EXPECT_EQ(GetSecondPageTitle(), web_contents->GetTitle());
       return;
     }
 
-    content::WindowedNotificationObserver observer(
-        chrome::NOTIFICATION_TAB_ADDED,
-        content::NotificationService::AllSources());
+    content::TestNavigationObserver new_tab_observer(nullptr);
+    new_tab_observer.StartWatchingNewWebContents();
     SimulateMouseClick(web_contents, modifiers, button);
-    observer.Wait();
+    new_tab_observer.Wait();
 
     if (disposition == WindowOpenDisposition::NEW_WINDOW) {
       EXPECT_EQ(2u, chrome::GetBrowserCount(browser->profile()));
@@ -2436,12 +2438,11 @@ class ClickModifierTest : public InProcessBrowserTest {
     EXPECT_EQ(1u, chrome::GetBrowserCount(browser->profile()));
     EXPECT_EQ(2, browser->tab_strip_model()->count());
     web_contents = browser->tab_strip_model()->GetActiveWebContents();
-    WaitForLoadStop(web_contents);
     if (disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB) {
-      EXPECT_EQ(getSecondPageTitle(), web_contents->GetTitle());
+      EXPECT_EQ(GetSecondPageTitle(), web_contents->GetTitle());
     } else {
       ASSERT_EQ(WindowOpenDisposition::NEW_BACKGROUND_TAB, disposition);
-      EXPECT_EQ(getFirstPageTitle(), web_contents->GetTitle());
+      EXPECT_EQ(GetFirstPageTitle(), web_contents->GetTitle());
     }
   }
 
@@ -2562,6 +2563,13 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefShiftMiddleClickTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
+  // Force an initial resize. This works around a test-only problem on Chrome OS
+  // where the shelf may not be created before the initial test browser window
+  // opens, which leads to sizing issues in WebContents resize.
+  browser()->window()->SetBounds(gfx::Rect(10, 20, 600, 400));
+  // Let the message loop run so that resize actually takes effect.
+  content::RunAllPendingInMessageLoop();
+
   // The instant extended NTP has javascript that does not work with
   // ui_test_utils::NavigateToURL.  The NTP rvh reloads when the browser tries
   // to navigate away from the page, which causes the WebContents to end up in
@@ -2685,6 +2693,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
 #endif
   EXPECT_EQ(exp_commit_size, rwhv_commit_size2);
   EXPECT_EQ(exp_commit_size, wcv_commit_size2);
+
   gfx::Size exp_final_size(initial_wcv_size);
   exp_final_size.Enlarge(wcv_resize_insets.width(),
                          wcv_resize_insets.height() + height_inset);

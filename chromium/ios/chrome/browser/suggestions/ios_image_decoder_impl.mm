@@ -4,16 +4,20 @@
 
 #include "ios/chrome/browser/suggestions/ios_image_decoder_impl.h"
 
-#include <UIKit/UIKit.h>
+#import <UIKit/UIKit.h>
 
 #include "base/callback.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "ios/chrome/browser/webp_transcode/webp_decoder.h"
+#import "ios/web/public/image_fetcher/webp_decoder.h"
 #include "ios/web/public/web_thread.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -26,13 +30,13 @@ class WebpDecoderDelegate : public webp_transcode::WebpDecoder::Delegate {
   // WebpDecoder::Delegate methods
   void OnFinishedDecoding(bool success) override {
     if (!success)
-      decoded_image_.reset();
+      decoded_image_ = nil;
   }
 
   void SetImageFeatures(
       size_t total_size,
       webp_transcode::WebpDecoder::DecodedImageFormat format) override {
-    decoded_image_.reset([[NSMutableData alloc] initWithCapacity:total_size]);
+    decoded_image_ = [[NSMutableData alloc] initWithCapacity:total_size];
   }
 
   void OnDataDecoded(NSData* data) override {
@@ -42,7 +46,7 @@ class WebpDecoderDelegate : public webp_transcode::WebpDecoder::Delegate {
 
  private:
   ~WebpDecoderDelegate() override {}
-  base::scoped_nsobject<NSMutableData> decoded_image_;
+  NSMutableData* decoded_image_;
 
   DISALLOW_COPY_AND_ASSIGN(WebpDecoderDelegate);
 };
@@ -56,7 +60,7 @@ base::scoped_nsobject<NSData> DecodeWebpImage(
       new webp_transcode::WebpDecoder(delegate.get()));
   decoder->OnDataReceived(webp_image);
   DLOG_IF(ERROR, !delegate->data()) << "WebP image decoding failed.";
-  return base::scoped_nsobject<NSData>([delegate->data() retain]);
+  return base::scoped_nsobject<NSData>(delegate->data());
 }
 
 // Returns true if the given image_data is a WebP image.
@@ -120,10 +124,10 @@ void IOSImageDecoderImpl::DecodeImage(
     const std::string& image_data,
     const image_fetcher::ImageDecodedCallback& callback) {
   // Convert the |image_data| std::string to an NSData buffer.
-  base::scoped_nsobject<NSData> data(
-      [[NSData dataWithBytesNoCopy:const_cast<char*>(image_data.c_str())
-                            length:image_data.length()
-                      freeWhenDone:NO] retain]);
+  base::scoped_nsobject<NSData> data([NSData
+      dataWithBytesNoCopy:const_cast<char*>(image_data.c_str())
+                   length:image_data.length()
+             freeWhenDone:NO]);
 
   // The WebP image format is not supported by iOS natively. Therefore WebP
   // images need to be decoded explicitly,
@@ -148,7 +152,7 @@ void IOSImageDecoderImpl::CreateUIImageAndRunCallback(
       // This constructor does not retain the image, but expects to take the
       // ownership, therefore, |ui_image| is retained here, but not released
       // afterwards.
-      gfx::Image gfx_image([ui_image retain]);
+      gfx::Image gfx_image(ui_image, base::scoped_policy::RETAIN);
       callback.Run(gfx_image);
       return;
     }

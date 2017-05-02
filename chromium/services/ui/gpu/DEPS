@@ -1,7 +1,16 @@
 include_rules = [
   "+gpu/command_buffer",
   "+gpu/config",
+  "+gpu/ipc",
   "+gpu/ipc/common",
   "+gpu/ipc/service",
   "+media/gpu/ipc/service",
+  "-services/ui/common",
 ]
+
+specific_include_rules = {
+  "gpu_main.*": [
+    "+services/ui/common",
+    "+services/ui/surfaces",
+  ]
+}

@@ -44,15 +44,8 @@ extern NSString* const kContainerViewID;
 @protocol CRWWebViewProxy;
 class GURL;
 
-namespace base {
-class Value;
-}
-
 namespace web {
-class BrowserState;
-struct Referrer;
 class WebState;
-class WebInterstitialImpl;
 class WebStateImpl;
 }
 
@@ -231,6 +224,10 @@ class WebStateImpl;
 
 // Notifies the CRWWebController that it has been shown.
 - (void)wasShown;
+
+// Notifies the CRWWebController that the current page is an HTTP page
+// containing a password field.
+- (void)didShowPasswordInputOnHTTP;
 
 // Notifies the CRWWebController that it has been hidden.
 - (void)wasHidden;

@@ -8,6 +8,7 @@
 
 #import "base/mac/mac_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_icon_decoration.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
@@ -29,9 +30,6 @@
 
 namespace {
 
-// This is used to increase the left padding of this decoration.
-const CGFloat kLeftSidePadding = 5.0;
-
 // Padding between the icon and label.
 CGFloat kIconLabelPadding = 4.0;
 
@@ -43,8 +41,7 @@ const CGFloat kRetinaBaselineOffset = 0.5;
 
 // The info-bubble point should look like it points to the bottom of the lock
 // icon. Determined with Pixie.app.
-const CGFloat kPageInfoBubblePointXOffset = 5.0;
-const CGFloat kPageInfoBubblePointYOffset = 6.0;
+const CGFloat kPageInfoBubblePointYOffset = 2.0;
 
 // Minimum acceptable width for the ev bubble.
 const CGFloat kMinElidedBubbleWidth = 150.0;
@@ -59,7 +56,7 @@ const NSTimeInterval kOutAnimationDuration = 250;
 
 // Transformation values at the beginning of the animation.
 const CGFloat kStartScale = 0.25;
-const CGFloat kStartx_offset = -15.0;
+const CGFloat kStartx_offset = 15.0;
 
 }  // namespace
 
@@ -150,26 +147,25 @@ CGFloat SecurityStateBubbleDecoration::GetWidthForSpace(CGFloat width) {
 void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
                                                 NSView* control_view) {
   const NSRect decoration_frame = NSInsetRect(frame, 0.0, kBackgroundYInset);
-  CGFloat text_offset = NSMinX(decoration_frame);
+  CGFloat text_left_offset = NSMinX(decoration_frame);
+  CGFloat text_right_offset = NSMaxX(decoration_frame);
+  const BOOL is_rtl = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
   if (image_) {
     // The image should fade in if we're animating in.
     CGFloat image_alpha =
         image_fade_ && animation_.IsShowing() ? GetAnimationProgress() : 1.0;
 
-    // Center the image vertically.
-    const NSSize image_size = [image_ size];
-    NSRect image_rect = decoration_frame;
-    image_rect.origin.y +=
-        std::floor((NSHeight(decoration_frame) - image_size.height) / 2.0);
-    image_rect.origin.x += kLeftSidePadding;
-    image_rect.size = image_size;
+    NSRect image_rect = GetImageRectInFrame(decoration_frame);
     [image_ drawInRect:image_rect
               fromRect:NSZeroRect  // Entire image
              operation:NSCompositeSourceOver
               fraction:image_alpha
         respectFlipped:YES
                  hints:nil];
-    text_offset = NSMaxX(image_rect) + kIconLabelPadding;
+    if (is_rtl)
+      text_right_offset = NSMinX(image_rect) - kIconLabelPadding;
+    else
+      text_left_offset = NSMaxX(image_rect) + kIconLabelPadding;
   }
 
   // Set the text color and draw the text.
@@ -198,9 +194,9 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
     NSRect text_rect = frame;
     CGFloat textHeight = [text size].height;
 
-    text_rect.origin.x = text_offset;
+    text_rect.origin.x = text_left_offset;
     text_rect.origin.y = std::round(NSMidY(text_rect) - textHeight / 2.0) - 1;
-    text_rect.size.width = NSMaxX(decoration_frame) - NSMinX(text_rect);
+    text_rect.size.width = text_right_offset - text_left_offset;
     text_rect.size.height = textHeight;
 
     NSAffineTransform* transform = [NSAffineTransform transform];
@@ -215,8 +211,9 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
 
     double x_origin_offset = NSMinX(text_rect) * (1 - scale);
     double y_origin_offset = NSMinY(text_rect) * (1 - scale);
+    double start_x_offset = is_rtl ? -kStartx_offset : kStartx_offset;
     double x_offset =
-        gfx::Tween::DoubleValueBetween(progress, kStartx_offset, 0);
+        gfx::Tween::DoubleValueBetween(progress, start_x_offset, 0);
     double y_offset = NSHeight(text_rect) * (1 - scale) / 2.0;
 
     [transform translateXBy:x_offset + x_origin_offset
@@ -229,11 +226,14 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
 
     // Draw the divider.
     if (state() == DecorationMouseState::NONE && !active()) {
+      const CGFloat divider_x_position =
+          is_rtl ? NSMinX(decoration_frame) + DividerPadding()
+                 : NSMaxX(decoration_frame) - DividerPadding();
       NSBezierPath* line = [NSBezierPath bezierPath];
       [line setLineWidth:line_width];
-      [line moveToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+      [line moveToPoint:NSMakePoint(divider_x_position,
                                     NSMinY(decoration_frame))];
-      [line lineToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+      [line lineToPoint:NSMakePoint(divider_x_position,
                                     NSMaxY(decoration_frame))];
 
       NSColor* divider_color = GetDividerColor(in_dark_mode);
@@ -274,13 +274,17 @@ bool SecurityStateBubbleDecoration::AcceptsMousePress() {
 
 NSPoint SecurityStateBubbleDecoration::GetBubblePointInFrame(NSRect frame) {
   NSRect image_rect = GetImageRectInFrame(frame);
-  return NSMakePoint(NSMidX(image_rect) + kPageInfoBubblePointXOffset,
+  return NSMakePoint(NSMidX(image_rect),
                      NSMaxY(image_rect) - kPageInfoBubblePointYOffset);
 }
 
 NSString* SecurityStateBubbleDecoration::GetToolTip() {
-  return [NSString stringWithFormat:@"%@. %@", full_label_.get(),
-                   l10n_util::GetNSStringWithFixup(IDS_TOOLTIP_LOCATION_ICON)];
+  NSString* tooltip_icon_text =
+      l10n_util::GetNSStringWithFixup(IDS_TOOLTIP_LOCATION_ICON);
+  if ([full_label_ length] == 0)
+    return tooltip_icon_text;
+  return [NSString
+      stringWithFormat:@"%@. %@", full_label_.get(), tooltip_icon_text];
 }
 
 //////////////////////////////////////////////////////////////////

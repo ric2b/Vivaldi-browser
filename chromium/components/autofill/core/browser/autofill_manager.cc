@@ -50,6 +50,7 @@
 #include "components/autofill/core/browser/phone_number.h"
 #include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
+#include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
@@ -60,7 +61,9 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
+#include "components/security_state/core/security_state.h"
 #include "google_apis/gaia/identity_provider.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -183,6 +186,23 @@ bool IsCreditCardExpirationType(ServerFieldType type) {
          type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
 }
 
+// Create http bad warning message at the top of autofill popup list showing
+// "Payment not secure" when users are on http sites or broken https sites.
+Suggestion CreateHttpWarningMessageSuggestionItem(const GURL& source_url) {
+  Suggestion cc_field_http_warning_suggestion(
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE));
+  cc_field_http_warning_suggestion.frontend_id =
+      POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE;
+  cc_field_http_warning_suggestion.label =
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_HTTP_WARNING_LEARN_MORE);
+  cc_field_http_warning_suggestion.icon =
+      (source_url.is_valid() && source_url.SchemeIs("http"))
+          ? base::ASCIIToUTF16("httpWarning")
+          : base::ASCIIToUTF16("httpsInvalid");
+
+  return cc_field_http_warning_suggestion;
+}
+
 }  // namespace
 
 AutofillManager::AutofillManager(
@@ -288,6 +308,12 @@ bool AutofillManager::ShouldShowScanCreditCard(const FormData& form,
 
   static const int kShowScanCreditCardMaxValueLength = 6;
   return field.value.size() <= kShowScanCreditCardMaxValueLength;
+}
+
+bool AutofillManager::IsCreditCardPopup(const FormData& form,
+                                        const FormFieldData& field) {
+  AutofillField* autofill_field = GetAutofillField(form, field);
+  return autofill_field && autofill_field->Type().group() == CREDIT_CARD;
 }
 
 bool AutofillManager::ShouldShowCreditCardSigninPromo(
@@ -510,8 +536,6 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
   if (!IsValidFormData(form) || !IsValidFormFieldData(field))
     return;
 
-  std::vector<Suggestion> suggestions;
-
   gfx::RectF transformed_box =
       driver_->TransformBoundingBoxToViewportCoordinates(bounding_box);
   external_delegate_->OnQuery(query_id, form, field, transformed_box);
@@ -526,9 +550,12 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
       // Don't send suggestions or track forms that should not be parsed.
       form_structure->ShouldBeParsed();
 
-  // Logging interactions of forms that are autofillable.
+  bool is_filling_credit_card = false;
+
+  // Log interactions of forms that are autofillable.
   if (got_autofillable_form) {
     if (autofill_field->Type().group() == CREDIT_CARD) {
+      is_filling_credit_card = true;
       driver_->DidInteractWithCreditCardForm();
       credit_card_form_event_logger_->OnDidInteractWithAutofillableForm();
     } else {
@@ -536,11 +563,18 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
     }
   }
 
+  std::vector<Suggestion> suggestions;
+  const bool is_context_secure =
+      !form_structure ||
+      (client_->IsContextSecure() &&
+       (!form_structure->target_url().is_valid() ||
+        !form_structure->target_url().SchemeIs("http")));
+  const bool is_http_warning_enabled =
+      security_state::IsHttpWarningInFormEnabled();
+
   if (is_autofill_possible &&
       driver_->RendererIsAvailable() &&
       got_autofillable_form) {
-    AutofillType type = autofill_field->Type();
-    bool is_filling_credit_card = (type.group() == CREDIT_CARD);
     // On desktop, don't return non credit card related suggestions for forms or
     // fields that have the "autocomplete" attribute set to off.
     if (IsDesktopPlatform() && !is_filling_credit_card &&
@@ -548,16 +582,13 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
       return;
     }
     if (is_filling_credit_card) {
-      suggestions = GetCreditCardSuggestions(field, type);
+      suggestions = GetCreditCardSuggestions(field, autofill_field->Type());
     } else {
       suggestions =
           GetProfileSuggestions(*form_structure, field, *autofill_field);
     }
+
     if (!suggestions.empty()) {
-      bool is_context_secure =
-          client_->IsContextSecure(form_structure->source_url()) &&
-          (!form_structure->target_url().is_valid() ||
-           !form_structure->target_url().SchemeIs("http"));
       if (is_filling_credit_card)
         AutofillMetrics::LogIsQueriedCreditCardFormSecure(is_context_secure);
 
@@ -566,26 +597,18 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
       // IsContextSecure).
       if (is_filling_credit_card && !is_context_secure) {
         // Replace the suggestion content with a warning message explaining why
-        // Autofill is disabled for a website.
+        // Autofill is disabled for a website. The string is different if the
+        // credit card autofill HTTP warning experiment is enabled.
         Suggestion warning_suggestion(l10n_util::GetStringUTF16(
-            IDS_AUTOFILL_WARNING_INSECURE_CONNECTION));
-        warning_suggestion.frontend_id = POPUP_ITEM_ID_WARNING_MESSAGE;
+            is_http_warning_enabled
+                ? IDS_AUTOFILL_WARNING_PAYMENT_DISABLED
+                : IDS_AUTOFILL_WARNING_INSECURE_CONNECTION));
+        warning_suggestion.frontend_id =
+            POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE;
         suggestions.assign(1, warning_suggestion);
-
-        // On top of the explanation message, first show a "Payment not secure"
-        // message.
-        if (IsCreditCardAutofillHttpWarningEnabled()) {
-          Suggestion cc_field_http_warning_suggestion(l10n_util::GetStringUTF16(
-              IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE));
-          cc_field_http_warning_suggestion.frontend_id =
-              POPUP_ITEM_ID_WARNING_MESSAGE;
-          suggestions.insert(suggestions.begin(),
-                             cc_field_http_warning_suggestion);
-        }
       } else {
-        bool section_is_autofilled =
-            SectionIsAutofilled(*form_structure, form,
-                                autofill_field->section());
+        bool section_is_autofilled = SectionIsAutofilled(
+            *form_structure, form, autofill_field->section());
         if (section_is_autofilled) {
           // If the relevant section is auto-filled and the renderer is querying
           // for suggestions, then the user is editing the value of a field.
@@ -615,6 +638,21 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
         }
       }
     }
+  }
+
+  // Show a "Payment not secure" message.
+  if (!is_context_secure && is_filling_credit_card && is_http_warning_enabled) {
+#if !defined(OS_ANDROID)
+    if (!suggestions.empty()) {
+      suggestions.insert(suggestions.begin(), Suggestion());
+      suggestions.front().frontend_id = POPUP_ITEM_ID_SEPARATOR;
+    }
+#endif
+
+    suggestions.insert(
+        suggestions.begin(),
+        CreateHttpWarningMessageSuggestionItem(
+            form_structure ? form_structure->source_url() : GURL::EmptyGURL()));
   }
 
   // If there are no Autofill suggestions, consider showing Autocomplete
@@ -948,7 +986,7 @@ void AutofillManager::OnLoadedServerPredictions(
 
   // Parse and store the server predictions.
   FormStructure::ParseQueryResponse(std::move(response), queried_forms,
-                                    client_->GetRapporService());
+                                    client_->GetRapporServiceImpl());
 
   // Will log quality metrics for each FormStructure based on the presence of
   // autocomplete attributes, if available.
@@ -1091,7 +1129,7 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
     recently_autofilled_forms_.push_back(
         std::map<std::string, base::string16>());
     auto& map = recently_autofilled_forms_.back();
-    for (const auto* field : submitted_form) {
+    for (const auto& field : submitted_form) {
       AutofillType type = field->Type();
       // Even though this is for development only, mask full credit card #'s.
       if (type.GetStorableType() == CREDIT_CARD_NUMBER &&
@@ -1131,10 +1169,10 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
     // their card. If no CVC is present, do nothing. We could fall back to a
     // local save but we believe that sometimes offering upload and sometimes
     // offering local save is a confusing user experience.
-    int cvc;
-    for (const AutofillField* field : submitted_form) {
+    for (const auto& field : submitted_form) {
       if (field->Type().GetStorableType() == CREDIT_CARD_VERIFICATION_CODE &&
-          base::StringToInt(field->value, &cvc)) {
+          IsValidCreditCardSecurityCode(field->value,
+                                        upload_request_.card.type())) {
         upload_request_.cvc = field->value;
         break;
       }
@@ -1268,8 +1306,8 @@ bool AutofillManager::GetProfilesForCreditCardUpload(
 
 void AutofillManager::CollectRapportSample(const GURL& source_url,
                                            const char* metric_name) const {
-  if (source_url.is_valid() && client_->GetRapporService()) {
-    rappor::SampleDomainAndRegistryFromGURL(client_->GetRapporService(),
+  if (source_url.is_valid() && client_->GetRapporServiceImpl()) {
+    rappor::SampleDomainAndRegistryFromGURL(client_->GetRapporServiceImpl(),
                                             metric_name, source_url);
   }
 }
@@ -1284,9 +1322,10 @@ void AutofillManager::UploadFormDataAsyncCallback(
     const TimeTicks& interaction_time,
     const TimeTicks& submission_time,
     bool observed_submission) {
-  submitted_form->LogQualityMetrics(
-      load_time, interaction_time, submission_time, client_->GetRapporService(),
-      did_show_suggestions_, observed_submission);
+  submitted_form->LogQualityMetrics(load_time, interaction_time,
+                                    submission_time,
+                                    client_->GetRapporServiceImpl(),
+                                    did_show_suggestions_, observed_submission);
 
   if (submitted_form->ShouldBeCrowdsourced())
     UploadFormData(*submitted_form, observed_submission);
@@ -1400,6 +1439,8 @@ bool AutofillManager::RefreshDataModels() {
         is_server_data_available);
     credit_card_form_event_logger_->set_is_local_data_available(
         is_local_data_available);
+    credit_card_form_event_logger_->set_is_context_secure(
+        client_->IsContextSecure());
   }
   {
     bool is_server_data_available = false;
@@ -1647,9 +1688,9 @@ bool AutofillManager::GetCachedFormAndField(const FormData& form,
 
   // Find the AutofillField that corresponds to |field|.
   *autofill_field = NULL;
-  for (AutofillField* current : **form_structure) {
+  for (const auto& current : **form_structure) {
     if (current->SameFieldAs(field)) {
-      *autofill_field = current;
+      *autofill_field = current.get();
       break;
     }
   }
@@ -1769,6 +1810,7 @@ std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
   for (size_t i = 0; i < suggestions.size(); i++) {
     suggestions[i].frontend_id =
         MakeFrontendID(suggestions[i].backend_id, std::string());
+    suggestions[i].is_value_bold = IsCreditCardPopupValueBold();
   }
   return suggestions;
 }

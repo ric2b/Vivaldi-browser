@@ -4,6 +4,8 @@
 
 #include "ash/common/accelerators/accelerator_controller.h"
 
+#include <utility>
+
 #include "ash/common/accelerators/accelerator_commands.h"
 #include "ash/common/accelerators/accelerator_controller_delegate.h"
 #include "ash/common/accelerators/debug_commands.h"
@@ -11,15 +13,21 @@
 #include "ash/common/accessibility_types.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/ime_control_delegate.h"
-#include "ash/common/media_delegate.h"
+#include "ash/common/media_controller.h"
 #include "ash/common/multi_profile_uma.h"
+#include "ash/common/new_window_controller.h"
+#include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/system/brightness_control_delegate.h"
+#include "ash/common/system/chromeos/ime_menu/ime_menu_tray.h"
+#include "ash/common/system/chromeos/palette/palette_tray.h"
+#include "ash/common/system/chromeos/palette/palette_utils.h"
 #include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/status_area_widget.h"
+#include "ash/common/system/system_notifier.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
@@ -29,37 +37,23 @@
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/public/interfaces/new_window.mojom.h"
+#include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "services/service_manager/public/cpp/connector.h"
-#include "ui/base/accelerators/accelerator.h"
-#include "ui/base/accelerators/accelerator_manager.h"
-#include "ui/keyboard/keyboard_controller.h"
-
-#if defined(OS_CHROMEOS)
-#include "ash/common/palette_delegate.h"
-#include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/system/chromeos/ime_menu/ime_menu_tray.h"
-#include "ash/common/system/chromeos/palette/palette_tray.h"
-#include "ash/common/system/chromeos/palette/palette_utils.h"
-#include "ash/common/system/status_area_widget.h"
-#include "ash/common/system/system_notifier.h"
-#include "ash/common/wm_root_window_controller.h"
-#include "ash/common/wm_window.h"
-#include "ash/resources/vector_icons/vector_icons.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "grit/ash_strings.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/keyboard/keyboard_controller.h"
 #include "ui/message_center/message_center.h"
-#endif  // defined(OS_CHROMEOS)
 
 namespace ash {
 namespace {
@@ -132,15 +126,15 @@ void HandleLaunchLastApp() {
 }
 
 void HandleMediaNextTrack() {
-  WmShell::Get()->media_delegate()->HandleMediaNextTrack();
+  WmShell::Get()->media_controller()->HandleMediaNextTrack();
 }
 
 void HandleMediaPlayPause() {
-  WmShell::Get()->media_delegate()->HandleMediaPlayPause();
+  WmShell::Get()->media_controller()->HandleMediaPlayPause();
 }
 
 void HandleMediaPrevTrack() {
-  WmShell::Get()->media_delegate()->HandleMediaPrevTrack();
+  WmShell::Get()->media_controller()->HandleMediaPrevTrack();
 }
 
 bool CanHandleNewIncognitoWindow() {
@@ -149,18 +143,18 @@ bool CanHandleNewIncognitoWindow() {
 
 void HandleNewIncognitoWindow() {
   base::RecordAction(UserMetricsAction("Accel_New_Incognito_Window"));
-  WmShell::Get()->new_window_client()->NewWindow(true /* is_incognito */);
+  WmShell::Get()->new_window_controller()->NewWindow(true /* is_incognito */);
 }
 
 void HandleNewTab(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_T)
     base::RecordAction(UserMetricsAction("Accel_NewTab_T"));
-  WmShell::Get()->new_window_client()->NewTab();
+  WmShell::Get()->new_window_controller()->NewTab();
 }
 
 void HandleNewWindow() {
   base::RecordAction(UserMetricsAction("Accel_New_Window"));
-  WmShell::Get()->new_window_client()->NewWindow(false /* is_incognito */);
+  WmShell::Get()->new_window_controller()->NewWindow(false /* is_incognito */);
 }
 
 bool CanHandleNextIme(ImeControlDelegate* ime_control_delegate) {
@@ -168,12 +162,15 @@ bool CanHandleNextIme(ImeControlDelegate* ime_control_delegate) {
 }
 
 bool CanHandleCycleMru(const ui::Accelerator& accelerator) {
-  // Don't do anything when Alt+Tab comes from a virtual keyboard. Touchscreen
-  // users have better window switching options. See http://crbug.com/638269
+  // Don't do anything when Alt+Tab is hit while a virtual keyboard is showing.
+  // Touchscreen users have better window switching options. It would be
+  // preferable if we could tell whether this event actually came from a virtual
+  // keyboard, but there's no easy way to do so, thus we block Alt+Tab when the
+  // virtual keyboard is showing, even if it came from a real keyboard. See
+  // http://crbug.com/638269
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
-  return !(keyboard_controller && keyboard_controller->keyboard_visible() &&
-           (accelerator.modifiers() & ui::EF_IS_SYNTHESIZED));
+  return !(keyboard_controller && keyboard_controller->keyboard_visible());
 }
 
 // We must avoid showing the Deprecated NEXT_IME notification erronously.
@@ -203,7 +200,7 @@ void HandleNextIme(ImeControlDelegate* ime_control_delegate) {
 
 void HandleOpenFeedbackPage() {
   base::RecordAction(UserMetricsAction("Accel_Open_Feedback_Page"));
-  WmShell::Get()->new_window_client()->OpenFeedbackPage();
+  WmShell::Get()->new_window_controller()->OpenFeedbackPage();
 }
 
 bool CanHandlePreviousIme(ImeControlDelegate* ime_control_delegate) {
@@ -220,12 +217,12 @@ void HandlePreviousIme(ImeControlDelegate* ime_control_delegate,
 
 void HandleRestoreTab() {
   base::RecordAction(UserMetricsAction("Accel_Restore_Tab"));
-  WmShell::Get()->new_window_client()->RestoreTab();
+  WmShell::Get()->new_window_controller()->RestoreTab();
 }
 
 void HandleShowKeyboardOverlay() {
   base::RecordAction(UserMetricsAction("Accel_Show_Keyboard_Overlay"));
-  WmShell::Get()->new_window_client()->ShowKeyboardOverlay();
+  WmShell::Get()->new_window_controller()->ShowKeyboardOverlay();
 }
 
 bool CanHandleShowMessageCenterBubble() {
@@ -251,7 +248,7 @@ void HandleShowMessageCenterBubble() {
 
 void HandleShowTaskManager() {
   base::RecordAction(UserMetricsAction("Accel_Show_Task_Manager"));
-  WmShell::Get()->new_window_client()->ShowTaskManager();
+  WmShell::Get()->new_window_controller()->ShowTaskManager();
 }
 
 bool CanHandleSwitchIme(ImeControlDelegate* ime_control_delegate,
@@ -370,7 +367,7 @@ void HandleShowImeMenuBubble() {
 void HandleCrosh() {
   base::RecordAction(UserMetricsAction("Accel_Open_Crosh"));
 
-  WmShell::Get()->new_window_client()->OpenCrosh();
+  WmShell::Get()->new_window_controller()->OpenCrosh();
 }
 
 bool CanHandleDisableCapsLock(const ui::Accelerator& previous_accelerator) {
@@ -400,11 +397,11 @@ void HandleDisableCapsLock() {
 void HandleFileManager() {
   base::RecordAction(UserMetricsAction("Accel_Open_File_Manager"));
 
-  WmShell::Get()->new_window_client()->OpenFileManager();
+  WmShell::Get()->new_window_controller()->OpenFileManager();
 }
 
 void HandleGetHelp() {
-  WmShell::Get()->new_window_client()->OpenGetHelp();
+  WmShell::Get()->new_window_controller()->OpenGetHelp();
 }
 
 bool CanHandleLock() {
@@ -419,7 +416,7 @@ void HandleLock() {
 void HandleShowStylusTools() {
   base::RecordAction(UserMetricsAction("Accel_Show_Stylus_Tools"));
 
-  WmRootWindowController* root_window_controller =
+  RootWindowController* root_window_controller =
       WmShell::Get()->GetRootWindowForNewWindows()->GetRootWindowController();
   PaletteTray* palette_tray =
       root_window_controller->GetShelf()->GetStatusAreaWidget()->palette_tray();
@@ -683,6 +680,16 @@ bool AcceleratorController::CanHandleAccelerators() const {
   return true;
 }
 
+void AcceleratorController::BindRequest(
+    mojom::AcceleratorControllerRequest request) {
+  bindings_.AddBinding(this, std::move(request));
+}
+
+void AcceleratorController::SetVolumeController(
+    mojom::VolumeControllerPtr controller) {
+  volume_controller_ = std::move(controller);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // AcceleratorController, private:
 
@@ -793,6 +800,7 @@ bool AcceleratorController::CanPerformAction(
     case DEBUG_PRINT_VIEW_HIERARCHY:
     case DEBUG_PRINT_WINDOW_HIERARCHY:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
+    case DEBUG_TRIGGER_CRASH:
       return debug::DebugAcceleratorsEnabled();
     case NEW_INCOGNITO_WINDOW:
       return CanHandleNewIncognitoWindow();
@@ -907,6 +915,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case DEBUG_PRINT_VIEW_HIERARCHY:
     case DEBUG_PRINT_WINDOW_HIERARCHY:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
+    case DEBUG_TRIGGER_CRASH:
       debug::PerformDebugActionIfEnabled(action);
       break;
     case EXIT:
@@ -1094,13 +1103,13 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       WmShell::Get()->system_tray_notifier()->NotifyRequestToggleWifi();
       break;
     case VOLUME_DOWN:
-      HandleVolumeDown(GetVolumeController(), accelerator);
+      HandleVolumeDown(volume_controller_.get(), accelerator);
       break;
     case VOLUME_MUTE:
-      HandleVolumeMute(GetVolumeController(), accelerator);
+      HandleVolumeMute(volume_controller_.get(), accelerator);
       break;
     case VOLUME_UP:
-      HandleVolumeUp(GetVolumeController(), accelerator);
+      HandleVolumeUp(volume_controller_.get(), accelerator);
       break;
 #else
     case DUMMY_FOR_RESERVED:
@@ -1130,6 +1139,7 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
           actions_allowed_in_pinned_mode_.end()) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
+  // TODO(xiyuan): Replace with SessionController. http://crbug.com/648964
   if (!wm_shell->GetSessionStateDelegate()->IsActiveUserSessionStarted() &&
       actions_allowed_at_login_screen_.find(action) ==
           actions_allowed_at_login_screen_.end()) {
@@ -1161,21 +1171,6 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
   return RESTRICTION_NONE;
-}
-
-mojom::VolumeController* AcceleratorController::GetVolumeController() {
-  if (!volume_controller_ && WmShell::Get()->delegate()->GetShellConnector()) {
-    WmShell::Get()->delegate()->GetShellConnector()->ConnectToInterface(
-        "content_browser", &volume_controller_);
-    volume_controller_.set_connection_error_handler(
-        base::Bind(&AcceleratorController::OnVolumeControllerConnectionError,
-                   base::Unretained(this)));
-  }
-  return volume_controller_.get();
-}
-
-void AcceleratorController::OnVolumeControllerConnectionError() {
-  volume_controller_.reset();
 }
 
 }  // namespace ash

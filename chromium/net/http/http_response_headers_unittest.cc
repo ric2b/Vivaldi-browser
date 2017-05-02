@@ -780,9 +780,12 @@ TEST_P(RequiresValidationTest, RequiresValidation) {
   const RequiresValidationTestData test = GetParam();
 
   base::Time request_time, response_time, current_time;
-  base::Time::FromString("Wed, 28 Nov 2007 00:40:09 GMT", &request_time);
-  base::Time::FromString("Wed, 28 Nov 2007 00:40:12 GMT", &response_time);
-  base::Time::FromString("Wed, 28 Nov 2007 00:45:20 GMT", &current_time);
+  ASSERT_TRUE(
+      base::Time::FromString("Wed, 28 Nov 2007 00:40:09 GMT", &request_time));
+  ASSERT_TRUE(
+      base::Time::FromString("Wed, 28 Nov 2007 00:40:12 GMT", &response_time));
+  ASSERT_TRUE(
+      base::Time::FromString("Wed, 28 Nov 2007 00:45:20 GMT", &current_time));
 
   std::string headers(test.headers);
   HeadersToRaw(&headers);
@@ -1338,7 +1341,7 @@ class ContentRangeTest
       public ::testing::WithParamInterface<ContentRangeTestData> {
 };
 
-TEST_P(ContentRangeTest, GetContentRange) {
+TEST_P(ContentRangeTest, GetContentRangeFor206) {
   const ContentRangeTestData test = GetParam();
 
   std::string headers(test.headers);
@@ -1348,9 +1351,8 @@ TEST_P(ContentRangeTest, GetContentRange) {
   int64_t first_byte_position;
   int64_t last_byte_position;
   int64_t instance_size;
-  bool return_value = parsed->GetContentRange(&first_byte_position,
-                                              &last_byte_position,
-                                              &instance_size);
+  bool return_value = parsed->GetContentRangeFor206(
+      &first_byte_position, &last_byte_position, &instance_size);
   EXPECT_EQ(test.expected_return_value, return_value);
   EXPECT_EQ(test.expected_first_byte_position, first_byte_position);
   EXPECT_EQ(test.expected_last_byte_position, last_byte_position);
@@ -1363,99 +1365,16 @@ const ContentRangeTestData content_range_tests[] = {
      "Content-Range:",
      false, -1, -1, -1},
     {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: megabytes 0-10/50",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: 0-10/50",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: Bytes 0-50/51",
-     true, 0, 50, 51},
-    {"HTTP/1.1 206 Partial Content\n"
      "Content-Range: bytes 0-50/51",
      true, 0, 50, 51},
     {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes\t0-50/51",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range:     bytes 0-50/51",
-     true, 0, 50, 51},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range:     bytes    0    -   50  \t / \t51",
-     true, 0, 50, 51},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0\t-\t50\t/\t51\t",
-     true, 0, 50, 51},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range:   \tbytes\t\t\t 0\t-\t50\t/\t51\t",
-     true, 0, 50, 51},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: \t   bytes \t  0    -   50   /   5   1",
-     false, 0, 50, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: \t   bytes \t  0    -   5 0   /   51",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
      "Content-Range: bytes 50-0/51",
-     false, 50, 0, -1},
-    {"HTTP/1.1 416 Requested range not satisfiable\n"
-     "Content-Range: bytes * /*",
      false, -1, -1, -1},
     {"HTTP/1.1 416 Requested range not satisfiable\n"
-     "Content-Range: bytes *   /    *   ",
+     "Content-Range: bytes */*",
      false, -1, -1, -1},
     {"HTTP/1.1 206 Partial Content\n"
      "Content-Range: bytes 0-50/*",
-     false, 0, 50, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-50  /    * ",
-     false, 0, 50, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-10000000000/10000000001",
-     true, 0, 10000000000ll, 10000000001ll},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-10000000000/10000000000",
-     false, 0, 10000000000ll, 10000000000ll},
-    // 64 bit wraparound.
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0 - 9223372036854775807 / 100",
-     false, 0, std::numeric_limits<int64_t>::max(), 100},
-    // 64 bit wraparound.
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0 - 100 / -9223372036854775808",
-     false, 0, 100, std::numeric_limits<int64_t>::min()},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes */50",
-     false, -1, -1, 50},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-50/10",
-     false, 0, 50, 10},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 40-50/45",
-     false, 40, 50, 45},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-50/-10",
-     false, 0, 50, -10},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-0/1",
-     true, 0, 0, 1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-40000000000000000000/40000000000000000001",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 1-/100",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes -/100",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes -1/100",
-     false, -1, -1, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes 0-1233/*",
-     false, 0, 1233, -1},
-    {"HTTP/1.1 206 Partial Content\n"
-     "Content-Range: bytes -123 - -1/100",
      false, -1, -1, -1},
 };
 

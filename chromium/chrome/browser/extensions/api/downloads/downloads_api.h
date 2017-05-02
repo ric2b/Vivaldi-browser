@@ -24,12 +24,6 @@
 #include "extensions/browser/warning_set.h"
 
 class DownloadFileIconExtractor;
-class DownloadQuery;
-
-namespace content {
-class ResourceContext;
-class ResourceDispatcherHost;
-}
 
 namespace extensions {
 class ExtensionRegistry;
@@ -204,6 +198,10 @@ class DownloadsAcceptDangerFunction : public ChromeAsyncExtensionFunction {
   DownloadsAcceptDangerFunction();
   bool RunAsync() override;
 
+  // To prevent multiple download.acceptDanger calls. Key is downloadId.
+  typedef std::set<int> DownloadRequestsSet;
+  static DownloadRequestsSet* s_current_accept_download_requests_;
+
  protected:
   ~DownloadsAcceptDangerFunction() override;
   void DangerPromptCallback(int download_id,
@@ -211,6 +209,10 @@ class DownloadsAcceptDangerFunction : public ChromeAsyncExtensionFunction {
 
  private:
   void PromptOrWait(int download_id, int retries);
+
+
+  // Used to block multiple calls for the same initiator.
+  int download_id_ = -1;
 
   static OnPromptCreatedCallback* on_prompt_created_;
   DISALLOW_COPY_AND_ASSIGN(DownloadsAcceptDangerFunction);

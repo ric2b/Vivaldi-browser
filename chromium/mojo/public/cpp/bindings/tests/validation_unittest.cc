@@ -18,7 +18,6 @@
 #include "mojo/public/cpp/bindings/connector.h"
 #include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "mojo/public/cpp/bindings/lib/router.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/message_header_validator.h"
@@ -266,7 +265,7 @@ class IntegrationTestInterfaceImpl : public IntegrationTestInterface {
 
   void Method0(BasicStructPtr param0,
                const Method0Callback& callback) override {
-    callback.Run(Array<uint8_t>::New(0u));
+    callback.Run(std::vector<uint8_t>());
   }
 };
 

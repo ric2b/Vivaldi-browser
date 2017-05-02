@@ -40,21 +40,47 @@ namespace blink {
 
 double ResourceRequest::s_defaultTimeoutInterval = INT_MAX;
 
-ResourceRequest::ResourceRequest() {
-  initialize(KURL());
-}
+ResourceRequest::ResourceRequest() : ResourceRequest(KURL()) {}
 
-ResourceRequest::ResourceRequest(const String& urlString) {
-  initialize(KURL(ParsedURLString, urlString));
-}
+ResourceRequest::ResourceRequest(const String& urlString)
+    : ResourceRequest(KURL(ParsedURLString, urlString)) {}
 
-ResourceRequest::ResourceRequest(const KURL& url) {
-  initialize(url);
-}
+ResourceRequest::ResourceRequest(const KURL& url)
+    : m_url(url),
+      m_cachePolicy(WebCachePolicy::UseProtocolCachePolicy),
+      m_timeoutInterval(s_defaultTimeoutInterval),
+      m_requestorOrigin(SecurityOrigin::createUnique()),
+      m_httpMethod(HTTPNames::GET),
+      m_allowStoredCredentials(true),
+      m_reportUploadProgress(false),
+      m_reportRawHeaders(false),
+      m_hasUserGesture(false),
+      m_downloadToFile(false),
+      m_useStreamOnResponse(false),
+      m_shouldResetAppCache(false),
+      m_skipServiceWorker(WebURLRequest::SkipServiceWorker::None),
+      m_priority(ResourceLoadPriorityLowest),
+      m_intraPriorityValue(0),
+      m_requestorID(0),
+      m_requestorProcessID(0),
+      m_appCacheHostID(0),
+      m_requestContext(WebURLRequest::RequestContextUnspecified),
+      m_frameType(WebURLRequest::FrameTypeNone),
+      m_fetchRequestMode(WebURLRequest::FetchRequestModeNoCORS),
+      m_fetchCredentialsMode(WebURLRequest::FetchCredentialsModeInclude),
+      m_fetchRedirectMode(WebURLRequest::FetchRedirectModeFollow),
+      m_previewsState(WebURLRequest::PreviewsUnspecified),
+      m_referrerPolicy(ReferrerPolicyDefault),
+      m_didSetHTTPReferrer(false),
+      m_checkForBrowserSideNavigation(true),
+      m_uiStartTime(0),
+      m_isExternalRequest(false),
+      m_inputPerfMetricReportPolicy(
+          InputToLoadPerfMetricReportPolicy::NoReport),
+      m_redirectStatus(RedirectStatus::NoRedirect) {}
 
 ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
-    : ResourceRequest() {
-  setURL(data->m_url);
+    : ResourceRequest(data->m_url) {
   setCachePolicy(data->m_cachePolicy);
   setTimeoutInterval(data->m_timeoutInterval);
   setFirstPartyForCookies(data->m_firstPartyForCookies);
@@ -81,7 +107,7 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
   setFetchRequestMode(data->m_fetchRequestMode);
   setFetchCredentialsMode(data->m_fetchCredentialsMode);
   setFetchRedirectMode(data->m_fetchRedirectMode);
-  setLoFiState(data->m_loFiState);
+  setPreviewsState(data->m_previewsState);
   m_referrerPolicy = data->m_referrerPolicy;
   m_didSetHTTPReferrer = data->m_didSetHTTPReferrer;
   m_checkForBrowserSideNavigation = data->m_checkForBrowserSideNavigation;
@@ -98,7 +124,7 @@ ResourceRequest& ResourceRequest::operator=(const ResourceRequest&) = default;
 std::unique_ptr<CrossThreadResourceRequestData> ResourceRequest::copyData()
     const {
   std::unique_ptr<CrossThreadResourceRequestData> data =
-      makeUnique<CrossThreadResourceRequestData>();
+      WTF::makeUnique<CrossThreadResourceRequestData>();
   data->m_url = url().copy();
   data->m_cachePolicy = getCachePolicy();
   data->m_timeoutInterval = timeoutInterval();
@@ -129,7 +155,7 @@ std::unique_ptr<CrossThreadResourceRequestData> ResourceRequest::copyData()
   data->m_fetchRequestMode = m_fetchRequestMode;
   data->m_fetchCredentialsMode = m_fetchCredentialsMode;
   data->m_fetchRedirectMode = m_fetchRedirectMode;
-  data->m_loFiState = m_loFiState;
+  data->m_previewsState = m_previewsState;
   data->m_referrerPolicy = m_referrerPolicy;
   data->m_didSetHTTPReferrer = m_didSetHTTPReferrer;
   data->m_checkForBrowserSideNavigation = m_checkForBrowserSideNavigation;
@@ -375,40 +401,6 @@ bool ResourceRequest::cacheControlContainsNoStore() const {
 bool ResourceRequest::hasCacheValidatorFields() const {
   return !m_httpHeaderFields.get(HTTPNames::Last_Modified).isEmpty() ||
          !m_httpHeaderFields.get(HTTPNames::ETag).isEmpty();
-}
-
-void ResourceRequest::initialize(const KURL& url) {
-  m_url = url;
-  m_cachePolicy = WebCachePolicy::UseProtocolCachePolicy;
-  m_timeoutInterval = s_defaultTimeoutInterval;
-  m_httpMethod = HTTPNames::GET;
-  m_allowStoredCredentials = true;
-  m_reportUploadProgress = false;
-  m_reportRawHeaders = false;
-  m_hasUserGesture = false;
-  m_downloadToFile = false;
-  m_useStreamOnResponse = false;
-  m_skipServiceWorker = WebURLRequest::SkipServiceWorker::None;
-  m_shouldResetAppCache = false;
-  m_priority = ResourceLoadPriorityLowest;
-  m_intraPriorityValue = 0;
-  m_requestorID = 0;
-  m_requestorProcessID = 0;
-  m_appCacheHostID = 0;
-  m_requestContext = WebURLRequest::RequestContextUnspecified;
-  m_frameType = WebURLRequest::FrameTypeNone;
-  m_fetchRequestMode = WebURLRequest::FetchRequestModeNoCORS;
-  m_fetchCredentialsMode = WebURLRequest::FetchCredentialsModeInclude;
-  m_fetchRedirectMode = WebURLRequest::FetchRedirectModeFollow;
-  m_referrerPolicy = ReferrerPolicyDefault;
-  m_loFiState = WebURLRequest::LoFiUnspecified;
-  m_didSetHTTPReferrer = false;
-  m_checkForBrowserSideNavigation = true;
-  m_uiStartTime = 0;
-  m_isExternalRequest = false;
-  m_inputPerfMetricReportPolicy = InputToLoadPerfMetricReportPolicy::NoReport;
-  m_redirectStatus = RedirectStatus::NoRedirect;
-  m_requestorOrigin = SecurityOrigin::createUnique();
 }
 
 bool ResourceRequest::needsHTTPOrigin() const {

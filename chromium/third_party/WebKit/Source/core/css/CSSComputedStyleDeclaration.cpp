@@ -35,20 +35,22 @@
 #include "core/css/CSSVariableData.h"
 #include "core/css/ComputedStyleCSSValueMapping.h"
 #include "core/css/parser/CSSParser.h"
-#include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/PseudoElement.h"
+#include "core/dom/StyleEngine.h"
 #include "core/layout/LayoutObject.h"
 #include "core/style/ComputedStyle.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
 
+namespace {
+
 // List of all properties we know how to compute, omitting shorthands.
 // NOTE: Do not use this list, use computableProperties() instead
 // to respect runtime enabling of CSS properties.
-static const CSSPropertyID staticComputableProperties[] = {
+const CSSPropertyID computedPropertyArray[] = {
     CSSPropertyAnimationDelay, CSSPropertyAnimationDirection,
     CSSPropertyAnimationDuration, CSSPropertyAnimationFillMode,
     CSSPropertyAnimationIterationCount, CSSPropertyAnimationName,
@@ -173,97 +175,31 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyRy, CSSPropertyScrollSnapType, CSSPropertyScrollSnapPointsX,
     CSSPropertyScrollSnapPointsY, CSSPropertyScrollSnapCoordinate,
     CSSPropertyScrollSnapDestination, CSSPropertyTranslate, CSSPropertyRotate,
-    CSSPropertyScale,
-};
+    CSSPropertyScale, CSSPropertyCaretColor};
 
-static const Vector<CSSPropertyID>& computableProperties() {
+const Vector<CSSPropertyID>& computableProperties() {
   DEFINE_STATIC_LOCAL(Vector<CSSPropertyID>, properties, ());
-  if (properties.isEmpty())
+  if (properties.isEmpty()) {
     CSSPropertyMetadata::filterEnabledCSSPropertiesIntoVector(
-        staticComputableProperties,
-        WTF_ARRAY_LENGTH(staticComputableProperties), properties);
+        computedPropertyArray, WTF_ARRAY_LENGTH(computedPropertyArray),
+        properties);
+  }
   return properties;
 }
 
-CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(
-    Node* n,
-    bool allowVisitedStyle,
-    const String& pseudoElementName)
-    : m_node(n),
-      m_pseudoElementSpecifier(CSSSelector::parsePseudoId(pseudoElementName)),
-      m_allowVisitedStyle(allowVisitedStyle) {}
-
-CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration() {}
-
-String CSSComputedStyleDeclaration::cssText() const {
-  StringBuilder result;
-  const Vector<CSSPropertyID>& properties = computableProperties();
-
-  for (unsigned i = 0; i < properties.size(); i++) {
-    if (i)
-      result.append(' ');
-    result.append(getPropertyName(properties[i]));
-    result.append(": ");
-    result.append(getPropertyValue(properties[i]));
-    result.append(';');
-  }
-
-  return result.toString();
-}
-
-void CSSComputedStyleDeclaration::setCSSText(const String&,
-                                             ExceptionState& exceptionState) {
-  exceptionState.throwDOMException(
-      NoModificationAllowedError,
-      "These styles are computed, and therefore read-only.");
-}
-
-static CSSValueID cssIdentifierForFontSizeKeyword(int keywordSize) {
+CSSValueID cssIdentifierForFontSizeKeyword(int keywordSize) {
   DCHECK_NE(keywordSize, 0);
   DCHECK_LE(keywordSize, 8);
   return static_cast<CSSValueID>(CSSValueXxSmall + keywordSize - 1);
 }
 
-inline static CSSPrimitiveValue* zoomAdjustedPixelValue(
-    double value,
-    const ComputedStyle& style) {
+inline CSSPrimitiveValue* zoomAdjustedPixelValue(double value,
+                                                 const ComputedStyle& style) {
   return CSSPrimitiveValue::create(adjustFloatForAbsoluteZoom(value, style),
                                    CSSPrimitiveValue::UnitType::Pixels);
 }
 
-const CSSValue*
-CSSComputedStyleDeclaration::getFontSizeCSSValuePreferringKeyword() const {
-  if (!m_node)
-    return nullptr;
-
-  m_node->document().updateStyleAndLayoutIgnorePendingStylesheets();
-
-  const ComputedStyle* style =
-      m_node->ensureComputedStyle(m_pseudoElementSpecifier);
-  if (!style)
-    return nullptr;
-
-  if (int keywordSize = style->getFontDescription().keywordSize())
-    return CSSIdentifierValue::create(
-        cssIdentifierForFontSizeKeyword(keywordSize));
-
-  return zoomAdjustedPixelValue(style->getFontDescription().computedPixelSize(),
-                                *style);
-}
-
-bool CSSComputedStyleDeclaration::isMonospaceFont() const {
-  if (!m_node)
-    return false;
-
-  const ComputedStyle* style =
-      m_node->ensureComputedStyle(m_pseudoElementSpecifier);
-  if (!style)
-    return false;
-
-  return style->getFontDescription().isMonospace();
-}
-
-static void logUnimplementedPropertyID(CSSPropertyID propertyID) {
+void logUnimplementedPropertyID(CSSPropertyID propertyID) {
   DEFINE_STATIC_LOCAL(HashSet<CSSPropertyID>, propertyIDSet, ());
   if (!propertyIDSet.add(propertyID).isNewEntry)
     return;
@@ -272,9 +208,9 @@ static void logUnimplementedPropertyID(CSSPropertyID propertyID) {
               << getPropertyName(propertyID) << "'.";
 }
 
-static bool isLayoutDependent(CSSPropertyID propertyID,
-                              const ComputedStyle* style,
-                              LayoutObject* layoutObject) {
+bool isLayoutDependent(CSSPropertyID propertyID,
+                       const ComputedStyle* style,
+                       LayoutObject* layoutObject) {
   if (!layoutObject)
     return false;
 
@@ -339,6 +275,73 @@ static bool isLayoutDependent(CSSPropertyID propertyID,
   }
 }
 
+}  // namespace
+
+CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(
+    Node* n,
+    bool allowVisitedStyle,
+    const String& pseudoElementName)
+    : m_node(n),
+      m_pseudoElementSpecifier(CSSSelector::parsePseudoId(pseudoElementName)),
+      m_allowVisitedStyle(allowVisitedStyle) {}
+
+CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration() {}
+
+String CSSComputedStyleDeclaration::cssText() const {
+  StringBuilder result;
+  const Vector<CSSPropertyID>& properties = computableProperties();
+
+  for (unsigned i = 0; i < properties.size(); i++) {
+    if (i)
+      result.append(' ');
+    result.append(getPropertyName(properties[i]));
+    result.append(": ");
+    result.append(getPropertyValue(properties[i]));
+    result.append(';');
+  }
+
+  return result.toString();
+}
+
+void CSSComputedStyleDeclaration::setCSSText(const String&,
+                                             ExceptionState& exceptionState) {
+  exceptionState.throwDOMException(
+      NoModificationAllowedError,
+      "These styles are computed, and therefore read-only.");
+}
+
+const CSSValue*
+CSSComputedStyleDeclaration::getFontSizeCSSValuePreferringKeyword() const {
+  if (!m_node)
+    return nullptr;
+
+  m_node->document().updateStyleAndLayoutIgnorePendingStylesheets();
+
+  const ComputedStyle* style =
+      m_node->ensureComputedStyle(m_pseudoElementSpecifier);
+  if (!style)
+    return nullptr;
+
+  if (int keywordSize = style->getFontDescription().keywordSize()) {
+    return CSSIdentifierValue::create(
+        cssIdentifierForFontSizeKeyword(keywordSize));
+  }
+
+  return zoomAdjustedPixelValue(style->getFontDescription().computedPixelSize(),
+                                *style);
+}
+
+bool CSSComputedStyleDeclaration::isMonospaceFont() const {
+  if (!m_node)
+    return false;
+
+  const ComputedStyle* style =
+      m_node->ensureComputedStyle(m_pseudoElementSpecifier);
+  if (!style)
+    return false;
+
+  return style->getFontDescription().isMonospace();
+}
 const ComputedStyle* CSSComputedStyleDeclaration::computeComputedStyle() const {
   Node* styledNode = this->styledNode();
   ASSERT(styledNode);
@@ -400,7 +403,7 @@ const CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(
       isLayoutDependent(propertyID, style, layoutObject) ||
       styledNode->isInShadowTree() ||
       (document.localOwner() &&
-       document.ensureStyleResolver().hasViewportDependentMediaQueries());
+       document.styleEngine().hasViewportDependentMediaQueries());
 
   if (forceFullLayout) {
     document.updateStyleAndLayoutIgnorePendingStylesheetsForNode(styledNode);
@@ -475,7 +478,7 @@ MutableStylePropertySet* CSSComputedStyleDeclaration::copyPropertiesInSet(
   for (unsigned i = 0; i < properties.size(); ++i) {
     const CSSValue* value = getPropertyCSSValue(properties[i]);
     if (value)
-      list.append(CSSProperty(properties[i], *value, false));
+      list.push_back(CSSProperty(properties[i], *value, false));
   }
   return MutableStylePropertySet::create(list.data(), list.size());
 }

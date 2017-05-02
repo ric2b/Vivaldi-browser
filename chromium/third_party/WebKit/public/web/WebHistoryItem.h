@@ -78,7 +78,7 @@ class WebHistoryItem {
   BLINK_EXPORT void setURLString(const WebString&);
 
   BLINK_EXPORT WebString referrer() const;
-  BLINK_EXPORT WebReferrerPolicy referrerPolicy() const;
+  BLINK_EXPORT WebReferrerPolicy getReferrerPolicy() const;
   BLINK_EXPORT void setReferrer(const WebString&, WebReferrerPolicy);
 
   BLINK_EXPORT WebString target() const;
@@ -87,13 +87,13 @@ class WebHistoryItem {
   BLINK_EXPORT WebFloatPoint visualViewportScrollOffset() const;
   BLINK_EXPORT void setVisualViewportScrollOffset(const WebFloatPoint&);
 
-  BLINK_EXPORT WebPoint scrollOffset() const;
+  BLINK_EXPORT WebPoint getScrollOffset() const;
   BLINK_EXPORT void setScrollOffset(const WebPoint&);
 
   BLINK_EXPORT float pageScaleFactor() const;
   BLINK_EXPORT void setPageScaleFactor(float);
 
-  BLINK_EXPORT WebVector<WebString> documentState() const;
+  BLINK_EXPORT WebVector<WebString> getDocumentState() const;
   BLINK_EXPORT void setDocumentState(const WebVector<WebString>&);
 
   BLINK_EXPORT long long itemSequenceNumber() const;

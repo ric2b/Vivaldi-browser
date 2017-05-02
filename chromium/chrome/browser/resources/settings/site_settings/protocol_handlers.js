@@ -64,17 +64,16 @@ Polymer({
         this.setProtocolHandlers_.bind(this));
     this.addWebUIListener('setIgnoredProtocolHandlers',
         this.setIgnoredProtocolHandlers_.bind(this));
-    this.browserProxy.initializeProtocolHandlerList();
+    this.browserProxy.observeProtocolHandlers();
   },
 
   /**
    * Obtains the description for the main toggle.
-   * @param {boolean} categoryEnabled Whether the main toggle is enabled.
    * @return {string} The description to use.
    * @private
    */
-  computeHandlersDescription_: function(categoryEnabled) {
-    var setting = categoryEnabled ?
+  computeHandlersDescription_: function() {
+    var setting = this.categoryEnabled ?
         settings.PermissionValues.ALLOW : settings.PermissionValues.BLOCK;
     return this.computeCategoryDesc(
         settings.ContentSettingsTypes.PROTOCOL_HANDLERS, setting, true);

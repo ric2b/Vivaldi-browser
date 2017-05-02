@@ -31,6 +31,7 @@
 #include "modules/filesystem/DOMFileSystem.h"
 
 #include "core/fileapi/BlobCallback.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "modules/filesystem/DOMFilePath.h"
 #include "modules/filesystem/DirectoryEntry.h"
 #include "modules/filesystem/FileEntry.h"
@@ -40,6 +41,7 @@
 #include "modules/filesystem/FileWriterCallback.h"
 #include "modules/filesystem/MetadataCallback.h"
 #include "platform/FileMetadata.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFileSystem.h"
@@ -51,14 +53,26 @@
 
 namespace blink {
 
+namespace {
+
+void runCallback(ExecutionContext* executionContext,
+                 std::unique_ptr<WTF::Closure> task) {
+  if (!executionContext)
+    return;
+  DCHECK(executionContext->isContextThread());
+  InspectorInstrumentation::AsyncTask asyncTask(executionContext, task.get(),
+                                                true /* isInstrumented */);
+  (*task)();
+}
+
+}  // namespace
+
 // static
 DOMFileSystem* DOMFileSystem::create(ExecutionContext* context,
                                      const String& name,
                                      FileSystemType type,
                                      const KURL& rootURL) {
-  DOMFileSystem* fileSystem(new DOMFileSystem(context, name, type, rootURL));
-  fileSystem->suspendIfNeeded();
-  return fileSystem;
+  return new DOMFileSystem(context, name, type, rootURL);
 }
 
 DOMFileSystem* DOMFileSystem::createIsolatedFileSystem(
@@ -94,8 +108,7 @@ DOMFileSystem::DOMFileSystem(ExecutionContext* context,
                              FileSystemType type,
                              const KURL& rootURL)
     : DOMFileSystemBase(context, name, type, rootURL),
-      ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+      ContextLifecycleObserver(context),
       m_numberOfPendingCallbacks(0),
       m_rootEntry(DirectoryEntry::create(this, DOMFilePath::root)) {}
 
@@ -125,10 +138,10 @@ void DOMFileSystem::reportError(ErrorCallbackBase* errorCallback,
 void DOMFileSystem::reportError(ExecutionContext* executionContext,
                                 ErrorCallbackBase* errorCallback,
                                 FileError::ErrorCode fileError) {
-  if (errorCallback)
-    scheduleCallback(
-        executionContext,
-        createSameThreadTask(&ErrorCallbackBase::invoke,
+  if (!errorCallback)
+    return;
+  scheduleCallback(executionContext,
+                   WTF::bind(&ErrorCallbackBase::invoke,
                              wrapPersistent(errorCallback), fileError));
 }
 
@@ -192,9 +205,20 @@ void DOMFileSystem::createFile(const FileEntry* fileEntry,
                                    successCallback, errorCallback, m_context));
 }
 
+void DOMFileSystem::scheduleCallback(ExecutionContext* executionContext,
+                                     std::unique_ptr<WTF::Closure> task) {
+  DCHECK(executionContext->isContextThread());
+  InspectorInstrumentation::asyncTaskScheduled(
+      executionContext, taskNameForInstrumentation(), task.get());
+  TaskRunnerHelper::get(TaskType::FileReading, executionContext)
+      ->postTask(BLINK_FROM_HERE,
+                 WTF::bind(&runCallback, wrapWeakPersistent(executionContext),
+                           WTF::passed(std::move(task))));
+}
+
 DEFINE_TRACE(DOMFileSystem) {
   DOMFileSystemBase::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   visitor->trace(m_rootEntry);
 }
 

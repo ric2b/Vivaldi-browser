@@ -135,7 +135,7 @@ void paintComplexOutline(GraphicsContext& graphicsContext,
       continue;
 
     edges.grow(++count);
-    OutlineEdgeInfo& edge = edges.last();
+    OutlineEdgeInfo& edge = edges.back();
     edge.x1 = SkScalarTruncToInt(points[0].x());
     edge.y1 = SkScalarTruncToInt(points[0].y());
     edge.x2 = SkScalarTruncToInt(points[1].x());
@@ -174,7 +174,7 @@ void paintComplexOutline(GraphicsContext& graphicsContext,
   }
 
   DCHECK(count >= 4 && edges.size() == count);
-  int firstAdjacentWidth = adjustJoint(width, edges.last(), edges.first());
+  int firstAdjacentWidth = adjustJoint(width, edges.back(), edges.front());
 
   // The width of the angled part of starting and ending joint of the current
   // edge.
@@ -223,7 +223,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo,
 
   const ComputedStyle& styleToUse = m_layoutObject.styleRef();
   if (!styleToUse.hasOutline() ||
-      styleToUse.visibility() != EVisibility::Visible)
+      styleToUse.visibility() != EVisibility::kVisible)
     return;
 
   // Only paint the focus ring by hand if the theme isn't able to draw the focus
@@ -258,7 +258,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo,
 
   Vector<IntRect> pixelSnappedOutlineRects;
   for (auto& r : outlineRects)
-    pixelSnappedOutlineRects.append(pixelSnappedIntRect(r));
+    pixelSnappedOutlineRects.push_back(pixelSnappedIntRect(r));
 
   IntRect unitedOutlineRect = unionRectEvenIfEmpty(pixelSnappedOutlineRects);
   IntRect bounds = unitedOutlineRect;
@@ -304,7 +304,7 @@ void ObjectPainter::addPDFURLRectIfNeeded(const PaintInfo& paintInfo,
   DCHECK(paintInfo.isPrinting());
   if (m_layoutObject.isElementContinuation() || !m_layoutObject.node() ||
       !m_layoutObject.node()->isLink() ||
-      m_layoutObject.styleRef().visibility() != EVisibility::Visible)
+      m_layoutObject.styleRef().visibility() != EVisibility::kVisible)
     return;
 
   KURL url = toElement(m_layoutObject.node())->hrefURL();
@@ -699,15 +699,6 @@ void ObjectPainter::doCheckPaintOffset(const PaintInfo& paintInfo,
                                        const LayoutPoint& paintOffset) {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
-  // TODO(pdr,wangxianzhu): Refactor to avoid the special treatment for SVGText,
-  // SVGInline, SVGInlineText and SVGForeignObject.
-  if (m_layoutObject.isSVG() && !m_layoutObject.isSVGRoot() &&
-      !m_layoutObject.isSVGForeignObject()) {
-    if (!m_layoutObject.isSVGInline() && !m_layoutObject.isSVGInlineText())
-      DCHECK(paintOffset == LayoutPoint());
-    return;
-  }
-
   // TODO(pdr): Let painter and paint property tree builder generate the same
   // paint offset for LayoutScrollbarPart. crbug.com/664249.
   if (m_layoutObject.isLayoutScrollbarPart())
@@ -716,7 +707,11 @@ void ObjectPainter::doCheckPaintOffset(const PaintInfo& paintInfo,
   LayoutPoint adjustedPaintOffset = paintOffset;
   if (m_layoutObject.isBox())
     adjustedPaintOffset += toLayoutBox(m_layoutObject).location();
-  DCHECK(m_layoutObject.previousPaintOffset() == adjustedPaintOffset);
+  DCHECK(m_layoutObject.paintOffset() == adjustedPaintOffset)
+      << " Paint offset mismatch: " << m_layoutObject.debugName()
+      << " from PaintPropertyTreeBuilder: "
+      << m_layoutObject.paintOffset().toString()
+      << " from painter: " << adjustedPaintOffset.toString();
 }
 #endif
 

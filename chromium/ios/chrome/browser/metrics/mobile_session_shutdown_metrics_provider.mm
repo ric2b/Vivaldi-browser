@@ -4,7 +4,7 @@
 
 #include "ios/chrome/browser/metrics/mobile_session_shutdown_metrics_provider.h"
 
-#include <Foundation/Foundation.h>
+#import <Foundation/Foundation.h>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -12,6 +12,10 @@
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
 #import "ios/chrome/browser/crash_report/crash_report_background_uploader.h"
 #import "ios/chrome/browser/metrics/previous_session_info.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 

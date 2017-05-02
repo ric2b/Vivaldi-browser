@@ -4,7 +4,10 @@
 
 #include "components/ntp_snippets/features.h"
 
-#include "base/strings/string_number_conversions.h"
+#include "base/memory/ptr_util.h"
+#include "base/time/clock.h"
+#include "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
+#include "components/ntp_snippets/category_rankers/constant_category_ranker.h"
 #include "components/variations/variations_associated_data.h"
 
 namespace ntp_snippets {
@@ -42,44 +45,52 @@ const base::Feature kForeignSessionsSuggestionsFeature{
 const base::Feature kFetchMoreFeature{"NTPSuggestionsFetchMore",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
-int GetParamAsInt(const base::Feature& feature,
-                  const std::string& param_name,
-                  const int default_value) {
-  std::string value_as_string =
-      variations::GetVariationParamValueByFeature(feature, param_name);
-  int value_as_int = 0;
-  if (!base::StringToInt(value_as_string, &value_as_int)) {
-    if (!value_as_string.empty()) {
-      LOG(WARNING) << "Failed to parse variation param " << param_name
-                   << " with string value " << value_as_string
-                   << " under feature " << feature.name
-                   << " into an int. Falling back to default value of "
-                   << default_value;
-    }
-    value_as_int = default_value;
+const base::Feature kPreferAmpUrlsFeature{"NTPPreferAmpUrls",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kCategoryRanker{"ContentSuggestionsCategoryRanker",
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
+
+const char kCategoryRankerParameter[] = "category_ranker";
+const char kCategoryRankerConstantRanker[] = "constant";
+const char kCategoryRankerClickBasedRanker[] = "click_based";
+
+CategoryRankerChoice GetSelectedCategoryRanker() {
+  std::string category_ranker_value =
+      variations::GetVariationParamValueByFeature(kCategoryRanker,
+                                                  kCategoryRankerParameter);
+
+  if (category_ranker_value.empty()) {
+    // Default, Enabled or Disabled.
+    return CategoryRankerChoice::CONSTANT;
   }
-  return value_as_int;
+  if (category_ranker_value == kCategoryRankerConstantRanker) {
+    return CategoryRankerChoice::CONSTANT;
+  }
+  if (category_ranker_value == kCategoryRankerClickBasedRanker) {
+    return CategoryRankerChoice::CLICK_BASED;
+  }
+
+  NOTREACHED() << "The " << kCategoryRankerParameter << " parameter value is '"
+               << category_ranker_value << "'";
+  return CategoryRankerChoice::CONSTANT;
 }
 
-
-bool GetParamAsBool(const base::Feature& feature,
-                    const std::string& param_name,
-                    bool default_value) {
-  std::string value_as_string =
-      variations::GetVariationParamValueByFeature(feature, param_name);
-  if (value_as_string == "true")
-    return true;
-  if (value_as_string == "false")
-    return false;
-
-  if (!value_as_string.empty()) {
-    LOG(WARNING) << "Failed to parse variation param " << param_name
-                 << " with string value " << value_as_string
-                 << " under feature " << feature.name
-                 << " into a bool. Falling back to default value of "
-                 << default_value;
+std::unique_ptr<CategoryRanker> BuildSelectedCategoryRanker(
+    PrefService* pref_service,
+    std::unique_ptr<base::Clock> clock) {
+  CategoryRankerChoice choice = ntp_snippets::GetSelectedCategoryRanker();
+  switch (choice) {
+    case CategoryRankerChoice::CONSTANT:
+      return base::MakeUnique<ConstantCategoryRanker>();
+    case CategoryRankerChoice::CLICK_BASED:
+      return base::MakeUnique<ClickBasedCategoryRanker>(pref_service,
+                                                        std::move(clock));
+    default:
+      NOTREACHED() << "The category ranker choice value is "
+                   << static_cast<int>(choice);
   }
-  return default_value;
+  return nullptr;
 }
 
 }  // namespace ntp_snippets

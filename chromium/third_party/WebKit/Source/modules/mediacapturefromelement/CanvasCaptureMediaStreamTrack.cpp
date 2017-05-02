@@ -40,8 +40,7 @@ void CanvasCaptureMediaStreamTrack::requestFrame() {
 
 CanvasCaptureMediaStreamTrack* CanvasCaptureMediaStreamTrack::clone(
     ExecutionContext* context) {
-  MediaStreamComponent* clonedComponent =
-      MediaStreamComponent::create(component()->source());
+  MediaStreamComponent* clonedComponent = component()->clone();
   CanvasCaptureMediaStreamTrack* clonedTrack =
       new CanvasCaptureMediaStreamTrack(*this, clonedComponent);
   MediaStreamCenter::instance().didCreateMediaStreamTrack(clonedComponent);
@@ -60,7 +59,6 @@ CanvasCaptureMediaStreamTrack::CanvasCaptureMediaStreamTrack(
     : MediaStreamTrack(track.m_canvasElement->getExecutionContext(), component),
       m_canvasElement(track.m_canvasElement),
       m_drawListener(track.m_drawListener) {
-  suspendIfNeeded();
   m_canvasElement->addListener(m_drawListener.get());
 }
 
@@ -70,7 +68,6 @@ CanvasCaptureMediaStreamTrack::CanvasCaptureMediaStreamTrack(
     std::unique_ptr<WebCanvasCaptureHandler> handler)
     : MediaStreamTrack(element->getExecutionContext(), component),
       m_canvasElement(element) {
-  suspendIfNeeded();
   m_drawListener = AutoCanvasDrawListener::create(std::move(handler));
   m_canvasElement->addListener(m_drawListener.get());
 }
@@ -82,7 +79,6 @@ CanvasCaptureMediaStreamTrack::CanvasCaptureMediaStreamTrack(
     double frameRate)
     : MediaStreamTrack(element->getExecutionContext(), component),
       m_canvasElement(element) {
-  suspendIfNeeded();
   if (frameRate == 0) {
     m_drawListener = OnRequestCanvasDrawListener::create(std::move(handler));
   } else {

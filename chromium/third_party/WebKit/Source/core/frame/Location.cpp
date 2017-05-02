@@ -28,6 +28,7 @@
 
 #include "core/frame/Location.h"
 
+#include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/dom/DOMURLUtilsReadOnly.h"
@@ -108,12 +109,13 @@ String Location::origin() const {
 }
 
 DOMStringList* Location::ancestorOrigins() const {
-  DOMStringList* origins = DOMStringList::create(DOMStringList::Location);
+  DOMStringList* origins = DOMStringList::create();
   if (!m_frame)
     return origins;
   for (Frame* frame = m_frame->tree().parent(); frame;
-       frame = frame->tree().parent())
+       frame = frame->tree().parent()) {
     origins->append(frame->securityContext()->getSecurityOrigin()->toString());
+  }
   return origins;
 }
 
@@ -227,6 +229,14 @@ void Location::assign(LocalDOMWindow* currentWindow,
                       LocalDOMWindow* enteredWindow,
                       const String& url,
                       ExceptionState& exceptionState) {
+  // TODO(yukishiino): Remove this check once we remove [CrossOrigin] from
+  // the |assign| DOM operation's definition in Location.idl.  See the comment
+  // in Location.idl for details.
+  if (!BindingSecurity::shouldAllowAccessTo(currentWindow, this,
+                                            exceptionState)) {
+    return;
+  }
+
   if (!m_frame)
     return;
   setLocation(url, currentWindow, enteredWindow, &exceptionState);
@@ -239,7 +249,7 @@ void Location::replace(LocalDOMWindow* currentWindow,
   if (!m_frame)
     return;
   setLocation(url, currentWindow, enteredWindow, &exceptionState,
-              SetLocation::ReplaceThisFrame);
+              SetLocationPolicy::ReplaceThisFrame);
 }
 
 void Location::reload(LocalDOMWindow* currentWindow) {
@@ -247,15 +257,19 @@ void Location::reload(LocalDOMWindow* currentWindow) {
     return;
   if (protocolIsJavaScript(toLocalFrame(m_frame)->document()->url()))
     return;
-  m_frame->reload(FrameLoadTypeReload, ClientRedirectPolicy::ClientRedirect);
+  FrameLoadType reloadType =
+      RuntimeEnabledFeatures::fasterLocationReloadEnabled()
+          ? FrameLoadTypeReloadMainResource
+          : FrameLoadTypeReload;
+  m_frame->reload(reloadType, ClientRedirectPolicy::ClientRedirect);
 }
 
 void Location::setLocation(const String& url,
                            LocalDOMWindow* currentWindow,
                            LocalDOMWindow* enteredWindow,
                            ExceptionState* exceptionState,
-                           SetLocation locationPolicy) {
-  ASSERT(m_frame);
+                           SetLocationPolicy setLocationPolicy) {
+  DCHECK(m_frame);
   if (!m_frame || !m_frame->host())
     return;
 
@@ -263,11 +277,12 @@ void Location::setLocation(const String& url,
     return;
 
   if (!currentWindow->frame()->canNavigate(*m_frame)) {
-    if (exceptionState)
+    if (exceptionState) {
       exceptionState->throwSecurityError(
           "The current window does not have permission to navigate the target "
           "frame to '" +
           url + "'.");
+    }
     return;
   }
 
@@ -292,14 +307,14 @@ void Location::setLocation(const String& url,
       V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
   if (activityLogger) {
     Vector<String> argv;
-    argv.append("LocalDOMWindow");
-    argv.append("url");
-    argv.append(enteredDocument->url());
-    argv.append(completedURL);
+    argv.push_back("LocalDOMWindow");
+    argv.push_back("url");
+    argv.push_back(enteredDocument->url());
+    argv.push_back(completedURL);
     activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
   }
   m_frame->navigate(*currentWindow->document(), completedURL,
-                    locationPolicy == SetLocation::ReplaceThisFrame,
+                    setLocationPolicy == SetLocationPolicy::ReplaceThisFrame,
                     UserGestureStatus::None);
 }
 

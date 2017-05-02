@@ -5,8 +5,8 @@
 package org.chromium.net;
 
 import android.os.ConditionVariable;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.SmallTest;
 
 import org.json.JSONObject;
 
@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
  * Tests making requests using QUIC.
  */
 public class QuicTest extends CronetTestBase {
-    private static final String TAG = "cr.QuicTest";
+    private static final String TAG = QuicTest.class.getSimpleName();
     private static final String QUIC_PROTOCOL_STRING_PREFIX = "http/2+quic/";
     private CronetTestFramework mTestFramework;
     private ExperimentalCronetEngine.Builder mBuilder;
@@ -95,7 +95,7 @@ public class QuicTest extends CronetTestBase {
         assertIsQuic(callback.mResponseInfo);
         // The total received bytes should be larger than the content length, to account for
         // headers.
-        assertTrue(callback.mResponseInfo.getReceivedBytesCount() > expectedContent.length());
+        assertTrue(callback.mResponseInfo.getReceivedByteCount() > expectedContent.length());
         // This test takes a long time, since the update will only be scheduled
         // after kUpdatePrefsDelayMs in http_server_properties_manager.cc.
         while (true) {
@@ -138,7 +138,7 @@ public class QuicTest extends CronetTestBase {
         assertIsQuic(callback.mResponseInfo);
         // The total received bytes should be larger than the content length, to account for
         // headers.
-        assertTrue(callback2.mResponseInfo.getReceivedBytesCount() > expectedContent.length());
+        assertTrue(callback2.mResponseInfo.getReceivedByteCount() > expectedContent.length());
     }
 
     // Returns whether a file contains a particular string.
@@ -171,7 +171,7 @@ public class QuicTest extends CronetTestBase {
         mTestFramework.mCronetEngine.addRttListener(rttListener);
         mTestFramework.mCronetEngine.addThroughputListener(throughputListener);
 
-        mTestFramework.mCronetEngine.configureNetworkQualityEstimatorForTesting(true, true);
+        mTestFramework.mCronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
 
         // Although the native stack races QUIC and SPDY for the first request,
@@ -207,6 +207,26 @@ public class QuicTest extends CronetTestBase {
         assertTrue(mTestFramework.mCronetEngine.getEffectiveConnectionType()
                 != EffectiveConnectionType.TYPE_UNKNOWN);
 
+        // Verify that the HTTP RTT, transport RTT and downstream throughput
+        // estimates are available.
+        assertTrue(mTestFramework.mCronetEngine.getHttpRttMs() >= 0);
+        assertTrue(mTestFramework.mCronetEngine.getTransportRttMs() >= 0);
+        assertTrue(mTestFramework.mCronetEngine.getDownstreamThroughputKbps() >= 0);
+
+        // Verify that the cached estimates were written to the prefs.
+        while (true) {
+            Log.i(TAG, "Still waiting for pref file update.....");
+            Thread.sleep(10000);
+            try {
+                if (fileContainsString("local_prefs.json", "network_qualities")) {
+                    break;
+                }
+            } catch (FileNotFoundException e) {
+                // Ignored this exception since the file will only be created when updates are
+                // flushed to the disk.
+            }
+        }
+        assertTrue(fileContainsString("local_prefs.json", "network_qualities"));
         mTestFramework.mCronetEngine.shutdown();
     }
 

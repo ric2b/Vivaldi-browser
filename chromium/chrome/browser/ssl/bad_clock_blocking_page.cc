@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/callback_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/interstitials/chrome_controller_client.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/bad_clock_ui.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "content/public/browser/interstitial_page.h"
@@ -67,9 +69,12 @@ BadClockBlockingPage::BadClockBlockingPage(
     ssl_errors::ClockState clock_state,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
-    : SecurityInterstitialPage(web_contents,
-                               request_url,
-                               CreateMetricsHelper(web_contents, request_url)),
+    : SecurityInterstitialPage(
+          web_contents,
+          request_url,
+          base::MakeUnique<ChromeControllerClient>(
+              web_contents,
+              CreateMetricsHelper(web_contents, request_url))),
       callback_(callback),
       ssl_info_(ssl_info),
       cert_report_helper_(new CertReportHelper(
@@ -134,6 +139,23 @@ void BadClockBlockingPage::CommandReceived(const std::string& command) {
 
   bad_clock_ui_->HandleCommand(
       static_cast<security_interstitials::SecurityInterstitialCommands>(cmd));
+
+  // Special handling for the reporting preference being changed.
+  switch (cmd) {
+    case security_interstitials::CMD_DO_REPORT:
+      safe_browsing::SetExtendedReportingPrefAndMetric(
+          controller()->GetPrefService(), true,
+          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
+      break;
+    case security_interstitials::CMD_DONT_REPORT:
+      safe_browsing::SetExtendedReportingPrefAndMetric(
+          controller()->GetPrefService(), false,
+          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
+      break;
+    default:
+      // Other commands can be ignored.
+      break;
+  }
 }
 
 void BadClockBlockingPage::OverrideRendererPrefs(
@@ -145,6 +167,7 @@ void BadClockBlockingPage::OverrideRendererPrefs(
 }
 
 void BadClockBlockingPage::OnDontProceed() {
+  UpdateMetricsAfterSecurityInterstitial();
   cert_report_helper_->FinishCertCollection(
       certificate_reporting::ErrorReport::USER_DID_NOT_PROCEED);
   NotifyDenyCertificate();

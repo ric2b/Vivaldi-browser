@@ -9,9 +9,11 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.os.AsyncTask;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v4.widget.DrawerLayout.DrawerListener;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar.OnMenuItemClickListener;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -121,7 +123,7 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
             List<DownloadHistoryItemWrapper> items = (List<DownloadHistoryItemWrapper>) actionData;
 
             // Deletion was undone. Add items back to the adapter.
-            mHistoryAdapter.reAddItemsToAdapter(items);
+            mHistoryAdapter.unmarkItemsForDeletion(items);
 
             RecordUserAction.record("Android.DownloadManager.UndoDelete");
         }
@@ -174,7 +176,7 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
     private Activity mActivity;
     private ViewGroup mMainView;
     private DownloadManagerToolbar mToolbar;
-    private SelectableListLayout mSelectableListLayout;
+    private SelectableListLayout<DownloadHistoryItemWrapper> mSelectableListLayout;
 
     public DownloadManagerUi(
             Activity activity, boolean isOffTheRecord, ComponentName parentComponent) {
@@ -190,14 +192,20 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
             addDrawerListener(drawerLayout);
         }
 
-        mSelectableListLayout =
-                (SelectableListLayout) mMainView.findViewById(R.id.selectable_list);
+        mSelectableListLayout = (SelectableListLayout<DownloadHistoryItemWrapper>)
+                mMainView.findViewById(R.id.selectable_list);
 
-        mSelectableListLayout.initializeEmptyView(R.drawable.downloads_big,
+        mSelectableListLayout.initializeEmptyView(
+                VectorDrawableCompat.create(mActivity.getResources(),
+                        R.drawable.downloads_big, mActivity.getTheme()),
                 R.string.download_manager_ui_empty);
 
         mHistoryAdapter = new DownloadHistoryAdapter(isOffTheRecord, parentComponent);
-        mSelectableListLayout.initializeRecyclerView(mHistoryAdapter);
+        RecyclerView recyclerView = mSelectableListLayout.initializeRecyclerView(mHistoryAdapter);
+
+        // Prevent every progress update from causing a transition animation.
+        recyclerView.getItemAnimator().setChangeDuration(0);
+
         mHistoryAdapter.initialize(mBackendProvider);
         addObserver(mHistoryAdapter);
 
@@ -211,7 +219,8 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
 
         mToolbar = (DownloadManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.download_manager_toolbar, mBackendProvider.getSelectionDelegate(),
-                0, drawerLayout, R.id.normal_menu_group, R.id.selection_mode_menu_group, this);
+                0, drawerLayout, R.id.normal_menu_group, R.id.selection_mode_menu_group, null, true,
+                this);
         mToolbar.setTitle(R.string.menu_downloads);
         addObserver(mToolbar);
 
@@ -394,7 +403,7 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
 
         if (itemsToDelete.isEmpty()) return;
 
-        mHistoryAdapter.removeItemsFromAdapter(itemsToDelete);
+        mHistoryAdapter.markItemsForDeletion(itemsToDelete);
 
         dismissUndoDeletionSnackbars();
 
@@ -420,7 +429,7 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
 
         for (DownloadHistoryItemWrapper item : selectedItems) {
             if (!filePathsToRemove.contains(item.getFilePath())) {
-                List<DownloadHistoryItemWrapper> itemsForFilePath =
+                Set<DownloadHistoryItemWrapper> itemsForFilePath =
                         mHistoryAdapter.getItemsForFilePath(item.getFilePath());
                 if (itemsForFilePath != null) {
                     itemsToRemove.addAll(itemsForFilePath);

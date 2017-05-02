@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/timing_function.h"
@@ -29,7 +30,6 @@
 #include "cc/output/copy_output_result.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/swap_promise.h"
-#include "cc/playback/display_item_list_settings.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
@@ -57,6 +57,7 @@
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/scroll_node.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/transform_node.h"
@@ -822,81 +823,90 @@ class LayerTreeHostTestPushNodeOwnerToNodeIdMap : public LayerTreeHostTest {
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
     PropertyTrees* property_trees = impl->sync_tree()->property_trees();
     auto root_transform_id_to_index =
-        property_trees->transform_id_to_index_map.find(root_->id());
+        property_trees->layer_id_to_transform_node_index.find(root_->id());
     auto child_transform_id_to_index =
-        property_trees->transform_id_to_index_map.find(child_->id());
+        property_trees->layer_id_to_transform_node_index.find(child_->id());
     auto root_effect_id_to_index =
-        property_trees->effect_id_to_index_map.find(root_->id());
+        property_trees->layer_id_to_effect_node_index.find(root_->id());
     auto child_effect_id_to_index =
-        property_trees->effect_id_to_index_map.find(child_->id());
+        property_trees->layer_id_to_effect_node_index.find(child_->id());
     auto root_clip_id_to_index =
-        property_trees->clip_id_to_index_map.find(root_->id());
+        property_trees->layer_id_to_clip_node_index.find(root_->id());
     auto child_clip_id_to_index =
-        property_trees->clip_id_to_index_map.find(child_->id());
+        property_trees->layer_id_to_clip_node_index.find(child_->id());
     auto root_scroll_id_to_index =
-        property_trees->scroll_id_to_index_map.find(root_->id());
+        property_trees->layer_id_to_scroll_node_index.find(root_->id());
     auto child_scroll_id_to_index =
-        property_trees->scroll_id_to_index_map.find(child_->id());
+        property_trees->layer_id_to_scroll_node_index.find(child_->id());
     switch (impl->sync_tree()->source_frame_number()) {
       case 0:
         // root_ should create every property tree node and child_ should not
         // create any.
         EXPECT_NE(root_transform_id_to_index,
-                  property_trees->transform_id_to_index_map.end());
+                  property_trees->layer_id_to_transform_node_index.end());
         EXPECT_EQ(root_transform_id_to_index->second,
                   root_->transform_tree_index());
         EXPECT_NE(root_effect_id_to_index,
-                  property_trees->effect_id_to_index_map.end());
+                  property_trees->layer_id_to_effect_node_index.end());
         EXPECT_EQ(root_effect_id_to_index->second, root_->effect_tree_index());
         EXPECT_NE(root_clip_id_to_index,
-                  property_trees->clip_id_to_index_map.end());
+                  property_trees->layer_id_to_clip_node_index.end());
         EXPECT_EQ(root_clip_id_to_index->second, root_->clip_tree_index());
         EXPECT_NE(root_scroll_id_to_index,
-                  property_trees->scroll_id_to_index_map.end());
+                  property_trees->layer_id_to_scroll_node_index.end());
         EXPECT_EQ(root_scroll_id_to_index->second, root_->scroll_tree_index());
         EXPECT_EQ(child_transform_id_to_index,
-                  property_trees->transform_id_to_index_map.end());
+                  property_trees->layer_id_to_transform_node_index.end());
         EXPECT_EQ(child_effect_id_to_index,
-                  property_trees->effect_id_to_index_map.end());
+                  property_trees->layer_id_to_effect_node_index.end());
         EXPECT_EQ(child_clip_id_to_index,
-                  property_trees->clip_id_to_index_map.end());
+                  property_trees->layer_id_to_clip_node_index.end());
         EXPECT_EQ(child_scroll_id_to_index,
-                  property_trees->scroll_id_to_index_map.end());
+                  property_trees->layer_id_to_scroll_node_index.end());
         break;
       case 1:
         // child_ should create a transfrom, clip, effect nodes but not a scroll
         // node.
-        EXPECT_NE(property_trees->transform_id_to_index_map.find(child_->id()),
-                  property_trees->transform_id_to_index_map.end());
+        EXPECT_NE(
+            property_trees->layer_id_to_transform_node_index.find(child_->id()),
+            property_trees->layer_id_to_transform_node_index.end());
         EXPECT_EQ(child_transform_id_to_index->second,
                   child_->transform_tree_index());
-        EXPECT_NE(property_trees->effect_id_to_index_map.find(child_->id()),
-                  property_trees->effect_id_to_index_map.end());
+        EXPECT_NE(
+            property_trees->layer_id_to_effect_node_index.find(child_->id()),
+            property_trees->layer_id_to_effect_node_index.end());
         EXPECT_EQ(child_effect_id_to_index->second,
                   child_->effect_tree_index());
-        EXPECT_NE(property_trees->clip_id_to_index_map.find(child_->id()),
-                  property_trees->clip_id_to_index_map.end());
+        EXPECT_NE(
+            property_trees->layer_id_to_clip_node_index.find(child_->id()),
+            property_trees->layer_id_to_clip_node_index.end());
         EXPECT_EQ(child_clip_id_to_index->second, child_->clip_tree_index());
-        EXPECT_EQ(property_trees->scroll_id_to_index_map.find(child_->id()),
-                  property_trees->scroll_id_to_index_map.end());
+        EXPECT_EQ(
+            property_trees->layer_id_to_scroll_node_index.find(child_->id()),
+            property_trees->layer_id_to_scroll_node_index.end());
         break;
       case 2:
         // child_ should create a scroll node.
-        EXPECT_NE(property_trees->scroll_id_to_index_map.find(child_->id()),
-                  property_trees->scroll_id_to_index_map.end());
+        EXPECT_NE(
+            property_trees->layer_id_to_scroll_node_index.find(child_->id()),
+            property_trees->layer_id_to_scroll_node_index.end());
         EXPECT_EQ(child_scroll_id_to_index->second,
                   child_->scroll_tree_index());
         break;
       case 3:
         // child_ should not create any property tree nodes.
-        EXPECT_EQ(property_trees->transform_id_to_index_map.find(child_->id()),
-                  property_trees->transform_id_to_index_map.end());
-        EXPECT_EQ(property_trees->effect_id_to_index_map.find(child_->id()),
-                  property_trees->effect_id_to_index_map.end());
-        EXPECT_EQ(property_trees->clip_id_to_index_map.find(child_->id()),
-                  property_trees->clip_id_to_index_map.end());
-        EXPECT_EQ(property_trees->scroll_id_to_index_map.find(child_->id()),
-                  property_trees->scroll_id_to_index_map.end());
+        EXPECT_EQ(
+            property_trees->layer_id_to_transform_node_index.find(child_->id()),
+            property_trees->layer_id_to_transform_node_index.end());
+        EXPECT_EQ(
+            property_trees->layer_id_to_effect_node_index.find(child_->id()),
+            property_trees->layer_id_to_effect_node_index.end());
+        EXPECT_EQ(
+            property_trees->layer_id_to_clip_node_index.find(child_->id()),
+            property_trees->layer_id_to_clip_node_index.end());
+        EXPECT_EQ(
+            property_trees->layer_id_to_scroll_node_index.find(child_->id()),
+            property_trees->layer_id_to_scroll_node_index.end());
 
         EndTest();
         break;
@@ -916,6 +926,111 @@ class LayerTreeHostTestPushNodeOwnerToNodeIdMap : public LayerTreeHostTest {
 // client side Layers would have the correct values for these indexes, but the
 // engine will never build PropertyTrees in LTH remote. See crbug.com/655795.
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestPushNodeOwnerToNodeIdMap);
+
+class LayerTreeHostTestPushElementIdToNodeIdMap : public LayerTreeHostTest {
+ protected:
+  void SetupTree() override {
+    root_ = Layer::Create();
+    child_ = Layer::Create();
+    child_->SetElementId(kTestElementId);
+    root_->AddChild(child_);
+    layer_tree()->SetRootLayer(root_);
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    switch (layer_tree_host()->SourceFrameNumber()) {
+      case 1:
+        child_->SetForceRenderSurfaceForTesting(true);
+        child_->AddMainThreadScrollingReasons(
+            MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+        break;
+      case 2:
+        child_->SetForceRenderSurfaceForTesting(false);
+        child_->ClearMainThreadScrollingReasons(
+            MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+        break;
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
+    PropertyTrees* property_trees = impl->sync_tree()->property_trees();
+    LayerImpl* child_impl_ = impl->sync_tree()->LayerById(child_->id());
+    switch (impl->sync_tree()->source_frame_number()) {
+      case 0:
+        EXPECT_EQ(2U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->transform_tree.size());
+        EXPECT_EQ(2U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->effect_tree.size());
+        EXPECT_EQ(2U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->scroll_tree.size());
+        EXPECT_TRUE(property_trees->element_id_to_transform_node_index.find(
+                        kTestElementId) ==
+                    property_trees->element_id_to_transform_node_index.end());
+        EXPECT_TRUE(property_trees->element_id_to_effect_node_index.find(
+                        kTestElementId) ==
+                    property_trees->element_id_to_effect_node_index.end());
+        EXPECT_TRUE(property_trees->element_id_to_scroll_node_index.find(
+                        kTestElementId) ==
+                    property_trees->element_id_to_scroll_node_index.end());
+        break;
+      case 1:
+        EXPECT_EQ(3U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->transform_tree.size());
+        EXPECT_EQ(3U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->effect_tree.size());
+        EXPECT_EQ(3U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->scroll_tree.size());
+        EXPECT_EQ(
+            2,
+            property_trees->element_id_to_transform_node_index[kTestElementId]);
+        EXPECT_EQ(
+            2, property_trees->element_id_to_effect_node_index[kTestElementId]);
+        EXPECT_EQ(
+            2, property_trees->element_id_to_scroll_node_index[kTestElementId]);
+        break;
+      case 2:
+        EXPECT_EQ(2U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->transform_tree.size());
+        EXPECT_EQ(2U, child_impl_->layer_tree_impl()
+                          ->property_trees()
+                          ->effect_tree.size());
+        EXPECT_TRUE(property_trees->element_id_to_transform_node_index.find(
+                        kTestElementId) ==
+                    property_trees->element_id_to_transform_node_index.end());
+        EXPECT_TRUE(property_trees->element_id_to_effect_node_index.find(
+                        kTestElementId) ==
+                    property_trees->element_id_to_effect_node_index.end());
+        EXPECT_TRUE(property_trees->element_id_to_scroll_node_index.find(
+                        kTestElementId) ==
+                    property_trees->element_id_to_scroll_node_index.end());
+        break;
+    }
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+ private:
+  const ElementId kTestElementId = ElementId(42, 8118);
+
+  scoped_refptr<Layer> root_;
+  scoped_refptr<Layer> child_;
+};
+
+// Validates that, for a layer with a compositor element id set on it, mappings
+// from compositor element id to transform/effect node indexes are created as
+// part of building a layer's property tree and are present on the impl thread.
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestPushElementIdToNodeIdMap);
 
 class LayerTreeHostTestSurfaceDamage : public LayerTreeHostTest {
  protected:
@@ -4559,12 +4674,14 @@ class TestSwapPromise : public SwapPromise {
     result_->did_activate_called = true;
   }
 
-  void DidSwap(CompositorFrameMetadata* metadata) override {
+  void WillSwap(CompositorFrameMetadata* metadata) override {
     base::AutoLock lock(result_->lock);
     EXPECT_FALSE(result_->did_swap_called);
     EXPECT_FALSE(result_->did_not_swap_called);
     result_->did_swap_called = true;
   }
+
+  void DidSwap() override {}
 
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
     base::AutoLock lock(result_->lock);
@@ -5613,6 +5730,82 @@ class LayerTreeHostTestActivateOnInvisible : public LayerTreeHostTest {
 // This test blocks activation which is not supported for single thread mode.
 MULTI_THREAD_BLOCKNOTIFY_TEST_F(LayerTreeHostTestActivateOnInvisible);
 
+class LayerTreeHostTestRenderSurfaceEffectTreeIndex : public LayerTreeHostTest {
+ public:
+  LayerTreeHostTestRenderSurfaceEffectTreeIndex() = default;
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void SetupTree() override {
+    root_ = Layer::Create();
+    child_ = Layer::Create();
+    grand_child_ = Layer::Create();
+
+    layer_tree()->SetRootLayer(root_);
+    root_->AddChild(child_);
+    child_->AddChild(grand_child_);
+
+    root_->SetBounds(gfx::Size(50, 50));
+    child_->SetBounds(gfx::Size(50, 50));
+    grand_child_->SetBounds(gfx::Size(50, 50));
+    child_->SetForceRenderSurfaceForTesting(true);
+    grand_child_->SetForceRenderSurfaceForTesting(true);
+
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    if (host_impl->sync_tree()->source_frame_number() >= 1) {
+      LayerImpl* grand_child_impl =
+          host_impl->sync_tree()->LayerById(grand_child_->id());
+      EXPECT_EQ(grand_child_impl->effect_tree_index(),
+                grand_child_impl->render_surface()->EffectTreeIndex());
+    }
+  }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    LayerImpl* grand_child_impl =
+        host_impl->active_tree()->LayerById(grand_child_->id());
+    switch (host_impl->active_tree()->source_frame_number()) {
+      case 0:
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 1:
+      case 2:
+        EXPECT_EQ(grand_child_impl->effect_tree_index(),
+                  grand_child_impl->render_surface()->EffectTreeIndex());
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 3:
+        EXPECT_EQ(grand_child_impl->effect_tree_index(),
+                  grand_child_impl->render_surface()->EffectTreeIndex());
+        EndTest();
+    }
+  }
+
+  void DidCommit() override {
+    switch (layer_tree_host()->SourceFrameNumber()) {
+      case 2:
+        // Setting an empty viewport causes draws to get skipped, so the active
+        // tree won't update draw properties.
+        layer_tree()->SetViewportSize(gfx::Size());
+        child_->SetForceRenderSurfaceForTesting(false);
+        break;
+      case 3:
+        layer_tree()->SetViewportSize(root_->bounds());
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  scoped_refptr<Layer> root_;
+  scoped_refptr<Layer> child_;
+  scoped_refptr<Layer> grand_child_;
+};
+
+SINGLE_MULTI_AND_REMOTE_TEST_F(LayerTreeHostTestRenderSurfaceEffectTreeIndex);
+
 // Do a synchronous composite and assert that the swap promise succeeds.
 class LayerTreeHostTestSynchronousCompositeSwapPromise
     : public LayerTreeHostTest {
@@ -5935,14 +6128,14 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
       // On frame 3, we will have a lower res tile complete for the pinch-out
       // gesture even though it's not displayed. We wait for it here to prevent
       // flakiness.
-      EXPECT_EQ(0.75f, tile->contents_scale_key());
+      EXPECT_EQ(0.75f, tile->contents_scale());
       PostNextAfterDraw(host_impl);
     }
     // On frame_ == 4, we are preventing texture uploads from completing,
     // so this verifies they are not completing before frame_ == 5.
     // Flaky failures here indicate we're failing to prevent uploads from
     // completing.
-    EXPECT_NE(4, frame_) << tile->contents_scale_key();
+    EXPECT_NE(4, frame_) << tile->contents_scale();
   }
 
   void AfterTest() override {}
@@ -6941,15 +7134,12 @@ class LayerTreeHostTestSubmitFrameMetadata : public LayerTreeHostTest {
       const CompositorFrame& frame) override {
     EXPECT_EQ(1, ++num_swaps_);
 
-    DelegatedFrameData* last_frame_data = frame.delegated_frame_data.get();
-    ASSERT_TRUE(frame.delegated_frame_data);
-    EXPECT_EQ(drawn_viewport_,
-              last_frame_data->render_pass_list.back()->output_rect);
+    EXPECT_EQ(drawn_viewport_, frame.render_pass_list.back()->output_rect);
     EXPECT_EQ(0.5f, frame.metadata.min_page_scale_factor);
     EXPECT_EQ(4.f, frame.metadata.max_page_scale_factor);
 
-    EXPECT_EQ(0u, frame.delegated_frame_data->resource_list.size());
-    EXPECT_EQ(1u, frame.delegated_frame_data->render_pass_list.size());
+    EXPECT_EQ(0u, frame.resource_list.size());
+    EXPECT_EQ(1u, frame.render_pass_list.size());
 
     EndTest();
   }
@@ -6972,14 +7162,15 @@ class LayerTreeHostTestSubmitFrameResources : public LayerTreeHostTest {
     frame->render_passes.clear();
 
     RenderPass* child_pass =
-        AddRenderPass(&frame->render_passes, RenderPassId(2, 1),
-                      gfx::Rect(3, 3, 10, 10), gfx::Transform());
+        AddRenderPass(&frame->render_passes, 2, gfx::Rect(3, 3, 10, 10),
+                      gfx::Transform(), FilterOperations());
     gpu::SyncToken mailbox_sync_token;
-    AddOneOfEveryQuadType(child_pass, host_impl->resource_provider(),
-                          RenderPassId(0, 0), &mailbox_sync_token);
+    AddOneOfEveryQuadType(child_pass, host_impl->resource_provider(), 0,
+                          &mailbox_sync_token);
 
-    RenderPass* pass = AddRenderPass(&frame->render_passes, RenderPassId(1, 1),
-                                     gfx::Rect(3, 3, 10, 10), gfx::Transform());
+    RenderPass* pass =
+        AddRenderPass(&frame->render_passes, 1, gfx::Rect(3, 3, 10, 10),
+                      gfx::Transform(), FilterOperations());
     AddOneOfEveryQuadType(pass, host_impl->resource_provider(), child_pass->id,
                           &mailbox_sync_token);
     return draw_result;
@@ -6987,14 +7178,12 @@ class LayerTreeHostTestSubmitFrameResources : public LayerTreeHostTest {
 
   void DisplayReceivedCompositorFrameOnThread(
       const CompositorFrame& frame) override {
-    ASSERT_TRUE(frame.delegated_frame_data);
-
-    EXPECT_EQ(2u, frame.delegated_frame_data->render_pass_list.size());
+    EXPECT_EQ(2u, frame.render_pass_list.size());
     // Each render pass has 10 resources in it. And the root render pass has a
     // mask resource used when drawing the child render pass. The number 10 may
     // change if AppendOneOfEveryQuadType() is updated, and the value here
     // should be updated accordingly.
-    EXPECT_EQ(21u, frame.delegated_frame_data->resource_list.size());
+    EXPECT_EQ(21u, frame.resource_list.size());
 
     EndTest();
   }

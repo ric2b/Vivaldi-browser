@@ -50,12 +50,13 @@ class Task {
 
   // These are special functions that we don't rename so that range-based
   // for loops and STL things work.
-  MyIterator begin() {}
-  my_iterator end() {}
-  my_iterator rbegin() {}
-  MyIterator rend() {}
-  // The trace() method is used by Oilpan, we shouldn't rename it.
-  void trace() {}
+  MyIterator begin() { return {}; }
+  my_iterator end() { return {}; }
+  my_iterator rbegin() { return {}; }
+  MyIterator rend() { return {}; }
+  // The trace() method is used by Oilpan, but we plan to tweak the Oilpan's
+  // clang plugin, so that it recognizes the new method name.
+  void Trace() {}
   // These are used by std::unique_lock and std::lock_guard.
   void lock() {}
   void unlock() {}
@@ -64,18 +65,10 @@ class Task {
 
 class Other {
   // Static begin/end/trace don't count, and should be renamed.
-  static MyIterator Begin() {}
-  static my_iterator End() {}
+  static MyIterator Begin() { return {}; }
+  static my_iterator End() { return {}; }
   static void Trace() {}
   static void Lock() {}
-};
-
-class NonIterators {
-  // begin()/end() and friends are renamed if they don't return an iterator.
-  void Begin() {}
-  int End() { return 0; }
-  void Rbegin() {}
-  int Rend() { return 0; }
 };
 
 // Test that the actual method definition is also updated.
@@ -180,6 +173,10 @@ class BitVector {
   class Baz {};
   class FooBar {};
 
+  // Should be renamed to GetReadyState, because of
+  // ShouldPrefixFunctionName heuristic.
+  int GetReadyState() { return 123; }
+
   template <typename T>
   class MyRefPtr {};
 
@@ -196,6 +193,80 @@ class BitVector {
   Bar bar_;
   MyRefPtr<FooBar> foobar_;
 };
+
+namespace get_prefix_vs_inheritance {
+
+// Regression test for https://crbug.com/673031:
+// 1. |frame| accessor/method should be renamed in the same way for
+//    WebFrameImplBase and WebLocalFrameImpl.
+// 2. Need to rename |frame| to |GetFrame| (not to |Frame|) to avoid
+//    a conflict with the Frame type.
+
+class FrameFoo {};
+class LocalFrame : public FrameFoo {};
+
+class WebFrameImplBase {
+ public:
+  // Using |frameFoo| to test inheritance, and NOT just the presence on the
+  // ShouldPrefixFunctionName list.
+  virtual FrameFoo* GetFrameFoo() const = 0;
+};
+
+class WebLocalFrameImpl : public WebFrameImplBase {
+ public:
+  LocalFrame* GetFrameFoo() const override { return nullptr; }
+};
+
+// This is also a regression test for https://crbug.com/673031.  We should NOT
+// rewrite in a non-virtual case, because walking the inheritance chain of the
+// return type depends too much on unrelated context (i.e. walking the
+// inheritance chain might not be possible if the return type is
+// forward-declared).
+class LayoutObjectFoo {};
+class LayoutBoxModelObject : public LayoutObjectFoo {};
+class PaintLayerStackingNode {
+ public:
+  // |layoutObjectFoo| should NOT be renamed to |GetLayoutObjectFoo| (just to
+  // |LayoutObjectFoo|) - see the big comment above.  We use layoutObject*Foo*
+  // to test inheritance-related behavior and avoid testing whether method name
+  // is covered via ShouldPrefixFunctionName.
+  LayoutBoxModelObject* LayoutObjectFoo() { return nullptr; }
+};
+
+}  // namespace get_prefix_vs_inheritance
+
+namespace blacklisting_of_method_and_function_names {
+
+class Foo {
+  // Expecting |swap| method to be renamed to |Swap| - we blacklist renaming of
+  // |swap| *function*, because it needs to have the same casing as std::swap,
+  // so that ADL can kick-in and pull it from another namespace depending on the
+  // bargument.  We have a choice to rename or not rename |swap| *methods* - we
+  // chose to rename to be consistent (i.e. we rename |clear| -> |Clear|) and
+  // because Google C++ Styke Guide uses "Swap" in examples.
+  void Swap() {}
+  static void Swap(Foo& x, Foo& y) {}
+
+  // We don't rename |begin|, so that <algorithms> and other templates that
+  // expect |begin|, |end|, etc. continue to work.  This is only necessary
+  // for instance methods - renaming static methods and funcitons is okay.
+  void begin() {}
+  static void Begin(int x) {}
+
+  // https://crbug.com672902: std-like names should not be rewritten.
+  void emplace_back(int x) {}
+  void insert(int x) {}
+  void push_back(int x) {}
+  int* back() { return nullptr; }
+  int* front() { return nullptr; }
+  void erase() {}
+  bool empty() { return true; }
+};
+
+void Begin(int x) {}
+void swap(Foo& x, Foo& y) {}
+
+}  // blacklisting_of_method_and_function_names
 
 }  // namespace blink
 
@@ -230,6 +301,41 @@ class InternalClass {
 };
 
 }  // namespace internal
+
+// Tests for --method-blocklist cmdline parameter.
+class IdlTestClass {
+ public:
+  static int IdlTestMethodNoParams(char x) { return 123; }
+  static int idlTestMethodOneParam(char x) { return 123; }
+
+  int idlTestMethodNoParams() { return 123; }
+  int IdlTestMethodNoParams(int x) { return 123; }
+
+  int IdlTestMethodOneParam() { return 123; }
+  int idlTestMethodOneParam(int x) { return 123; }
+
+  int IdlTestMethodTwoOrThreeParams() { return 123; }
+  int idlTestMethodTwoOrThreeParams(int x, int y) { return 123; }
+  int idlTestMethodTwoOrThreeParams(int x, int y, int z) { return 123; }
+
+  int idlOptionalArgsPass(int x = 0) { return x; }
+  int IdlOptionalArgsStillTooMany(int x, int y = 0) { return x + y; }
+  int IdlOptionalArgsTooLittle(int x = 0) { return x; }
+
+  template <typename T>
+  int idlTemplateMethod(T x) {
+    return 123;
+  }
+
+  int path() { return 123; }
+  int GetPath(int x) { return 123; }
+};
+
+template <typename T>
+class IdlTemplateClass {
+ public:
+  int idlTestMethod(T x) { return 123; }
+};
 
 }  // namespace blink
 

@@ -27,6 +27,7 @@
 
 namespace blink {
 
+DISABLE_CFI_PERF
 void BlockPainter::paint(const PaintInfo& paintInfo,
                          const LayoutPoint& paintOffset) {
   ObjectPainter(m_layoutBlock).checkPaintOffset(paintInfo, paintOffset);
@@ -77,7 +78,7 @@ void BlockPainter::paintOverflowControlsIfNeeded(
     const PaintInfo& paintInfo,
     const LayoutPoint& paintOffset) {
   if (m_layoutBlock.hasOverflowClip() &&
-      m_layoutBlock.style()->visibility() == EVisibility::Visible &&
+      m_layoutBlock.style()->visibility() == EVisibility::kVisible &&
       shouldPaintSelfBlockBackground(paintInfo.phase) &&
       !paintInfo.paintRootBackgroundOnly()) {
     Optional<ClipRecorder> clipRecorder;
@@ -163,12 +164,13 @@ void BlockPainter::paintInlineBox(const InlineBox& inlineBox,
       .paintAllPhasesAtomically(paintInfo, childPoint);
 }
 
+DISABLE_CFI_PERF
 void BlockPainter::paintObject(const PaintInfo& paintInfo,
                                const LayoutPoint& paintOffset) {
   const PaintPhase paintPhase = paintInfo.phase;
 
   if (shouldPaintSelfBlockBackground(paintPhase)) {
-    if (m_layoutBlock.style()->visibility() == EVisibility::Visible &&
+    if (m_layoutBlock.style()->visibility() == EVisibility::kVisible &&
         m_layoutBlock.hasBoxDecorationBackground())
       m_layoutBlock.paintBoxDecorationBackground(paintInfo, paintOffset);
     // We're done. We don't bother painting any children.
@@ -180,13 +182,13 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
     return;
 
   if (paintPhase == PaintPhaseMask &&
-      m_layoutBlock.style()->visibility() == EVisibility::Visible) {
+      m_layoutBlock.style()->visibility() == EVisibility::kVisible) {
     m_layoutBlock.paintMask(paintInfo, paintOffset);
     return;
   }
 
   if (paintPhase == PaintPhaseClippingMask &&
-      m_layoutBlock.style()->visibility() == EVisibility::Visible) {
+      m_layoutBlock.style()->visibility() == EVisibility::kVisible) {
     BoxPainter(m_layoutBlock).paintClippingMask(paintInfo, paintOffset);
     return;
   }
@@ -206,8 +208,8 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
                                             .currentPaintChunkProperties());
         auto* scrollTranslation = objectProperties->scrollTranslation();
         DCHECK(scrollTranslation);
-        properties.transform = scrollTranslation;
-        properties.scroll = scroll;
+        properties.propertyTreeState.setTransform(scrollTranslation);
+        properties.propertyTreeState.setScroll(scroll);
         m_scopedScrollProperty.emplace(
             paintInfo.context.getPaintController(), m_layoutBlock,
             DisplayItem::paintPhaseToDrawingType(paintPhase), properties);
@@ -262,6 +264,7 @@ void BlockPainter::paintCarets(const PaintInfo& paintInfo,
         frame, paintInfo.context, paintOffset);
 }
 
+DISABLE_CFI_PERF
 bool BlockPainter::intersectsPaintRect(
     const PaintInfo& paintInfo,
     const LayoutPoint& adjustedPaintOffset) const {

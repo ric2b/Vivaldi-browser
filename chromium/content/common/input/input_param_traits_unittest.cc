@@ -11,6 +11,7 @@
 #include "content/common/input/input_event.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
+#include "content/common/input/synthetic_pointer_action_list_params.h"
 #include "content/common/input/synthetic_pointer_action_params.h"
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
@@ -19,6 +20,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 
 namespace content {
 namespace {
@@ -30,8 +32,8 @@ class InputParamTraitsTest : public testing::Test {
   static void Compare(const InputEvent* a, const InputEvent* b) {
     EXPECT_EQ(!!a->web_event, !!b->web_event);
     if (a->web_event && b->web_event) {
-      const size_t a_size = a->web_event->size;
-      ASSERT_EQ(a_size, b->web_event->size);
+      const size_t a_size = a->web_event->size();
+      ASSERT_EQ(a_size, b->web_event->size());
       EXPECT_EQ(0, memcmp(a->web_event.get(), b->web_event.get(), a_size));
     }
     EXPECT_EQ(a->latency_info.latency_components().size(),
@@ -82,7 +84,6 @@ class InputParamTraitsTest : public testing::Test {
 
   static void Compare(const SyntheticPointerActionParams* a,
                       const SyntheticPointerActionParams* b) {
-    EXPECT_EQ(a->gesture_source_type, b->gesture_source_type);
     EXPECT_EQ(a->pointer_action_type(), b->pointer_action_type());
     if (a->pointer_action_type() ==
             SyntheticPointerActionParams::PointerActionType::PRESS ||
@@ -90,11 +91,18 @@ class InputParamTraitsTest : public testing::Test {
             SyntheticPointerActionParams::PointerActionType::MOVE) {
       EXPECT_EQ(a->position(), b->position());
     }
-    if (a->pointer_action_type() !=
-            SyntheticPointerActionParams::PointerActionType::PROCESS &&
-        a->pointer_action_type() !=
-            SyntheticPointerActionParams::PointerActionType::FINISH) {
-      EXPECT_EQ(a->index(), b->index());
+    EXPECT_EQ(a->index(), b->index());
+  }
+
+  static void Compare(const SyntheticPointerActionListParams* a,
+                      const SyntheticPointerActionListParams* b) {
+    EXPECT_EQ(a->gesture_source_type, b->gesture_source_type);
+    EXPECT_EQ(a->params.size(), b->params.size());
+    for (size_t i = 0; i < a->params.size(); ++i) {
+      EXPECT_EQ(a->params[i].size(), b->params[i].size());
+      for (size_t j = 0; j < a->params[i].size(); ++j) {
+        Compare(&a->params[i][j], &b->params[i][j]);
+      }
     }
   }
 
@@ -123,9 +131,9 @@ class InputParamTraitsTest : public testing::Test {
         Compare(SyntheticTapGestureParams::Cast(a->gesture_params()),
                 SyntheticTapGestureParams::Cast(b->gesture_params()));
         break;
-      case SyntheticGestureParams::POINTER_ACTION:
-        Compare(SyntheticPointerActionParams::Cast(a->gesture_params()),
-                SyntheticPointerActionParams::Cast(b->gesture_params()));
+      case SyntheticGestureParams::POINTER_ACTION_LIST:
+        Compare(SyntheticPointerActionListParams::Cast(a->gesture_params()),
+                SyntheticPointerActionListParams::Cast(b->gesture_params()));
         break;
     }
   }
@@ -187,30 +195,36 @@ TEST_F(InputParamTraitsTest, InitializedEvents) {
 
   ui::LatencyInfo latency;
 
-  blink::WebKeyboardEvent key_event;
-  key_event.type = blink::WebInputEvent::RawKeyDown;
+  blink::WebKeyboardEvent key_event(blink::WebInputEvent::RawKeyDown,
+                                    blink::WebInputEvent::NoModifiers,
+                                    blink::WebInputEvent::TimeStampForTesting);
   key_event.nativeKeyCode = 5;
   events.push_back(new InputEvent(key_event, latency));
 
-  blink::WebMouseWheelEvent wheel_event;
-  wheel_event.type = blink::WebInputEvent::MouseWheel;
+  blink::WebMouseWheelEvent wheel_event(
+      blink::WebInputEvent::MouseWheel, blink::WebInputEvent::NoModifiers,
+      blink::WebInputEvent::TimeStampForTesting);
   wheel_event.deltaX = 10;
   latency.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, 1, 1);
   events.push_back(new InputEvent(wheel_event, latency));
 
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   mouse_event.x = 10;
   latency.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 2, 2);
   events.push_back(new InputEvent(mouse_event, latency));
 
-  blink::WebGestureEvent gesture_event;
-  gesture_event.type = blink::WebInputEvent::GestureScrollBegin;
+  blink::WebGestureEvent gesture_event(
+      blink::WebInputEvent::GestureScrollBegin,
+      blink::WebInputEvent::NoModifiers,
+      blink::WebInputEvent::TimeStampForTesting);
   gesture_event.x = -1;
   events.push_back(new InputEvent(gesture_event, latency));
 
-  blink::WebTouchEvent touch_event;
-  touch_event.type = blink::WebInputEvent::TouchStart;
+  blink::WebTouchEvent touch_event(blink::WebInputEvent::TouchStart,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   touch_event.touchesLength = 1;
   touch_event.touches[0].radiusX = 1;
   events.push_back(new InputEvent(touch_event, latency));
@@ -275,51 +289,71 @@ TEST_F(InputParamTraitsTest, SyntheticTapGestureParams) {
   Verify(packet_in);
 }
 
-TEST_F(InputParamTraitsTest, SyntheticPointerActionParamsMove) {
-  std::unique_ptr<SyntheticPointerActionParams> gesture_params =
-      base::MakeUnique<SyntheticPointerActionParams>(
-          SyntheticPointerActionParams::PointerActionType::MOVE);
+TEST_F(InputParamTraitsTest, SyntheticPointerActionListParamsMove) {
+  SyntheticPointerActionParams action_params(
+      SyntheticPointerActionParams::PointerActionType::MOVE);
+  action_params.set_position(gfx::PointF(356, 287));
+  action_params.set_index(0);
+  std::unique_ptr<SyntheticPointerActionListParams> gesture_params =
+      base::MakeUnique<SyntheticPointerActionListParams>();
   gesture_params->gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
-  gesture_params->set_position(gfx::PointF(356, 287));
-  gesture_params->set_index(0);
-  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION,
+  gesture_params->PushPointerActionParams(action_params);
+
+  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION_LIST,
             gesture_params->GetGestureType());
   SyntheticGesturePacket packet_in;
   packet_in.set_gesture_params(std::move(gesture_params));
   Verify(packet_in);
 }
 
-TEST_F(InputParamTraitsTest, SyntheticPointerActionParamsRelease) {
-  std::unique_ptr<SyntheticPointerActionParams> gesture_params =
-      base::MakeUnique<SyntheticPointerActionParams>(
-          SyntheticPointerActionParams::PointerActionType::RELEASE);
+TEST_F(InputParamTraitsTest, SyntheticPointerActionListParamsPressRelease) {
+  std::unique_ptr<SyntheticPointerActionListParams> gesture_params =
+      base::MakeUnique<SyntheticPointerActionListParams>();
   gesture_params->gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
-  gesture_params->set_index(0);
-  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION,
+  SyntheticPointerActionParams action_params(
+      SyntheticPointerActionParams::PointerActionType::PRESS);
+  action_params.set_index(0);
+  gesture_params->PushPointerActionParams(action_params);
+  action_params.set_pointer_action_type(
+      SyntheticPointerActionParams::PointerActionType::RELEASE);
+  gesture_params->PushPointerActionParams(action_params);
+
+  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION_LIST,
             gesture_params->GetGestureType());
   SyntheticGesturePacket packet_in;
   packet_in.set_gesture_params(std::move(gesture_params));
   Verify(packet_in);
 }
 
-TEST_F(InputParamTraitsTest, SyntheticPointerActionParamsProcess) {
-  std::unique_ptr<SyntheticPointerActionParams> gesture_params =
-      base::MakeUnique<SyntheticPointerActionParams>(
-          SyntheticPointerActionParams::PointerActionType::PROCESS);
+TEST_F(InputParamTraitsTest, SyntheticPointerActionParamsIdle) {
+  std::unique_ptr<SyntheticPointerActionListParams> gesture_params =
+      base::MakeUnique<SyntheticPointerActionListParams>();
   gesture_params->gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
-  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION,
+  SyntheticPointerActionParams action_params(
+      SyntheticPointerActionParams::PointerActionType::IDLE);
+  action_params.set_index(0);
+  gesture_params->PushPointerActionParams(action_params);
+
+  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION_LIST,
             gesture_params->GetGestureType());
   SyntheticGesturePacket packet_in;
   packet_in.set_gesture_params(std::move(gesture_params));
   Verify(packet_in);
 }
 
-TEST_F(InputParamTraitsTest, SyntheticPointerActionParamsFinish) {
-  std::unique_ptr<SyntheticPointerActionParams> gesture_params =
-      base::MakeUnique<SyntheticPointerActionParams>(
-          SyntheticPointerActionParams::PointerActionType::FINISH);
+TEST_F(InputParamTraitsTest, SyntheticPointerActionListParamsTwoPresses) {
+  SyntheticPointerActionListParams::ParamList param_list;
+  SyntheticPointerActionParams action_params(
+      SyntheticPointerActionParams::PointerActionType::PRESS);
+  action_params.set_index(0);
+  param_list.push_back(action_params);
+  action_params.set_index(1);
+  param_list.push_back(action_params);
+  std::unique_ptr<SyntheticPointerActionListParams> gesture_params =
+      base::MakeUnique<SyntheticPointerActionListParams>(param_list);
   gesture_params->gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
-  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION,
+
+  ASSERT_EQ(SyntheticGestureParams::POINTER_ACTION_LIST,
             gesture_params->GetGestureType());
   SyntheticGesturePacket packet_in;
   packet_in.set_gesture_params(std::move(gesture_params));

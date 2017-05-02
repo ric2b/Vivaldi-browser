@@ -10,11 +10,13 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
+#include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -26,7 +28,6 @@
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
-#include "content/browser/accessibility/accessibility_mode_helper.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -38,6 +39,8 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
+#include "content/common/fileapi/file_system_messages.h"
+#include "content/common/fileapi/webblob_messages.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
@@ -55,9 +58,11 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/test_fileapi_operation_waiter.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/accessibility_browser_test_utils.h"
+#include "ipc/ipc_security_test_util.h"
 #include "net/base/filename_util.h"
 #include "net/cookies/cookie_store.h"
 #include "net/filter/gzip_header.h"
@@ -69,12 +74,14 @@
 #include "net/test/python_utils.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "storage/browser/fileapi/file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/test/test_clipboard.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -201,17 +208,12 @@ void BuildSimpleWebKeyEvent(blink::WebInputEvent::Type type,
                             ui::DomKey key,
                             ui::DomCode code,
                             ui::KeyboardCode key_code,
-                            int modifiers,
                             NativeWebKeyboardEvent* event) {
   event->domKey = key;
   event->domCode = static_cast<int>(code);
   event->nativeKeyCode = ui::KeycodeConverter::DomCodeToNativeKeycode(code);
   event->windowsKeyCode = key_code;
-  event->type = type;
-  event->modifiers = modifiers;
   event->isSystemKey = false;
-  event->timeStampSeconds =
-      (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
   event->skip_in_browser = true;
 
   if (type == blink::WebInputEvent::Char ||
@@ -227,8 +229,8 @@ void InjectRawKeyEvent(WebContents* web_contents,
                        ui::DomCode code,
                        ui::KeyboardCode key_code,
                        int modifiers) {
-  NativeWebKeyboardEvent event;
-  BuildSimpleWebKeyEvent(type, key, code, key_code, modifiers, &event);
+  NativeWebKeyboardEvent event(type, modifiers, base::TimeTicks::Now());
+  BuildSimpleWebKeyEvent(type, key, code, key_code, &event);
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
   RenderWidgetHostImpl* main_frame_rwh =
@@ -401,7 +403,7 @@ const char kHasVideoInputDeviceOnSystem[] =
       "navigator.mediaDevices.enumerateDevices()"
       ".then(function(devices) {"
         "devices.forEach(function(device) {"
-          "if (device.kind == 'video-input') {"
+          "if (device.kind == 'videoinput') {"
             "window.domAutomationController.send('has-video-input-device');"
             "return;"
           "}"
@@ -525,12 +527,12 @@ void SimulateMouseClickAt(WebContents* web_contents,
                           int modifiers,
                           blink::WebMouseEvent::Button button,
                           const gfx::Point& point) {
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::MouseDown, modifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   mouse_event.button = button;
   mouse_event.x = point.x();
   mouse_event.y = point.y();
-  mouse_event.modifiers = modifiers;
   // Mac needs globalX/globalY for events to plugins.
   gfx::Rect offset = web_contents->GetContainerBounds();
   mouse_event.globalX = point.x() + offset.x();
@@ -538,7 +540,7 @@ void SimulateMouseClickAt(WebContents* web_contents,
   mouse_event.clickCount = 1;
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
       mouse_event);
-  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.setType(blink::WebInputEvent::MouseUp);
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
       mouse_event);
 }
@@ -546,8 +548,9 @@ void SimulateMouseClickAt(WebContents* web_contents,
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point) {
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = type;
+  blink::WebMouseEvent mouse_event(
+      type, blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   mouse_event.x = point.x();
   mouse_event.y = point.y();
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
@@ -557,8 +560,10 @@ void SimulateMouseEvent(WebContents* web_contents,
 void SimulateMouseWheelEvent(WebContents* web_contents,
                              const gfx::Point& point,
                              const gfx::Vector2d& delta) {
-  blink::WebMouseWheelEvent wheel_event;
-  wheel_event.type = blink::WebInputEvent::MouseWheel;
+  blink::WebMouseWheelEvent wheel_event(
+      blink::WebInputEvent::MouseWheel, blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+
   wheel_event.x = point.x();
   wheel_event.y = point.y();
   wheel_event.deltaX = delta.x();
@@ -574,15 +579,19 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
 
-  blink::WebGestureEvent scroll_begin;
-  scroll_begin.type = blink::WebGestureEvent::GestureScrollBegin;
+  blink::WebGestureEvent scroll_begin(
+      blink::WebGestureEvent::GestureScrollBegin,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   scroll_begin.sourceDevice = blink::WebGestureDeviceTouchpad;
   scroll_begin.x = point.x();
   scroll_begin.y = point.y();
   widget_host->ForwardGestureEvent(scroll_begin);
 
-  blink::WebGestureEvent scroll_update;
-  scroll_update.type = blink::WebGestureEvent::GestureScrollUpdate;
+  blink::WebGestureEvent scroll_update(
+      blink::WebGestureEvent::GestureScrollUpdate,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   scroll_update.sourceDevice = blink::WebGestureDeviceTouchpad;
   scroll_update.x = point.x();
   scroll_update.y = point.y();
@@ -592,8 +601,10 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
   scroll_update.data.scrollUpdate.velocityY = 0;
   widget_host->ForwardGestureEvent(scroll_update);
 
-  blink::WebGestureEvent scroll_end;
-  scroll_end.type = blink::WebGestureEvent::GestureScrollEnd;
+  blink::WebGestureEvent scroll_end(
+      blink::WebGestureEvent::GestureScrollEnd,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   scroll_end.sourceDevice = blink::WebGestureDeviceTouchpad;
   scroll_end.x = point.x() + delta.x();
   scroll_end.y = point.y() + delta.y();
@@ -606,22 +617,28 @@ void SimulateGestureFlingSequence(WebContents* web_contents,
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
 
-  blink::WebGestureEvent scroll_begin;
-  scroll_begin.type = blink::WebGestureEvent::GestureScrollBegin;
+  blink::WebGestureEvent scroll_begin(
+      blink::WebGestureEvent::GestureScrollBegin,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   scroll_begin.sourceDevice = blink::WebGestureDeviceTouchpad;
   scroll_begin.x = point.x();
   scroll_begin.y = point.y();
   widget_host->ForwardGestureEvent(scroll_begin);
 
-  blink::WebGestureEvent scroll_end;
-  scroll_end.type = blink::WebGestureEvent::GestureScrollEnd;
+  blink::WebGestureEvent scroll_end(
+      blink::WebGestureEvent::GestureScrollEnd,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   scroll_end.sourceDevice = blink::WebGestureDeviceTouchpad;
   scroll_end.x = point.x();
   scroll_end.y = point.y();
   widget_host->ForwardGestureEvent(scroll_end);
 
-  blink::WebGestureEvent fling_start;
-  fling_start.type = blink::WebGestureEvent::GestureFlingStart;
+  blink::WebGestureEvent fling_start(
+      blink::WebGestureEvent::GestureFlingStart,
+      blink::WebInputEvent::NoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   fling_start.sourceDevice = blink::WebGestureDeviceTouchpad;
   fling_start.x = point.x();
   fling_start.y = point.y();
@@ -632,12 +649,12 @@ void SimulateGestureFlingSequence(WebContents* web_contents,
 }
 
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point) {
-  blink::WebGestureEvent tap;
-  tap.type = blink::WebGestureEvent::GestureTap;
+  blink::WebGestureEvent tap(
+      blink::WebGestureEvent::GestureTap, blink::WebInputEvent::ControlKey,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   tap.sourceDevice = blink::WebGestureDeviceTouchpad;
   tap.x = point.x();
   tap.y = point.y();
-  tap.modifiers = blink::WebInputEvent::ControlKey;
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
   widget_host->ForwardGestureEvent(tap);
@@ -646,12 +663,12 @@ void SimulateTapAt(WebContents* web_contents, const gfx::Point& point) {
 void SimulateTapWithModifiersAt(WebContents* web_contents,
                                 unsigned modifiers,
                                 const gfx::Point& point) {
-  blink::WebGestureEvent tap;
-  tap.type = blink::WebGestureEvent::GestureTap;
+  blink::WebGestureEvent tap(
+      blink::WebGestureEvent::GestureTap, modifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
   tap.sourceDevice = blink::WebGestureDeviceTouchpad;
   tap.x = point.x();
   tap.y = point.y();
-  tap.modifiers = modifiers;
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
   widget_host->ForwardGestureEvent(tap);
@@ -1021,7 +1038,7 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
 void EnableAccessibilityForWebContents(WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
-  web_contents_impl->SetAccessibilityMode(AccessibilityModeComplete);
+  web_contents_impl->SetAccessibilityMode(ACCESSIBILITY_MODE_COMPLETE);
 }
 
 void WaitForAccessibilityFocusChange() {
@@ -1189,9 +1206,7 @@ void WaitForGuestSurfaceReady(content::WebContents* guest_web_contents) {
 
 TitleWatcher::TitleWatcher(WebContents* web_contents,
                            const base::string16& expected_title)
-    : WebContentsObserver(web_contents),
-      message_loop_runner_(new MessageLoopRunner) {
-  EXPECT_TRUE(web_contents != NULL);
+    : WebContentsObserver(web_contents) {
   expected_titles_.push_back(expected_title);
 }
 
@@ -1204,7 +1219,7 @@ TitleWatcher::~TitleWatcher() {
 
 const base::string16& TitleWatcher::WaitAndGetTitle() {
   TestTitle();
-  message_loop_runner_->Run();
+  run_loop_.Run();
   return observed_title_;
 }
 
@@ -1221,15 +1236,11 @@ void TitleWatcher::TitleWasSet(NavigationEntry* entry, bool explicit_set) {
 }
 
 void TitleWatcher::TestTitle() {
-  std::vector<base::string16>::const_iterator it =
-      std::find(expected_titles_.begin(),
-                expected_titles_.end(),
-                web_contents()->GetTitle());
-  if (it == expected_titles_.end())
-    return;
-
-  observed_title_ = *it;
-  message_loop_runner_->Quit();
+  const base::string16& current_title = web_contents()->GetTitle();
+  if (base::ContainsValue(expected_titles_, current_title)) {
+    observed_title_ = current_title;
+    run_loop_.Quit();
+  }
 }
 
 RenderProcessHostWatcher::RenderProcessHostWatcher(
@@ -1303,7 +1314,8 @@ void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
     case base::TERMINATION_STATUS_STILL_RUNNING:
       break;
     default:
-      message_loop_runner_->Quit();
+      if (message_loop_runner_.get())
+        message_loop_runner_->Quit();
       break;
   }
 }
@@ -1316,10 +1328,15 @@ bool DOMMessageQueue::WaitForMessage(std::string* message) {
   DCHECK(message);
   if (message_queue_.empty()) {
     // This will be quit when a new message comes in.
-    message_loop_runner_ = new MessageLoopRunner;
+    message_loop_runner_ =
+        new MessageLoopRunner(MessageLoopRunner::QuitMode::IMMEDIATE);
     message_loop_runner_->Run();
   }
-  // The queue should not be empty, unless we were quit because of a timeout.
+  return PopMessage(message);
+}
+
+bool DOMMessageQueue::PopMessage(std::string* message) {
+  DCHECK(message);
   if (message_queue_.empty())
     return false;
   *message = message_queue_.front();
@@ -1519,9 +1536,13 @@ bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
   return false;
 }
 
+bool InputMsgWatcher::HasReceivedAck() const {
+  return ack_result_ != INPUT_EVENT_ACK_STATE_UNKNOWN;
+}
+
 uint32_t InputMsgWatcher::WaitForAck() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (ack_result_ != INPUT_EVENT_ACK_STATE_UNKNOWN)
+  if (HasReceivedAck())
     return ack_result_;
   base::RunLoop run_loop;
   base::AutoReset<base::Closure> reset_quit(&quit_, run_loop.QuitClosure());
@@ -1771,6 +1792,68 @@ bool ConsoleObserverDelegate::DidAddMessageToConsole(
     message_loop_runner_->Quit();
   }
   return false;
+}
+
+// static
+void PwnMessageHelper::CreateBlobWithPayload(RenderProcessHost* process,
+                                             std::string uuid,
+                                             std::string content_type,
+                                             std::string content_disposition,
+                                             std::string payload) {
+  std::vector<storage::DataElement> data_elements(1);
+  data_elements[0].SetToBytes(payload.c_str(), payload.size());
+
+  IPC::IpcSecurityTestUtil::PwnMessageReceived(
+      process->GetChannel(),
+      BlobStorageMsg_RegisterBlob(uuid, content_type, content_disposition,
+                                  data_elements));
+}
+
+
+// static
+void PwnMessageHelper::RegisterBlobURL(RenderProcessHost* process,
+                                       GURL url,
+                                       std::string uuid) {
+  IPC::IpcSecurityTestUtil::PwnMessageReceived(
+      process->GetChannel(), BlobHostMsg_RegisterPublicURL(url, uuid));
+}
+
+// static
+void PwnMessageHelper::FileSystemCreate(RenderProcessHost* process,
+                                        int request_id,
+                                        GURL path,
+                                        bool exclusive,
+                                        bool is_directory,
+                                        bool recursive) {
+  TestFileapiOperationWaiter waiter(
+      process->GetStoragePartition()->GetFileSystemContext());
+
+  IPC::IpcSecurityTestUtil::PwnMessageReceived(
+      process->GetChannel(),
+      FileSystemHostMsg_Create(request_id, path, exclusive, is_directory,
+                               recursive));
+
+  // If this started an async operation, wait for it to complete.
+  if (waiter.did_start_update())
+    waiter.WaitForEndUpdate();
+}
+
+// static
+void PwnMessageHelper::FileSystemWrite(RenderProcessHost* process,
+                                       int request_id,
+                                       GURL file_path,
+                                       std::string blob_uuid,
+                                       int64_t position) {
+  TestFileapiOperationWaiter waiter(
+      process->GetStoragePartition()->GetFileSystemContext());
+
+  IPC::IpcSecurityTestUtil::PwnMessageReceived(
+      process->GetChannel(),
+      FileSystemHostMsg_Write(request_id, file_path, blob_uuid, position));
+
+  // If this started an async operation, wait for it to complete.
+  if (waiter.did_start_update())
+    waiter.WaitForEndUpdate();
 }
 
 }  // namespace content

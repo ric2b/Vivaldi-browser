@@ -7,6 +7,7 @@
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
+#include "base/debug/stack_trace.h"
 #include "base/i18n/icu_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -17,6 +18,7 @@
 #include "chrome/test/base/chrome_test_launcher.h"
 #include "chrome/test/base/chrome_test_suite.h"
 #include "chrome/test/base/mojo_test_connector.h"
+#include "content/public/app/content_main.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/test/test_launcher.h"
 #include "mash/package/mash_packaged_service.h"
@@ -24,10 +26,10 @@
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
+#include "services/service_manager/public/cpp/standalone_service/standalone_service.h"
 #include "services/service_manager/runner/common/switches.h"
-#include "services/service_manager/runner/host/child_process.h"
-#include "services/service_manager/runner/host/child_process_base.h"
 #include "services/service_manager/runner/init.h"
+#include "ui/aura/env.h"
 
 namespace {
 
@@ -78,6 +80,7 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
   // ChromeTestLauncherDelegate:
   int RunTestSuite(int argc, char** argv) override {
     test_suite_.reset(new MashTestSuite(argc, argv));
+    content::GetContentMainParams()->env_mode = aura::Env::Mode::MUS;
     const int result = test_suite_->Run();
     test_suite_.reset();
     return result;
@@ -150,20 +153,13 @@ bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
     base::AtExitManager exit_manager;
 #endif
     base::i18n::InitializeICU();
-    service_manager::ChildProcessMainWithCallback(base::Bind(&StartChildApp));
-    *exit_code = 0;
-    return true;
-  }
 
-  if (command_line.HasSwitch(switches::kChildProcess) &&
-      !command_line.HasSwitch(MojoTestConnector::kTestSwitch)) {
-    base::AtExitManager at_exit;
-    service_manager::InitializeLogging();
-    service_manager::WaitForDebuggerIfNecessary();
-#if !defined(OFFICIAL_BUILD) && defined(OS_WIN)
-    base::RouteStdioToConsole(false);
+#if !defined(OFFICIAL_BUILD)
+    base::debug::EnableInProcessStackDumping();
 #endif
-    *exit_code = service_manager::ChildProcessMain();
+
+    service_manager::RunStandaloneService(base::Bind(&StartChildApp));
+    *exit_code = 0;
     return true;
   }
 

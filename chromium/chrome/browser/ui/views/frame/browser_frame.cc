@@ -125,14 +125,6 @@ void BrowserFrame::UpdateThrobber(bool running) {
   browser_frame_view_->UpdateThrobber(running);
 }
 
-void BrowserFrame::UpdateToolbar() {
-  browser_frame_view_->UpdateToolbar();
-}
-
-views::View* BrowserFrame::GetLocationIconView() const {
-  return browser_frame_view_->GetLocationIconView();
-}
-
 BrowserNonClientFrameView* BrowserFrame::GetFrameView() const {
   return browser_frame_view_;
 }
@@ -148,6 +140,16 @@ bool BrowserFrame::ShouldSaveWindowPlacement() const {
 void BrowserFrame::GetWindowPlacement(gfx::Rect* bounds,
                                       ui::WindowShowState* show_state) const {
   return native_browser_frame_->GetWindowPlacement(bounds, show_state);
+}
+
+bool BrowserFrame::PreHandleKeyboardEvent(
+    const content::NativeWebKeyboardEvent& event) {
+  return native_browser_frame_->PreHandleKeyboardEvent(event);
+}
+
+bool BrowserFrame::HandleKeyboardEvent(
+    const content::NativeWebKeyboardEvent& event) {
+  return native_browser_frame_->HandleKeyboardEvent(event);
 }
 
 void BrowserFrame::OnBrowserViewInitViewsComplete() {
@@ -226,6 +228,11 @@ void BrowserFrame::OnNativeWidgetWorkspaceChanged() {
       views::X11DesktopHandler::get()->GetWorkspace());
 #endif
   Widget::OnNativeWidgetWorkspaceChanged();
+}
+
+void BrowserFrame::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
+  views::Widget::OnNativeThemeUpdated(observed_theme);
+  browser_view_->NativeThemeUpdated(observed_theme);
 }
 
 void BrowserFrame::ShowContextMenuForView(views::View* source,

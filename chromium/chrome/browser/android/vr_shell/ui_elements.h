@@ -10,7 +10,7 @@
 
 #include "base/macros.h"
 #include "chrome/browser/android/vr_shell/vr_math.h"
-#include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 namespace vr_shell {
 
@@ -63,6 +63,12 @@ struct ContentRectangle : public WorldRectangle {
 
   void Animate(int64_t time);
 
+  // Indicates whether the element should be visually rendered.
+  bool IsVisible() const;
+
+  // Indicates whether the element should be tested for cursor input.
+  bool IsHitTestable() const;
+
   // Valid IDs are non-negative.
   int id = -1;
 
@@ -99,6 +105,12 @@ struct ContentRectangle : public WorldRectangle {
   // The translation of the object, and its children.  Translation is applied
   // after rotation and scaling.
   gvr::Vec3f translation = {0.0f, 0.0f, 0.0f};
+
+  // The opacity of the object (between 0.0 and 1.0).
+  float opacity = 1.0f;
+
+  // The computed opacity, incorporating opacity of parent objects.
+  float computed_opacity;
 
   // If anchoring is specified, the translation will be relative to the
   // specified edge(s) of the parent, rather than the center.  A parent object

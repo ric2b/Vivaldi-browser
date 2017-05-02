@@ -10,7 +10,7 @@
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
@@ -227,10 +227,48 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdate) {
   const string& cached_scfg = state->server_config();
   test::CompareCharArraysWithHexError(
       "scfg", cached_scfg.data(), cached_scfg.length(),
-      QuicUtils::AsChars(scfg), arraysize(scfg));
+      reinterpret_cast<char*>(scfg), arraysize(scfg));
+
   QuicStreamSequencer* sequencer = QuicStreamPeer::sequencer(stream());
-  EXPECT_NE(FLAGS_quic_release_crypto_stream_buffer,
-            QuicStreamSequencerPeer::IsUnderlyingBufferAllocated(sequencer));
+  EXPECT_NE(
+      FLAGS_quic_reloadable_flag_quic_release_crypto_stream_buffer &&
+          FLAGS_quic_reloadable_flag_quic_reduce_sequencer_buffer_memory_life_time,  // NOLINT
+      QuicStreamSequencerPeer::IsUnderlyingBufferAllocated(sequencer));
+}
+
+TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdateWithCert) {
+  // Test that the crypto client stream can receive and use server config
+  // updates with certificates after the connection has been established.
+  CompleteCryptoHandshake();
+
+  // Build a server config update message with certificates
+  QuicCryptoServerConfig crypto_config(
+      QuicCryptoServerConfig::TESTING, QuicRandom::GetInstance(),
+      CryptoTestUtils::ProofSourceForTesting());
+  CryptoTestUtils::FakeServerOptions options;
+  CryptoTestUtils::SetupCryptoServerConfigForTest(
+      connection_->clock(), QuicRandom::GetInstance(), &crypto_config, options);
+  SourceAddressTokens tokens;
+  QuicCompressedCertsCache cache(1);
+  CachedNetworkParameters network_params;
+  CryptoHandshakeMessage server_config_update;
+  EXPECT_TRUE(crypto_config.BuildServerConfigUpdateMessage(
+      session_->connection()->version(), stream()->chlo_hash(), tokens,
+      QuicSocketAddress(QuicIpAddress::Loopback6(), 1234),
+      QuicIpAddress::Loopback6(), connection_->clock(),
+      QuicRandom::GetInstance(), &cache, stream()->crypto_negotiated_params(),
+      &network_params, QuicTagVector(), &server_config_update));
+
+  std::unique_ptr<QuicData> data(
+      CryptoFramer::ConstructHandshakeMessage(server_config_update));
+  stream()->OnStreamFrame(QuicStreamFrame(kCryptoStreamId, /*fin=*/false,
+                                          /*offset=*/0, data->AsStringPiece()));
+
+  // Recreate connection with the new config and verify a 0-RTT attempt.
+  CreateConnection();
+
+  stream()->CryptoConnect();
+  EXPECT_TRUE(session_->IsEncryptionEstablished());
 }
 
 TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdateBeforeHandshake) {
@@ -339,7 +377,7 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
     CryptoTestUtils::SetupCryptoServerConfigForTest(
         server_connection_->clock(), server_connection_->random_generator(),
         &server_crypto_config_, options);
-    FLAGS_enable_quic_stateless_reject_support = true;
+    FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   }
 
   QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
@@ -361,7 +399,7 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
 };
 
 TEST_F(QuicCryptoClientStreamStatelessTest, StatelessReject) {
-  FLAGS_enable_quic_stateless_reject_support = true;
+  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
 
   QuicCryptoClientConfig::CachedState* client_state =
       client_crypto_config_.LookupOrCreate(server_id_);

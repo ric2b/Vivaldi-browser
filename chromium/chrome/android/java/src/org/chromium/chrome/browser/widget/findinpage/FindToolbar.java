@@ -62,7 +62,7 @@ public class FindToolbar extends LinearLayout
     protected TintedImageButton mFindPrevButton;
     protected TintedImageButton mFindNextButton;
 
-    private FindResultBar mResultBar = null;
+    private FindResultBar mResultBar;
 
     private TabModelSelector mTabModelSelector;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
@@ -77,12 +77,12 @@ public class FindToolbar extends LinearLayout
     private String mLastUserSearch = "";
 
     /** Whether toolbar text is being set automatically (not typed by user). */
-    private boolean mSettingFindTextProgrammatically = false;
+    private boolean mSettingFindTextProgrammatically;
 
     /** Whether the search key should trigger a new search. */
-    private boolean mSearchKeyShouldTriggerSearch = false;
+    private boolean mSearchKeyShouldTriggerSearch;
 
-    private boolean mActive = false;
+    private boolean mActive;
 
     private Handler mHandler = new Handler();
     private Runnable mAccessibleAnnouncementRunnable;
@@ -235,7 +235,6 @@ public class FindToolbar extends LinearLayout
                 if (mFindInPageBridge == null) return;
 
                 mAccessibilityDidActivateResult = false;
-                setPrevNextEnabled(s.length() > 0);
 
                 if (mSettingFindTextProgrammatically) return;
 
@@ -335,7 +334,7 @@ public class FindToolbar extends LinearLayout
         mAccessibilityDidActivateResult = true;
     }
 
-    private boolean mShowKeyboardOnceWindowIsFocused = false;
+    private boolean mShowKeyboardOnceWindowIsFocused;
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
@@ -429,6 +428,8 @@ public class FindToolbar extends LinearLayout
                 Math.max(result.activeMatchOrdinal, 0),
                 result.numberOfMatches);
         setStatus(text, result.numberOfMatches == 0);
+
+        setPrevNextEnabled(result.numberOfMatches > 0);
 
         // The accessible version will be something like "Result 1 of 9".
         String accessibleText = getAccessibleStatusText(

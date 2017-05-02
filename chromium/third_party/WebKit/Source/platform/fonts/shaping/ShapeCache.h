@@ -38,8 +38,6 @@
 
 namespace blink {
 
-class Font;
-
 struct ShapeCacheEntry {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
   ShapeCacheEntry() { m_shapeResult = nullptr; }
@@ -59,16 +57,19 @@ class ShapeCache {
    public:
     static unsigned capacity() { return s_capacity; }
 
-    SmallStringKey() : m_length(s_emptyValueLength), m_direction(LTR) {}
+    SmallStringKey()
+        : m_length(s_emptyValueLength),
+          m_direction(static_cast<unsigned>(TextDirection::kLtr)) {}
 
     SmallStringKey(WTF::HashTableDeletedValueType)
-        : m_length(s_deletedValueLength), m_direction(LTR) {}
+        : m_length(s_deletedValueLength),
+          m_direction(static_cast<unsigned>(TextDirection::kLtr)) {}
 
     template <typename CharacterType>
     SmallStringKey(CharacterType* characters,
                    unsigned short length,
                    TextDirection direction)
-        : m_length(length), m_direction(direction) {
+        : m_length(length), m_direction(static_cast<unsigned>(direction)) {
       ASSERT(length <= s_capacity);
 
       StringHasher hasher;
@@ -187,7 +188,7 @@ class ShapeCache {
       uint32_t key = run[0];
       // All current codepointsin UTF-32 are bewteen 0x0 and 0x10FFFF,
       // as such use bit 32 to indicate direction.
-      if (run.direction() == RTL)
+      if (run.direction() == TextDirection::kRtl)
         key |= (1u << 31);
       SingleCharMap::AddResult addResult = m_singleCharMap.add(key, entry);
       isNewEntry = addResult.isNewEntry;

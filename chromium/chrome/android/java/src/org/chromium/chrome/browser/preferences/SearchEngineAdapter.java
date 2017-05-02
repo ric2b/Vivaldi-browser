@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.SpannableString;
+import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -25,128 +26,231 @@ import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
-import org.chromium.chrome.browser.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
 * A custom adapter for listing search engines.
 */
-public class SearchEngineAdapter extends BaseAdapter implements LoadListener, OnClickListener {
-    /**
-     * A callback for reporting progress to the owner.
-     */
-    public interface SelectSearchEngineCallback {
-        /**
-         * Called when the search engine data has loaded and we've determined the currently active
-         * one.
-         * @param name Provides the name of it (with a simplified URL in parenthesis).
-         */
-        void currentSearchEngineDetermined(int selectedIndex);
-    }
+public class SearchEngineAdapter extends BaseAdapter
+        implements TemplateUrlService.LoadListener, TemplateUrlService.TemplateUrlServiceObserver,
+                OnClickListener {
+    private static final String TAG = "cr_SearchEngines";
 
-    // The current context.
+    private static final int VIEW_TYPE_ITEM = 0;
+    private static final int VIEW_TYPE_DIVIDER = 1;
+    private static final int VIEW_TYPE_COUNT = 2;
+
+    /** The current context. */
     private Context mContext;
 
-    // The layout inflater to use for the custom views.
+    /** The layout inflater to use for the custom views. */
     private LayoutInflater mLayoutInflater;
 
-    // The callback to use for notifying caller of progress.
-    private SelectSearchEngineCallback mCallback;
+    /** The list of prepopluated and default search engines. */
+    private List<TemplateUrl> mPrepopulatedSearchEngines = new ArrayList<>();
 
-    // The list of available search engines.
-    private List<TemplateUrl> mSearchEngines;
-    // The position (index into mSearchEngines) of the currently selected search engine. Can be -1
-    // if current search engine is managed and set to something other than the pre-populated values.
+    /** The list of recently visited search engines. */
+    private List<TemplateUrl> mRecentSearchEngines = new ArrayList<>();
+
+    /**
+     * The position (index into mPrepopulatedSearchEngines) of the currently selected search engine.
+     * Can be -1 if current search engine is managed and set to something other than the
+     * pre-populated values.
+     */
     private int mSelectedSearchEnginePosition = -1;
 
-    // The position of the default search engine before user's action.
+    /** The position of the default search engine before user's action. */
     private int mInitialEnginePosition = -1;
+
+    private boolean mHasLoadObserver;
 
     /**
      * Construct a SearchEngineAdapter.
      * @param context The current context.
-     * @param callback The callback to use to communicate back.
      */
-    public SearchEngineAdapter(Context context, SelectSearchEngineCallback callback) {
+    public SearchEngineAdapter(Context context) {
         mContext = context;
         mLayoutInflater = (LayoutInflater) mContext.getSystemService(
                 Context.LAYOUT_INFLATER_SERVICE);
-        mCallback = callback;
-
-        initEntries();
     }
 
     /**
-     * @return The index of the selected engine before user's action.
+     * Start the adapter to gather the available search engines and listen for updates.
      */
-    public int getInitialSearchEnginePosition() {
-        return mInitialEnginePosition;
+    public void start() {
+        refreshData();
+        TemplateUrlService.getInstance().addObserver(this);
     }
 
-    // Used for testing.
+    /**
+     * Stop the adapter from listening for future search engine updates.
+     */
+    public void stop() {
+        if (mHasLoadObserver) {
+            TemplateUrlService.getInstance().unregisterLoadListener(this);
+            mHasLoadObserver = false;
+        }
+        TemplateUrlService.getInstance().removeObserver(this);
+    }
 
+    @VisibleForTesting
     String getValueForTesting() {
         return Integer.toString(mSelectedSearchEnginePosition);
     }
 
-    void setValueForTesting(String value) {
-        searchEngineSelected(Integer.parseInt(value));
+    @VisibleForTesting
+    String setValueForTesting(String value) {
+        return searchEngineSelected(Integer.parseInt(value));
+    }
+
+    @VisibleForTesting
+    String getKeywordForTesting(int index) {
+        return toKeyword(index);
     }
 
     /**
      * Initialize the search engine list.
      */
-    private void initEntries() {
+    private void refreshData() {
         TemplateUrlService templateUrlService = TemplateUrlService.getInstance();
         if (!templateUrlService.isLoaded()) {
+            mHasLoadObserver = true;
             templateUrlService.registerLoadListener(this);
             templateUrlService.load();
             return;  // Flow continues in onTemplateUrlServiceLoaded below.
         }
 
-        // Fetch all the search engine info and the currently active one.
-        mSearchEngines = templateUrlService.getLocalizedSearchEngines();
-        int searchEngineIndex = templateUrlService.getDefaultSearchEngineIndex();
-        // Convert the TemplateUrl index into an index into mSearchEngines.
+        List<TemplateUrl> templateUrls = templateUrlService.getSearchEngines();
+        if (!didSearchEnginesChange(templateUrls)) return;
+        mPrepopulatedSearchEngines = new ArrayList<>();
+        mRecentSearchEngines = new ArrayList<>();
+
+        for (int i = 0; i < templateUrls.size(); i++) {
+            TemplateUrl templateUrl = templateUrls.get(i);
+            if (templateUrl.getType() == TemplateUrlService.TYPE_PREPOPULATED
+                    || templateUrl.getType() == TemplateUrlService.TYPE_DEFAULT) {
+                mPrepopulatedSearchEngines.add(templateUrl);
+            } else {
+                mRecentSearchEngines.add(templateUrl);
+            }
+        }
+
+        int defaultSearchEngineIndex =
+                TemplateUrlService.getInstance().getDefaultSearchEngineIndex();
+
+        // Convert the TemplateUrl index into an index of mSearchEngines.
         mSelectedSearchEnginePosition = -1;
-        for (int i = 0; i < mSearchEngines.size(); ++i) {
-            if (mSearchEngines.get(i).getIndex() == searchEngineIndex) {
+        for (int i = 0; i < mPrepopulatedSearchEngines.size(); ++i) {
+            if (mPrepopulatedSearchEngines.get(i).getIndex() == defaultSearchEngineIndex) {
                 mSelectedSearchEnginePosition = i;
             }
         }
+
+        for (int i = 0; i < mRecentSearchEngines.size(); ++i) {
+            if (mRecentSearchEngines.get(i).getIndex() == defaultSearchEngineIndex) {
+                // Add one to offset the title for the recent search engine list.
+                mSelectedSearchEnginePosition = i + computeStartIndexForRecentSearchEngines();
+            }
+        }
+
+        if (mSelectedSearchEnginePosition == -1) {
+            throw new IllegalStateException(
+                    "Default search engine index did not match any available search engines.");
+        }
+
         mInitialEnginePosition = mSelectedSearchEnginePosition;
 
-        // Report back what is selected.
-        mCallback.currentSearchEngineDetermined(toIndex(mSelectedSearchEnginePosition));
+        notifyDataSetChanged();
     }
 
-    private int toIndex(int position) {
-        return mSearchEngines.get(position).getIndex();
+    private static boolean containsTemplateUrl(
+            List<TemplateUrl> templateUrls, TemplateUrl targetTemplateUrl) {
+        for (int i = 0; i < templateUrls.size(); i++) {
+            TemplateUrl templateUrl = templateUrls.get(i);
+            // Explicitly excluding TemplateUrlType and Index as they might change if a search
+            // engine is set as default.
+            if (templateUrl.getIsPrepopulated() == targetTemplateUrl.getIsPrepopulated()
+                    && TextUtils.equals(templateUrl.getKeyword(), targetTemplateUrl.getKeyword())
+                    && TextUtils.equals(
+                               templateUrl.getShortName(), targetTemplateUrl.getShortName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean didSearchEnginesChange(List<TemplateUrl> templateUrls) {
+        if (templateUrls.size()
+                != mPrepopulatedSearchEngines.size() + mRecentSearchEngines.size()) {
+            return true;
+        }
+        for (int i = 0; i < templateUrls.size(); i++) {
+            TemplateUrl templateUrl = templateUrls.get(i);
+            if (!containsTemplateUrl(mPrepopulatedSearchEngines, templateUrl)
+                    && !SearchEngineAdapter.containsTemplateUrl(
+                               mRecentSearchEngines, templateUrl)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String toKeyword(int position) {
+        if (position < mPrepopulatedSearchEngines.size()) {
+            return mPrepopulatedSearchEngines.get(position).getKeyword();
+        } else {
+            position -= computeStartIndexForRecentSearchEngines();
+            return mRecentSearchEngines.get(position).getKeyword();
+        }
     }
 
     // BaseAdapter:
 
     @Override
     public int getCount() {
-        return mSearchEngines == null ? 0 : mSearchEngines.size();
+        int size = 0;
+        if (mPrepopulatedSearchEngines != null) {
+            size += mPrepopulatedSearchEngines.size();
+        }
+        if (mRecentSearchEngines != null && mRecentSearchEngines.size() != 0) {
+            // Account for the header by adding one to the size.
+            size += mRecentSearchEngines.size() + 1;
+        }
+        return size;
+    }
+
+    @Override
+    public int getViewTypeCount() {
+        return VIEW_TYPE_COUNT;
     }
 
     @Override
     public Object getItem(int pos) {
-        TemplateUrl templateUrl = mSearchEngines.get(pos);
-        return templateUrl.getShortName();
+        if (pos < mPrepopulatedSearchEngines.size()) {
+            return mPrepopulatedSearchEngines.get(pos);
+        } else if (pos > mPrepopulatedSearchEngines.size()) {
+            pos -= computeStartIndexForRecentSearchEngines();
+            return mRecentSearchEngines.get(pos);
+        }
+        return null;
     }
 
     @Override
@@ -155,10 +259,27 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
     }
 
     @Override
+    public int getItemViewType(int position) {
+        if (position == mPrepopulatedSearchEngines.size() && mRecentSearchEngines.size() != 0) {
+            return VIEW_TYPE_DIVIDER;
+        } else {
+            return VIEW_TYPE_ITEM;
+        }
+    }
+
+    @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         View view = convertView;
+        int itemViewType = getItemViewType(position);
         if (convertView == null) {
-            view = mLayoutInflater.inflate(R.layout.search_engine, null);
+            view = mLayoutInflater.inflate(
+                    itemViewType == VIEW_TYPE_DIVIDER && mRecentSearchEngines.size() != 0
+                            ? R.layout.search_engine_recent_title
+                            : R.layout.search_engine,
+                    null);
+        }
+        if (itemViewType == VIEW_TYPE_DIVIDER) {
+            return view;
         }
 
         view.setOnClickListener(this);
@@ -178,10 +299,19 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
         }
         radioButton.setChecked(selected);
 
-        TextView description = (TextView) view.findViewById(R.id.description);
-        TemplateUrl templateUrl = mSearchEngines.get(position);
+        TextView description = (TextView) view.findViewById(R.id.name);
         Resources resources = mContext.getResources();
+
+        TemplateUrl templateUrl = (TemplateUrl) getItem(position);
         description.setText(templateUrl.getShortName());
+
+        TextView url = (TextView) view.findViewById(R.id.url);
+        url.setText(templateUrl.getKeyword());
+        if (templateUrl.getType() == TemplateUrlService.TYPE_PREPOPULATED
+                || templateUrl.getType() == TemplateUrlService.TYPE_DEFAULT
+                || templateUrl.getKeyword().length() == 0) {
+            url.setVisibility(View.GONE);
+        }
 
         // To improve the explore-by-touch experience, the radio button is hidden from accessibility
         // and instead, "checked" or "not checked" is read along with the search engine's name, e.g.
@@ -202,26 +332,35 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
             }
         });
 
-        TextView link = (TextView) view.findViewById(R.id.link);
+        TextView link = (TextView) view.findViewById(R.id.location_permission);
         link.setVisibility(selected ? View.VISIBLE : View.GONE);
-        if (selected) {
-            ForegroundColorSpan linkSpan = new ForegroundColorSpan(
-                    ApiCompatibilityUtils.getColor(resources, R.color.pref_accent_color));
-            if (LocationUtils.getInstance().isSystemLocationSettingEnabled()) {
-                String message = mContext.getString(
-                        locationEnabled(position, true)
-                        ? R.string.search_engine_location_allowed
-                        : R.string.search_engine_location_blocked);
-                SpannableString messageWithLink = new SpannableString(message);
-                messageWithLink.setSpan(linkSpan, 0, messageWithLink.length(), 0);
-                link.setText(messageWithLink);
+        if (TemplateUrlService.getInstance().getSearchEngineUrlFromTemplateUrl(
+                templateUrl.getKeyword()) == null) {
+            Log.e(TAG, "Invalid template URL found: %s", templateUrl);
+            assert false;
+            link.setVisibility(View.GONE);
+        } else if (selected) {
+            if (getLocationPermissionType(templateUrl, true) == ContentSetting.ASK) {
+                link.setVisibility(View.GONE);
             } else {
-                link.setText(SpanApplier.applySpans(
-                        mContext.getString(R.string.android_location_off),
-                        new SpanInfo("<link>", "</link>", linkSpan)));
-            }
+                ForegroundColorSpan linkSpan = new ForegroundColorSpan(
+                        ApiCompatibilityUtils.getColor(resources, R.color.google_blue_700));
+                if (LocationUtils.getInstance().isSystemLocationSettingEnabled()) {
+                    String message = mContext.getString(
+                            locationEnabled(templateUrl, true)
+                            ? R.string.search_engine_location_allowed
+                            : R.string.search_engine_location_blocked);
+                    SpannableString messageWithLink = new SpannableString(message);
+                    messageWithLink.setSpan(linkSpan, 0, messageWithLink.length(), 0);
+                    link.setText(messageWithLink);
+                } else {
+                    link.setText(SpanApplier.applySpans(
+                            mContext.getString(R.string.android_location_off),
+                            new SpanInfo("<link>", "</link>", linkSpan)));
+                }
 
-            link.setOnClickListener(this);
+                link.setOnClickListener(this);
+            }
         }
 
         return view;
@@ -232,8 +371,13 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
     @Override
     public void onTemplateUrlServiceLoaded() {
         TemplateUrlService.getInstance().unregisterLoadListener(this);
-        initEntries();
-        notifyDataSetChanged();
+        mHasLoadObserver = false;
+        refreshData();
+    }
+
+    @Override
+    public void onTemplateURLServiceChanged() {
+        refreshData();
     }
 
     // OnClickListener:
@@ -247,15 +391,16 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
         }
     }
 
-    private void searchEngineSelected(int position) {
+    private String searchEngineSelected(int position) {
         // First clean up any automatically added permissions (if any) for the previously selected
         // search engine.
         SharedPreferences sharedPreferences =
                 ContextUtils.getAppSharedPreferences();
         if (sharedPreferences.getBoolean(PrefServiceBridge.LOCATION_AUTO_ALLOWED, false)) {
-            if (locationEnabled(mSelectedSearchEnginePosition, false)) {
+            TemplateUrl templateUrl = (TemplateUrl) getItem(mSelectedSearchEnginePosition);
+            if (locationEnabled(templateUrl, false)) {
                 String url = TemplateUrlService.getInstance().getSearchEngineUrlFromTemplateUrl(
-                        toIndex(mSelectedSearchEnginePosition));
+                        templateUrl.getKeyword());
                 WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(
                         url, url, ContentSetting.DEFAULT.toInt(), false);
             }
@@ -265,10 +410,17 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
         // Record the change in search engine.
         mSelectedSearchEnginePosition = position;
 
-        // Report the change back.
-        mCallback.currentSearchEngineDetermined(toIndex(mSelectedSearchEnginePosition));
+        String keyword = toKeyword(mSelectedSearchEnginePosition);
+        TemplateUrlService.getInstance().setSearchEngine(keyword);
 
+        // If the user has manually set the default search engine, disable auto switching.
+        boolean manualSwitch = mSelectedSearchEnginePosition != mInitialEnginePosition;
+        if (manualSwitch) {
+            RecordUserAction.record("SearchEngine_ManualChange");
+            LocaleManager.getInstance().setSearchEngineAutoSwitch(false);
+        }
         notifyDataSetChanged();
+        return keyword;
     }
 
     private void onLocationLinkClicked() {
@@ -278,26 +430,60 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
             Intent settingsIntent = PreferencesLauncher.createIntentForSettingsPage(
                     mContext, SingleWebsitePreferences.class.getName());
             String url = TemplateUrlService.getInstance().getSearchEngineUrlFromTemplateUrl(
-                    toIndex(mSelectedSearchEnginePosition));
+                    toKeyword(mSelectedSearchEnginePosition));
             Bundle fragmentArgs = SingleWebsitePreferences.createFragmentArgsForSite(url);
             fragmentArgs.putBoolean(SingleWebsitePreferences.EXTRA_LOCATION,
-                    locationEnabled(mSelectedSearchEnginePosition, true));
+                    locationEnabled((TemplateUrl) getItem(mSelectedSearchEnginePosition), true));
             settingsIntent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
             mContext.startActivity(settingsIntent);
         }
     }
 
-    private boolean locationEnabled(int position, boolean checkGeoHeader) {
-        if (position == -1) return false;
+    private ContentSetting getLocationPermissionType(
+            TemplateUrl templateUrl, boolean checkGeoHeader) {
+        if (templateUrl == null) {
+            Log.e(TAG, "Invalid null template URL found");
+            assert false;
+            return ContentSetting.BLOCK;
+        }
 
         String url = TemplateUrlService.getInstance().getSearchEngineUrlFromTemplateUrl(
-                toIndex(position));
+                templateUrl.getKeyword());
+        if (url == null) {
+            Log.e(TAG, "Invalid template URL found: %s", templateUrl);
+            assert false;
+            return ContentSetting.BLOCK;
+        }
         GeolocationInfo locationSettings = new GeolocationInfo(url, null, false);
         ContentSetting locationPermission = locationSettings.getContentSetting();
-        // Handle the case where the geoHeader being sent when no permission has been specified.
-        if (locationPermission == ContentSetting.ASK && checkGeoHeader) {
-            return GeolocationHeader.isGeoHeaderEnabledForUrl(mContext, url, false);
+        if (locationPermission == ContentSetting.ASK) {
+            // Handle the case where the geoHeader being sent when no permission has been specified.
+            if (checkGeoHeader) {
+                if (ChromeFeatureList.isEnabled(ChromeFeatureList.CONSISTENT_OMNIBOX_GEOLOCATION)) {
+                    if (WebsitePreferenceBridge.shouldUseDSEGeolocationSetting(url, false)) {
+                        locationPermission = WebsitePreferenceBridge.getDSEGeolocationSetting()
+                                ? ContentSetting.ALLOW
+                                : ContentSetting.BLOCK;
+                    }
+                } else if (GeolocationHeader.isGeoHeaderEnabledForUrl(url, false)) {
+                    locationPermission = ContentSetting.ALLOW;
+                }
+            }
         }
-        return locationPermission == ContentSetting.ALLOW;
+        return locationPermission;
+    }
+
+    private boolean locationEnabled(TemplateUrl templateUrl, boolean checkGeoHeader) {
+        return getLocationPermissionType(templateUrl, checkGeoHeader) == ContentSetting.ALLOW;
+    }
+
+    private int computeStartIndexForRecentSearchEngines() {
+        // If there are custom search engines to show, add 1 for showing the  "Recently visited"
+        // header.
+        if (mRecentSearchEngines.size() > 0) {
+            return mPrepopulatedSearchEngines.size() + 1;
+        } else {
+            return mPrepopulatedSearchEngines.size();
+        }
     }
 }

@@ -31,7 +31,6 @@
 #define ShapeOutsideInfo_h
 
 #include "core/layout/shapes/Shape.h"
-#include "core/style/ComputedStyle.h"
 #include "core/style/ShapeValue.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/LayoutSize.h"
@@ -121,7 +120,7 @@ class ShapeOutsideInfo final {
 
   static std::unique_ptr<ShapeOutsideInfo> createInfo(
       const LayoutBox& layoutBox) {
-    return wrapUnique(new ShapeOutsideInfo(layoutBox));
+    return WTF::wrapUnique(new ShapeOutsideInfo(layoutBox));
   }
   static bool isEnabledFor(const LayoutBox&);
 

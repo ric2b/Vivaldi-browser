@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "components/guest_view/browser/guest_view_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -134,10 +135,9 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
       url::kFileScheme,
       url::kFileSystemScheme,
       kExtensionScheme,
-      kExtensionResourceScheme,
   };
-  for (size_t i = 0; i < arraysize(kProtocolList); ++i) {
-    if (url.scheme() == kProtocolList[i])
+  for (const char* scheme : kProtocolList) {
+    if (url.SchemeIs(scheme))
       return true;
   }
   return false;
@@ -231,11 +231,12 @@ ShellContentBrowserClient::GetDevToolsManagerDelegate() {
   return new content::ShellDevToolsManagerDelegate(GetBrowserContext());
 }
 
-ScopedVector<content::NavigationThrottle>
+std::vector<std::unique_ptr<content::NavigationThrottle>>
 ShellContentBrowserClient::CreateThrottlesForNavigation(
     content::NavigationHandle* navigation_handle) {
-  ScopedVector<content::NavigationThrottle> throttles;
-  throttles.push_back(new ExtensionNavigationThrottle(navigation_handle));
+  std::vector<std::unique_ptr<content::NavigationThrottle>> throttles;
+  throttles.push_back(
+      base::MakeUnique<ExtensionNavigationThrottle>(navigation_handle));
   return throttles;
 }
 

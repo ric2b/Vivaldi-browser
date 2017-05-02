@@ -7,9 +7,13 @@
 #include <utility>
 
 #include "base/memory/memory_coordinator_client_registry.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
+#include "base/trace_event/process_memory_dump.h"
+#include "net/cert/x509_util_openssl.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
+#include "third_party/boringssl/src/include/openssl/x509.h"
 
 namespace net {
 
@@ -33,7 +37,8 @@ size_t SSLClientSessionCache::size() const {
 }
 
 bssl::UniquePtr<SSL_SESSION> SSLClientSessionCache::Lookup(
-    const std::string& cache_key) {
+    const std::string& cache_key,
+    int* count) {
   base::AutoLock lock(lock_);
 
   // Expire stale sessions.
@@ -43,18 +48,39 @@ bssl::UniquePtr<SSL_SESSION> SSLClientSessionCache::Lookup(
     FlushExpiredSessions();
   }
 
+  // Set count to 0 if there's no session in the cache.
+  if (count != nullptr)
+    *count = 0;
+
   auto iter = cache_.Get(cache_key);
   if (iter == cache_.end())
     return nullptr;
 
-  SSL_SESSION* session = iter->second.get();
+  SSL_SESSION* session = iter->second.session.get();
   if (IsExpired(session, clock_->Now().ToTimeT())) {
     cache_.Erase(iter);
     return nullptr;
   }
 
+  iter->second.lookups++;
+  if (count != nullptr) {
+    *count = iter->second.lookups;
+  }
+
   SSL_SESSION_up_ref(session);
   return bssl::UniquePtr<SSL_SESSION>(session);
+}
+
+void SSLClientSessionCache::ResetLookupCount(const std::string& cache_key) {
+  base::AutoLock lock(lock_);
+
+  // It's possible that the cached session for this key was deleted after the
+  // Lookup. If that's the case, don't do anything.
+  auto iter = cache_.Get(cache_key);
+  if (iter == cache_.end())
+    return;
+
+  iter->second.lookups = 0;
 }
 
 void SSLClientSessionCache::Insert(const std::string& cache_key,
@@ -62,7 +88,9 @@ void SSLClientSessionCache::Insert(const std::string& cache_key,
   base::AutoLock lock(lock_);
 
   SSL_SESSION_up_ref(session);
-  cache_.Put(cache_key, bssl::UniquePtr<SSL_SESSION>(session));
+  Entry entry;
+  entry.session = bssl::UniquePtr<SSL_SESSION>(session);
+  cache_.Put(cache_key, std::move(entry));
 }
 
 void SSLClientSessionCache::Flush() {
@@ -82,11 +110,52 @@ bool SSLClientSessionCache::IsExpired(SSL_SESSION* session, time_t now) {
              SSL_SESSION_get_time(session) + SSL_SESSION_get_timeout(session);
 }
 
+void SSLClientSessionCache::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd) {
+  std::string absolute_name = "net/ssl_session_cache";
+  base::trace_event::MemoryAllocatorDump* cache_dump =
+      pmd->GetAllocatorDump(absolute_name);
+  // This method can be reached from different URLRequestContexts. Since this is
+  // a singleton, only log memory stats once.
+  // TODO(xunjieli): Change this once crbug.com/458365 is fixed.
+  if (cache_dump)
+    return;
+  cache_dump = pmd->CreateAllocatorDump(absolute_name);
+  base::AutoLock lock(lock_);
+  size_t total_serialized_cert_size = 0;
+  size_t total_cert_count = 0;
+  for (const auto& pair : cache_) {
+    const SSL_SESSION* session = pair.second.session.get();
+    size_t cert_count = sk_CRYPTO_BUFFER_num(session->certs);
+    total_cert_count += cert_count;
+    for (size_t i = 0; i < cert_count; ++i) {
+      const CRYPTO_BUFFER* cert = sk_CRYPTO_BUFFER_value(session->certs, i);
+      total_serialized_cert_size += CRYPTO_BUFFER_len(cert);
+    }
+  }
+  // This measures the lower bound of the serialized certificate. It doesn't
+  // measure the actual memory used, which is 4x this amount (see
+  // crbug.com/671420 for more details).
+  cache_dump->AddScalar("serialized_cert_size",
+                        base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                        total_serialized_cert_size);
+  cache_dump->AddScalar("cert_count",
+                        base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                        total_cert_count);
+  cache_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                        base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                        total_serialized_cert_size);
+}
+
+SSLClientSessionCache::Entry::Entry() : lookups(0) {}
+SSLClientSessionCache::Entry::Entry(Entry&&) = default;
+SSLClientSessionCache::Entry::~Entry() = default;
+
 void SSLClientSessionCache::FlushExpiredSessions() {
   time_t now = clock_->Now().ToTimeT();
   auto iter = cache_.begin();
   while (iter != cache_.end()) {
-    if (IsExpired(iter->second.get(), now)) {
+    if (IsExpired(iter->second.session.get(), now)) {
       iter = cache_.Erase(iter);
     } else {
       ++iter;

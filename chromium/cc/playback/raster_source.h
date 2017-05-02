@@ -17,10 +17,14 @@
 #include "skia/ext/analysis_canvas.h"
 #include "third_party/skia/include/core/SkPicture.h"
 
+namespace gfx {
+class ColorSpace;
+}
+
 namespace cc {
 class DisplayItemList;
 class DrawImage;
-class ImageDecodeController;
+class ImageDecodeCache;
 
 class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
  public:
@@ -47,7 +51,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   void PlaybackToCanvas(SkCanvas* canvas,
                         const gfx::Rect& canvas_bitmap_rect,
                         const gfx::Rect& canvas_playback_rect,
-                        const gfx::SizeF& raster_scales,
+                        float contents_scale,
                         const PlaybackSettings& settings) const;
 
   // Raster this RasterSource into the given canvas. Canvas states such as
@@ -65,7 +69,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Returns whether the given rect at given scale is of solid color in
   // this raster source, as well as the solid color value.
   bool PerformSolidColorAnalysis(const gfx::Rect& content_rect,
-                                 const gfx::SizeF& raster_scales,
+                                 float contents_scale,
                                  SkColor* color) const;
 
   // Returns true iff the whole raster source is of solid color.
@@ -78,11 +82,19 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Returns the size of this raster source.
   gfx::Size GetSize() const;
 
+  // Returns whether or not there was a color space implied by the raster source
+  // when it was created. If this returns true then no color correction is
+  // to be applied at rasterization time, and the result of rasterization is to
+  // be interpreted as being in this color space. If this returns falce, then
+  // then a destination color space must be specified at raster time.
+  bool HasImpliedColorSpace() const;
+  const gfx::ColorSpace& GetImpliedColorSpace() const;
+
   // Populate the given list with all images that may overlap the given
   // rect in layer space. The returned draw images' matrices are modified as if
   // they were being using during raster at scale |raster_scale|.
   void GetDiscardableImagesInRect(const gfx::Rect& layer_rect,
-                                  const gfx::SizeF& raster_scales,
+                                  float contents_scale,
                                   std::vector<DrawImage>* images) const;
 
   // Return true iff this raster source can raster the given rect in layer
@@ -108,21 +120,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
 
   // Image decode controller should be set once. Its lifetime has to exceed that
   // of the raster source, since the raster source will access it during raster.
-  void set_image_decode_controller(
-      ImageDecodeController* image_decode_controller) {
-    DCHECK(image_decode_controller);
-    image_decode_controller_ = image_decode_controller;
-  }
-
-  // Returns the ImageDecodeController, currently only used by
-  // GpuRasterBufferProvider in order to create its own ImageHijackCanvas.
-  // Because of the MultiPictureDraw approach used by GPU raster, it does not
-  // integrate well with the use of the ImageHijackCanvas internal to this
-  // class. See gpu_raster_buffer_provider.cc for more information.
-  // TODO(crbug.com/628394): Redesign this to avoid exposing
-  // ImageDecodeController from the raster source.
-  ImageDecodeController* image_decode_controller() const {
-    return image_decode_controller_;
+  void set_image_decode_cache(ImageDecodeCache* image_decode_cache) {
+    DCHECK(image_decode_cache);
+    image_decode_cache_ = image_decode_cache;
   }
 
  protected:
@@ -148,7 +148,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
 
   // In practice, this is only set once before raster begins, so it's ok with
   // respect to threading.
-  ImageDecodeController* image_decode_controller_;
+  ImageDecodeCache* image_decode_cache_;
 
  private:
   void RasterCommon(SkCanvas* canvas, SkPicture::AbortCallback* callback) const;

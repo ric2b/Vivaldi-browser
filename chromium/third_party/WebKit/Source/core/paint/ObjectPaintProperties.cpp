@@ -6,28 +6,25 @@
 
 namespace blink {
 
-ObjectPaintProperties::PropertyTreeStateWithOffset
-ObjectPaintProperties::contentsProperties() const {
-  ObjectPaintProperties::PropertyTreeStateWithOffset propertiesWithOffset =
-      *localBorderBoxProperties();
-  if (svgLocalToBorderBoxTransform()) {
-    propertiesWithOffset.propertyTreeState.setTransform(
-        svgLocalToBorderBoxTransform());
-    // There's no paint offset for the contents because
-    // svgLocalToBorderBoxTransform bakes in the paint offset.
-    propertiesWithOffset.paintOffset = LayoutPoint();
-  } else if (scrollTranslation()) {
-    propertiesWithOffset.propertyTreeState.setTransform(scrollTranslation());
-  }
+void ObjectPaintProperties::updateContentsProperties() const {
+  DCHECK(m_localBorderBoxProperties);
+  DCHECK(!m_contentsProperties);
+
+  m_contentsProperties =
+      WTF::makeUnique<PropertyTreeState>(*m_localBorderBoxProperties);
+
+  if (scrollTranslation())
+    m_contentsProperties->setTransform(scrollTranslation());
+
+  if (scroll())
+    m_contentsProperties->setScroll(scroll());
 
   if (overflowClip())
-    propertiesWithOffset.propertyTreeState.setClip(overflowClip());
+    m_contentsProperties->setClip(overflowClip());
   else if (cssClip())
-    propertiesWithOffset.propertyTreeState.setClip(cssClip());
+    m_contentsProperties->setClip(cssClip());
 
   // TODO(chrishtr): cssClipFixedPosition needs to be handled somehow.
-
-  return propertiesWithOffset;
 }
 
 }  // namespace blink

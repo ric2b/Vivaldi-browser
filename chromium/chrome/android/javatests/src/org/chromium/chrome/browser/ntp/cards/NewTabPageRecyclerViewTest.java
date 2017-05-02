@@ -4,9 +4,9 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import android.support.test.filters.MediumTest;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
-import android.test.suitebuilder.annotation.MediumTest;
 import android.view.View;
 
 import org.chromium.base.ThreadUtils;
@@ -110,16 +110,15 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
     @MediumTest
     @Feature({"NewTabPage"})
     @CommandLineFlags.Add("enable-features=NTPSnippets")
-    public void testClickSuggestion() throws InterruptedException, TimeoutException {
+    public void testClickSuggestion() throws InterruptedException {
         setSuggestionsAndWaitForUpdate(10);
         List<SnippetArticle> suggestions =
                 mSource.getSuggestionsForCategory(KnownCategories.ARTICLES);
 
         // Scroll the last suggestion into view and click it.
         SnippetArticle suggestion = suggestions.get(suggestions.size() - 1);
-        int suggestionPosition = getAdapter().getSuggestionPosition(suggestion);
-        scrollToPosition(suggestionPosition);
-        final View suggestionView = waitForView(suggestionPosition);
+        int suggestionPosition = getSuggestionPosition(suggestion);
+        final View suggestionView = getViewHolderAtPosition(suggestionPosition).itemView;
         ChromeTabUtils.waitForTabPageLoaded(mTab, new Runnable() {
             @Override
             public void run() {
@@ -135,33 +134,27 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
     public void testAllDismissed() throws InterruptedException, TimeoutException {
         setSuggestionsAndWaitForUpdate(3);
         assertEquals(3, mSource.getSuggestionsForCategory(KnownCategories.ARTICLES).size());
-        assertFalse(getAdapter().hasAllBeenDismissed());
+        assertEquals(RecyclerView.NO_POSITION,
+                getAdapter().getFirstPositionForType(ItemViewType.ALL_DISMISSED));
         assertEquals(1, mSource.getCategories().length);
         assertEquals(KnownCategories.ARTICLES, mSource.getCategories()[0]);
 
         // Dismiss the sign in promo.
-        int signinPromoPosition = getAdapter().getSignInPromoPosition();
-        scrollToPosition(signinPromoPosition);
-        View signinPromoView = waitForView(signinPromoPosition);
-        getAdapter().dismissItem(signinPromoPosition);
-        waitForViewToDetach(signinPromoView);
+        int signinPromoPosition = getAdapter().getFirstPositionForType(ItemViewType.PROMO);
+        dismissItemAtPosition(signinPromoPosition);
 
         // Dismiss all the cards, including status cards, which dismisses the associated category.
-        int cardPosition = getAdapter().getFirstCardPosition();
-        while (cardPosition != RecyclerView.NO_POSITION) {
-            scrollToPosition(cardPosition);
-            View cardView = waitForView(cardPosition);
-            getAdapter().dismissItem(cardPosition);
-            waitForViewToDetach(cardView);
-            cardPosition = getAdapter().getFirstCardPosition();
+        while (true) {
+            int cardPosition = getAdapter().getFirstCardPosition();
+            if (cardPosition == RecyclerView.NO_POSITION) break;
+            dismissItemAtPosition(cardPosition);
         }
-        assertTrue(getAdapter().hasAllBeenDismissed());
         assertEquals(0, mSource.getCategories().length);
 
         // Click the refresh button on the all dismissed item.
-        int allDismissedPosition = getAdapter().getLastContentItemPosition();
-        scrollToPosition(allDismissedPosition);
-        View allDismissedView = waitForView(allDismissedPosition);
+        int allDismissedPosition = getAdapter().getFirstPositionForType(ItemViewType.ALL_DISMISSED);
+        assertTrue(allDismissedPosition != RecyclerView.NO_POSITION);
+        View allDismissedView = getViewHolderAtPosition(allDismissedPosition).itemView;
         singleClickView(allDismissedView.findViewById(R.id.action_button));
         waitForViewToDetach(allDismissedView);
         assertEquals(1, mSource.getCategories().length);
@@ -178,10 +171,8 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
         assertEquals(10, suggestions.size());
 
         // Scroll a suggestion into view.
-        int suggestionPosition =
-                getAdapter().getSuggestionPosition(suggestions.get(suggestions.size() - 1));
-        scrollToPosition(suggestionPosition);
-        View suggestionView = waitForView(suggestionPosition);
+        int suggestionPosition = getSuggestionPosition(suggestions.get(suggestions.size() - 1));
+        View suggestionView = getViewHolderAtPosition(suggestionPosition).itemView;
 
         // Dismiss the suggestion using the context menu.
         invokeContextMenu(suggestionView, ContextMenuManager.ID_REMOVE);
@@ -203,8 +194,7 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
         int cardPosition = getAdapter().getFirstCardPosition();
         assertEquals(ItemViewType.STATUS, getAdapter().getItemViewType(cardPosition));
 
-        scrollToPosition(cardPosition);
-        View statusCardView = waitForView(cardPosition);
+        View statusCardView = getViewHolderAtPosition(cardPosition).itemView;
 
         // Dismiss the status card using the context menu.
         invokeContextMenu(statusCardView, ContextMenuManager.ID_REMOVE);
@@ -224,8 +214,7 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
         // Scroll the action item into view.
         int actionItemPosition = getAdapter().getFirstCardPosition() + 1;
         assertEquals(ItemViewType.ACTION, getAdapter().getItemViewType(actionItemPosition));
-        scrollToPosition(actionItemPosition);
-        View actionItemView = waitForView(actionItemPosition);
+        View actionItemView = getViewHolderAtPosition(actionItemPosition).itemView;
 
         // Dismiss the action item using the context menu.
         invokeContextMenu(actionItemView, ContextMenuManager.ID_REMOVE);
@@ -246,7 +235,22 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
         return getRecyclerView().getNewTabPageAdapter();
     }
 
-    private void scrollToPosition(final int position) {
+    private int getSuggestionPosition(SnippetArticle article) {
+        NewTabPageAdapter adapter = getAdapter();
+        for (int i = 0; i < adapter.getItemCount(); i++) {
+            SnippetArticle articleToCheck = adapter.getSuggestionAt(i);
+            if (articleToCheck != null && articleToCheck.equals(article)) return i;
+        }
+        return RecyclerView.NO_POSITION;
+    }
+
+    /**
+     * Scroll the {@link View} at the given adapter position into view and returns
+     * its {@link ViewHolder}.
+     * @param position the adapter position for which to return the {@link ViewHolder}.
+     * @return the ViewHolder for the given {@code position}.
+     */
+    private ViewHolder getViewHolderAtPosition(final int position) {
         final NewTabPageRecyclerView recyclerView = getRecyclerView();
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -254,13 +258,31 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
             public void run() {
                 recyclerView.getLinearLayoutManager().scrollToPositionWithOffset(
                         position, getActivity().getResources().getDimensionPixelSize(
-                                          R.dimen.tab_strip_height));
+                                R.dimen.tab_strip_height));
             }
         });
+        return waitForView(position);
     }
 
-    private void setSuggestionsAndWaitForUpdate(final int suggestionsCount)
-            throws InterruptedException, TimeoutException {
+    /**
+     * Dismiss the item at the given {@code position} and wait until it has been removed from the
+     * {@link RecyclerView}.
+     * @param position the adapter position to remove.
+     * @throws InterruptedException
+     * @throws TimeoutException
+     */
+    private void dismissItemAtPosition(int position) throws InterruptedException, TimeoutException {
+        final ViewHolder viewHolder = getViewHolderAtPosition(position);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                getRecyclerView().dismissItemWithAnimation(viewHolder);
+            }
+        });
+        waitForViewToDetach(viewHolder.itemView);
+    }
+
+    private void setSuggestionsAndWaitForUpdate(final int suggestionsCount) {
         final FakeSuggestionsSource source = mSource;
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -279,8 +301,7 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
         for (int i = 0; i < suggestionsCount; i++) {
             String url = mTestServer.getURL(TEST_PAGE) + "#" + i;
             suggestions.add(new SnippetArticle(KnownCategories.ARTICLES, "id" + i, "title" + i,
-                    "publisher" + i, "previewText" + i, url, url, 1466614774 + i, 10f, 0,
-                    ContentSuggestionsCardLayout.FULL_CARD));
+                    "publisher" + i, "previewText" + i, url, 1466614774 + i, 10f));
         }
         return suggestions;
     }
@@ -291,7 +312,7 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
                 getInstrumentation().invokeContextMenuAction(getActivity(), contextMenuItemId, 0));
     }
 
-    private View waitForView(final int position) throws InterruptedException {
+    private ViewHolder waitForView(final int position) {
         final NewTabPageRecyclerView recyclerView = getRecyclerView();
 
         CriteriaHelper.pollUiThread(new Criteria() {
@@ -315,7 +336,7 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
 
         waitForStableRecyclerView();
 
-        return recyclerView.findViewHolderForAdapterPosition(position).itemView;
+        return recyclerView.findViewHolderForAdapterPosition(position);
     }
 
     private void waitForViewToDetach(final View view)
@@ -341,7 +362,7 @@ public class NewTabPageRecyclerViewTest extends ChromeTabbedActivityTestBase {
         waitForStableRecyclerView();
     }
 
-    private void waitForStableRecyclerView() throws InterruptedException {
+    private void waitForStableRecyclerView() {
         final RecyclerView recyclerView = getRecyclerView();
 
         CriteriaHelper.pollUiThread(new Criteria() {

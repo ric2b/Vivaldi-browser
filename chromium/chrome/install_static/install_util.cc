@@ -6,6 +6,7 @@
 
 #include <windows.h>
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <algorithm>
@@ -14,6 +15,8 @@
 
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_modes.h"
+#include "chrome/install_static/policy_path_parser.h"
+#include "chrome/install_static/user_data_dir.h"
 #include "chrome_elf/nt_registry/nt_registry.h"
 
 namespace install_static {
@@ -31,12 +34,12 @@ const wchar_t kShowRestart[] = L"CHROME_CRASHED";
 const wchar_t kRestartInfo[] = L"CHROME_RESTART";
 const wchar_t kRtlLocale[] = L"RIGHT_TO_LEFT";
 
-const char kGpuProcess[] = "gpu-process";
-const char kPpapiPluginProcess[] = "ppapi";
-const char kRendererProcess[] = "renderer";
-const char kUtilityProcess[] = "utility";
-const char kProcessType[] = "type";
-const char kCrashpadHandler[] = "crashpad-handler";
+const wchar_t kCrashpadHandler[] = L"crashpad-handler";
+const wchar_t kFallbackHandler[] = L"fallback-handler";
+
+const wchar_t kProcessType[] = L"type";
+const wchar_t kUserDataDirSwitch[] = L"user-data-dir";
+const wchar_t kUtilityProcess[] = L"utility";
 
 namespace {
 
@@ -57,7 +60,6 @@ constexpr wchar_t kRegValueAp[] = L"ap";
 constexpr wchar_t kRegValueUsageStats[] = L"usagestats";
 constexpr wchar_t kMetricsReportingEnabled[] = L"MetricsReportingEnabled";
 
-constexpr wchar_t kUserDataDirname[] = L"User Data";
 constexpr wchar_t kBrowserCrashDumpMetricsSubKey[] =
     L"\\BrowserCrashDumpAttempts";
 
@@ -151,73 +153,17 @@ bool GetValueFromVersionResource(const char* version_resource,
   return false;
 }
 
-bool RecursiveDirectoryCreate(const std::wstring& full_path) {
-  // If the path exists, we've succeeded if it's a directory, failed otherwise.
-  const wchar_t* full_path_str = full_path.c_str();
-  DWORD file_attributes = ::GetFileAttributes(full_path_str);
-  if (file_attributes != INVALID_FILE_ATTRIBUTES) {
-    if ((file_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
-      Trace(L"%hs( %ls directory exists )\n", __func__, full_path_str);
-      return true;
-    }
-    Trace(L"%hs( %ls directory conflicts with an existing file. )\n", __func__,
-          full_path_str);
+bool DirectoryExists(const std::wstring& path) {
+  DWORD file_attributes = ::GetFileAttributes(path.c_str());
+  if (file_attributes == INVALID_FILE_ATTRIBUTES)
     return false;
-  }
-
-  // Invariant:  Path does not exist as file or directory.
-
-  // Attempt to create the parent recursively.  This will immediately return
-  // true if it already exists, otherwise will create all required parent
-  // directories starting with the highest-level missing parent.
-  std::wstring parent_path;
-  std::size_t pos = full_path.find_last_of(L"/\\");
-  if (pos != std::wstring::npos) {
-    parent_path = full_path.substr(0, pos);
-    if (!RecursiveDirectoryCreate(parent_path)) {
-      Trace(L"Failed to create one of the parent directories");
-      return false;
-    }
-  }
-  if (!::CreateDirectory(full_path_str, nullptr)) {
-    DWORD error_code = ::GetLastError();
-    if (error_code == ERROR_ALREADY_EXISTS) {
-      DWORD file_attributes = ::GetFileAttributes(full_path_str);
-      if ((file_attributes != INVALID_FILE_ATTRIBUTES) &&
-          ((file_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)) {
-        // This error code ERROR_ALREADY_EXISTS doesn't indicate whether we
-        // were racing with someone creating the same directory, or a file
-        // with the same path.  If the directory exists, we lost the
-        // race to create the same directory.
-        return true;
-      } else {
-        Trace(L"Failed to create directory %ls, last error is %d\n",
-              full_path_str, error_code);
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-// Appends "[kCompanyPathName\]kProductPathName[install_suffix]" to |path|,
-// returning a reference to |path|.
-std::wstring& AppendChromeInstallSubDirectory(std::wstring* path,
-                                              bool include_suffix) {
-  if (*kCompanyPathName) {
-    path->append(kCompanyPathName);
-    path->push_back(L'\\');
-  }
-  path->append(kProductPathName, kProductPathNameLength);
-  if (!include_suffix)
-    return *path;
-  return path->append(InstallDetails::Get().install_suffix());
+  return (file_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
 std::wstring GetChromeInstallRegistryPath() {
   std::wstring registry_path = L"Software\\";
-  return AppendChromeInstallSubDirectory(&registry_path,
-                                         true /* include_suffix */);
+  return AppendChromeInstallSubDirectory(
+      InstallDetails::Get().mode(), true /* include_suffix */, &registry_path);
 }
 
 // Returns true if the |source| string matches the |pattern|. The pattern
@@ -313,21 +259,17 @@ std::vector<StringType> TokenizeStringT(
 }
 
 std::wstring ChannelFromAdditionalParameters(const InstallConstants& mode,
-                                             bool system_level,
-                                             bool binaries) {
+                                             bool system_level) {
   assert(kUseGoogleUpdateIntegration);
-  // InitChannelInfo in google_update_settings.cc only reports a failure in the
-  // case of multi-install Chrome where the binaries' ClientState key exists,
-  // but that the "ap" value therein cannot be read due to some reason *other*
-  // than it not being present. This should be exceedingly rare. For
-  // simplicity's sake, use an empty |value| in case of any error whatsoever
-  // here.
+  // InitChannelInfo in google_update_settings.cc only reports a failure when
+  // Chrome's ClientState key exists but that the "ap" value therein cannot be
+  // read due to some reason *other* than it not being present. This should be
+  // exceedingly rare. For simplicity's sake, use an empty |value| in case of
+  // any error whatsoever here.
   std::wstring value;
   nt::QueryRegValueSZ(system_level ? nt::HKLM : nt::HKCU, nt::WOW6432,
-                      (binaries ? GetBinariesClientStateKeyPath()
-                                : GetClientStateKeyPath(mode.app_guid))
-                          .c_str(),
-                      kRegValueAp, &value);
+                      GetClientStateKeyPath(mode.app_guid).c_str(), kRegValueAp,
+                      &value);
 
   static constexpr wchar_t kChromeChannelBetaPattern[] = L"1?1-*";
   static constexpr wchar_t kChromeChannelBetaX64Pattern[] = L"*x64-beta*";
@@ -350,7 +292,7 @@ std::wstring ChannelFromAdditionalParameters(const InstallConstants& mode,
   }
   // Else report values with garbage as stable since they will match the stable
   // rules in the update configs. ChannelInfo::GetChannelName painstakingly
-  // strips off known modifiers (e.g., "-multi-full") to see if the empty string
+  // strips off known modifiers (e.g., "-full") to see if the empty string
   // remains, returning channel "unknown" if not. This differs here in that some
   // clients will tag crashes as "stable" rather than "unknown" via this
   // codepath, but it is an accurate reflection of which update channel the
@@ -363,10 +305,6 @@ std::wstring ChannelFromAdditionalParameters(const InstallConstants& mode,
 
 bool IsSystemInstall() {
   return InstallDetails::Get().system_level();
-}
-
-bool IsMultiInstall() {
-  return InstallDetails::Get().multi_install();
 }
 
 bool GetCollectStatsConsent() {
@@ -383,7 +321,7 @@ bool GetCollectStatsConsent() {
   if (system_install &&
       nt::QueryRegValueDWORD(
           nt::HKLM, nt::WOW6432,
-          InstallDetails::Get().GetClientStateMediumKeyPath(true).c_str(),
+          InstallDetails::Get().GetClientStateMediumKeyPath().c_str(),
           kRegValueUsageStats, &out_value)) {
     return (out_value == 1);
   }
@@ -391,7 +329,7 @@ bool GetCollectStatsConsent() {
   // Second, try ClientState.
   return (nt::QueryRegValueDWORD(
               system_install ? nt::HKLM : nt::HKCU, nt::WOW6432,
-              InstallDetails::Get().GetClientStateKeyPath(true).c_str(),
+              InstallDetails::Get().GetClientStateKeyPath().c_str(),
               kRegValueUsageStats, &out_value) &&
           out_value == 1);
 }
@@ -424,9 +362,25 @@ bool SetCollectStatsInSample(bool in_sample) {
   return success;
 }
 
+// Appends "[kCompanyPathName\]kProductPathName[install_suffix]" to |path|,
+// returning a reference to |path|.
+std::wstring& AppendChromeInstallSubDirectory(const InstallConstants& mode,
+                                              bool include_suffix,
+                                              std::wstring* path) {
+  if (*kCompanyPathName) {
+    path->append(kCompanyPathName);
+    path->push_back(L'\\');
+  }
+  path->append(kProductPathName, kProductPathNameLength);
+  if (!include_suffix)
+    return *path;
+  return path->append(mode.install_suffix);
+}
+
 bool ReportingIsEnforcedByPolicy(bool* crash_reporting_enabled) {
   std::wstring policies_path = L"SOFTWARE\\Policies\\";
-  AppendChromeInstallSubDirectory(&policies_path, false /* !include_suffix */);
+  AppendChromeInstallSubDirectory(InstallDetails::Get().mode(),
+                                  false /* !include_suffix */, &policies_path);
   DWORD value = 0;
 
   // First, try HKLM.
@@ -473,45 +427,15 @@ bool IsNonBrowserProcess() {
   return g_process_type == ProcessType::NON_BROWSER_PROCESS;
 }
 
-bool GetDefaultUserDataDirectory(std::wstring* result) {
-  // This environment variable should be set on Windows Vista and later
-  // (https://msdn.microsoft.com/library/windows/desktop/dd378457.aspx).
-  std::wstring user_data_dir = GetEnvironmentString16(L"LOCALAPPDATA");
-
-  if (user_data_dir.empty()) {
-    // LOCALAPPDATA was not set; fallback to the temporary files path.
-    DWORD size = ::GetTempPath(0, nullptr);
-    if (!size)
-      return false;
-    user_data_dir.resize(size + 1);
-    size = ::GetTempPath(size + 1, &user_data_dir[0]);
-    if (!size || size >= user_data_dir.size())
-      return false;
-    user_data_dir.resize(size);
-  }
-
-  result->swap(user_data_dir);
-  if ((*result)[result->length() - 1] != L'\\')
-    result->push_back(L'\\');
-  AppendChromeInstallSubDirectory(result, true /* include_suffix */);
-  result->push_back(L'\\');
-  result->append(kUserDataDirname);
-  return true;
-}
-
-bool GetDefaultCrashDumpLocation(std::wstring* crash_dir) {
-  // In order to be able to start crash handling very early, we do not rely on
-  // chrome's PathService entries (for DIR_CRASH_DUMPS) being available on
-  // Windows. See https://crbug.com/564398.
-  if (!GetDefaultUserDataDirectory(crash_dir))
-    return false;
-
-  // We have to make sure the user data dir exists on first run. See
-  // http://crbug.com/591504.
-  if (!RecursiveDirectoryCreate(*crash_dir))
-    return false;
-  crash_dir->append(L"\\Crashpad");
-  return true;
+std::wstring GetCrashDumpLocation() {
+  // In order to be able to start crash handling very early and in chrome_elf,
+  // we cannot rely on chrome's PathService entries (for DIR_CRASH_DUMPS) being
+  // available on Windows. See https://crbug.com/564398.
+  std::wstring user_data_dir;
+  bool ret = GetUserDataDirectory(&user_data_dir, nullptr);
+  assert(ret);
+  IgnoreUnused(ret);
+  return user_data_dir.append(L"\\Crashpad");
 }
 
 std::string GetEnvironmentString(const std::string& variable_name) {
@@ -583,16 +507,11 @@ void GetExecutableVersionDetails(const std::wstring& exe_path,
       GetValueFromVersionResource(data.get(), L"SpecialBuild", special_build);
     }
   }
-  *channel_name = GetChromeChannelName(true /* add_modifier */);
+  *channel_name = GetChromeChannelName();
 }
 
-std::wstring GetChromeChannelName(bool add_modifier) {
-  const std::wstring& channel = InstallDetails::Get().channel();
-  if (!add_modifier || !IsMultiInstall())
-    return channel;
-  if (channel.empty())
-    return L"m";
-  return channel + L"-m";
+std::wstring GetChromeChannelName() {
+  return InstallDetails::Get().channel();
 }
 
 std::wstring GetBrowserCrashDumpAttemptsRegistryPath() {
@@ -651,53 +570,174 @@ std::vector<std::wstring> TokenizeString16(const std::wstring& str,
   return TokenizeStringT<std::wstring>(str, delimiter, trim_spaces);
 }
 
-std::string GetSwitchValueFromCommandLine(const std::string& command_line,
-                                          const std::string& switch_name) {
+std::vector<std::wstring> TokenizeCommandLineToArray(
+    const std::wstring& command_line) {
+  // This is baroquely complex to do properly, see e.g.
+  // https://blogs.msdn.microsoft.com/oldnewthing/20100917-00/?p=12833
+  // http://www.windowsinspired.com/how-a-windows-programs-splits-its-command-line-into-individual-arguments/
+  // and many others. We cannot use CommandLineToArgvW() in chrome_elf, because
+  // it's in shell32.dll. Previously, __wgetmainargs() in the CRT was available,
+  // and it's still documented for VS 2015 at
+  // https://msdn.microsoft.com/en-us/library/ff770599.aspx but unfortunately,
+  // isn't actually available.
+  //
+  // This parsing matches CommandLineToArgvW()s for arguments, rather than the
+  // CRTs. These are different only in the most obscure of cases and will not
+  // matter in any practical situation. See the windowsinspired.com post above
+  // for details.
+  //
+  // Indicates whether or not space and tab are interpreted as token separators.
+  enum class SpecialChars {
+    // Space or tab, if encountered, delimit tokens.
+    kInterpret,
+
+    // Space or tab, if encountered, are part of the current token.
+    kIgnore,
+  } state;
+
+  static constexpr wchar_t kSpaceTab[] = L" \t";
+
+  std::vector<std::wstring> result;
+  const wchar_t* p = command_line.c_str();
+
+  // The first argument (the program) is delimited by whitespace or quotes based
+  // on its first character.
+  int argv0_length = 0;
+  if (p[0] == L'"')
+    argv0_length = wcschr(++p, L'"') - (command_line.c_str() + 1);
+  else
+    argv0_length = wcscspn(p, kSpaceTab);
+  result.emplace_back(p, argv0_length);
+  if (p[argv0_length] == 0)
+    return result;
+  p += argv0_length + 1;
+
+  std::wstring token;
+  // This loops the entire string, with a subloop for each argument.
+  for (;;) {
+    // Advance past leading whitespace (only space and tab are handled).
+    p += wcsspn(p, kSpaceTab);
+
+    // End of arguments.
+    if (p[0] == 0) {
+      if (!token.empty())
+        result.push_back(token);
+      break;
+    }
+
+    state = SpecialChars::kInterpret;
+
+    // Scan an argument.
+    for (;;) {
+      // Count and advance past collections of backslashes, which have special
+      // meaning when followed by a double quote.
+      int num_backslashes = wcsspn(p, L"\\");
+      p += num_backslashes;
+
+      if (p[0] == L'"') {
+        // Emit a backslash for each pair of backslashes found. A non-paired
+        // "extra" backslash is handled below.
+        token.append(num_backslashes / 2, L'\\');
+
+        if (num_backslashes % 2 == 1) {
+          // An odd number of backslashes followed by a quote is treated as
+          // pairs of protected backslashes, followed by the protected quote.
+          token += L'"';
+        } else if (p[1] == L'"' && state == SpecialChars::kIgnore) {
+          // Special case for consecutive double quotes within a quoted string:
+          // emit one for the pair, and switch back to interpreting special
+          // characters.
+          ++p;
+          token += L'"';
+          state = SpecialChars::kInterpret;
+        } else {
+          state = state == SpecialChars::kInterpret ? SpecialChars::kIgnore
+                                                    : SpecialChars::kInterpret;
+        }
+      } else {
+        // Emit backslashes that do not precede a quote verbatim.
+        token.append(num_backslashes, L'\\');
+        if (p[0] == 0 ||
+            (state == SpecialChars::kInterpret && wcschr(kSpaceTab, p[0]))) {
+          result.push_back(token);
+          token.clear();
+          break;
+        }
+
+        token += *p;
+      }
+
+      ++p;
+    }
+  }
+
+  return result;
+}
+
+std::wstring GetSwitchValueFromCommandLine(const std::wstring& command_line,
+                                           const std::wstring& switch_name) {
   assert(!command_line.empty());
   assert(!switch_name.empty());
 
-  std::string command_line_copy = command_line;
-  // Remove leading and trailing spaces.
-  TrimT<std::string>(&command_line_copy);
-
-  // Find the switch in the command line. If we don't find the switch, return
-  // an empty string.
-  std::string switch_token = "--";
-  switch_token += switch_name;
-  switch_token += "=";
-  size_t switch_offset = command_line_copy.find(switch_token);
-  if (switch_offset == std::string::npos)
-    return std::string();
-
-  // The format is "--<switch name>=blah". Look for a space after the
-  // "--<switch name>=" string. If we don't find a space assume that the switch
-  // value ends at the end of the command line.
-  size_t switch_value_start_offset = switch_offset + switch_token.length();
-  if (std::string(kWhiteSpaces).find(
-          command_line_copy[switch_value_start_offset]) != std::string::npos) {
-    switch_value_start_offset = command_line_copy.find_first_not_of(
-        GetWhiteSpacesForType<std::string>(), switch_value_start_offset);
-    if (switch_value_start_offset == std::string::npos)
-      return std::string();
+  std::vector<std::wstring> as_array = TokenizeCommandLineToArray(command_line);
+  std::wstring switch_with_equal = L"--" + switch_name + L"=";
+  for (size_t i = 1; i < as_array.size(); ++i) {
+    const std::wstring& arg = as_array[i];
+    if (arg.compare(0, switch_with_equal.size(), switch_with_equal) == 0)
+      return arg.substr(switch_with_equal.size());
   }
-  size_t switch_value_end_offset =
-      command_line_copy.find_first_of(GetWhiteSpacesForType<std::string>(),
-                                      switch_value_start_offset);
-  if (switch_value_end_offset == std::string::npos)
-    switch_value_end_offset = command_line_copy.length();
 
-  std::string switch_value = command_line_copy.substr(
-      switch_value_start_offset,
-      switch_value_end_offset - (switch_offset + switch_token.length()));
-  TrimT<std::string>(&switch_value);
-  return switch_value;
+  return std::wstring();
+}
+
+bool RecursiveDirectoryCreate(const std::wstring& full_path) {
+  // If the path exists, we've succeeded if it's a directory, failed otherwise.
+  const wchar_t* full_path_str = full_path.c_str();
+  DWORD file_attributes = ::GetFileAttributes(full_path_str);
+  if (file_attributes != INVALID_FILE_ATTRIBUTES) {
+    if ((file_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+      Trace(L"%hs( %ls directory exists )\n", __func__, full_path_str);
+      return true;
+    }
+    Trace(L"%hs( %ls directory conflicts with an existing file. )\n", __func__,
+          full_path_str);
+    return false;
+  }
+
+  // Invariant:  Path does not exist as file or directory.
+
+  // Attempt to create the parent recursively.  This will immediately return
+  // true if it already exists, otherwise will create all required parent
+  // directories starting with the highest-level missing parent.
+  std::wstring parent_path;
+  std::size_t pos = full_path.find_last_of(L"/\\");
+  if (pos != std::wstring::npos) {
+    parent_path = full_path.substr(0, pos);
+    if (!RecursiveDirectoryCreate(parent_path)) {
+      Trace(L"Failed to create one of the parent directories");
+      return false;
+    }
+  }
+  if (!::CreateDirectory(full_path_str, nullptr)) {
+    DWORD error_code = ::GetLastError();
+    if (error_code == ERROR_ALREADY_EXISTS && DirectoryExists(full_path_str)) {
+      // This error code ERROR_ALREADY_EXISTS doesn't indicate whether we
+      // were racing with someone creating the same directory, or a file
+      // with the same path.  If the directory exists, we lost the
+      // race to create the same directory.
+      return true;
+    } else {
+      Trace(L"Failed to create directory %ls, last error is %d\n",
+            full_path_str, error_code);
+      return false;
+    }
+  }
+  return true;
 }
 
 // This function takes these inputs rather than accessing the module's
 // InstallDetails instance since it is used to bootstrap InstallDetails.
-std::wstring DetermineChannel(const InstallConstants& mode,
-                              bool system_level,
-                              bool multi_install) {
+std::wstring DetermineChannel(const InstallConstants& mode, bool system_level) {
   if (!kUseGoogleUpdateIntegration)
     return std::wstring();
 
@@ -706,7 +746,7 @@ std::wstring DetermineChannel(const InstallConstants& mode,
       assert(false);
       break;
     case ChannelStrategy::ADDITIONAL_PARAMETERS:
-      return ChannelFromAdditionalParameters(mode, system_level, multi_install);
+      return ChannelFromAdditionalParameters(mode, system_level);
     case ChannelStrategy::FIXED:
       return mode.default_channel_name;
   }

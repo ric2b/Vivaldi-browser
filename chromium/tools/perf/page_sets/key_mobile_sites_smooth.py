@@ -35,7 +35,7 @@ class KeyMobileSitesSmoothPage(page_module.Page):
   def RunPageInteractions(self, action_runner):
     if self.action_on_load_complete:
         action_runner.WaitForJavaScriptCondition(
-            'document.readyState == "complete"', 30)
+            'document.readyState == "complete"', timeout_in_seconds=30)
     _IssueMarkerAndScroll(action_runner)
 
 
@@ -170,7 +170,10 @@ class KeyMobileSitesSmoothPageSet(story.StorySet):
     # See crbug.com/409086.
     # self.AddStory(GroupClonedListImagesSmoothPage(self))
     self.AddStory(GoogleNewsMobile2SmoothPage(self))
-    self.AddStory(AmazonNicolasCageSmoothPage(self))
+    # Amazon's Nicolas Cage search is currently failing. Reenable it once it's
+    # not anymore.
+    # crbug.com/667432
+    # self.AddStory(AmazonNicolasCageSmoothPage(self))
     self.AddStory(CNNArticleSmoothPage(self))
 
     # Add pages with custom labels.

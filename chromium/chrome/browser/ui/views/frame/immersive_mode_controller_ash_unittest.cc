@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
@@ -131,36 +130,21 @@ TEST_F(ImmersiveModeControllerAshTest, Layout) {
   EXPECT_TRUE(controller()->IsEnabled());
   EXPECT_FALSE(controller()->IsRevealed());
   EXPECT_FALSE(toolbar->visible());
-  // For MD, the browser's top chrome is completely hidden in immersive
-  // fullscreen mode.
-  bool is_using_material_design =
-      ash::MaterialDesignController::IsImmersiveModeMaterial();
-  if (is_using_material_design) {
-    EXPECT_FALSE(tabstrip->visible());
-  } else {
-    EXPECT_TRUE(tabstrip->visible());
-    EXPECT_TRUE(tabstrip->IsImmersiveStyle());
-  }
+  // The browser's top chrome is completely offscreen with tapstrip visible.
+  EXPECT_TRUE(tabstrip->visible());
+  // Tabstrip and top container view should be completely offscreen.
+  EXPECT_EQ(0, GetBoundsInWidget(tabstrip).bottom());
+  EXPECT_EQ(0, GetBoundsInWidget(browser_view()->top_container()).bottom());
 
-  // The tab indicators should be flush with the top of the widget.
-  EXPECT_EQ(0, GetBoundsInWidget(tabstrip).y());
-
-  // In MD, since the tab strip and tool bar are both hidden in immersive
-  // fullscreen mode, the web contents should extend to the edge of screen. In
-  // non-MD, the web contents should be immediately below the tab indicators.
-  if (is_using_material_design) {
-    EXPECT_EQ(0, GetBoundsInWidget(contents_web_view).y());
-  } else {
-    EXPECT_EQ(Tab::GetImmersiveHeight(),
-              GetBoundsInWidget(contents_web_view).y());
-  }
+  // Since the tab strip and tool bar are both hidden in immersive fullscreen
+  // mode, the web contents should extend to the edge of screen.
+  EXPECT_EQ(0, GetBoundsInWidget(contents_web_view).y());
 
   // Revealing the top-of-window views should set the tab strip back to the
   // normal style and show the toolbar.
   AttemptReveal();
   EXPECT_TRUE(controller()->IsRevealed());
   EXPECT_TRUE(tabstrip->visible());
-  EXPECT_FALSE(tabstrip->IsImmersiveStyle());
   EXPECT_TRUE(toolbar->visible());
 
   // The TopContainerView should be flush with the top edge of the widget. If
@@ -170,12 +154,7 @@ TEST_F(ImmersiveModeControllerAshTest, Layout) {
 
   // The web contents should be at the same y position as they were when the
   // top-of-window views were hidden.
-  if (is_using_material_design) {
-    EXPECT_EQ(0, GetBoundsInWidget(contents_web_view).y());
-  } else {
-    EXPECT_EQ(Tab::GetImmersiveHeight(),
-              GetBoundsInWidget(contents_web_view).y());
-  }
+  EXPECT_EQ(0, GetBoundsInWidget(contents_web_view).y());
 
   // Repeat the test for when in both immersive fullscreen and tab fullscreen.
   SetTabFullscreen(true);
@@ -187,7 +166,6 @@ TEST_F(ImmersiveModeControllerAshTest, Layout) {
   // should still be flush with the top edge of the widget.
   EXPECT_TRUE(controller()->IsRevealed());
   EXPECT_TRUE(tabstrip->visible());
-  EXPECT_FALSE(tabstrip->IsImmersiveStyle());
   EXPECT_TRUE(toolbar->visible());
   EXPECT_EQ(0, GetBoundsInWidget(browser_view()->top_container()).y());
 
@@ -195,12 +173,11 @@ TEST_F(ImmersiveModeControllerAshTest, Layout) {
   // both immersive and tab fullscreen.
   EXPECT_EQ(0, GetBoundsInWidget(contents_web_view).y());
 
-  // Hide the top-of-window views. Both the tab strip and the toolbar should
-  // hide when in both immersive and tab fullscreen.
+  // Hide the top-of-window views. Tabstrip is still considered as visible.
   AttemptUnreveal();
   EXPECT_FALSE(controller()->IsRevealed());
-  EXPECT_FALSE(tabstrip->visible());
   EXPECT_FALSE(toolbar->visible());
+  EXPECT_TRUE(tabstrip->visible());
 
   // The web contents should still be flush with the edge of the widget.
   EXPECT_EQ(0, GetBoundsInWidget(contents_web_view).y());
@@ -212,7 +189,6 @@ TEST_F(ImmersiveModeControllerAshTest, Layout) {
   EXPECT_FALSE(controller()->IsEnabled());
   EXPECT_FALSE(controller()->IsRevealed());
   EXPECT_TRUE(tabstrip->visible());
-  EXPECT_FALSE(tabstrip->IsImmersiveStyle());
   EXPECT_TRUE(toolbar->visible());
 }
 
@@ -244,8 +220,8 @@ TEST_F(ImmersiveModeControllerAshTest, ExitUponRestore) {
   EXPECT_FALSE(controller()->IsEnabled());
 }
 
-// Test how being simultaneously in tab fullscreen and immersive fullscreen
-// affects the shelf visibility and whether the tab indicators are hidden.
+// Test the shelf visibility affected by entering and exiting tab fullscreen and
+// immersive fullscreen.
 TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
   AddTab(browser(), GURL("about:blank"));
 
@@ -254,39 +230,27 @@ TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
       ash::Shell::GetPrimaryRootWindowController()->GetShelfLayoutManager();
   ASSERT_EQ(ash::SHELF_VISIBLE, shelf->visibility_state());
 
-  // 1) Test that entering tab fullscreen from immersive fullscreen hides the
-  // tab indicators and the shelf.
-  // Note that tab indicators are removed from MD, so ShouldHideTabIndicators()
-  // always returns true.
+  // 1) Test that entering tab fullscreen from immersive fullscreen hides
+  // the shelf.
   ToggleFullscreen();
   ASSERT_TRUE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_AUTO_HIDE, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
-    EXPECT_FALSE(controller()->ShouldHideTabIndicators());
 
   SetTabFullscreen(true);
   ASSERT_TRUE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_HIDDEN, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
-    EXPECT_TRUE(controller()->ShouldHideTabIndicators());
 
-  // 2) Test that exiting tab fullscreen shows the tab indicators and autohides
-  // the shelf.
+  // 2) Test that exiting tab fullscreen autohides the shelf.
   SetTabFullscreen(false);
   ASSERT_TRUE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_AUTO_HIDE, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
-    EXPECT_FALSE(controller()->ShouldHideTabIndicators());
 
-  // 3) Test that exiting tab fullscreen and immersive fullscreen
-  // simultaneously correctly updates the shelf visibility and whether the tab
-  // indicators should be hidden.
+  // 3) Test that exiting tab fullscreen and immersive fullscreen correctly
+  // updates the shelf visibility.
   SetTabFullscreen(true);
   ToggleFullscreen();
   ASSERT_FALSE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_VISIBLE, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
-    EXPECT_TRUE(controller()->ShouldHideTabIndicators());
 }
 
 // Ensure the circular tab-loading throbbers are not painted as layers in
@@ -351,7 +315,8 @@ TEST_F(ImmersiveModeControllerAshTestHostedApp, Layout) {
   EXPECT_FALSE(controller()->IsRevealed());
 
   // Entering immersive fullscreen should make the web contents flush with the
-  // top of the widget.
+  // top of the widget. The popup browser type doesn't support tabstrip and
+  // toolbar feature, thus invisible.
   EXPECT_FALSE(tabstrip->visible());
   EXPECT_FALSE(toolbar->visible());
   EXPECT_TRUE(top_container->GetVisibleBounds().IsEmpty());

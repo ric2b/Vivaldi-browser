@@ -117,7 +117,7 @@ UI.Dialog = class extends UI.Widget {
   addCloseButton() {
     var closeButton = this.contentElement.createChild('div', 'dialog-close-button', 'dt-close-button');
     closeButton.gray = true;
-    closeButton.addEventListener('click', this.detach.bind(this), false);
+    closeButton.addEventListener('click', () => this.detach(), false);
   }
 
   /**
@@ -130,7 +130,7 @@ UI.Dialog = class extends UI.Widget {
   }
 
   /**
-   * @param {!Size} size
+   * @param {!UI.Size} size
    */
   setMaxSize(size) {
     this._maxSize = size;

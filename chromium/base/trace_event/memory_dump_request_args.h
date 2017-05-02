@@ -18,16 +18,19 @@ namespace base {
 namespace trace_event {
 
 // Captures the reason why a memory dump is being requested. This is to allow
-// selective enabling of dumps, filtering and post-processing.
+// selective enabling of dumps, filtering and post-processing. Important: this
+// must be kept consistent with
+// services/memory_infra/public/cpp/memory_infra_traits.cc.
 enum class MemoryDumpType {
-  TASK_BEGIN,         // Dumping memory at the beginning of a message-loop task.
-  TASK_END,           // Dumping memory at the ending of a message-loop task.
-  PERIODIC_INTERVAL,  // Dumping memory at periodic intervals.
+  PERIODIC_INTERVAL,     // Dumping memory at periodic intervals.
   EXPLICITLY_TRIGGERED,  // Non maskable dump request.
-  LAST = EXPLICITLY_TRIGGERED // For IPC macros.
+  PEAK_MEMORY_USAGE,     // Dumping memory at detected peak total memory usage.
+  LAST = PEAK_MEMORY_USAGE  // For IPC macros.
 };
 
 // Tells the MemoryDumpProvider(s) how much detailed their dumps should be.
+// Important: this must be kept consistent with
+// services/memory_infra/public/cpp/memory_infra_traits.cc.
 enum class MemoryDumpLevelOfDetail : uint32_t {
   FIRST,
 
@@ -50,7 +53,8 @@ enum class MemoryDumpLevelOfDetail : uint32_t {
 };
 
 // Initial request arguments for a global memory dump. (see
-// MemoryDumpManager::RequestGlobalMemoryDump()).
+// MemoryDumpManager::RequestGlobalMemoryDump()). Important: this must be kept
+// consistent with services/memory_infra/public/cpp/memory_infra_traits.cc.
 struct BASE_EXPORT MemoryDumpRequestArgs {
   // Globally unique identifier. In multi-process dumps, all processes issue a
   // local dump with the same guid. This allows the trace importers to
@@ -71,6 +75,8 @@ struct MemoryDumpArgs {
 using MemoryDumpCallback = Callback<void(uint64_t dump_guid, bool success)>;
 
 BASE_EXPORT const char* MemoryDumpTypeToString(const MemoryDumpType& dump_type);
+
+BASE_EXPORT MemoryDumpType StringToMemoryDumpType(const std::string& str);
 
 BASE_EXPORT const char* MemoryDumpLevelOfDetailToString(
     const MemoryDumpLevelOfDetail& level_of_detail);

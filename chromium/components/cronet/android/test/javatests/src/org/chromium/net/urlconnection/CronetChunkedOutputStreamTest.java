@@ -4,13 +4,13 @@
 
 package org.chromium.net.urlconnection;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestBase;
 import org.chromium.net.CronetTestFramework;
 import org.chromium.net.NativeTestServer;
-import org.chromium.net.UrlRequestException;
+import org.chromium.net.NetworkException;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -103,9 +103,9 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
             fail();
         } catch (IOException e) {
             if (!testingSystemHttpURLConnection()) {
-                UrlRequestException requestException = (UrlRequestException) e;
-                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
-                        requestException.getErrorCode());
+                NetworkException requestException = (NetworkException) e;
+                assertEquals(
+                        NetworkException.ERROR_CONNECTION_REFUSED, requestException.getErrorCode());
             }
         }
         // Restarting server to run the test for a second time.
@@ -130,12 +130,15 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
             out.write(1);
             // Forces OutputStream implementation to flush. crbug.com/653072
             out.flush();
-            fail();
+            // System's implementation is flaky see crbug.com/653072.
+            if (!testingSystemHttpURLConnection()) {
+                fail();
+            }
         } catch (IOException e) {
             if (!testingSystemHttpURLConnection()) {
-                UrlRequestException requestException = (UrlRequestException) e;
-                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
-                        requestException.getErrorCode());
+                NetworkException requestException = (NetworkException) e;
+                assertEquals(
+                        NetworkException.ERROR_CONNECTION_REFUSED, requestException.getErrorCode());
             }
         }
         // Make sure IOException is reported again when trying to read response
@@ -146,9 +149,9 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         } catch (IOException e) {
             // Expected.
             if (!testingSystemHttpURLConnection()) {
-                UrlRequestException requestException = (UrlRequestException) e;
-                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
-                        requestException.getErrorCode());
+                NetworkException requestException = (NetworkException) e;
+                assertEquals(
+                        NetworkException.ERROR_CONNECTION_REFUSED, requestException.getErrorCode());
             }
         }
         // Restarting server to run the test for a second time.

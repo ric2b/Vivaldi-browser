@@ -16,6 +16,9 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram_base.h"
+#include "base/metrics/histogram_samples.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/sequence_token.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -25,6 +28,7 @@
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/test/gtest_util.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
@@ -264,7 +268,8 @@ TEST_P(TaskSchedulerTaskTrackerTest, WillPostAndRunLongTaskBeforeShutdown) {
                       WaitableEvent::InitialState::NOT_SIGNALED);
   auto blocked_task = base::MakeUnique<Task>(
       FROM_HERE, Bind(&WaitableEvent::Wait, Unretained(&event)),
-      TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta());
+      TaskTraits().WithBaseSyncPrimitives().WithShutdownBehavior(GetParam()),
+      TimeDelta());
 
   // Inform |task_tracker_| that |blocked_task| will be posted.
   EXPECT_TRUE(tracker_.WillPostTask(blocked_task.get()));
@@ -429,6 +434,34 @@ TEST_P(TaskSchedulerTaskTrackerTest, SingletonAllowed) {
     EXPECT_DCHECK_DEATH(
         { tracker.RunTask(std::move(task), SequenceToken::Create()); });
   }
+}
+
+// Verify that AssertIOAllowed() succeeds only for a MayBlock() task.
+TEST_P(TaskSchedulerTaskTrackerTest, IOAllowed) {
+  TaskTracker tracker;
+
+  // Unset the IO allowed bit. Expect TaskTracker to set it before running a
+  // task with the MayBlock() trait.
+  ThreadRestrictions::SetIOAllowed(false);
+  auto task_with_may_block = MakeUnique<Task>(
+      FROM_HERE, Bind([]() {
+        // Shouldn't fail.
+        ThreadRestrictions::AssertIOAllowed();
+      }),
+      TaskTraits().MayBlock().WithShutdownBehavior(GetParam()), TimeDelta());
+  EXPECT_TRUE(tracker.WillPostTask(task_with_may_block.get()));
+  tracker.RunTask(std::move(task_with_may_block), SequenceToken::Create());
+
+  // Set the IO allowed bit. Expect TaskTracker to unset it before running a
+  // task without the MayBlock() trait.
+  ThreadRestrictions::SetIOAllowed(true);
+  auto task_without_may_block = MakeUnique<Task>(
+      FROM_HERE, Bind([]() {
+        EXPECT_DCHECK_DEATH({ ThreadRestrictions::AssertIOAllowed(); });
+      }),
+      TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta());
+  EXPECT_TRUE(tracker.WillPostTask(task_without_may_block.get()));
+  tracker.RunTask(std::move(task_without_may_block), SequenceToken::Create());
 }
 
 static void RunTaskRunnerHandleVerificationTask(
@@ -802,6 +835,105 @@ TEST_F(TaskSchedulerTaskTrackerTest, LoadWillPostAndRunDuringShutdown) {
                                SequenceToken::Create()));
   EXPECT_EQ(kLoadTestNumIterations + 1, NumTasksExecuted());
   WAIT_FOR_ASYNC_SHUTDOWN_COMPLETED();
+}
+
+namespace {
+
+class WaitAllowedTestThread : public SimpleThread {
+ public:
+  WaitAllowedTestThread() : SimpleThread("WaitAllowedTestThread") {}
+
+ private:
+  void Run() override {
+    TaskTracker tracker;
+
+    // Waiting is allowed by default. Expect TaskTracker to disallow it before
+    // running a task without the WithBaseSyncPrimitives() trait.
+    ThreadRestrictions::AssertWaitAllowed();
+    auto task_without_sync_primitives = MakeUnique<Task>(
+        FROM_HERE, Bind([]() {
+          EXPECT_DCHECK_DEATH({ ThreadRestrictions::AssertWaitAllowed(); });
+        }),
+        TaskTraits(), TimeDelta());
+    EXPECT_TRUE(tracker.WillPostTask(task_without_sync_primitives.get()));
+    tracker.RunTask(std::move(task_without_sync_primitives),
+                    SequenceToken::Create());
+
+    // Disallow waiting. Expect TaskTracker to allow it before running a task
+    // with the WithBaseSyncPrimitives() trait.
+    ThreadRestrictions::DisallowWaiting();
+    auto task_with_sync_primitives =
+        MakeUnique<Task>(FROM_HERE, Bind([]() {
+                           // Shouldn't fail.
+                           ThreadRestrictions::AssertWaitAllowed();
+                         }),
+                         TaskTraits().WithBaseSyncPrimitives(), TimeDelta());
+    EXPECT_TRUE(tracker.WillPostTask(task_with_sync_primitives.get()));
+    tracker.RunTask(std::move(task_with_sync_primitives),
+                    SequenceToken::Create());
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(WaitAllowedTestThread);
+};
+
+}  // namespace
+
+// Verify that AssertIOAllowed() succeeds only for a WithBaseSyncPrimitives()
+// task.
+TEST(TaskSchedulerTaskTrackerWaitAllowedTest, WaitAllowed) {
+  // Run the test on the separate thread since it is not possible to reset the
+  // "wait allowed" bit of a thread without being a friend of
+  // ThreadRestrictions.
+  WaitAllowedTestThread wait_allowed_test_thread;
+  wait_allowed_test_thread.Start();
+  wait_allowed_test_thread.Join();
+}
+
+// Verify that TaskScheduler.TaskLatency.* histograms are correctly recorded
+// when a task runs.
+TEST(TaskSchedulerTaskTrackerHistogramTest, TaskLatency) {
+  auto statistics_recorder = StatisticsRecorder::CreateTemporaryForTesting();
+
+  TaskTracker tracker;
+
+  struct {
+    const TaskTraits traits;
+    const char* const expected_histogram;
+  } tests[] = {
+      {TaskTraits().WithPriority(TaskPriority::BACKGROUND),
+       "TaskScheduler.TaskLatency.BackgroundTaskPriority"},
+      {TaskTraits().WithPriority(TaskPriority::BACKGROUND).MayBlock(),
+       "TaskScheduler.TaskLatency.BackgroundTaskPriority.MayBlock"},
+      {TaskTraits()
+           .WithPriority(TaskPriority::BACKGROUND)
+           .WithBaseSyncPrimitives(),
+       "TaskScheduler.TaskLatency.BackgroundTaskPriority.MayBlock"},
+      {TaskTraits().WithPriority(TaskPriority::USER_VISIBLE),
+       "TaskScheduler.TaskLatency.UserVisibleTaskPriority"},
+      {TaskTraits().WithPriority(TaskPriority::USER_VISIBLE).MayBlock(),
+       "TaskScheduler.TaskLatency.UserVisibleTaskPriority.MayBlock"},
+      {TaskTraits()
+           .WithPriority(TaskPriority::USER_VISIBLE)
+           .WithBaseSyncPrimitives(),
+       "TaskScheduler.TaskLatency.UserVisibleTaskPriority.MayBlock"},
+      {TaskTraits().WithPriority(TaskPriority::USER_BLOCKING),
+       "TaskScheduler.TaskLatency.UserBlockingTaskPriority"},
+      {TaskTraits().WithPriority(TaskPriority::USER_BLOCKING).MayBlock(),
+       "TaskScheduler.TaskLatency.UserBlockingTaskPriority.MayBlock"},
+      {TaskTraits()
+           .WithPriority(TaskPriority::USER_BLOCKING)
+           .WithBaseSyncPrimitives(),
+       "TaskScheduler.TaskLatency.UserBlockingTaskPriority.MayBlock"}};
+
+  for (const auto& test : tests) {
+    auto task =
+        MakeUnique<Task>(FROM_HERE, Bind(&DoNothing), test.traits, TimeDelta());
+    ASSERT_TRUE(tracker.WillPostTask(task.get()));
+
+    HistogramTester tester;
+    EXPECT_TRUE(tracker.RunTask(std::move(task), SequenceToken::Create()));
+    tester.ExpectTotalCount(test.expected_histogram, 1);
+  }
 }
 
 }  // namespace internal

@@ -4,8 +4,7 @@
 
 module ui.mojom;
 
-import "cc/ipc/surface_id.mojom";
-import "cc/ipc/surface_sequence.mojom";
+import "cc/ipc/surface_info.mojom";
 import "cc/ipc/mojo_compositor_frame_sink.mojom";
 import "services/ui/public/interfaces/cursor.mojom";
 import "services/ui/public/interfaces/event_matcher.mojom";
@@ -140,7 +139,6 @@ interface WindowTree {
   // Attaches a CompositorFrameSink to a particular window.
   AttachCompositorFrameSink(
       uint32 window_id,
-      CompositorFrameSinkType type,
       cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
       cc.mojom.MojoCompositorFrameSinkClient client);
 
@@ -262,6 +260,10 @@ interface WindowTree {
   // See documentation for WindowTreeClient::OnWindowInputEvent().
   OnWindowInputEventAck(uint32 event_id, EventResult result);
 
+  // If the current focus is (or is a child of) |window_id|, requests that the
+  // window manager change the focus to the next activatable window.
+  DeactivateWindow(uint32 window_id);
+
   // See description of WindowManager for details.
   GetWindowManagerClient(associated WindowManagerClient& internal);
 
@@ -357,7 +359,7 @@ interface WindowTreeClient {
   // If |window| was not visible to this client, but is visible now because
   // |new_parent| is visible to this client, then |windows| contains details
   // about |window|, and all its descendants. |windows| includes any windows
-  // that client may already know about, but did not know the parent because
+  // the client may already know about, but did not know the parent because
   // the parent was previously not visible to this client.
   // This is not sent for hierarchy changes of windows not known to this client
   // or not attached to the tree.
@@ -434,9 +436,7 @@ interface WindowTreeClient {
   // TODO(fsamuel): Surface IDs should be passed to parents directly instead of
   // going through the window server. http://crbug.com/655231
   OnWindowSurfaceChanged(uint32 window_id,
-                         cc.mojom.SurfaceId surface_id,
-                         gfx.mojom.Size frame_size,
-                         float device_scale_factor);
+                         cc.mojom.SurfaceInfo surface_info);
                          
   // Called when the mouse cursor enters a window on this connection for the
   // first time, providing a list of available mime types. We want to send this

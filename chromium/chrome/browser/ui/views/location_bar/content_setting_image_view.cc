@@ -8,7 +8,6 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/grit/theme_resources.h"
@@ -33,12 +32,12 @@ const int ContentSettingImageView::kAnimationDurationMS =
     (IconLabelBubbleView::kOpenTimeMS * 2) + kStayOpenTimeMS;
 
 ContentSettingImageView::ContentSettingImageView(
-    ContentSettingImageModel* image_model,
+    std::unique_ptr<ContentSettingImageModel> image_model,
     LocationBarView* parent,
     const gfx::FontList& font_list)
     : IconLabelBubbleView(font_list, false),
       parent_(parent),
-      content_setting_image_model_(image_model),
+      content_setting_image_model_(std::move(image_model)),
       slide_animator_(this),
       pause_animation_(false),
       pause_animation_state_(0.0),
@@ -163,9 +162,8 @@ SkColor ContentSettingImageView::GetTextColor() const {
 
 bool ContentSettingImageView::ShouldShowLabel() const {
   return (!IsShrinking() ||
-          (width() >
-           (image()->GetPreferredSize().width() +
-            2 * GetLayoutConstant(LOCATION_BAR_HORIZONTAL_PADDING)))) &&
+          (width() > (image()->GetPreferredSize().width() +
+                      2 * LocationBarView::kHorizontalPadding))) &&
          (slide_animator_.is_animating() || pause_animation_);
 }
 

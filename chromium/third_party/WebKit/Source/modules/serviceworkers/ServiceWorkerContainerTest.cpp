@@ -16,6 +16,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/page/FocusController.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/serviceworkers/NavigatorServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -26,6 +27,7 @@
 #include "wtf/PtrUtil.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
+#include <utility>
 #include <v8.h>
 
 namespace blink {
@@ -126,10 +128,10 @@ class NotReachedWebServiceWorkerProvider : public WebServiceWorkerProvider {
   void registerServiceWorker(
       const WebURL& pattern,
       const WebURL& scriptURL,
-      WebServiceWorkerRegistrationCallbacks* callbacks) override {
+      std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks)
+      override {
     ADD_FAILURE()
         << "the provider should not be called to register a Service Worker";
-    delete callbacks;
   }
 
   bool validateScopeAndScriptURL(const WebURL& scope,
@@ -149,6 +151,9 @@ class ServiceWorkerContainerTest : public ::testing::Test {
   }
 
   ExecutionContext* getExecutionContext() { return &(m_page->document()); }
+  NavigatorServiceWorker* getNavigatorServiceWorker() {
+    return NavigatorServiceWorker::from(m_page->document());
+  }
   v8::Isolate* isolate() { return v8::Isolate::GetCurrent(); }
   ScriptState* getScriptState() {
     return ScriptState::forMainWorld(m_page->document().frame());
@@ -157,7 +162,8 @@ class ServiceWorkerContainerTest : public ::testing::Test {
   void provide(std::unique_ptr<WebServiceWorkerProvider> provider) {
     Supplement<Document>::provideTo(
         m_page->document(), ServiceWorkerContainerClient::supplementName(),
-        ServiceWorkerContainerClient::create(std::move(provider)));
+        new ServiceWorkerContainerClient(m_page->document(),
+                                         std::move(provider)));
   }
 
   void setPageURL(const String& url) {
@@ -173,10 +179,10 @@ class ServiceWorkerContainerTest : public ::testing::Test {
                             const ScriptValueTest& valueTest) {
     // When the registration is rejected, a register call must not reach
     // the provider.
-    provide(makeUnique<NotReachedWebServiceWorkerProvider>());
+    provide(WTF::makeUnique<NotReachedWebServiceWorkerProvider>());
 
-    ServiceWorkerContainer* container =
-        ServiceWorkerContainer::create(getExecutionContext());
+    ServiceWorkerContainer* container = ServiceWorkerContainer::create(
+        getExecutionContext(), getNavigatorServiceWorker());
     ScriptState::Scope scriptScope(getScriptState());
     RegistrationOptions options;
     options.setScope(scope);
@@ -187,10 +193,10 @@ class ServiceWorkerContainerTest : public ::testing::Test {
 
   void testGetRegistrationRejected(const String& documentURL,
                                    const ScriptValueTest& valueTest) {
-    provide(makeUnique<NotReachedWebServiceWorkerProvider>());
+    provide(WTF::makeUnique<NotReachedWebServiceWorkerProvider>());
 
-    ServiceWorkerContainer* container =
-        ServiceWorkerContainer::create(getExecutionContext());
+    ServiceWorkerContainer* container = ServiceWorkerContainer::create(
+        getExecutionContext(), getNavigatorServiceWorker());
     ScriptState::Scope scriptScope(getScriptState());
     ScriptPromise promise =
         container->getRegistration(getScriptState(), documentURL);
@@ -264,7 +270,7 @@ class StubWebServiceWorkerProvider {
   // other methods must not be called after the
   // StubWebServiceWorkerProvider dies.
   std::unique_ptr<WebServiceWorkerProvider> provider() {
-    return wrapUnique(new WebServiceWorkerProviderImpl(*this));
+    return WTF::wrapUnique(new WebServiceWorkerProviderImpl(*this));
   }
 
   size_t registerCallCount() { return m_registerCallCount; }
@@ -284,19 +290,21 @@ class StubWebServiceWorkerProvider {
     void registerServiceWorker(
         const WebURL& pattern,
         const WebURL& scriptURL,
-        WebServiceWorkerRegistrationCallbacks* callbacks) override {
+        std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks)
+        override {
       m_owner.m_registerCallCount++;
       m_owner.m_registerScope = pattern;
       m_owner.m_registerScriptURL = scriptURL;
-      m_registrationCallbacksToDelete.append(wrapUnique(callbacks));
+      m_registrationCallbacksToDelete.push_back(std::move(callbacks));
     }
 
     void getRegistration(
         const WebURL& documentURL,
-        WebServiceWorkerGetRegistrationCallbacks* callbacks) override {
+        std::unique_ptr<WebServiceWorkerGetRegistrationCallbacks> callbacks)
+        override {
       m_owner.m_getRegistrationCallCount++;
       m_owner.m_getRegistrationURL = documentURL;
-      m_getRegistrationCallbacksToDelete.append(wrapUnique(callbacks));
+      m_getRegistrationCallbacksToDelete.push_back(std::move(callbacks));
     }
 
     bool validateScopeAndScriptURL(const WebURL& scope,
@@ -328,8 +336,8 @@ TEST_F(ServiceWorkerContainerTest,
   StubWebServiceWorkerProvider stubProvider;
   provide(stubProvider.provider());
 
-  ServiceWorkerContainer* container =
-      ServiceWorkerContainer::create(getExecutionContext());
+  ServiceWorkerContainer* container = ServiceWorkerContainer::create(
+      getExecutionContext(), getNavigatorServiceWorker());
 
   // register
   {
@@ -354,8 +362,8 @@ TEST_F(ServiceWorkerContainerTest,
   StubWebServiceWorkerProvider stubProvider;
   provide(stubProvider.provider());
 
-  ServiceWorkerContainer* container =
-      ServiceWorkerContainer::create(getExecutionContext());
+  ServiceWorkerContainer* container = ServiceWorkerContainer::create(
+      getExecutionContext(), getNavigatorServiceWorker());
 
   {
     ScriptState::Scope scriptScope(getScriptState());

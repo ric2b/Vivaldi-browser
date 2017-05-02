@@ -37,10 +37,10 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
 
     this.deleteButton = new UI.ToolbarButton(Common.UIString('Delete'), 'largeicon-delete');
     this.deleteButton.setVisible(false);
-    this.deleteButton.addEventListener('click', this._deleteButtonClicked, this);
+    this.deleteButton.addEventListener(UI.ToolbarButton.Events.Click, this._deleteButtonClicked, this);
 
     this.refreshButton = new UI.ToolbarButton(Common.UIString('Refresh'), 'largeicon-refresh');
-    this.refreshButton.addEventListener('click', this._refreshButtonClicked, this);
+    this.refreshButton.addEventListener(UI.ToolbarButton.Events.Click, this._refreshButtonClicked, this);
 
     this.domStorage.addEventListener(
         Resources.DOMStorage.Events.DOMStorageItemsCleared, this._domStorageItemsCleared, this);
@@ -83,7 +83,6 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     this._dataGrid.rootNode().removeChildren();
     this._dataGrid.addCreationNode(false);
     this.deleteButton.setVisible(false);
-    event.consume(true);
   }
 
   /**
@@ -96,8 +95,6 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     var storageData = event.data;
     var rootNode = this._dataGrid.rootNode();
     var children = rootNode.children;
-
-    event.consume(true);
 
     for (var i = 0; i < children.length; ++i) {
       var childNode = children[i];
@@ -120,7 +117,6 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     var rootNode = this._dataGrid.rootNode();
     var children = rootNode.children;
 
-    event.consume(true);
     this.deleteButton.setVisible(true);
 
     for (var i = 0; i < children.length; ++i) {
@@ -128,7 +124,7 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
         return;
     }
 
-    var childNode = new UI.DataGridNode({key: storageData.key, value: storageData.value}, false);
+    var childNode = new DataGrid.DataGridNode({key: storageData.key, value: storageData.value}, false);
     rootNode.insertChild(childNode, children.length - 1);
   }
 
@@ -142,8 +138,6 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     var storageData = event.data;
     var rootNode = this._dataGrid.rootNode();
     var children = rootNode.children;
-
-    event.consume(true);
 
     var keyFound = false;
     for (var i = 0; i < children.length; ++i) {
@@ -180,7 +174,7 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
   }
 
   _dataGridForDOMStorageItems(items) {
-    var columns = /** @type {!Array<!UI.DataGrid.ColumnDescriptor>} */ ([
+    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([
       {id: 'key', title: Common.UIString('Key'), sortable: false, editable: true, weight: 50},
       {id: 'value', title: Common.UIString('Value'), sortable: false, editable: true, weight: 50}
     ]);
@@ -192,13 +186,13 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     for (var i = 0; i < items.length; i++) {
       var key = items[i][0];
       var value = items[i][1];
-      var node = new UI.DataGridNode({key: key, value: value}, false);
+      var node = new DataGrid.DataGridNode({key: key, value: value}, false);
       node.selectable = true;
       nodes.push(node);
       keys.push(key);
     }
 
-    var dataGrid = new UI.DataGrid(columns, this._editingCallback.bind(this), this._deleteCallback.bind(this));
+    var dataGrid = new DataGrid.DataGrid(columns, this._editingCallback.bind(this), this._deleteCallback.bind(this));
     dataGrid.setName('DOMStorageItemsView');
     length = nodes.length;
     for (var i = 0; i < length; ++i)
@@ -209,6 +203,9 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     return dataGrid;
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _deleteButtonClicked(event) {
     if (!this._dataGrid || !this._dataGrid.selectedNode)
       return;
@@ -216,6 +213,9 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
     this._deleteCallback(this._dataGrid.selectedNode);
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _refreshButtonClicked(event) {
     this._update();
   }
@@ -233,7 +233,7 @@ Resources.DOMStorageItemsView = class extends UI.SimpleView {
   }
 
   /**
-   * @param {!UI.DataGridNode} masterNode
+   * @param {!DataGrid.DataGridNode} masterNode
    */
   _removeDupes(masterNode) {
     var rootNode = this._dataGrid.rootNode();

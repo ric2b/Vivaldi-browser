@@ -76,7 +76,6 @@ typedef std::vector<metrics::OmniboxEventProto_ProviderInfo> ProvidersInfo;
 //
 // QUERY input type:
 // --------------------------------------------------------------------|-----
-// Bookmark Provider (nickname exact match)                            | 1600 
 // Search Primary or Secondary (past query in history within 2 days)   | 1599**
 // Keyword (non-substituting or in keyword UI mode, exact match)       | 1500
 // Keyword (substituting, exact match)                                 | 1450

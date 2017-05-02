@@ -179,13 +179,6 @@ class CORE_EXPORT PaintLayerCompositor final : public GraphicsLayerClient {
   String debugName(const GraphicsLayer*) const override;
   DocumentLifecycle& lifecycle() const;
 
-  bool needsUpdateDescendantDependentFlags() const {
-    return m_needsUpdateDescendantDependentFlags;
-  }
-  void setNeedsUpdateDescendantDependentFlags() {
-    m_needsUpdateDescendantDependentFlags = true;
-  }
-
   void updatePotentialCompositingReasonsFromStyle(PaintLayer*);
 
   // Whether the layer could ever be composited.
@@ -198,12 +191,10 @@ class CORE_EXPORT PaintLayerCompositor final : public GraphicsLayerClient {
       PaintLayer*,
       CompositingStateTransitionType compositedLayerUpdate);
 
-  void updateDirectCompositingReasons(PaintLayer*);
-
   bool inOverlayFullscreenVideo() const { return m_inOverlayFullscreenVideo; }
 
  private:
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void assertNoUnresolvedDirtyBits();
 #endif
 
@@ -246,6 +237,8 @@ class CORE_EXPORT PaintLayerCompositor final : public GraphicsLayerClient {
 
   void applyOverlayFullscreenVideoAdjustmentIfNeeded();
 
+  void updateContainerSizes();
+
   // Checks the given graphics layer against the compositor's horizontal and
   // vertical scrollbar graphics layers, returning the associated Scrollbar
   // instance if any, else nullptr.
@@ -272,7 +265,6 @@ class CORE_EXPORT PaintLayerCompositor final : public GraphicsLayerClient {
   bool m_needsUpdateFixedBackground;
   bool m_isTrackingRasterInvalidations;  // Used for testing.
   bool m_inOverlayFullscreenVideo;
-  bool m_needsUpdateDescendantDependentFlags;
 
   RootLayerAttachment m_rootLayerAttachment;
 

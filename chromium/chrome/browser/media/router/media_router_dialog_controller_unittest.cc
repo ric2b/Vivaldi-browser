@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <vector>
 
 #include "chrome/browser/media/router/create_presentation_connection_request.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -62,24 +62,26 @@ class MediaRouterDialogControllerTest : public ChromeRenderViewHostTestHarness {
   }
 
   void RequestSuccess(const content::PresentationSessionInfo&,
-                      const MediaRoute::Id&) {}
+                      const MediaRoute&) {}
   void RequestError(const content::PresentationError& error) {}
 
   std::unique_ptr<CreatePresentationConnectionRequest> GetRequest() {
-    return base::MakeUnique<CreatePresentationConnectionRequest>(
-        RenderFrameHostId(1, 2), GURL("http://example.com"),
-        GURL("http://google.com"),
-        base::Bind(&MediaRouterDialogControllerTest::RequestSuccess,
-                   base::Unretained(this)),
-        base::Bind(&MediaRouterDialogControllerTest::RequestError,
-                   base::Unretained(this)));
+    return std::unique_ptr<CreatePresentationConnectionRequest>(
+        new CreatePresentationConnectionRequest(
+            RenderFrameHostId(1, 2),
+            {GURL("http://example.com"), GURL("http://example2.com")},
+            GURL("http://google.com"),
+            base::Bind(&MediaRouterDialogControllerTest::RequestSuccess,
+                       base::Unretained(this)),
+            base::Bind(&MediaRouterDialogControllerTest::RequestError,
+                       base::Unretained(this))));
   }
 
   std::unique_ptr<TestMediaRouterDialogController> dialog_controller_;
   std::unique_ptr<MockWebContentsDelegate> web_contents_delegate_;
 };
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 // The non-Android implementation is tested in
 // MediaRouterDialogControllerImplTest.
 TEST_F(MediaRouterDialogControllerTest, CreateForWebContents) {

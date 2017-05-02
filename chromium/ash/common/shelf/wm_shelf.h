@@ -22,13 +22,13 @@ class GestureEvent;
 
 namespace ash {
 
+class ShelfBezelEventHandler;
 class ShelfLayoutManager;
 class ShelfLayoutManagerTest;
 class ShelfLockingManager;
 class ShelfView;
 class ShelfWidget;
 class StatusAreaWidget;
-class WmDimmerView;
 class WmShelfObserver;
 class WmWindow;
 
@@ -36,6 +36,9 @@ class WmWindow;
 // controller. Note that the shelf widget may not be created until after login.
 class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
  public:
+  WmShelf();
+  ~WmShelf() override;
+
   // Returns the shelf for the display that |window| is on. Note that the shelf
   // widget may not exist, or the shelf may not be visible.
   static WmShelf* ForWindow(WmWindow* window);
@@ -44,7 +47,7 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   // adjust the alignment (eg. not allowed in guest and supervised user modes).
   static bool CanChangeShelfAlignment();
 
-  virtual void CreateShelfWidget(WmWindow* root);
+  void CreateShelfWidget(WmWindow* root);
   void ShutdownShelfWidget();
   void DestroyShelfWidget();
 
@@ -55,7 +58,9 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   ShelfWidget* shelf_widget() { return shelf_widget_.get(); }
 
   // Creates the shelf view.
-  void InitializeShelf();
+  void CreateShelfView();
+
+  // TODO(jamescook): Eliminate this method.
   void ShutdownShelf();
 
   // True after the ShelfView has been created (e.g. after login).
@@ -90,17 +95,6 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   void UpdateAutoHideState();
 
   ShelfBackgroundType GetBackgroundType() const;
-
-  // Creates a view that dims shelf items. The returned view is owned by its
-  // widget. Returns null if shelf dimming is not supported (e.g. on mus).
-  // TODO(jamescook): Delete this after material design ships, as MD will not
-  // require shelf dimming. http://crbug.com/614453
-  virtual WmDimmerView* CreateDimmerView(bool disable_animations_for_test);
-
-  // Shelf items are slightly dimmed (e.g. when a window is maximized).
-  // TODO(jamescook): Delete this after material design ships, as MD will not
-  // require shelf dimming. http://crbug.com/614453
-  bool IsDimmed() const;
 
   // Whether the shelf view is visible.
   // TODO(jamescook): Consolidate this with GetVisibilityState().
@@ -147,9 +141,6 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   ShelfView* GetShelfViewForTesting();
 
  protected:
-  WmShelf();
-  ~WmShelf() override;
-
   // ShelfLayoutManagerObserver:
   void WillDeleteShelfLayoutManager() override;
   void WillChangeVisibilityState(ShelfVisibilityState new_state) override;
@@ -158,6 +149,7 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
                            BackgroundAnimatorChangeType change_type) override;
 
  private:
+  class AutoHideEventHandler;
   friend class ShelfLayoutManagerTest;
 
   // Layout manager for the shelf container window. Instances are constructed by
@@ -178,6 +170,14 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   ShelfAutoHideBehavior auto_hide_behavior_ = SHELF_AUTO_HIDE_BEHAVIOR_NEVER;
 
   base::ObserverList<WmShelfObserver> observers_;
+
+  // Forwards mouse and gesture events to ShelfLayoutManager for auto-hide.
+  // TODO(mash): Facilitate simliar functionality in mash: crbug.com/631216
+  std::unique_ptr<AutoHideEventHandler> auto_hide_event_handler_;
+
+  // Forwards touch gestures on a bezel sensor to the shelf.
+  // TODO(mash): Facilitate simliar functionality in mash: crbug.com/636647
+  std::unique_ptr<ShelfBezelEventHandler> bezel_event_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(WmShelf);
 };

@@ -23,6 +23,7 @@
 
 #include "core/dom/Document.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/layout/svg/LayoutSVGResourceContainer.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/animation/SMILTimeContainer.h"
 #include "wtf/AutoReset.h"
@@ -32,10 +33,6 @@ namespace blink {
 
 SVGDocumentExtensions::SVGDocumentExtensions(Document* document)
     : m_document(document)
-#if ENABLE(ASSERT)
-      ,
-      m_inRelativeLengthSVGRootsInvalidation(false)
-#endif
 {
 }
 
@@ -224,7 +221,7 @@ void SVGDocumentExtensions::removeElementFromPendingResources(
 
     elements->remove(element);
     if (elements->isEmpty())
-      toBeRemoved.append(entry.key);
+      toBeRemoved.push_back(entry.key);
   }
 
   clearHasPendingResourcesIfPossible(element);
@@ -258,7 +255,7 @@ bool SVGDocumentExtensions::isSVGRootWithRelativeLengthDescendents(
 void SVGDocumentExtensions::invalidateSVGRootsWithRelativeLengthDescendents(
     SubtreeLayoutScope* scope) {
   ASSERT(!m_inRelativeLengthSVGRootsInvalidation);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   AutoReset<bool> inRelativeLengthSVGRootsChange(
       &m_inRelativeLengthSVGRootsInvalidation, true);
 #endif

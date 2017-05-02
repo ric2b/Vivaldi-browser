@@ -11,78 +11,83 @@
 #include "cc/quads/render_pass.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_compositor_frame_sink.h"
 #include "ui/aura/mus/window_compositor_frame_sink.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/window.h"
+#include "ui/display/screen.h"
 
 namespace content {
 
 MusBrowserCompositorOutputSurface::MusBrowserCompositorOutputSurface(
     ui::Window* window,
-    scoped_refptr<ContextProviderCommandBuffer> context,
+    scoped_refptr<ui::ContextProviderCommandBuffer> context,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-    cc::SyntheticBeginFrameSource* begin_frame_source,
+    const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
         overlay_candidate_validator)
     : GpuBrowserCompositorOutputSurface(std::move(context),
-                                        std::move(vsync_manager),
-                                        begin_frame_source,
-                                        std::move(overlay_candidate_validator)),
-      ui_window_(window) {
+                                        update_vsync_parameters_callback,
+                                        std::move(overlay_candidate_validator),
+                                        false /* support_stencil */),
+      ui_window_(window),
+      window_(nullptr),
+      begin_frame_source_(nullptr) {
   ui_compositor_frame_sink_ = ui_window_->RequestCompositorFrameSink(
-      ui::mojom::CompositorFrameSinkType::DEFAULT, context,
-      gpu_memory_buffer_manager);
+      context, gpu_memory_buffer_manager);
   ui_compositor_frame_sink_->BindToClient(this);
 }
 
 MusBrowserCompositorOutputSurface::MusBrowserCompositorOutputSurface(
     aura::Window* window,
-    scoped_refptr<ContextProviderCommandBuffer> context,
+    scoped_refptr<ui::ContextProviderCommandBuffer> context,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-    cc::SyntheticBeginFrameSource* begin_frame_source,
+    const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
         overlay_candidate_validator)
     : GpuBrowserCompositorOutputSurface(std::move(context),
-                                        std::move(vsync_manager),
-                                        begin_frame_source,
-                                        std::move(overlay_candidate_validator)),
-      window_(window) {
+                                        update_vsync_parameters_callback,
+                                        std::move(overlay_candidate_validator),
+                                        false  /* support_stencil */),
+      ui_window_(nullptr),
+      window_(window),
+      begin_frame_source_(nullptr) {
   aura::WindowPortMus* window_port = aura::WindowPortMus::Get(window_);
   DCHECK(window_port);
   compositor_frame_sink_ = window_port->RequestCompositorFrameSink(
-      ui::mojom::CompositorFrameSinkType::DEFAULT, context,
-      gpu_memory_buffer_manager);
+      context, gpu_memory_buffer_manager);
   compositor_frame_sink_->BindToClient(this);
 }
 
 MusBrowserCompositorOutputSurface::~MusBrowserCompositorOutputSurface() {}
+
+cc::BeginFrameSource* MusBrowserCompositorOutputSurface::GetBeginFrameSource() {
+  return begin_frame_source_;
+}
 
 void MusBrowserCompositorOutputSurface::SwapBuffers(
     cc::OutputSurfaceFrame frame) {
   const gfx::Rect bounds = ui_window_ ? gfx::Rect(ui_window_->bounds().size())
                                       : gfx::Rect(window_->bounds().size());
   cc::CompositorFrame ui_frame;
+  ui_frame.metadata.device_scale_factor = display::Screen::GetScreen()
+                                              ->GetDisplayNearestWindow(window_)
+                                              .device_scale_factor();
   ui_frame.metadata.latency_info = std::move(frame.latency_info);
   // Reset latency_info to known empty state after moving contents.
   frame.latency_info.clear();
-  ui_frame.delegated_frame_data = base::MakeUnique<cc::DelegatedFrameData>();
-  const cc::RenderPassId render_pass_id(1, 1);
+  const int render_pass_id = 1;
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
-  const bool has_transparent_background = true;
-  pass->SetAll(render_pass_id, bounds, bounds, gfx::Transform(),
-               has_transparent_background);
+  pass->SetNew(render_pass_id, bounds, bounds, gfx::Transform());
   // The SharedQuadState is owned by the SharedQuadStateList
   // shared_quad_state_list.
   cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->SetAll(gfx::Transform(), bounds.size(), bounds, bounds,
-              false /* is_clipped */, 1.f /* opacity */, SkXfermode::kSrc_Mode,
+              false /* is_clipped */, 1.f /* opacity */, SkBlendMode::kSrc,
               0 /* sorting_context_id */);
 
   cc::TransferableResource resource;
@@ -113,7 +118,7 @@ void MusBrowserCompositorOutputSurface::SwapBuffers(
   resource.read_lock_fences_enabled = false;
   resource.is_software = false;
   resource.is_overlay_candidate = false;
-  ui_frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+  ui_frame.resource_list.push_back(std::move(resource));
 
   const bool needs_blending = true;
   const bool premultiplied_alpha = true;
@@ -132,7 +137,7 @@ void MusBrowserCompositorOutputSurface::SwapBuffers(
                background_color, vertex_opacity, y_flipped, nearest_neighbor,
                secure_output_only);
 
-  ui_frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  ui_frame.render_pass_list.push_back(std::move(pass));
 
   // TODO(mfomitchev): Remove ui_compositor_frame_sink_ once we complete the
   // switch to Aura-Mus.
@@ -144,7 +149,9 @@ void MusBrowserCompositorOutputSurface::SwapBuffers(
 }
 
 void MusBrowserCompositorOutputSurface::SetBeginFrameSource(
-    cc::BeginFrameSource* source) {}
+    cc::BeginFrameSource* source) {
+  begin_frame_source_ = source;
+}
 
 void MusBrowserCompositorOutputSurface::ReclaimResources(
     const cc::ReturnedResourceArray& resources) {

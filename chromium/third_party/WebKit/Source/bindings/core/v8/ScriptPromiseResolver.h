@@ -10,8 +10,8 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ToV8.h"
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/SuspendableObject.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -24,13 +24,13 @@ namespace blink {
 // functionalities.
 //  - A ScriptPromiseResolver retains a ScriptState. A caller
 //    can call resolve or reject from outside of a V8 context.
-//  - This class is an ActiveDOMObject and keeps track of the associated
+//  - This class is an SuspendableObject and keeps track of the associated
 //    ExecutionContext state. When the ExecutionContext is suspended,
 //    resolve or reject will be delayed. When it is stopped, resolve or reject
 //    will be ignored.
 class CORE_EXPORT ScriptPromiseResolver
     : public GarbageCollectedFinalized<ScriptPromiseResolver>,
-      public ActiveDOMObject {
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(ScriptPromiseResolver);
   WTF_MAKE_NONCOPYABLE(ScriptPromiseResolver);
 
@@ -41,7 +41,7 @@ class CORE_EXPORT ScriptPromiseResolver
     return resolver;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // Eagerly finalized so as to ensure valid access to getExecutionContext()
   // from the destructor's assert.
   EAGERLY_FINALIZE();
@@ -54,7 +54,7 @@ class CORE_EXPORT ScriptPromiseResolver
     //    ExecutionContext is stopped.
     ASSERT(m_state == Detached || !m_isPromiseCalled ||
            !getScriptState()->contextIsValid() || !getExecutionContext() ||
-           getExecutionContext()->activeDOMObjectsAreStopped());
+           getExecutionContext()->isContextDestroyed());
   }
 #endif
 
@@ -78,7 +78,7 @@ class CORE_EXPORT ScriptPromiseResolver
   // Note that an empty ScriptPromise will be returned after resolve or
   // reject is called.
   ScriptPromise promise() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_isPromiseCalled = true;
 #endif
     return m_resolver.promise();
@@ -86,10 +86,10 @@ class CORE_EXPORT ScriptPromiseResolver
 
   ScriptState* getScriptState() const { return m_scriptState.get(); }
 
-  // ActiveDOMObject implementation.
+  // SuspendableObject implementation.
   void suspend() override;
   void resume() override;
-  void contextDestroyed() override { detach(); }
+  void contextDestroyed(ExecutionContext*) override { detach(); }
 
   // Calling this function makes the resolver release its internal resources.
   // That means the associated promise will never be resolved or rejected
@@ -105,7 +105,7 @@ class CORE_EXPORT ScriptPromiseResolver
 
  protected:
   // You need to call suspendIfNeeded after the construction because
-  // this is an ActiveDOMObject.
+  // this is an SuspendableObject.
   explicit ScriptPromiseResolver(ScriptState*);
 
  private:
@@ -120,18 +120,17 @@ class CORE_EXPORT ScriptPromiseResolver
   template <typename T>
   void resolveOrReject(T value, ResolutionState newState) {
     if (m_state != Pending || !getScriptState()->contextIsValid() ||
-        !getExecutionContext() ||
-        getExecutionContext()->activeDOMObjectsAreStopped())
+        !getExecutionContext() || getExecutionContext()->isContextDestroyed())
       return;
     ASSERT(newState == Resolving || newState == Rejecting);
     m_state = newState;
 
     ScriptState::Scope scope(m_scriptState.get());
     m_value.set(m_scriptState->isolate(),
-                toV8(value, m_scriptState->context()->Global(),
+                ToV8(value, m_scriptState->context()->Global(),
                      m_scriptState->isolate()));
 
-    if (getExecutionContext()->activeDOMObjectsAreSuspended()) {
+    if (getExecutionContext()->isContextSuspended()) {
       // Retain this object until it is actually resolved or rejected.
       keepAliveWhilePending();
       return;
@@ -154,7 +153,7 @@ class CORE_EXPORT ScriptPromiseResolver
 
   ResolutionState m_state;
   const RefPtr<ScriptState> m_scriptState;
-  Timer<ScriptPromiseResolver> m_timer;
+  TaskRunnerTimer<ScriptPromiseResolver> m_timer;
   Resolver m_resolver;
   ScopedPersistent<v8::Value> m_value;
 
@@ -162,9 +161,9 @@ class CORE_EXPORT ScriptPromiseResolver
   // alive while in that state.
   SelfKeepAlive<ScriptPromiseResolver> m_keepAlive;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // True if promise() is called.
-  bool m_isPromiseCalled;
+  bool m_isPromiseCalled = false;
 #endif
 };
 

@@ -74,6 +74,8 @@ def _WriteMessage(file, message):
   file.write('<msg')
   _WriteAttribute(file, 'desc', message.GetDescription())
   _WriteAttribute(file, 'id', message.GetId())
+  if  message.GetName():
+    _WriteAttribute(file, 'name', message.GetName())
   _WriteAttribute(file, 'meaning', message.GetMeaning())
   if preserve_space:
     _WriteAttribute(file, 'xml:space', 'preserve')
@@ -184,7 +186,8 @@ Other options:
     limit_is_grd = False
     limit_file_dir = None
     limit_untranslated_lang = False
-    own_opts, args = getopt.getopt(args, 'l:D:E:ihL')
+    print_all_strings = False
+    own_opts, args = getopt.getopt(args, 'l:D:E:ihLa')
     for key, val in own_opts:
       if key == '-l':
         limit_file = open(val, 'r')
@@ -195,7 +198,11 @@ Other options:
       elif key == '-i':
         self.format = self.FORMAT_IDS_ONLY
       elif key == '-L':
-        limit_untranslated_lang = args[1:] if len(args) > 1 else False 
+        limit_untranslated_lang = args[1:] if len(args) > 1 else False
+        if "en-US" in limit_untranslated_lang:
+          limit_untranslated_lang.remove("en-US");
+      elif key == '-a':
+        print_all_strings = True
       elif key == '-D':
         name, val = util.ParseDefine(val)
         self.defines[name] = val
@@ -227,13 +234,14 @@ Other options:
       with open(cur_xmb_path, 'wb') as output_file:
         self.Process(
           res_tree, output_file, limit_file, limit_is_grd, limit_file_dir,
-          missing_translate_for_lang= lang)
+          missing_translate_for_lang= lang, print_all_strings=print_all_strings)
     if limit_file:
       limit_file.close()
     print "Wrote %s" % xmb_path
 
   def Process(self, res_tree, output_file, limit_file=None, limit_is_grd=False,
-              dir=None, missing_translate_for_lang=None):
+              dir=None, missing_translate_for_lang=None,
+              print_all_strings=False):
     """Writes a document with the contents of res_tree into output_file,
     limiting output to the IDs specified in limit_file, which is a GRD file if
     limit_is_grd is true, otherwise a file with one ID per line.
@@ -305,12 +313,16 @@ Other options:
           if id not in active_nodes:
             continue
           try:
-            if clique.MessageForLanguage(missing_translate_for_lang, missing_translation_is_error=True):
+            if clique.MessageForLanguage(missing_translate_for_lang, missing_translation_is_error=True) and not print_all_strings:
               continue
           except:
+            if print_all_strings:
+              continue # don't output messages that have no translation when dumping all
             pass
 
         message = node.UberClique().BestClique(id).GetMessage()
+        if (missing_translate_for_lang or print_all_strings) and 'name' in node.attrs:
+          message.SetName(node.attrs['name'])
         messages += [message]
 
     # Ensure a stable order of messages, to help regression testing.

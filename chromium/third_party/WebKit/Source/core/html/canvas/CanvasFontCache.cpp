@@ -88,7 +88,7 @@ MutableStylePropertySet* CanvasFontCache::parseFont(const String& fontString) {
     m_fontLRUList.add(fontString);
   } else {
     parsedStyle = MutableStylePropertySet::create(HTMLStandardMode);
-    CSSParser::parseValue(parsedStyle, CSSPropertyFont, fontString, true, 0);
+    CSSParser::parseValue(parsedStyle, CSSPropertyFont, fontString, true);
     if (parsedStyle->isEmpty())
       return nullptr;
     // According to
@@ -133,7 +133,7 @@ void CanvasFontCache::schedulePruningIfNeeded() {
   if (m_pruningScheduled)
     return;
   ASSERT(!m_mainCachePurgePreventer);
-  m_mainCachePurgePreventer = wrapUnique(new FontCachePurgePreventer);
+  m_mainCachePurgePreventer = WTF::wrapUnique(new FontCachePurgePreventer);
   Platform::current()->currentThread()->addTaskObserver(this);
   m_pruningScheduled = true;
 }

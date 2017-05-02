@@ -373,7 +373,7 @@ struct zcr_remote_surface_v1_interface {
 	/**
 	 * set a rectangular shadow
 	 *
-	 * Request that surface needs a rectangular shadow.
+	 * [Deprecated] Request that surface needs a rectangular shadow.
 	 *
 	 * This is only a request that the surface should have a
 	 * rectangular shadow. The compositor may choose to ignore this
@@ -539,13 +539,63 @@ struct zcr_remote_surface_v1_interface {
 	void (*unset_system_modal)(struct wl_client *client,
 				   struct wl_resource *resource);
 	/**
+	 * set a rectangular shadow
+	 *
+	 * Request that surface needs a rectangular shadow.
+	 *
+	 * This is only a request that the surface should have a
+	 * rectangular shadow. The compositor may choose to ignore this
+	 * request.
+	 *
+	 * The arguments are given in the remote surface coordinate space
+	 * and specifies inner bounds of the shadow. Specifying zero width
+	 * and height will disable the shadow.
+	 * @since 2
+	 */
+	void (*set_rectangular_surface_shadow)(struct wl_client *client,
+					       struct wl_resource *resource,
+					       int32_t x,
+					       int32_t y,
+					       int32_t width,
+					       int32_t height);
+	/**
+	 * ack a configure event
+	 *
+	 * When a configure event is received, if a client commits the
+	 * surface in response to the configure event, then the client must
+	 * make an ack_configure request sometime before the commit
+	 * request, passing along the serial of the configure event.
+	 *
+	 * For instance, the compositor might use this information during
+	 * display configuration to change its coordinate space for
+	 * set_window_geometry requests only when the client has switched
+	 * to the new coordinate space.
+	 *
+	 * If the client receives multiple configure events before it can
+	 * respond to one, it only has to ack the last configure event.
+	 *
+	 * A client is not required to commit immediately after sending an
+	 * ack_configure request - it may even ack_configure several times
+	 * before its next surface commit.
+	 *
+	 * A client may send multiple ack_configure requests before
+	 * committing, but only the last request sent before a commit
+	 * indicates which configure event the client really is responding
+	 * to.
+	 * @param serial the serial from the configure event
+	 * @since 3
+	 */
+	void (*ack_configure)(struct wl_client *client,
+			      struct wl_resource *resource,
+			      uint32_t serial);
+	/**
 	 * interactive move started
 	 *
 	 * Notifies the compositor when an interactive, user-driven move
 	 * of the surface starts. The compositor may assume that subsequent
 	 * set_window_geometry requests are position updates until it
 	 * receives a unset_moving request.
-	 * @since 2
+	 * @since 3
 	 */
 	void (*set_moving)(struct wl_client *client,
 			   struct wl_resource *resource);
@@ -555,7 +605,7 @@ struct zcr_remote_surface_v1_interface {
 	 * Notifies the compositor when an interactive, user-driven move
 	 * of the surface stops. The compositor may choose to stop the move
 	 * regardless of this request.
-	 * @since 2
+	 * @since 3
 	 */
 	void (*unset_moving)(struct wl_client *client,
 			     struct wl_resource *resource);
@@ -563,6 +613,7 @@ struct zcr_remote_surface_v1_interface {
 
 #define ZCR_REMOTE_SURFACE_V1_CLOSE	0
 #define ZCR_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED	1
+#define ZCR_REMOTE_SURFACE_V1_CONFIGURE	2
 
 /**
  * @ingroup iface_zcr_remote_surface_v1
@@ -572,6 +623,10 @@ struct zcr_remote_surface_v1_interface {
  * @ingroup iface_zcr_remote_surface_v1
  */
 #define ZCR_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED_SINCE_VERSION	1
+/**
+ * @ingroup iface_zcr_remote_surface_v1
+ */
+#define ZCR_REMOTE_SURFACE_V1_CONFIGURE_SINCE_VERSION	3
 
 /**
  * @ingroup iface_zcr_remote_surface_v1
@@ -593,6 +648,17 @@ static inline void
 zcr_remote_surface_v1_send_state_type_changed(struct wl_resource *resource_, uint32_t state_type)
 {
 	wl_resource_post_event(resource_, ZCR_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED, state_type);
+}
+
+/**
+ * @ingroup iface_zcr_remote_surface_v1
+ * Sends an configure event to the client owning the resource.
+ * @param resource_ The client's resource
+ */
+static inline void
+zcr_remote_surface_v1_send_configure(struct wl_resource *resource_, int32_t origin_x, int32_t origin_y, uint32_t serial)
+{
+	wl_resource_post_event(resource_, ZCR_REMOTE_SURFACE_V1_CONFIGURE, origin_x, origin_y, serial);
 }
 
 /**

@@ -7,42 +7,45 @@
 namespace content {
 
 SyntheticPointerActionParams::SyntheticPointerActionParams()
-    : pointer_action_type_(PointerActionType::NOT_INITIALIZED), index_(-1) {}
+    : pointer_action_type_(PointerActionType::NOT_INITIALIZED),
+      index_(0),
+      button_(Button::LEFT) {}
 
 SyntheticPointerActionParams::SyntheticPointerActionParams(
-    PointerActionType type)
-    : pointer_action_type_(type), index_(-1) {}
-
-SyntheticPointerActionParams::SyntheticPointerActionParams(
-    const SyntheticPointerActionParams& other)
-    : SyntheticGestureParams(other),
-      pointer_action_type_(other.pointer_action_type()) {
-  switch (other.pointer_action_type()) {
-    case PointerActionType::PRESS:
-    case PointerActionType::MOVE:
-      index_ = other.index();
-      position_ = other.position();
-      break;
-    case PointerActionType::RELEASE:
-      index_ = other.index();
-      break;
-    default:
-      break;
-  }
-}
+    PointerActionType action_type)
+    : pointer_action_type_(action_type), index_(0), button_(Button::LEFT) {}
 
 SyntheticPointerActionParams::~SyntheticPointerActionParams() {}
 
-SyntheticGestureParams::GestureType
-SyntheticPointerActionParams::GetGestureType() const {
-  return POINTER_ACTION;
+// static
+unsigned SyntheticPointerActionParams::GetWebMouseEventModifier(
+    SyntheticPointerActionParams::Button button) {
+  switch (button) {
+    case SyntheticPointerActionParams::Button::LEFT:
+      return blink::WebMouseEvent::LeftButtonDown;
+    case SyntheticPointerActionParams::Button::MIDDLE:
+      return blink::WebMouseEvent::MiddleButtonDown;
+    case SyntheticPointerActionParams::Button::RIGHT:
+      return blink::WebMouseEvent::RightButtonDown;
+  }
+  NOTREACHED();
+  return blink::WebMouseEvent::NoModifiers;
 }
 
-const SyntheticPointerActionParams* SyntheticPointerActionParams::Cast(
-    const SyntheticGestureParams* gesture_params) {
-  DCHECK(gesture_params);
-  DCHECK_EQ(POINTER_ACTION, gesture_params->GetGestureType());
-  return static_cast<const SyntheticPointerActionParams*>(gesture_params);
+// static
+blink::WebMouseEvent::Button
+SyntheticPointerActionParams::GetWebMouseEventButton(
+    SyntheticPointerActionParams::Button button) {
+  switch (button) {
+    case SyntheticPointerActionParams::Button::LEFT:
+      return blink::WebMouseEvent::Button::Left;
+    case SyntheticPointerActionParams::Button::MIDDLE:
+      return blink::WebMouseEvent::Button::Middle;
+    case SyntheticPointerActionParams::Button::RIGHT:
+      return blink::WebMouseEvent::Button::Right;
+  }
+  NOTREACHED();
+  return blink::WebMouseEvent::Button::NoButton;
 }
 
 }  // namespace content

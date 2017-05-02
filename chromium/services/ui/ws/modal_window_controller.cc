@@ -4,6 +4,7 @@
 
 #include "services/ui/ws/modal_window_controller.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "services/ui/ws/event_dispatcher.h"
 #include "services/ui/ws/server_window.h"
@@ -80,8 +81,9 @@ bool ModalWindowController::IsWindowBlocked(const ServerWindow* window) const {
 const ServerWindow* ModalWindowController::GetTargetForWindow(
     const ServerWindow* window) const {
   ServerWindow* system_modal_window = GetActiveSystemModalWindow();
-  return system_modal_window ? system_modal_window
-                             : GetWindowModalTargetForWindow(window);
+  if (system_modal_window)
+    return system_modal_window;
+  return window ? GetWindowModalTargetForWindow(window) : nullptr;
 }
 
 ServerWindow* ModalWindowController::GetActiveSystemModalWindow() const {

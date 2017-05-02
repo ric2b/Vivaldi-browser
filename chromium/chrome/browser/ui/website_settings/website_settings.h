@@ -75,8 +75,7 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
     SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT,
     // The website provided a valid certificate, but the certificate or chain
     // is using a deprecated signature algorithm.
-    SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR,
-    SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR,
+    SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM,
     // The website has been flagged by Safe Browsing as dangerous for
     // containing malware, social engineering, or unwanted software.
     SITE_IDENTITY_STATUS_MALWARE,
@@ -89,9 +88,11 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.pageinfo
   enum WebsiteSettingsAction {
     WEBSITE_SETTINGS_OPENED = 0,
-    WEBSITE_SETTINGS_PERMISSIONS_TAB_SELECTED = 1,
-    WEBSITE_SETTINGS_CONNECTION_TAB_SELECTED = 2,
-    WEBSITE_SETTINGS_CONNECTION_TAB_SHOWN_IMMEDIATELY = 3,
+    // No longer used; indicated actions for the old version of Page Info that
+    // had a "Permissions" tab and a "Connection" tab.
+    // WEBSITE_SETTINGS_PERMISSIONS_TAB_SELECTED = 1,
+    // WEBSITE_SETTINGS_CONNECTION_TAB_SELECTED = 2,
+    // WEBSITE_SETTINGS_CONNECTION_TAB_SHOWN_IMMEDIATELY = 3,
     WEBSITE_SETTINGS_COOKIES_DIALOG_OPENED = 4,
     WEBSITE_SETTINGS_CHANGED_PERMISSION = 5,
     WEBSITE_SETTINGS_CERTIFICATE_DIALOG_OPENED = 6,

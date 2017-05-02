@@ -83,6 +83,8 @@ class AutofillAgent : public content::RenderFrameObserver,
       int32_t key,
       const PasswordFormFillData& form_data) override;
 
+  void ShowNotSecureWarning(const blink::WebInputElement& element);
+
  protected:
   // blink::WebAutofillClient:
   void didAssociateFormControlsDynamically() override;
@@ -182,13 +184,10 @@ class AutofillAgent : public content::RenderFrameObserver,
   void textFieldDidReceiveKeyDown(
       const blink::WebInputElement& element,
       const blink::WebKeyboardEvent& event) override;
-  void setIgnoreTextChanges(bool ignore) override;
   void openTextDataListChooser(const blink::WebInputElement& element) override;
   void dataListOptionsChanged(const blink::WebInputElement& element) override;
   void firstUserGestureObserved() override;
   void ajaxSucceeded() override;
-
-  void OnPing();
 
   // Called when a same-page navigation is detected.
   void OnSamePageNavigationCompleted();

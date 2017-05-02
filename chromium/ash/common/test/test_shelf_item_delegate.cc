@@ -10,7 +10,7 @@ namespace ash {
 namespace test {
 
 TestShelfItemDelegate::TestShelfItemDelegate(WmWindow* window)
-    : window_(window), is_draggable_(true) {}
+    : window_(window) {}
 
 TestShelfItemDelegate::~TestShelfItemDelegate() {}
 
@@ -26,24 +26,8 @@ ShelfItemDelegate::PerformedAction TestShelfItemDelegate::ItemSelected(
   return kNoAction;
 }
 
-base::string16 TestShelfItemDelegate::GetTitle() {
-  return window_ ? window_->GetTitle() : base::string16();
-}
-
 ShelfMenuModel* TestShelfItemDelegate::CreateApplicationMenu(int event_flags) {
   return nullptr;
-}
-
-bool TestShelfItemDelegate::IsDraggable() {
-  return is_draggable_;
-}
-
-bool TestShelfItemDelegate::CanPin() const {
-  return true;
-}
-
-bool TestShelfItemDelegate::ShouldShowTooltip() {
-  return true;
 }
 
 void TestShelfItemDelegate::Close() {}

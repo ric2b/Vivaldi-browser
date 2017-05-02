@@ -2,26 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_UNACKED_PACKET_MAP_H_
-#define NET_QUIC_QUIC_UNACKED_PACKET_MAP_H_
+#ifndef NET_QUIC_CORE_QUIC_UNACKED_PACKET_MAP_H_
+#define NET_QUIC_CORE_QUIC_UNACKED_PACKET_MAP_H_
 
-#include <stddef.h>
-
+#include <cstddef>
 #include <deque>
 
 #include "base/macros.h"
-#include "net/base/net_export.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/core/quic_transmission_info.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
-
-class AckNotifierManager;
 
 // Class which tracks unacked packets for three purposes:
 // 1) Track retransmittable data, including multiple transmissions of frames.
 // 2) Track packets and bytes in flight for congestion control.
 // 3) Track sent time of packets to provide RTT measurements from acks.
-class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
+class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
  public:
   QuicUnackedPacketMap();
   ~QuicUnackedPacketMap();
@@ -33,7 +31,7 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
   // |old_packet_number| is the packet number of the previous transmission,
   // or 0 if there was none.
   // Any AckNotifierWrappers in |serialized_packet| are swapped from the
-  // serialized packet into the TransmissionInfo.
+  // serialized packet into the QuicTransmissionInfo.
   void AddSentPacket(SerializedPacket* serialized_packet,
                      QuicPacketNumber old_packet_number,
                      TransmissionType transmission_type,
@@ -53,7 +51,7 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
                                QuicTime::Delta delta_largest_observed);
 
   // Marks |info| as no longer in flight.
-  void RemoveFromInFlight(TransmissionInfo* info);
+  void RemoveFromInFlight(QuicTransmissionInfo* info);
 
   // Marks |packet_number| as no longer in flight.
   void RemoveFromInFlight(QuicPacketNumber packet_number);
@@ -96,7 +94,7 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
   // been acked by the peer.  If there are no unacked packets, returns 0.
   QuicPacketNumber GetLeastUnacked() const;
 
-  typedef std::deque<TransmissionInfo> UnackedPacketMap;
+  typedef std::deque<QuicTransmissionInfo> UnackedPacketMap;
 
   typedef UnackedPacketMap::const_iterator const_iterator;
   typedef UnackedPacketMap::iterator iterator;
@@ -109,14 +107,15 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
   // Returns true if there are unacked packets that are in flight.
   bool HasInFlightPackets() const;
 
-  // Returns the TransmissionInfo associated with |packet_number|, which
+  // Returns the QuicTransmissionInfo associated with |packet_number|, which
   // must be unacked.
-  const TransmissionInfo& GetTransmissionInfo(
+  const QuicTransmissionInfo& GetTransmissionInfo(
       QuicPacketNumber packet_number) const;
 
-  // Returns mutable TransmissionInfo associated with |packet_number|, which
+  // Returns mutable QuicTransmissionInfo associated with |packet_number|, which
   // must be unacked.
-  TransmissionInfo* GetMutableTransmissionInfo(QuicPacketNumber packet_number);
+  QuicTransmissionInfo* GetMutableTransmissionInfo(
+      QuicPacketNumber packet_number);
 
   // Returns the time that the last unacked packet was sent.
   QuicTime GetLastPacketSentTime() const;
@@ -133,9 +132,9 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
   // Removes any retransmittable frames from this transmission or an associated
   // transmission.  It removes now useless transmissions, and disconnects any
   // other packets from other transmissions.
-  void RemoveRetransmittability(TransmissionInfo* info);
+  void RemoveRetransmittability(QuicTransmissionInfo* info);
 
-  // Looks up the TransmissionInfo by |packet_number| and calls
+  // Looks up the QuicTransmissionInfo by |packet_number| and calls
   // RemoveRetransmittability.
   void RemoveRetransmittability(QuicPacketNumber packet_number);
 
@@ -155,24 +154,24 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
   void TransferRetransmissionInfo(QuicPacketNumber old_packet_number,
                                   QuicPacketNumber new_packet_number,
                                   TransmissionType transmission_type,
-                                  TransmissionInfo* info);
-
-  void MaybeRemoveRetransmittableFrames(TransmissionInfo* transmission_info);
+                                  QuicTransmissionInfo* info);
 
   // Returns true if packet may be useful for an RTT measurement.
   bool IsPacketUsefulForMeasuringRtt(QuicPacketNumber packet_number,
-                                     const TransmissionInfo& info) const;
+                                     const QuicTransmissionInfo& info) const;
 
   // Returns true if packet may be useful for congestion control purposes.
-  bool IsPacketUsefulForCongestionControl(const TransmissionInfo& info) const;
+  bool IsPacketUsefulForCongestionControl(
+      const QuicTransmissionInfo& info) const;
 
   // Returns true if packet may be associated with retransmittable data
   // directly or through retransmissions.
-  bool IsPacketUsefulForRetransmittableData(const TransmissionInfo& info) const;
+  bool IsPacketUsefulForRetransmittableData(
+      const QuicTransmissionInfo& info) const;
 
   // Returns true if the packet no longer has a purpose in the map.
   bool IsPacketUseless(QuicPacketNumber packet_number,
-                       const TransmissionInfo& info) const;
+                       const QuicTransmissionInfo& info) const;
 
   QuicPacketNumber largest_sent_packet_;
   // The largest sent packet we expect to receive an ack for.
@@ -200,4 +199,4 @@ class NET_EXPORT_PRIVATE QuicUnackedPacketMap {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_UNACKED_PACKET_MAP_H_
+#endif  // NET_QUIC_CORE_QUIC_UNACKED_PACKET_MAP_H_

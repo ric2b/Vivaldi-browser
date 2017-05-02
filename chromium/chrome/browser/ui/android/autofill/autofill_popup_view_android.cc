@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "jni/AutofillPopupBridge_jni.h"
 #include "ui/android/view_android.h"
@@ -94,18 +95,31 @@ void AutofillPopupViewAndroid::UpdateBoundsAndRedrawPopup() {
           controller_->layout_model().GetIconResourceID(suggestion.icon));
     }
 
-    bool deletable =
+    bool is_deletable =
         controller_->GetRemovalConfirmationText(i, nullptr, nullptr);
+    // In the Form-Not-Secure experiment, the payment disabled message
+    // is a short message that should be displayed the same as the other
+    // autofill suggestions. If this experiment is not enabled, then the
+    // payment disabled message should be allowed to span multiple
+    // lines.
     bool is_label_multiline =
-        suggestion.frontend_id == POPUP_ITEM_ID_WARNING_MESSAGE ||
+        (!security_state::IsHttpWarningInFormEnabled() &&
+         suggestion.frontend_id ==
+             POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE) ||
         suggestion.frontend_id == POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO;
     Java_AutofillPopupBridge_addToAutofillSuggestionArray(
         env, data_array, i, value, label, android_icon_id,
-        suggestion.frontend_id, deletable, is_label_multiline);
+        controller_->layout_model().IsIconAtStart(suggestion.frontend_id),
+        suggestion.frontend_id, is_deletable, is_label_multiline,
+        suggestion.is_value_bold);
   }
 
-  Java_AutofillPopupBridge_show(env, java_object_, data_array,
-                                controller_->IsRTL());
+  Java_AutofillPopupBridge_show(
+      env, java_object_, data_array, controller_->IsRTL(),
+      controller_->layout_model().GetBackgroundColor(),
+      controller_->layout_model().GetDividerColor(),
+      controller_->layout_model().GetDropdownItemHeight(),
+      controller_->layout_model().GetMargin());
 }
 
 void AutofillPopupViewAndroid::SuggestionSelected(

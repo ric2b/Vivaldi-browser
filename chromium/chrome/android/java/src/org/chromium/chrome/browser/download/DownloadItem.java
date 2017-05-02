@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.download;
 
+import org.chromium.base.annotations.CalledByNative;
+
 /**
  * A generic class representing a download item. The item can be either downloaded through the
  * Android DownloadManager, or through Chrome's network stack.
@@ -13,6 +15,8 @@ package org.chromium.chrome.browser.download;
  */
 public class DownloadItem {
     static final long INVALID_DOWNLOAD_ID = -1L;
+    static final int INVALID_DOWNLOAD_PERCENTAGE = -1;
+
     private boolean mUseAndroidDownloadManager;
     private DownloadInfo mDownloadInfo;
     private long mDownloadId = INVALID_DOWNLOAD_ID;
@@ -109,5 +113,21 @@ public class DownloadItem {
      */
     public boolean hasBeenExternallyRemoved() {
         return mHasBeenExternallyRemoved;
+    }
+
+    @CalledByNative
+    private static DownloadItem createDownloadItem(
+            DownloadInfo downloadInfo, long startTimestamp, boolean hasBeenExternallyRemoved) {
+        DownloadItem downloadItem = new DownloadItem(false, downloadInfo);
+        downloadItem.setStartTime(startTimestamp);
+        downloadItem.setHasBeenExternallyRemoved(hasBeenExternallyRemoved);
+        return downloadItem;
+    }
+
+    /**
+     * @return Whether or not the download has an indeterminate percentage.
+     */
+    public boolean isIndeterminate() {
+        return getDownloadInfo().getPercentCompleted() == INVALID_DOWNLOAD_PERCENTAGE;
     }
 }

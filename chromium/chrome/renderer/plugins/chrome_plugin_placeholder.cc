@@ -31,6 +31,7 @@
 #include "gin/object_template_builder.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
@@ -84,11 +85,6 @@ ChromePluginPlaceholder::~ChromePluginPlaceholder() {
         routing_id(), placeholder_routing_id_));
   }
 #endif
-}
-
-// static
-bool ChromePluginPlaceholder::IsSmallContentFilterEnabled() {
-  return base::FeatureList::IsEnabled(features::kBlockSmallContent);
 }
 
 // static
@@ -218,11 +214,6 @@ bool ChromePluginPlaceholder::OnMessageReceived(const IPC::Message& message) {
   IPC_END_MESSAGE_MAP()
 
   return false;
-}
-
-void ChromePluginPlaceholder::OpenAboutPluginsCallback() {
-  RenderThread::Get()->Send(
-      new ChromeViewHostMsg_OpenAboutPlugins(routing_id()));
 }
 
 void ChromePluginPlaceholder::ShowPermissionBubbleCallback() {
@@ -417,8 +408,6 @@ gin::ObjectTemplateBuilder ChromePluginPlaceholder::GetObjectTemplateBuilder(
           .SetMethod<void (ChromePluginPlaceholder::*)()>(
               "didFinishLoading",
               &ChromePluginPlaceholder::DidFinishLoadingCallback)
-          .SetMethod("openAboutPlugins",
-                     &ChromePluginPlaceholder::OpenAboutPluginsCallback)
           .SetMethod("showPermissionBubble",
                      &ChromePluginPlaceholder::ShowPermissionBubbleCallback);
 

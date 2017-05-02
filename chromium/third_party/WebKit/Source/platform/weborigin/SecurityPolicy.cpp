@@ -193,8 +193,10 @@ Referrer SecurityPolicy::generateReferrer(ReferrerPolicy referrerPolicy,
 
 void SecurityPolicy::addOriginTrustworthyWhiteList(
     PassRefPtr<SecurityOrigin> origin) {
+#if DCHECK_IS_ON()
   // Must be called before we start other threads.
-  ASSERT(WTF::isBeforeThreadCreated());
+  DCHECK(WTF::isBeforeThreadCreated());
+#endif
   if (origin->isUnique())
     return;
   trustworthyOriginSet().add(origin->toRawString());
@@ -250,13 +252,13 @@ void SecurityPolicy::addOriginAccessWhitelistEntry(
   OriginAccessMap::AddResult result =
       originAccessMap().add(sourceString, nullptr);
   if (result.isNewEntry)
-    result.storedValue->value = wrapUnique(new OriginAccessWhiteList);
+    result.storedValue->value = WTF::wrapUnique(new OriginAccessWhiteList);
 
   OriginAccessWhiteList* list = result.storedValue->value.get();
-  list->append(OriginAccessEntry(destinationProtocol, destinationDomain,
-                                 allowDestinationSubdomains
-                                     ? OriginAccessEntry::AllowSubdomains
-                                     : OriginAccessEntry::DisallowSubdomains));
+  list->push_back(OriginAccessEntry(
+      destinationProtocol, destinationDomain,
+      allowDestinationSubdomains ? OriginAccessEntry::AllowSubdomains
+                                 : OriginAccessEntry::DisallowSubdomains));
 }
 
 void SecurityPolicy::removeOriginAccessWhitelistEntry(

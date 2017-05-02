@@ -93,7 +93,7 @@ void HistoryItem::setVisualViewportScrollOffset(const ScrollOffset& offset) {
   m_visualViewportScrollOffset = offset;
 }
 
-const ScrollOffset& HistoryItem::scrollOffset() const {
+const ScrollOffset& HistoryItem::getScrollOffset() const {
   return m_scrollOffset;
 }
 
@@ -118,14 +118,14 @@ void HistoryItem::setDocumentState(DocumentState* state) {
   m_documentState = state;
 }
 
-const Vector<String>& HistoryItem::documentState() {
+const Vector<String>& HistoryItem::getDocumentState() {
   if (m_documentState)
     m_documentStateVector = m_documentState->toStateVector();
   return m_documentStateVector;
 }
 
 Vector<String> HistoryItem::getReferencedFilePaths() {
-  return FormController::getReferencedFilePaths(documentState());
+  return FormController::getReferencedFilePaths(getDocumentState());
 }
 
 void HistoryItem::clearDocumentState() {

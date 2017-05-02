@@ -189,7 +189,7 @@ public class CronetPerfTestActivity extends Activity {
             }
             final ExperimentalCronetEngine.Builder cronetEngineBuilder =
                     new ExperimentalCronetEngine.Builder(CronetPerfTestActivity.this);
-            CronetTestUtil.setLibraryName(cronetEngineBuilder, "cronet_tests");
+            System.loadLibrary("cronet_tests");
             if (mProtocol == Protocol.QUIC) {
                 cronetEngineBuilder.enableQuic(true);
                 cronetEngineBuilder.addQuicHint(host, port, port);
@@ -451,8 +451,7 @@ public class CronetPerfTestActivity extends Activity {
                 }
 
                 @Override
-                public void onFailed(
-                        UrlRequest request, UrlResponseInfo info, UrlRequestException e) {
+                public void onFailed(UrlRequest request, UrlResponseInfo info, CronetException e) {
                     System.out.println("Async request failed with " + e);
                     mFailed = true;
                 }

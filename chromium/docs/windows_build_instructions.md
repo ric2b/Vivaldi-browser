@@ -1,76 +1,157 @@
-# Windows Build Instructions
+# Checking out and Building Chromium for Windows
 
-## Common checkout instructions
+There are instructions for other platforms linked from the 
+[get the code](get_the_code.md) page.
 
-This page covers Windows-specific setup and configuration. The
-[general checkout
-instructions](http://dev.chromium.org/developers/how-tos/get-the-code) cover
-installing depot tools and checking out the code via git.
+## Instructions for Google Employees
+
+Are you a Google employee? See
+[go/building-chrome-win](https://goto.google.com/building-chrome-win) instead.
+
+[TOC]
+
+## System requirements
+
+* A 64-bit Intel machine with at least 8GB of RAM. More than 16GB is highly
+  recommended.
+* At least 100GB of free disk space on an NTFS-formatted hard drive. FAT32
+  will not work, as some of the Git packfiles are larger than 4GB.
+* Visual Studio 2015 Update 3, see below (no other version is supported).
+* Windows 7 or newer.
 
 ## Setting up Windows
 
-You must set your Windows system locale to English, or else you may get
-build errors about "The file contains a character that cannot be
-represented in the current code page."
+### Visual Studio
 
-### Setting up the environment for Visual Studio
-
-You must build with Visual Studio 2015 Update 3; no other version is
-supported.
-
-You must have Windows 7 x64 or later. x86 OSs are unsupported.
-
-## Getting the compiler toolchain
-
-Follow the appropriate path below:
-
-### Open source contributors
-
-As of March 11, 2016 Chromium requires Visual Studio 2015 to build.
+As of December 8, 2016 Chromium requires Visual Studio 2015, with the 14393
+Windows SDK to build.
 
 Install Visual Studio 2015 Update 3 or later - Community Edition
 should work if its license is appropriate for you. Use the Custom Install option
 and select:
 
 - Visual C++, which will select three sub-categories including MFC
-- Universal Windows Apps Development Tools > Tools
-- Universal Windows Apps Development Tools > Windows 10 SDK (10.0.10586)
+- Universal Windows Apps Development Tools > Tools (1.4.1) and Windows 10 SDK
+  (10.0.14393)
 
-You must have the 10586 SDK installed or else you will hit compile errors such
-as redefined macros.
+You must have the 14393 SDK installed or else you will hit compile errors such
+as undefined or redefined macros.
 
-Install Windows Driver Kit (WDK) 10, or use some other method to get the
-Debugging Tools for Windows.
+Install the Windows SDK 10, and choose Debugging Tools For Windows when you
+install this in order to get windbg.
 
-Run `set DEPOT_TOOLS_WIN_TOOLCHAIN=0`, or set that variable in your
-global environment.
+## Install `depot_tools`
 
-Compilation is done through ninja, **not** Visual Studio.
+Download the [depot_tools bundle](https://storage.googleapis.com/chrome-infra/depot_tools.zip)
+and extract it somewhere.
 
-### Google employees
+*** note
+**Warning:** **DO NOT** use drag-n-drop or copy-n-paste extract from Explorer,
+this will not extract the hidden “.git” folder which is necessary for
+depot_tools to autoupdate itself. You can use “Extract all…” from the 
+context menu though.
+***
 
-Run: `download_from_google_storage --config` and follow the
-authentication instructions. **Note that you must authenticate with your
-@google.com credentials**, not @chromium.org. Enter "0" if asked for a
-project-id.
+Add depot_tools to the start of your PATH (must be ahead of any installs of 
+Python). Assuming you unzipped the bundle to C:\src\depot_tools, open:
 
-Run: `gclient sync` again to download and install the toolchain automatically.
+Control Panel → System and Security → System → Advanced system settings
 
-The toolchain will be in `depot_tools\win_toolchain\vs_files\<hash>`, and windbg
-can be found in `depot_tools\win_toolchain\vs_files\<hash>\win_sdk\Debuggers`.
+If you have Administrator access, Modify the PATH system variable and
+put `C:\src\depot_tools` at the front (or at least in front of any directory
+that might already have a copy of Python or Git).
 
-If you want the IDE for debugging and editing, you will need to install
-it separately, but this is optional and not needed to build Chromium.
+If you don't have Administrator access, you can add a user-level PATH
+environment variable and put `C:\src\depot_tools` at the front, but
+if your system PATH has a Python in it, you will be out of luck.
 
-## Using the Visual Studio IDE
+Also, add a DEPOT_TOOLS_WIN_TOOLCHAIN system variable in the same way, and set
+it to 0. This tells depot_tools to use your locally installed version of Visual
+Studio (by default, depot_tools will try to use a google-internal version).
+
+From a cmd.exe shell, run the command gclient (without arguments). On first
+run, gclient will install all the Windows-specific bits needed to work with
+the code, including msysgit and python.
+
+* If you run gclient from a non-cmd shell (e.g., cygwin, PowerShell),
+  it may appear to run properly, but msysgit, python, and other tools
+  may not get installed correctly.
+* If you see strange errors with the file system on the first run of gclient,
+  you may want to [disable Windows Indexing](http://tortoisesvn.tigris.org/faq.html#cantmove2).
+
+After running gclient open a command prompt and type `where python` and 
+confirm that the depot_tools `python.bat` comes ahead of any copies of 
+python.exe. Failing to ensure this can lead to overbuilding when 
+using gn - see [crbug.com/611087](https://crbug.com/611087).
+
+## Get the code
+
+Create a `chromium` directory for the checkout and change to it (you can call
+this whatever you like and put it wherever you like, as
+long as the full path has no spaces):
+
+```shell
+$ mkdir chromium && cd chromium
+```
+
+Run the `fetch` tool from `depot_tools` to check out the code and its
+dependencies.
+
+```shell
+$ fetch chromium
+```
+
+If you don't want the full repo history, you can save a lot of time by
+adding the `--no-history` flag to `fetch`.
+
+Expect the command to take 30 minutes on even a fast connection, and many
+hours on slower ones.
+
+When `fetch` completes, it will have created a hidden `.gclient` file and a
+directory called `src` in the working directory. The remaining instructions
+assume you have switched to the `src` directory:
+
+```shell
+$ cd src
+```
+
+*Optional*: You can also [install API
+keys](https://www.chromium.org/developers/how-tos/api-keys) if you want your
+build to talk to some Google services, but this is not necessary for most
+development and testing purposes.
+
+## Setting up the build
+
+Chromium uses [Ninja](https://ninja-build.org) as its main build tool along
+with a tool called [GN](../tools/gn/docs/quick_start.md) to generate `.ninja`
+files. You can create any number of *build directories* with different
+configurations. To create a build directory:
+
+```shell
+$ gn gen out/Default
+```
+
+* You only have to run this once for each new build directory, Ninja will
+  update the build files as needed.
+* You can replace `Default` with another name, but
+  it should be a subdirectory of `out`.
+* For other build arguments, including release settings, see [GN build
+  configuration](https://www.chromium.org/developers/gn-build-configuration).
+  The default will be a debug component build matching the current host
+  operating system and CPU.
+* For more info on GN, run `gn help` on the command line or read the
+  [quick start guide](../tools/gn/docs/quick_start.md).
+
+### Using the Visual Studio IDE
 
 If you want to use the Visual Studio IDE, use the `--ide` command line
 argument to `gn gen` when you generate your output directory (as described on
-the [get the code](http://dev.chromium.org/developers/how-tos/get-the-code)
+the [get the code](https://dev.chromium.org/developers/how-tos/get-the-code)
 page):
 
-```gn gen --ide=vs out\Default
-devenv out\Default\all.sln
+```shell
+$ gn gen --ide=vs out\Default
+$ devenv out\Default\all.sln
 ```
 
 GN will produce a file `all.sln` in your build directory. It will internally
@@ -85,24 +166,70 @@ for only the code you're interested in, although this will also limit what
 files appear in the project explorer. A minimal solution that will let you
 compile and run Chrome in the IDE but will not show any source files is:
 
-```gn gen --ide=vs --filters=//chrome out\Default```
+```
+$ gn gen --ide=vs --filters=//chrome out\Default
+```
 
 There are other options for controlling how the solution is generated, run `gn
 help gen` for the current documentation.
 
-## Performance tips
+### Faster builds
 
-1.  Have a lot of fast CPU cores and enough RAM to keep them all busy.
-    (Minimum recommended is 4-8 fast cores and 16-32 GB of RAM)
-2.  Reduce file system overhead by excluding build directories from
-    antivirus and indexing software.
-3.  Store the build tree on a fast disk (preferably SSD).
-4.  If you are primarily going to be doing debug development builds, you
-    should use the component build. Set the [build
-    arg](https://www.chromium.org/developers/gn-build-configuration)
-    `is_component_build = true`.
-    This will generate many DLLs and enable incremental linking, which makes
-    linking **much** faster in Debug.
+* Reduce file system overhead by excluding build directories from
+  antivirus and indexing software.
+* Store the build tree on a fast disk (preferably SSD).
 
 Still, expect build times of 30 minutes to 2 hours when everything has to
 be recompiled.
+
+## Build Chromium
+
+Build Chromium (the "chrome" target) with Ninja using the command:
+
+```shell
+$ ninja -C out\Default chrome
+```
+
+You can get a list of all of the other build targets from GN by running
+`gn ls out/Default` from the command line. To compile one, pass to Ninja
+the GN label with no preceding "//" (so for `//chrome/test:unit_tests`
+use ninja -C out/Default chrome/test:unit_tests`).
+
+## Run Chromium
+
+Once it is built, you can simply run the browser:
+
+```shell
+$ out\Default\chrome.exe
+```
+
+(The ".exe" suffix in the command is actually optional).
+
+## Running test targets
+
+You can run the tests in the same way. You can also limit which tests are
+run using the `--gtest_filter` arg, e.g.:
+
+```shell
+$ out\Default\unit_tests.exe --gtest_filter="PushClientTest.*"
+```
+
+You can find out more about GoogleTest at its
+[GitHub page](https://github.com/google/googletest).
+
+## Update your checkout
+
+To update an existing checkout, you can run
+
+```shell
+$ git rebase-update
+$ gclient sync
+```
+
+The first command updates the primary Chromium source repository and rebases
+any of your local branches on top of tip-of-tree (aka the Git branch `origin/master`).
+If you don't want to use this script, you can also just use `git pull` or 
+other common Git commands to update the repo.
+
+The second command syncs the subrepositories to the appropriate versions and
+re-runs the hooks as needed.

@@ -14,22 +14,21 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
+#include "ui/events/latency_info.h"
 
 namespace ui {
-class CompositorVSyncManager;
+class ContextProviderCommandBuffer;
 }
 
 namespace content {
-class ContextProviderCommandBuffer;
 class ReflectorTexture;
 
 class OffscreenBrowserCompositorOutputSurface
     : public BrowserCompositorOutputSurface {
  public:
   OffscreenBrowserCompositorOutputSurface(
-      scoped_refptr<ContextProviderCommandBuffer> context,
-      scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      cc::SyntheticBeginFrameSource* begin_frame_source,
+      scoped_refptr<ui::ContextProviderCommandBuffer> context,
+      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator);
 
@@ -43,7 +42,8 @@ class OffscreenBrowserCompositorOutputSurface
   void Reshape(const gfx::Size& size,
                float scale_factor,
                const gfx::ColorSpace& color_space,
-               bool alpha) override;
+               bool alpha,
+               bool stencil) override;
   void BindFramebuffer() override;
   void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   bool IsDisplayedAsOverlayPlane() const override;
@@ -57,7 +57,7 @@ class OffscreenBrowserCompositorOutputSurface
   void SetSurfaceSuspendedForRecycle(bool suspended) override {};
 #endif
 
-  void OnSwapBuffersComplete();
+  void OnSwapBuffersComplete(const std::vector<ui::LatencyInfo>& latency_info);
 
   cc::OutputSurfaceClient* client_ = nullptr;
   gfx::Size reshape_size_;

@@ -58,11 +58,8 @@ class AppBannerManager : public content::WebContentsObserver,
   // Fast-forwards the current time for testing.
   static void SetTimeDeltaForTesting(int days);
 
-  // Sets the weights applied to direct and indirect navigations for triggering
-  // the banner. Deprecated and will be removed when app banners fully migrates
-  // to using site engagement as a trigger.
-  static void SetEngagementWeights(double direct_engagement,
-                                   double indirect_engagement);
+  // Sets the total engagement required for triggering the banner in testing.
+  static void SetTotalEngagementToTrigger(double engagement);
 
   // Returns whether or not the URLs match for everything except for the ref.
   static bool URLsAreForTheSamePage(const GURL& first, const GURL& second);
@@ -70,6 +67,11 @@ class AppBannerManager : public content::WebContentsObserver,
   // Requests an app banner. If |is_debug_mode| is true, any failure in the
   // pipeline will be reported to the devtools console.
   virtual void RequestAppBanner(const GURL& validated_url, bool is_debug_mode);
+
+  // Informs the page that it has been installed via an app banner.
+  // This is redundant for the beforeinstallprompt event's promise being
+  // resolved, but is required by the install event spec.
+  void OnInstall();
 
   // Sends a message to the renderer that the user accepted the banner. Does
   // nothing if |request_id| does not match the current request.
@@ -102,6 +104,11 @@ class AppBannerManager : public content::WebContentsObserver,
   explicit AppBannerManager(content::WebContents* web_contents);
   ~AppBannerManager() override;
 
+  // Returns true if the banner should be shown. Returns false if the banner has
+  // been shown too recently, or if the app has already been installed.
+  // GetAppIdentifier() must return a valid value for this method to work.
+  bool CheckIfShouldShowBanner();
+
   // Return a string identifying this app for metrics.
   virtual std::string GetAppIdentifier();
 
@@ -114,8 +121,8 @@ class AppBannerManager : public content::WebContentsObserver,
   std::string GetStatusParam(InstallableStatusCode code);
 
   // Returns the ideal and minimum icon sizes required for being installable.
-  virtual int GetIdealIconSizeInDp();
-  virtual int GetMinimumIconSizeInDp();
+  virtual int GetIdealIconSizeInPx();
+  virtual int GetMinimumIconSizeInPx();
 
   // Returns a WeakPtr to this object. Exposed so subclasses/infobars may
   // may bind callbacks without needing their own WeakPtrFactory.
@@ -127,7 +134,8 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Returns true if the webapp at |start_url| has already been installed.
   virtual bool IsWebAppInstalled(content::BrowserContext* browser_context,
-                                 const GURL& start_url);
+                                 const GURL& start_url,
+                                 const GURL& manifest_url);
 
   // Callback invoked by the InstallableManager once it has fetched the page's
   // manifest.
@@ -153,6 +161,9 @@ class AppBannerManager : public content::WebContentsObserver,
   void ReportStatus(content::WebContents* web_contents,
                     InstallableStatusCode code);
 
+  // Resets all fetched data for the current page.
+  virtual void ResetCurrentPageData();
+
   // Stops the banner pipeline, preventing any outstanding callbacks from
   // running and resetting the manager state. This method is virtual to allow
   // tests to intercept it and verify correct behaviour.
@@ -160,9 +171,8 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Sends a message to the renderer that the page has met the requirements to
   // show a banner. The page can respond to cancel the banner (and possibly
-  // display it later), or otherwise allow it to be shown. This is virtual to
-  // allow tests to mock out the renderer IPC.
-  virtual void SendBannerPromptRequest();
+  // display it later), or otherwise allow it to be shown.
+  void SendBannerPromptRequest();
 
   // content::WebContentsObserver overrides.
   void DidStartNavigation(content::NavigationHandle* handle) override;
@@ -219,9 +229,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // platform-specific.
   virtual void ShowBanner() = 0;
 
-  // Returns true if the banner should be shown.
-  bool CheckIfShouldShowBanner();
-
   // Called after the manager sends a message to the renderer regarding its
   // intention to show a prompt. The renderer will send a message back with the
   // opportunity to cancel.
@@ -232,9 +239,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // Called when Blink has prevented a banner from being shown, and is now
   // requesting that it be shown later.
   void DisplayAppBanner() override;
-
-  // The type of navigation made to the page
-  ui::PageTransition last_transition_type_;
 
   // Fetches the data required to display a banner for the current page.
   InstallableManager* manager_;

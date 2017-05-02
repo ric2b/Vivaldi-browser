@@ -14,7 +14,6 @@ modules/indexeddb/IDBOpenDBRequest
 modules/indexeddb/IDBRequest
 modules/indexeddb/IDBTransaction
 modules/mediarecorder/MediaRecorder
-modules/mediasession/MediaSession
 modules/mediasource/MediaSource
 modules/mediasource/SourceBuffer
 modules/mediasource/SourceBufferList
@@ -42,6 +41,7 @@ modules/serviceworkers/ServiceWorkerRegistration
 modules/speech/SpeechRecognition
 modules/speech/SpeechSynthesis
 modules/speech/SpeechSynthesisUtterance
+modules/vr/VRDisplay
 modules/webaudio/AudioContext
 modules/webaudio/AudioNode
 modules/webmidi/MIDIAccess

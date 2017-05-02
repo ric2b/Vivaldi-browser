@@ -34,13 +34,12 @@ import sys
 import traceback
 
 from webkitpy.common.host import Host
-from webkitpy.common.system.executive import Executive
 from webkitpy.layout_tests.controllers.manager import Manager
+from webkitpy.layout_tests.generate_results_dashboard import DashBoardGenerator
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port.factory import configuration_options, platform_options
 from webkitpy.layout_tests.views import buildbot_results
 from webkitpy.layout_tests.views import printing
-from webkitpy.layout_tests.generate_results_dashboard import DashBoardGenerator
 
 _log = logging.getLogger(__name__)
 
@@ -59,9 +58,9 @@ def main(argv, stdout, stderr):
 
     try:
         port = host.port_factory.get(options.platform, options)
-    except (NotImplementedError, ValueError) as e:
+    except (NotImplementedError, ValueError) as error:
         # FIXME: is this the best way to handle unsupported port names?
-        print >> stderr, str(e)
+        print >> stderr, str(error)
         return test_run_results.UNEXPECTED_ERROR_EXIT_STATUS
 
     try:
@@ -70,12 +69,12 @@ def main(argv, stdout, stderr):
     # We need to still handle KeyboardInterrupt, at least for webkitpy unittest cases.
     except KeyboardInterrupt:
         return test_run_results.INTERRUPTED_EXIT_STATUS
-    except test_run_results.TestRunException as e:
-        print >> stderr, e.msg
-        return e.code
-    except BaseException as e:
-        if isinstance(e, Exception):
-            print >> stderr, '\n%s raised: %s' % (e.__class__.__name__, str(e))
+    except test_run_results.TestRunException as error:
+        print >> stderr, error.msg
+        return error.code
+    except BaseException as error:
+        if isinstance(error, Exception):
+            print >> stderr, '\n%s raised: %s' % (error.__class__.__name__, error)
             traceback.print_exc(file=stderr)
         return test_run_results.UNEXPECTED_ERROR_EXIT_STATUS
 
@@ -331,13 +330,13 @@ def parse_args(args):
             optparse.make_option(
                 "--order",
                 action="store",
-                default="natural",
+                default="random",
                 help=("Determine the order in which the test cases will be run. "
                       "'none' == use the order in which the tests were listed "
                       "either in arguments or test list, "
-                      "'natural' == use the natural order (default), "
-                      "'random' == pseudo-random order. Seed can be specified "
-                      "via --seed, otherwise it will default to the current unix timestamp.")),
+                      "'random' == pseudo-random order (default). Seed can be specified "
+                      "via --seed, otherwise it will default to the current unix timestamp. "
+                      "'natural' == use the natural order")),
             optparse.make_option(
                 "--profile",
                 action="store_true",
@@ -375,6 +374,18 @@ def parse_args(args):
             optparse.make_option(
                 "--run-part",
                 help="Run a specified part (n:m), the nth of m parts, of the layout tests"),
+            optparse.make_option(
+                "--total-shards",
+                type=int,
+                help=('Total number of shards being used for this test run. '
+                      'Must be used with --shard-index. '
+                      '(The user of this script is responsible for spawning '
+                      'all of the shards.)')),
+            optparse.make_option(
+                "--shard-index",
+                type=int,
+                help=('Shard index [0..total_shards) of this test run. '
+                      'Must be used with --total-shards.')),
             optparse.make_option(
                 "--run-singly",
                 action="store_true",
@@ -541,10 +552,14 @@ def _set_up_derived_options(port, options, args):
     if not options.skipped:
         options.skipped = 'default'
 
-    if 'GTEST_SHARD_INDEX' in port.host.environ and 'GTEST_TOTAL_SHARDS' in port.host.environ:
-        shard_index = int(port.host.environ['GTEST_SHARD_INDEX']) + 1
-        total_shards = int(port.host.environ['GTEST_TOTAL_SHARDS']) + 1
-        options.run_part = '{0}:{1}'.format(shard_index, total_shards)
+    if not options.run_part:
+        if not options.total_shards and 'GTEST_TOTAL_SHARDS' in port.host.environ:
+            options.total_shards = int(port.host.environ['GTEST_TOTAL_SHARDS']) + 1
+        if not options.shard_index and 'GTEST_SHARD_INDEX' in port.host.environ:
+            options.shard_index = int(port.host.environ['GTEST_SHARD_INDEX'])
+        if options.shard_index is not None and options.total_shards is not None:
+            options.run_part = '%d:%d' % (int(options.shard_index) + 1,
+                                          int(options.total_shards))
 
     if not options.seed:
         options.seed = port.host.time()

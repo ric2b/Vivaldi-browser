@@ -43,13 +43,11 @@ class AccessPolicy;
 class DisplayManager;
 class Display;
 class DragTargetConnection;
-class EventMatcher;
 class ServerWindow;
 class TargetedEvent;
 class WindowManagerDisplayRoot;
 class WindowManagerState;
 class WindowServer;
-class WindowTreeTest;
 
 namespace test {
 class WindowTreeTestApi;
@@ -260,9 +258,7 @@ class WindowTree : public mojom::WindowTree,
                                      const ServerWindow* transient_window,
                                      bool originated_change);
   void ProcessWindowSurfaceChanged(ServerWindow* window,
-                                   const cc::SurfaceId& surface_id,
-                                   const gfx::Size& frame_size,
-                                   float device_scale_factor);
+                                   const cc::SurfaceInfo& surface_info);
 
   // Sends this event to the client if it matches an active pointer watcher.
   // |target_window| is the target of the event, and may be null or not known
@@ -338,7 +334,7 @@ class WindowTree : public mojom::WindowTree,
   // Converts Window(s) to WindowData(s) for transport. This assumes all the
   // windows are valid for the client. The parent of windows the client is not
   // allowed to see are set to NULL (in the returned WindowData(s)).
-  mojo::Array<mojom::WindowDataPtr> WindowsToWindowDatas(
+  std::vector<mojom::WindowDataPtr> WindowsToWindowDatas(
       const std::vector<const ServerWindow*>& windows);
   mojom::WindowDataPtr WindowToWindowData(const ServerWindow* window);
 
@@ -376,12 +372,14 @@ class WindowTree : public mojom::WindowTree,
   // WindowTree:
   void NewWindow(uint32_t change_id,
                  Id transport_window_id,
-                 mojo::Map<mojo::String, mojo::Array<uint8_t>>
+                 const base::Optional<
+                     std::unordered_map<std::string, std::vector<uint8_t>>>&
                      transport_properties) override;
-  void NewTopLevelWindow(uint32_t change_id,
-                         Id transport_window_id,
-                         mojo::Map<mojo::String, mojo::Array<uint8_t>>
-                             transport_properties) override;
+  void NewTopLevelWindow(
+      uint32_t change_id,
+      Id transport_window_id,
+      const std::unordered_map<std::string, std::vector<uint8_t>>&
+          transport_properties) override;
   void DeleteWindow(uint32_t change_id, Id transport_window_id) override;
   void AddWindow(uint32_t change_id, Id parent_id, Id child_id) override;
   void RemoveWindowFromParent(uint32_t change_id, Id window_id) override;
@@ -397,7 +395,7 @@ class WindowTree : public mojom::WindowTree,
                      mojom::OrderDirection direction) override;
   void GetWindowTree(
       Id window_id,
-      const base::Callback<void(mojo::Array<mojom::WindowDataPtr>)>& callback)
+      const base::Callback<void(std::vector<mojom::WindowDataPtr>)>& callback)
       override;
   void SetCapture(uint32_t change_id, Id window_id) override;
   void ReleaseCapture(uint32_t change_id, Id window_id) override;
@@ -409,16 +407,16 @@ class WindowTree : public mojom::WindowTree,
   void SetWindowVisibility(uint32_t change_id,
                            Id window_id,
                            bool visible) override;
-  void SetWindowProperty(uint32_t change_id,
-                         Id transport_window_id,
-                         const mojo::String& name,
-                         mojo::Array<uint8_t> value) override;
+  void SetWindowProperty(
+      uint32_t change_id,
+      Id transport_window_id,
+      const std::string& name,
+      const base::Optional<std::vector<uint8_t>>& value) override;
   void SetWindowOpacity(uint32_t change_id,
                         Id window_id,
                         float opacity) override;
   void AttachCompositorFrameSink(
       Id transport_window_id,
-      mojom::CompositorFrameSinkType type,
       cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink,
       cc::mojom::MojoCompositorFrameSinkClientPtr client) override;
   void Embed(Id transport_window_id,
@@ -439,10 +437,11 @@ class WindowTree : public mojom::WindowTree,
                         mojo::TextInputStatePtr state) override;
   void OnWindowInputEventAck(uint32_t event_id,
                              mojom::EventResult result) override;
-  void SetClientArea(
-      Id transport_window_id,
-      const gfx::Insets& insets,
-      mojo::Array<gfx::Rect> transport_additional_client_areas) override;
+  void DeactivateWindow(Id window_id) override;
+  void SetClientArea(Id transport_window_id,
+                     const gfx::Insets& insets,
+                     const base::Optional<std::vector<gfx::Rect>>&
+                         transport_additional_client_areas) override;
   void SetCanAcceptDrops(Id window_id, bool accepts_drops) override;
   void SetHitTestMask(Id transport_window_id,
                       const base::Optional<gfx::Rect>& mask) override;
@@ -451,10 +450,11 @@ class WindowTree : public mojom::WindowTree,
       override;
   void GetCursorLocationMemory(const GetCursorLocationMemoryCallback& callback)
       override;
-  void PerformDragDrop(uint32_t change_id,
-                       Id source_window_id,
-                       mojo::Map<mojo::String, mojo::Array<uint8_t>> drag_data,
-                       uint32_t drag_operation) override;
+  void PerformDragDrop(
+      uint32_t change_id,
+      Id source_window_id,
+      const std::unordered_map<std::string, std::vector<uint8_t>>& drag_data,
+      uint32_t drag_operation) override;
   void CancelDragDrop(Id window_id) override;
   void PerformWindowMove(uint32_t change_id,
                          Id window_id,
@@ -463,9 +463,8 @@ class WindowTree : public mojom::WindowTree,
   void CancelWindowMove(Id window_id) override;
 
   // mojom::WindowManagerClient:
-  void AddAccelerator(uint32_t id,
-                      mojom::EventMatcherPtr event_matcher,
-                      const AddAcceleratorCallback& callback) override;
+  void AddAccelerators(std::vector<mojom::AcceleratorPtr> accelerators,
+                       const AddAcceleratorsCallback& callback) override;
   void RemoveAccelerator(uint32_t id) override;
   void AddActivationParent(Id transport_window_id) override;
   void RemoveActivationParent(Id transport_window_id) override;
@@ -499,7 +498,8 @@ class WindowTree : public mojom::WindowTree,
 
   // DragTargetConnection:
   void PerformOnDragDropStart(
-      mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) override;
+      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
+      override;
   void PerformOnDragEnter(
       const ServerWindow* window,
       uint32_t event_flags,

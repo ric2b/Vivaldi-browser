@@ -13,13 +13,13 @@
 class LocationBarView;
 
 namespace ui {
-class KeyEvent;
 class LocatedEvent;
 }
 
 // Use a LocationIconView to display an icon on the leading side of the edit
 // field. It shows the user's current action (while the user is editing), or the
-// page security status (after navigation has completed).
+// page security status (after navigation has completed), or extension name (if
+// the URL is a chrome-extension:// URL).
 class LocationIconView : public IconLabelBubbleView,
                          public gfx::AnimationDelegate {
  public:
@@ -37,6 +37,7 @@ class LocationIconView : public IconLabelBubbleView,
                       base::string16* tooltip) const override;
   SkColor GetTextColor() const override;
   bool OnActivate(const ui::Event& event) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // Whether we should show the tooltip for this icon or not.
   void set_show_tooltip(bool show_tooltip) { show_tooltip_ = show_tooltip; }
@@ -46,10 +47,9 @@ class LocationIconView : public IconLabelBubbleView,
 
   const gfx::FontList& GetFontList() const { return font_list(); }
 
-  // Sets whether the verbose security state text should be visible.
-  // |should_animate| controls whether any necessary transition to this state
-  // should be animated.
-  void SetSecurityState(bool should_show, bool should_animate);
+  // Sets whether the text should be visible. |should_animate| controls whether
+  // any necessary transition to this state should be animated.
+  void SetTextVisibility(bool should_show, bool should_animate);
 
  private:
   // IconLabelBubbleView:

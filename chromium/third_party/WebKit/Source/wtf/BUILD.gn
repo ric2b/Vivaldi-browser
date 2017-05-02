@@ -110,8 +110,9 @@ component("wtf") {
     "SaturatedArithmetic.h",
     "SizeAssertions.h",
     "SizeLimits.cpp",
-    "SpinLock.cpp",
     "SpinLock.h",
+    "StackUtil.cpp",
+    "StackUtil.h",
     "StaticConstructors.h",
     "StdLibExtras.h",
     "StringExtras.h",
@@ -124,6 +125,7 @@ component("wtf") {
     "ThreadingPrimitives.h",
     "ThreadingPthreads.cpp",
     "ThreadingWin.cpp",
+    "Time.h",
     "TreeNode.h",
     "TypeTraits.h",
     "Vector.h",
@@ -134,17 +136,10 @@ component("wtf") {
     "WTFThreadData.cpp",
     "WTFThreadData.h",
     "WeakPtr.h",
-    "allocator/AddressSpaceRandomization.cpp",
-    "allocator/AddressSpaceRandomization.h",
-    "allocator/PageAllocator.cpp",
-    "allocator/PageAllocator.h",
-    "allocator/PartitionAlloc.cpp",
-    "allocator/PartitionAlloc.h",
     "allocator/PartitionAllocator.cpp",
     "allocator/PartitionAllocator.h",
     "allocator/Partitions.cpp",
     "allocator/Partitions.h",
-    "asm/SaturatedArithmeticARM.h",
     "build_config.h",
     "debug/Alias.h",
     "debug/CrashLogging.h",
@@ -248,6 +243,7 @@ component("wtf") {
   configs += [
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:non_test_config",
+    "//third_party/WebKit/Source:blink_pch",
   ]
 
   defines = [ "WTF_IMPLEMENTATION=1" ]
@@ -318,13 +314,12 @@ test("wtf_unittests") {
     "OptionalTest.cpp",
     "PassRefPtrTest.cpp",
     "RefPtrTest.cpp",
-    "SaturatedArithmeticTest.cpp",
     "StringExtrasTest.cpp",
     "StringHasherTest.cpp",
+    "TimeTest.cpp",
     "TreeNodeTest.cpp",
     "TypeTraitsTest.cpp",
     "VectorTest.cpp",
-    "allocator/PartitionAllocTest.cpp",
     "dtoa_test.cpp",
     "testing/RunAllTests.cpp",
     "text/AtomicStringTest.cpp",
@@ -334,6 +329,7 @@ test("wtf_unittests") {
     "text/StringBuilderTest.cpp",
     "text/StringImplTest.cpp",
     "text/StringOperatorsTest.cpp",
+    "text/StringToNumberTest.cpp",
     "text/StringViewTest.cpp",
     "text/TextCodecICUTest.cpp",
     "text/TextCodecLatin1Test.cpp",
@@ -353,7 +349,10 @@ test("wtf_unittests") {
     cflags = [ "/wd4068" ]  # Unknown pragma.
   }
 
-  configs += [ "//third_party/WebKit/Source:config" ]
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:blink_pch",
+  ]
 
   deps = [
     ":wtf",

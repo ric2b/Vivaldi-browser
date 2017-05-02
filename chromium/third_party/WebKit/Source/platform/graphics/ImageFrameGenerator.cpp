@@ -28,7 +28,7 @@
 #include "SkData.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/image-decoders/ImageDecoder.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "third_party/skia/include/core/SkYUVSizeInfo.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -104,10 +104,10 @@ static bool updateYUVComponentSizes(ImageDecoder* decoder,
 }
 
 ImageFrameGenerator::ImageFrameGenerator(const SkISize& fullSize,
-                                         sk_sp<SkColorSpace> colorSpace,
-                                         bool isMultiFrame)
+                                         bool isMultiFrame,
+                                         const ColorBehavior& colorBehavior)
     : m_fullSize(fullSize),
-      m_colorSpace(std::move(colorSpace)),
+      m_decoderColorBehavior(colorBehavior),
       m_isMultiFrame(isMultiFrame),
       m_decodeFailed(false),
       m_yuvDecodingFailed(false),
@@ -174,15 +174,14 @@ bool ImageFrameGenerator::decodeToYUV(SegmentReader* data,
     return false;
   }
 
-  std::unique_ptr<ImageDecoder> decoder =
-      ImageDecoder::create(data, true, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::ColorSpaceApplied);
+  std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(
+      data, true, ImageDecoder::AlphaPremultiplied, m_decoderColorBehavior);
   // getYUVComponentSizes was already called and was successful, so
   // ImageDecoder::create must succeed.
   ASSERT(decoder);
 
   std::unique_ptr<ImagePlanes> imagePlanes =
-      makeUnique<ImagePlanes>(planes, rowBytes);
+      WTF::makeUnique<ImagePlanes>(planes, rowBytes);
   decoder->setImagePlanes(std::move(imagePlanes));
 
   ASSERT(decoder->canDecodeToYUV());
@@ -226,7 +225,7 @@ SkBitmap ImageFrameGenerator::tryToResumeDecode(
   // the decoder is owned by ImageDecodingStore.
   std::unique_ptr<ImageDecoder> decoderContainer;
   if (!resumeDecoding)
-    decoderContainer = wrapUnique(decoder);
+    decoderContainer = WTF::wrapUnique(decoder);
 
   if (fullSizeImage.isNull()) {
     // If decoding has failed, we can save work in the future by
@@ -298,7 +297,7 @@ bool ImageFrameGenerator::decode(SegmentReader* data,
     if (!*decoder) {
       *decoder = ImageDecoder::create(data, allDataReceived,
                                       ImageDecoder::AlphaPremultiplied,
-                                      ImageDecoder::ColorSpaceApplied)
+                                      m_decoderColorBehavior)
                      .release();
       // The newly created decoder just grabbed the data.  No need to reset it.
       shouldCallSetData = false;
@@ -366,15 +365,15 @@ bool ImageFrameGenerator::getYUVComponentSizes(SegmentReader* data,
   if (m_yuvDecodingFailed)
     return false;
 
-  std::unique_ptr<ImageDecoder> decoder =
-      ImageDecoder::create(data, true, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::ColorSpaceApplied);
+  std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(
+      data, true, ImageDecoder::AlphaPremultiplied, m_decoderColorBehavior);
   if (!decoder)
     return false;
 
   // Setting a dummy ImagePlanes object signals to the decoder that we want to
   // do YUV decoding.
-  std::unique_ptr<ImagePlanes> dummyImagePlanes = wrapUnique(new ImagePlanes);
+  std::unique_ptr<ImagePlanes> dummyImagePlanes =
+      WTF::wrapUnique(new ImagePlanes);
   decoder->setImagePlanes(std::move(dummyImagePlanes));
 
   return updateYUVComponentSizes(decoder.get(), sizeInfo->fSizes,

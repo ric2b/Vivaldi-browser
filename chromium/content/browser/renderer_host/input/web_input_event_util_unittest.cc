@@ -49,12 +49,11 @@ TEST(WebInputEventUtilTest, MotionEventConversion) {
     event.set_flags(ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
     event.set_unique_event_id(123456U);
 
-    WebTouchEvent expected_event;
-    expected_event.type = WebInputEvent::TouchStart;
+    WebTouchEvent expected_event(
+        WebInputEvent::TouchStart,
+        WebInputEvent::ShiftKey | WebInputEvent::AltKey,
+        (event.GetEventTime() - base::TimeTicks()).InSecondsF());
     expected_event.touchesLength = 1;
-    expected_event.timeStampSeconds =
-        (event.GetEventTime() - base::TimeTicks()).InSecondsF();
-    expected_event.modifiers = WebInputEvent::ShiftKey | WebInputEvent::AltKey;
     WebTouchPoint expected_pointer;
     expected_pointer.id = pointer.id;
     expected_pointer.state = WebTouchPoint::StatePressed;
@@ -112,10 +111,10 @@ TEST(WebInputEventUtilTest, ScrollUpdateConversion) {
 
   blink::WebGestureEvent web_event =
       ui::CreateWebGestureEventFromGestureEventData(event);
-  EXPECT_EQ(WebInputEvent::GestureScrollUpdate, web_event.type);
-  EXPECT_EQ(0, web_event.modifiers);
+  EXPECT_EQ(WebInputEvent::GestureScrollUpdate, web_event.type());
+  EXPECT_EQ(0, web_event.modifiers());
   EXPECT_EQ((timestamp - base::TimeTicks()).InSecondsF(),
-            web_event.timeStampSeconds);
+            web_event.timeStampSeconds());
   EXPECT_EQ(gfx::ToFlooredInt(pos.x()), web_event.x);
   EXPECT_EQ(gfx::ToFlooredInt(pos.y()), web_event.y);
   EXPECT_EQ(gfx::ToFlooredInt(raw_pos.x()), web_event.globalX);

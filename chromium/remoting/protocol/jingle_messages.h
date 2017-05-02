@@ -10,7 +10,7 @@
 #include <string>
 
 #include "remoting/protocol/errors.h"
-#include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
+#include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 #include "third_party/webrtc/p2p/base/candidate.h"
 
 namespace remoting {
@@ -90,6 +90,11 @@ struct JingleMessage {
   // message when parsing fails.
   bool ParseXml(const buzz::XmlElement* stanza, std::string* error);
 
+  // Adds an XmlElement into |attachments|. This function implicitly creates
+  // |attachments| if it's empty, and |attachment| should not be an empty
+  // unique_ptr.
+  void AddAttachment(std::unique_ptr<buzz::XmlElement> attachment);
+
   std::unique_ptr<buzz::XmlElement> ToXml() const;
 
   SignalingAddress from;
@@ -105,6 +110,10 @@ struct JingleMessage {
 
   // Content of session-info messages.
   std::unique_ptr<buzz::XmlElement> info;
+
+  // Content of plugin message. The node is read or written by all plugins, and
+  // ActionType independent.
+  std::unique_ptr<buzz::XmlElement> attachments;
 
   // Value from the <reason> tag if it is present in the
   // message. Useful mainly for session-terminate messages, but Jingle

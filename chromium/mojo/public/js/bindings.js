@@ -3,115 +3,261 @@
 // found in the LICENSE file.
 
 define("mojo/public/js/bindings", [
-  "mojo/public/js/router",
   "mojo/public/js/core",
-], function(router, core) {
+  "mojo/public/js/interface_types",
+  "mojo/public/js/router",
+], function(core, types, router) {
 
-  var Router = router.Router;
+  // ---------------------------------------------------------------------------
 
-  var kProxyProperties = Symbol("proxyProperties");
-  var kStubProperties = Symbol("stubProperties");
-
-  // Public proxy class properties that are managed at runtime by the JS
-  // bindings. See ProxyBindings below.
-  function ProxyProperties(receiver) {
-    this.receiver = receiver;
+  function makeRequest(interfacePtr) {
+    var pipe = core.createMessagePipe();
+    interfacePtr.ptr.bind(new types.InterfacePtrInfo(pipe.handle0, 0));
+    return new types.InterfaceRequest(pipe.handle1);
   }
 
-  // TODO(hansmuller): remove then after 'Client=' has been removed from Mojom.
-  ProxyProperties.prototype.getLocalDelegate = function() {
-    return this.local && StubBindings(this.local).delegate;
+  // ---------------------------------------------------------------------------
+
+  // Operations used to setup/configure an interface pointer. Exposed as the
+  // |ptr| field of generated interface pointer classes.
+  // |ptrInfoOrHandle| could be omitted and passed into bind() later.
+  function InterfacePtrController(interfaceType, ptrInfoOrHandle) {
+    this.version = 0;
+
+    this.interfaceType_ = interfaceType;
+    this.router_ = null;
+    this.proxy_ = null;
+
+    // |router_| is lazily initialized. |handle_| is valid between bind() and
+    // the initialization of |router_|.
+    this.handle_ = null;
+
+    if (ptrInfoOrHandle)
+      this.bind(ptrInfoOrHandle);
   }
 
-  // TODO(hansmuller): remove then after 'Client=' has been removed from Mojom.
-  ProxyProperties.prototype.setLocalDelegate = function(impl) {
-    if (this.local)
-      StubBindings(this.local).delegate = impl;
-    else
-      throw new Error("no stub object");
-  }
+  InterfacePtrController.prototype.bind = function(ptrInfoOrHandle) {
+    this.reset();
 
-  ProxyProperties.prototype.close = function() {
-    this.connection.close();
-  }
+    if (ptrInfoOrHandle instanceof types.InterfacePtrInfo) {
+      this.version = ptrInfoOrHandle.version;
+      this.handle_ = ptrInfoOrHandle.handle;
+    } else {
+      this.handle_ = ptrInfoOrHandle;
+    }
+  };
 
-  // Public stub class properties that are managed at runtime by the JS
-  // bindings. See StubBindings below.
-  function StubProperties(delegate) {
-    this.delegate = delegate;
-  }
+  InterfacePtrController.prototype.isBound = function() {
+    return this.router_ !== null || this.handle_ !== null;
+  };
 
-  StubProperties.prototype.close = function() {
-    this.connection.close();
-  }
+  // Although users could just discard the object, reset() closes the pipe
+  // immediately.
+  InterfacePtrController.prototype.reset = function() {
+    this.version = 0;
+    if (this.router_) {
+      this.router_.close();
+      this.router_ = null;
 
-  // The base class for generated proxy classes.
-  function ProxyBase(receiver) {
-    this[kProxyProperties] = new ProxyProperties(receiver);
+      this.proxy_ = null;
+    }
+    if (this.handle_) {
+      core.close(this.handle_);
+      this.handle_ = null;
+    }
+  };
 
-    // TODO(hansmuller): Temporary, for Chrome backwards compatibility.
-    if (receiver instanceof Router)
-      this.receiver_ = receiver;
-  }
+  InterfacePtrController.prototype.setConnectionErrorHandler
+      = function(callback) {
+    if (!this.isBound())
+      throw new Error("Cannot set connection error handler if not bound.");
 
-  // The base class for generated stub classes.
-  function StubBase(delegate) {
-    this[kStubProperties] = new StubProperties(delegate);
-  }
+    this.configureProxyIfNecessary_();
+    this.router_.setErrorHandler(callback);
+  };
 
-  // TODO(hansmuller): remove everything except the connection property doc
-  // after 'Client=' has been removed from Mojom.
+  InterfacePtrController.prototype.passInterface = function() {
+    var result;
+    if (this.router_) {
+      // TODO(yzshen): Fix Router interface to support extracting handle.
+      result = new types.InterfacePtrInfo(
+          this.router_.connector_.handle_, this.version);
+      this.router_.connector_.handle_ = null;
+    } else {
+      // This also handles the case when this object is not bound.
+      result = new types.InterfacePtrInfo(this.handle_, this.version);
+      this.handle_ = null;
+    }
 
-  // Provides access to properties added to a proxy object without risking
-  // Mojo interface name collisions. Unless otherwise specified, the initial
-  // value of all properties is undefined.
+    this.reset();
+    return result;
+  };
+
+  InterfacePtrController.prototype.getProxy = function() {
+    this.configureProxyIfNecessary_();
+    return this.proxy_;
+  };
+
+  InterfacePtrController.prototype.enableTestingMode = function() {
+    this.configureProxyIfNecessary_();
+    return this.router_.enableTestingMode();
+  };
+
+  InterfacePtrController.prototype.configureProxyIfNecessary_ = function() {
+    if (!this.handle_)
+      return;
+
+    this.router_ = new router.Router(this.handle_);
+    this.handle_ = null;
+    this.router_ .setPayloadValidators([this.interfaceType_.validateResponse]);
+
+    this.proxy_ = new this.interfaceType_.proxyClass(this.router_);
+  };
+
+  // TODO(yzshen): Implement the following methods.
+  //   InterfacePtrController.prototype.queryVersion
+  //   InterfacePtrController.prototype.requireVersion
+
+  // ---------------------------------------------------------------------------
+
+  // |request| could be omitted and passed into bind() later.
   //
-  // ProxyBindings(proxy).connection - The Connection object that links the
-  //   proxy for a remote Mojo service to an optional local stub for a local
-  //   service. The value of ProxyBindings(proxy).connection.remote == proxy.
+  // Example:
   //
-  // ProxyBindings(proxy).local  - The "local" stub object whose delegate
-  //   implements the proxy's Mojo client interface.
+  //    // FooImpl implements mojom.Foo.
+  //    function FooImpl() { ... }
+  //    FooImpl.prototype.fooMethod1 = function() { ... }
+  //    FooImpl.prototype.fooMethod2 = function() { ... }
   //
-  // ProxyBindings(proxy).setLocalDelegate(impl) - Sets the implementation
-  //   delegate of the proxy's client stub object. This is just shorthand
-  //   for |StubBindings(ProxyBindings(proxy).local).delegate = impl|.
-  //
-  // ProxyBindings(proxy).getLocalDelegate() - Returns the implementation
-  //   delegate of the proxy's client stub object. This is just shorthand
-  //   for |StubBindings(ProxyBindings(proxy).local).delegate|.
+  //    var fooPtr = new mojom.FooPtr();
+  //    var request = makeRequest(fooPtr);
+  //    var binding = new Binding(mojom.Foo, new FooImpl(), request);
+  //    fooPtr.fooMethod1();
+  function Binding(interfaceType, impl, requestOrHandle) {
+    this.interfaceType_ = interfaceType;
+    this.impl_ = impl;
+    this.router_ = null;
+    this.stub_ = null;
 
-  function ProxyBindings(proxy) {
-    return (proxy instanceof ProxyBase) ? proxy[kProxyProperties] : proxy;
+    if (requestOrHandle)
+      this.bind(requestOrHandle);
   }
 
-  // TODO(hansmuller): remove the remote doc after 'Client=' has been
-  // removed from Mojom.
+  Binding.prototype.isBound = function() {
+    return this.router_ !== null;
+  };
 
-  // Provides access to properties added to a stub object without risking
-  // Mojo interface name collisions. Unless otherwise specified, the initial
-  // value of all properties is undefined.
-  //
-  // StubBindings(stub).delegate - The optional implementation delegate for
-  //  the Mojo interface stub.
-  //
-  // StubBindings(stub).connection - The Connection object that links an
-  //   optional proxy for a remote service to this stub. The value of
-  //   StubBindings(stub).connection.local == stub.
-  //
-  // StubBindings(stub).remote - A proxy for the the stub's Mojo client
-  //   service.
-
-  function StubBindings(stub) {
-    return stub instanceof StubBase ?  stub[kStubProperties] : stub;
+  Binding.prototype.createInterfacePtrAndBind = function() {
+    var ptr = new this.interfaceType_.ptrClass();
+    // TODO(yzshen): Set the version of the interface pointer.
+    this.bind(makeRequest(ptr));
+    return ptr;
   }
+
+  Binding.prototype.bind = function(requestOrHandle) {
+    this.close();
+
+    var handle = requestOrHandle instanceof types.InterfaceRequest ?
+        requestOrHandle.handle : requestOrHandle;
+    if (!core.isHandle(handle))
+      return;
+
+    this.stub_ = new this.interfaceType_.stubClass(this.impl_);
+    this.router_ = new router.Router(handle);
+    this.router_.setIncomingReceiver(this.stub_);
+    this.router_ .setPayloadValidators([this.interfaceType_.validateRequest]);
+  };
+
+  Binding.prototype.close = function() {
+    if (!this.isBound())
+      return;
+
+    this.router_.close();
+    this.router_ = null;
+    this.stub_ = null;
+  };
+
+  Binding.prototype.setConnectionErrorHandler
+      = function(callback) {
+    if (!this.isBound())
+      throw new Error("Cannot set connection error handler if not bound.");
+    this.router_.setErrorHandler(callback);
+  };
+
+  Binding.prototype.unbind = function() {
+    if (!this.isBound())
+      return new types.InterfaceRequest(null);
+
+    var result = new types.InterfaceRequest(this.router_.connector_.handle_);
+    this.router_.connector_.handle_ = null;
+    this.close();
+    return result;
+  };
+
+  Binding.prototype.enableTestingMode = function() {
+    return this.router_.enableTestingMode();
+  };
+
+  // ---------------------------------------------------------------------------
+
+  function BindingSetEntry(bindingSet, interfaceType, impl, requestOrHandle,
+                           bindingId) {
+    this.bindingSet_ = bindingSet;
+    this.bindingId_ = bindingId;
+    this.binding_ = new Binding(interfaceType, impl, requestOrHandle);
+
+    this.binding_.setConnectionErrorHandler(function() {
+      this.bindingSet_.onConnectionError(bindingId);
+    }.bind(this));
+  }
+
+  BindingSetEntry.prototype.close = function() {
+    this.binding_.close();
+  };
+
+  function BindingSet(interfaceType) {
+    this.interfaceType_ = interfaceType;
+    this.nextBindingId_ = 0;
+    this.bindings_ = new Map();
+    this.errorHandler_ = null;
+  }
+
+  BindingSet.prototype.isEmpty = function() {
+    return this.bindings_.size == 0;
+  };
+
+  BindingSet.prototype.addBinding = function(impl, requestOrHandle) {
+    this.bindings_.set(
+        this.nextBindingId_,
+        new BindingSetEntry(this, this.interfaceType_, impl, requestOrHandle,
+                            this.nextBindingId_));
+    ++this.nextBindingId_;
+  };
+
+  BindingSet.prototype.closeAllBindings = function() {
+    for (var entry of this.bindings_.values())
+      entry.close();
+    this.bindings_.clear();
+  };
+
+  BindingSet.prototype.setConnectionErrorHandler = function(callback) {
+    this.errorHandler_ = callback;
+  };
+
+  BindingSet.prototype.onConnectionError = function(bindingId) {
+    this.bindings_.delete(bindingId);
+
+    if (this.errorHandler_)
+      this.errorHandler_();
+  };
 
   var exports = {};
-  exports.EmptyProxy = ProxyBase;
-  exports.EmptyStub = StubBase;
-  exports.ProxyBase = ProxyBase;
-  exports.ProxyBindings = ProxyBindings;
-  exports.StubBase = StubBase;
-  exports.StubBindings = StubBindings;
+  exports.InterfacePtrInfo = types.InterfacePtrInfo;
+  exports.InterfaceRequest = types.InterfaceRequest;
+  exports.makeRequest = makeRequest;
+  exports.InterfacePtrController = InterfacePtrController;
+  exports.Binding = Binding;
+  exports.BindingSet = BindingSet;
+
   return exports;
 });

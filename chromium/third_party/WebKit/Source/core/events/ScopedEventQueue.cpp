@@ -50,14 +50,15 @@ ScopedEventQueue::~ScopedEventQueue() {
 
 void ScopedEventQueue::initialize() {
   DCHECK(!s_instance);
-  std::unique_ptr<ScopedEventQueue> instance = wrapUnique(new ScopedEventQueue);
+  std::unique_ptr<ScopedEventQueue> instance =
+      WTF::wrapUnique(new ScopedEventQueue);
   s_instance = instance.release();
 }
 
 void ScopedEventQueue::enqueueEventDispatchMediator(
     EventDispatchMediator* mediator) {
   if (shouldQueueEvents())
-    m_queuedEventDispatchMediators.append(mediator);
+    m_queuedEventDispatchMediators.push_back(mediator);
   else
     dispatchEvent(mediator);
 }
@@ -66,8 +67,8 @@ void ScopedEventQueue::dispatchAllEvents() {
   HeapVector<Member<EventDispatchMediator>> queuedEventDispatchMediators;
   queuedEventDispatchMediators.swap(m_queuedEventDispatchMediators);
 
-  for (size_t i = 0; i < queuedEventDispatchMediators.size(); i++)
-    dispatchEvent(queuedEventDispatchMediators[i].release());
+  for (auto& mediator : queuedEventDispatchMediators)
+    dispatchEvent(mediator.release());
 }
 
 void ScopedEventQueue::dispatchEvent(EventDispatchMediator* mediator) const {

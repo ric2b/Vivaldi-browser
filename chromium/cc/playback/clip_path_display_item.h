@@ -13,7 +13,6 @@
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "third_party/skia/include/core/SkRegion.h"
 
 class SkCanvas;
 
@@ -21,7 +20,7 @@ namespace cc {
 
 class CC_EXPORT ClipPathDisplayItem : public DisplayItem {
  public:
-  ClipPathDisplayItem(const SkPath& path, SkRegion::Op clip_op, bool antialias);
+  ClipPathDisplayItem(const SkPath& path, bool antialias);
   explicit ClipPathDisplayItem(const proto::DisplayItem& proto);
   ~ClipPathDisplayItem() override;
 
@@ -30,15 +29,18 @@ class CC_EXPORT ClipPathDisplayItem : public DisplayItem {
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
-  size_t ExternalMemoryUsage() const override;
 
+  size_t ExternalMemoryUsage() const {
+    // The size of SkPath's external storage is not currently accounted for (and
+    // may well be shared anyway).
+    return 0;
+  }
   int ApproximateOpCount() const { return 1; }
 
  private:
-  void SetNew(const SkPath& path, SkRegion::Op clip_op, bool antialias);
+  void SetNew(const SkPath& path, bool antialias);
 
   SkPath clip_path_;
-  SkRegion::Op clip_op_;
   bool antialias_;
 };
 
@@ -57,7 +59,6 @@ class CC_EXPORT EndClipPathDisplayItem : public DisplayItem {
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
-  size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const { return 0; }
 };

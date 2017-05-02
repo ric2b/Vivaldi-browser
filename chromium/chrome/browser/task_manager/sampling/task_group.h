@@ -12,8 +12,10 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/task_manager/providers/task.h"
 #include "chrome/browser/task_manager/sampling/task_group_sampler.h"
@@ -67,6 +69,8 @@ class TaskGroup {
   bool empty() const { return tasks().empty(); }
 
   double cpu_usage() const { return cpu_usage_; }
+  base::Time start_time() const { return start_time_; }
+  base::TimeDelta cpu_time() const { return cpu_time_; }
   int64_t private_bytes() const { return memory_usage_.private_bytes; }
   int64_t shared_bytes() const { return memory_usage_.shared_bytes; }
   int64_t physical_bytes() const { return memory_usage_.physical_bytes; }
@@ -75,6 +79,7 @@ class TaskGroup {
 #endif
   int64_t gpu_memory() const { return gpu_memory_; }
   bool gpu_memory_has_duplicates() const { return gpu_memory_has_duplicates_; }
+  base::MemoryState memory_state() const { return memory_state_; }
   int64_t per_process_network_usage() const {
     return per_process_network_usage_;
   }
@@ -106,6 +111,10 @@ class TaskGroup {
   void RefreshNaClDebugStubPort(int child_process_unique_id);
 
   void OnCpuRefreshDone(double cpu_usage);
+
+  void OnStartTimeRefreshDone(base::Time start_time);
+
+  void OnCpuTimeRefreshDone(base::TimeDelta cpu_time);
 
   void OnPhysicalMemoryUsageRefreshDone(int64_t physical_bytes);
   void OnMemoryUsageRefreshDone(MemoryUsageStats memory_usage);
@@ -143,8 +152,11 @@ class TaskGroup {
 
   // The per process resources usages.
   double cpu_usage_;
+  base::Time start_time_;     // Only calculated On Windows now.
+  base::TimeDelta cpu_time_;  // Only calculated On Windows now.
   MemoryUsageStats memory_usage_;
   int64_t gpu_memory_;
+  base::MemoryState memory_state_;
   // The network usage in bytes per second as the sum of all network usages of
   // the individual tasks sharing the same process.
   int64_t per_process_network_usage_;

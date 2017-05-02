@@ -31,10 +31,6 @@ namespace blink {
 struct WebFindOptions;
 }  // namespace blink
 
-namespace content {
-struct GlobalRequestID;
-}  // namespace content
-
 namespace extensions {
 
 class WebViewInternalFindFunction;
@@ -94,7 +90,8 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   void NavigateGuest(const std::string& src,
                      bool force_navigation,
                      bool wasTyped = false,
-                     content::Referrer* referrer = nullptr);
+                     content::Referrer* referrer = nullptr,
+                     content::OpenURLParams* params = nullptr);
 
   // Shows the context menu for the guest.
   void ShowContextMenu(int request_id);
@@ -270,6 +267,9 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) const final;
+  void RequestToLockMouse(content::WebContents* web_contents,
+                          bool user_gesture,
+                          bool last_unlocked_by_target) override;
   blink::WebSecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
       content::SecurityStyleExplanations* security_style_explanations) override;
@@ -305,7 +305,8 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
       const GURL& url,
       const content::Referrer& referrer,
       ui::PageTransition transition_type,
-      bool force_navigation);
+      bool force_navigation,
+      const content::OpenURLParams* params = nullptr);
 
   void RequestNewWindowPermission(
       WindowOpenDisposition disposition,
@@ -368,16 +369,19 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
     std::string name;
     bool changed;
     content::Referrer *referrer;
+    content::OpenURLParams* params;
     NewWindowInfo(const GURL& url, const std::string& name) :
         url(url),
         name(name),
         changed(false),
-        referrer(nullptr) {}
+        referrer(nullptr),
+        params(nullptr) {}
     // NOTE(espen@vivaldi.com): We have to let the referrer member be a pointer
     // (and thus have a destructor) to avoid breaking chromium style:
     // "Complex constructor has an inlined body"
     ~NewWindowInfo() {
       delete referrer;
+      delete params;
     };
   };
 

@@ -87,8 +87,7 @@ class MimeHandlerStreamManager::EmbedderObserver
   void DidStartProvisionalLoadForFrame(
       content::RenderFrameHost* render_frame_host,
       const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override;
+      bool is_error_page) override;
   void WebContentsDestroyed() override;
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
@@ -209,8 +208,7 @@ void MimeHandlerStreamManager::EmbedderObserver::RenderProcessGone(
 void MimeHandlerStreamManager::EmbedderObserver::
     DidStartProvisionalLoadForFrame(content::RenderFrameHost* render_frame_host,
                                     const GURL& validated_url,
-                                    bool is_error_page,
-                                    bool is_iframe_srcdoc) {
+                                    bool is_error_page) {
   if (!IsTrackedRenderFrameHost(render_frame_host))
     return;
   // With PlzNavigate we get a provisional load notification for the URL we are
@@ -225,7 +223,7 @@ void MimeHandlerStreamManager::EmbedderObserver::
 void MimeHandlerStreamManager::EmbedderObserver::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   // If the top level frame is navigating away, clean up the stream.
-  if (navigation_handle->IsInMainFrame())
+  if (navigation_handle->IsInMainFrame() && !navigation_handle->IsSamePage())
     AbortStream();
 }
 
@@ -238,8 +236,11 @@ void MimeHandlerStreamManager::EmbedderObserver::RenderFrameHostChanged(
     return;
 
   // If this is an unrelated host, ignore.
-  if ((old_host->GetRoutingID() != render_frame_id_) ||
-      (old_host->GetProcess()->GetID() != render_process_id_)) {
+  if ((frame_tree_node_id_ != -1 &&
+       old_host->GetFrameTreeNodeId() != frame_tree_node_id_) ||
+      (render_frame_id_ != -1 &&
+       (old_host->GetRoutingID() != render_frame_id_ ||
+        (old_host->GetProcess()->GetID() != render_process_id_)))) {
     return;
   }
 
@@ -251,6 +252,9 @@ void MimeHandlerStreamManager::EmbedderObserver::RenderFrameHostChanged(
          (frame_tree_node_id_ == new_host_->GetFrameTreeNodeId()));
   render_frame_id_ = new_host_->GetRoutingID();
   render_process_id_ = new_host_->GetProcess()->GetID();
+  // No need to keep this around anymore since we have valid render frame IDs
+  // now.
+  frame_tree_node_id_ = -1;
 }
 
 void MimeHandlerStreamManager::EmbedderObserver::WebContentsDestroyed() {

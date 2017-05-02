@@ -369,9 +369,11 @@ class WebDataServiceFake : public AutofillWebDataService {
   DISALLOW_COPY_AND_ASSIGN(WebDataServiceFake);
 };
 
-ACTION_P(ReturnNewDataTypeManagerWithDebugListener, debug_listener) {
-  return new syncer::DataTypeManagerImpl(debug_listener, arg1, arg2, arg3,
-                                         arg4);
+ACTION_P2(ReturnNewDataTypeManagerWithDebugListener,
+          sync_client,
+          debug_listener) {
+  return new syncer::DataTypeManagerImpl(sync_client, arg0, debug_listener,
+                                         arg2, arg3, arg4, arg5);
 }
 
 class MockPersonalDataManager : public PersonalDataManager {
@@ -476,8 +478,9 @@ class ProfileSyncServiceAutofillTest
     CreateSyncService(std::move(sync_client_owned_), callback);
 
     EXPECT_CALL(*profile_sync_service_bundle()->component_factory(),
-                CreateDataTypeManager(_, _, _, _, _))
+                CreateDataTypeManager(_, _, _, _, _, _))
         .WillOnce(ReturnNewDataTypeManagerWithDebugListener(
+            sync_client_,
             syncer::MakeWeakHandle(debug_ptr_factory_.GetWeakPtr())));
 
     EXPECT_CALL(personal_data_manager(), IsDataLoaded())

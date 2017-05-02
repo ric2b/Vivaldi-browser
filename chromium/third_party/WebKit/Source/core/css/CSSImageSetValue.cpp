@@ -30,10 +30,10 @@
 #include "core/dom/Document.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/FetchRequest.h"
-#include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/frame/Settings.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/StyleFetchedImageSet.h"
 #include "core/style/StyleInvalidImage.h"
 #include "platform/weborigin/KURL.h"
@@ -66,7 +66,7 @@ void CSSImageSetValue::fillImageSet() {
         imageValue.referrer().referrerPolicy, KURL(ParsedURLString, imageURL),
         imageValue.referrer().referrer);
     image.scaleFactor = scaleFactor;
-    m_imagesInSet.append(image);
+    m_imagesInSet.push_back(image);
     ++i;
   }
 
@@ -117,11 +117,11 @@ StyleImage* CSSImageSetValue::cacheImage(
     if (crossOrigin != CrossOriginAttributeNotSet)
       request.setCrossOriginAccessControl(document.getSecurityOrigin(),
                                           crossOrigin);
-    if (document.settings() && document.settings()->fetchImagePlaceholders())
+    if (document.settings() && document.settings()->getFetchImagePlaceholders())
       request.setAllowImagePlaceholder();
 
-    if (ImageResource* cachedImage =
-            ImageResource::fetch(request, document.fetcher()))
+    if (ImageResourceContent* cachedImage =
+            ImageResourceContent::fetch(request, document.fetcher()))
       m_cachedImage = StyleFetchedImageSet::create(
           cachedImage, image.scaleFactor, this, request.url());
     else
@@ -165,7 +165,7 @@ String CSSImageSetValue::customCSSText() const {
 bool CSSImageSetValue::hasFailedOrCanceledSubresources() const {
   if (!m_cachedImage)
     return false;
-  if (Resource* cachedResource = m_cachedImage->cachedImage())
+  if (ImageResourceContent* cachedResource = m_cachedImage->cachedImage())
     return cachedResource->loadFailedOrCanceled();
   return true;
 }

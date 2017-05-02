@@ -36,6 +36,7 @@
 #include "core/css/CSSPropertyEquality.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
+#include "core/frame/UseCounter.h"
 #include "platform/animation/AnimationUtilities.h"
 #include "platform/geometry/FloatBox.h"
 #include "platform/transforms/TransformationMatrix.h"
@@ -110,15 +111,22 @@ bool KeyframeEffectModelBase::snapshotAllCompositorKeyframes(
     const ComputedStyle* parentStyle) const {
   m_needsCompositorKeyframesSnapshot = false;
   bool updated = false;
+  bool hasNeutralCompositableKeyframe = false;
   ensureKeyframeGroups();
   for (CSSPropertyID property : CompositorAnimations::compositableProperties) {
     PropertySpecificKeyframeGroup* keyframeGroup =
         m_keyframeGroups->get(PropertyHandle(property));
     if (!keyframeGroup)
       continue;
-    for (auto& keyframe : keyframeGroup->m_keyframes)
+    for (auto& keyframe : keyframeGroup->m_keyframes) {
       updated |= keyframe->populateAnimatableValue(property, element, baseStyle,
                                                    parentStyle);
+      hasNeutralCompositableKeyframe |= keyframe->isNeutral();
+    }
+  }
+  if (updated && hasNeutralCompositableKeyframe) {
+    UseCounter::count(element.document(),
+                      UseCounter::SyntheticKeyframesInCompositedCSSAnimation);
   }
   return updated;
 }
@@ -137,20 +145,20 @@ KeyframeEffectModelBase::normalizedKeyframes(const KeyframeVector& keyframes) {
       DCHECK_GE(offset, lastOffset);
       lastOffset = offset;
     }
-    result.append(keyframe->clone());
+    result.push_back(keyframe->clone());
   }
 
   if (result.isEmpty())
     return result;
 
-  if (isNull(result.last()->offset()))
-    result.last()->setOffset(1);
+  if (isNull(result.back()->offset()))
+    result.back()->setOffset(1);
 
   if (result.size() > 1 && isNull(result[0]->offset()))
-    result.first()->setOffset(0);
+    result.front()->setOffset(0);
 
   size_t lastIndex = 0;
-  lastOffset = result.first()->offset();
+  lastOffset = result.front()->offset();
   for (size_t i = 1; i < result.size(); ++i) {
     double offset = result[i]->offset();
     if (!isNull(offset)) {
@@ -176,7 +184,7 @@ void KeyframeEffectModelBase::ensureKeyframeGroups() const {
   if (m_keyframeGroups)
     return;
 
-  m_keyframeGroups = wrapUnique(new KeyframeGroupMap);
+  m_keyframeGroups = WTF::wrapUnique(new KeyframeGroupMap);
   RefPtr<TimingFunction> zeroOffsetEasing = m_defaultKeyframeEasing;
   for (const auto& keyframe : normalizedKeyframes(getFrames())) {
     if (keyframe->offset() == 0)
@@ -185,13 +193,14 @@ void KeyframeEffectModelBase::ensureKeyframeGroups() const {
     for (const PropertyHandle& property : keyframe->properties()) {
       KeyframeGroupMap::iterator groupIter = m_keyframeGroups->find(property);
       PropertySpecificKeyframeGroup* group;
-      if (groupIter == m_keyframeGroups->end())
-        group =
-            m_keyframeGroups
-                ->add(property, wrapUnique(new PropertySpecificKeyframeGroup))
-                .storedValue->value.get();
-      else
+      if (groupIter == m_keyframeGroups->end()) {
+        group = m_keyframeGroups
+                    ->add(property,
+                          WTF::wrapUnique(new PropertySpecificKeyframeGroup))
+                    .storedValue->value.get();
+      } else {
         group = groupIter->value.get();
+      }
 
       group->appendKeyframe(keyframe->createPropertySpecificKeyframe(property));
     }
@@ -272,8 +281,8 @@ Keyframe::PropertySpecificKeyframe::PropertySpecificKeyframe(
 void KeyframeEffectModelBase::PropertySpecificKeyframeGroup::appendKeyframe(
     PassRefPtr<Keyframe::PropertySpecificKeyframe> keyframe) {
   DCHECK(m_keyframes.isEmpty() ||
-         m_keyframes.last()->offset() <= keyframe->offset());
-  m_keyframes.append(keyframe);
+         m_keyframes.back()->offset() <= keyframe->offset());
+  m_keyframes.push_back(keyframe);
 }
 
 void KeyframeEffectModelBase::PropertySpecificKeyframeGroup::
@@ -301,13 +310,13 @@ bool KeyframeEffectModelBase::PropertySpecificKeyframeGroup::
 
   bool addedSyntheticKeyframe = false;
 
-  if (m_keyframes.first()->offset() != 0.0) {
-    m_keyframes.insert(0, m_keyframes.first()->neutralKeyframe(
+  if (m_keyframes.front()->offset() != 0.0) {
+    m_keyframes.insert(0, m_keyframes.front()->neutralKeyframe(
                               0, std::move(zeroOffsetEasing)));
     addedSyntheticKeyframe = true;
   }
-  if (m_keyframes.last()->offset() != 1.0) {
-    appendKeyframe(m_keyframes.last()->neutralKeyframe(1, nullptr));
+  if (m_keyframes.back()->offset() != 1.0) {
+    appendKeyframe(m_keyframes.back()->neutralKeyframe(1, nullptr));
     addedSyntheticKeyframe = true;
   }
 

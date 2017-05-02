@@ -19,7 +19,7 @@ class NotesModelLoadedObserver : public NotesModelObserver {
   explicit NotesModelLoadedObserver(Profile* profile);
 
  private:
-  void Loaded(Notes_Model* model, bool ids_reassigned) override;
+  void NotesModelLoaded(Notes_Model* model, bool ids_reassigned) override;
   void NotesModelBeingDeleted(Notes_Model* model) override;
 
   Profile* profile_;

@@ -54,9 +54,10 @@ class SpdyFramerDecoderAdapter {
     return process_single_input_frame_;
   }
 
-  // Decode the |len| bytes of encoded HTTP/2 starting at |*data|. Returns the
-  // number of bytes consumed. It is safe to pass more bytes in than may be
-  // consumed.
+  // Decode the |len| bytes of encoded HTTP/2 starting at |*data|. Returns
+  // the number of bytes consumed. It is safe to pass more bytes in than
+  // may be consumed. Should process (or otherwise buffer) as much as
+  // available, unless process_single_input_frame is true.
   virtual size_t ProcessInput(const char* data, size_t len) = 0;
 
   // Reset the decoder (used just for tests at this time).
@@ -68,9 +69,9 @@ class SpdyFramerDecoderAdapter {
   // Current error code (NO_ERROR if state != ERROR).
   virtual SpdyFramer::SpdyError error_code() const = 0;
 
-  // Did the most recently decoded frame header appear to be the start of an
-  // HTTP/1.1 (or earlier) response? Used to detect if a backend/server that
-  // we sent a request to, responded with an HTTP/1.1 response?
+  // Has any frame header looked like the start of an HTTP/1.1 (or earlier)
+  // response? Used to detect if a backend/server that we sent a request to
+  // has responded with an HTTP/1.1 (or earlier) response.
   virtual bool probable_http_response() const = 0;
 
  private:
@@ -99,6 +100,10 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
   // The visitor needs the original SpdyFramer, not the SpdyFramerDecoderAdapter
   // instance.
   void OnError(SpdyFramer* framer) override;
+  void OnCommonHeader(SpdyStreamId stream_id,
+                      size_t length,
+                      uint8_t type,
+                      uint8_t flags) override;
   void OnDataFrameHeader(SpdyStreamId stream_id,
                          size_t length,
                          bool fin) override;
@@ -110,14 +115,8 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
   SpdyHeadersHandlerInterface* OnHeaderFrameStart(
       SpdyStreamId stream_id) override;
   void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override;
-  void OnSynStream(SpdyStreamId stream_id,
-                   SpdyStreamId associated_stream_id,
-                   SpdyPriority priority,
-                   bool fin,
-                   bool unidirectional) override;
-  void OnSynReply(SpdyStreamId stream_id, bool fin) override;
   void OnRstStream(SpdyStreamId stream_id, SpdyRstStreamStatus status) override;
-  void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override;
+  void OnSetting(SpdySettingsIds id, uint32_t value) override;
   void OnPing(SpdyPingId unique_id, bool is_ack) override;
   void OnSettings(bool clear_persisted) override;
   void OnSettingsAck() override;

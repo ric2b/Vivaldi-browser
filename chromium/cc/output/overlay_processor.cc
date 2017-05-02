@@ -8,8 +8,34 @@
 #include "cc/output/overlay_strategy_single_on_top.h"
 #include "cc/output/overlay_strategy_underlay.h"
 #include "cc/quads/draw_quad.h"
+#include "cc/resources/resource_provider.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
+
+namespace {
+
+#if defined(OS_ANDROID)
+// Utility class to make sure that we notify resource that they're promotable
+// before returning from ProcessForOverlays.
+class SendPromotionHintsBeforeReturning {
+ public:
+  SendPromotionHintsBeforeReturning(cc::ResourceProvider* resource_provider,
+                                    cc::OverlayCandidateList* candidates)
+      : resource_provider_(resource_provider), candidates_(candidates) {}
+  ~SendPromotionHintsBeforeReturning() {
+    resource_provider_->SendPromotionHints(
+        candidates_->promotion_hint_info_map_);
+  }
+
+ private:
+  cc::ResourceProvider* resource_provider_;
+  cc::OverlayCandidateList* candidates_;
+
+  DISALLOW_COPY_AND_ASSIGN(SendPromotionHintsBeforeReturning);
+};
+#endif
+
+}  // namespace
 
 namespace cc {
 
@@ -35,6 +61,8 @@ gfx::Rect OverlayProcessor::GetAndResetOverlayDamage() {
 bool OverlayProcessor::ProcessForCALayers(
     ResourceProvider* resource_provider,
     RenderPass* render_pass,
+    const RenderPassFilterList& render_pass_filters,
+    const RenderPassFilterList& render_pass_background_filters,
     OverlayCandidateList* overlay_candidates,
     CALayerOverlayList* ca_layer_overlays,
     gfx::Rect* damage_rect) {
@@ -43,9 +71,10 @@ bool OverlayProcessor::ProcessForCALayers(
   if (!overlay_validator || !overlay_validator->AllowCALayerOverlays())
     return false;
 
-  if (!ProcessForCALayerOverlays(resource_provider,
-                                 gfx::RectF(render_pass->output_rect),
-                                 render_pass->quad_list, ca_layer_overlays))
+  if (!ProcessForCALayerOverlays(
+          resource_provider, gfx::RectF(render_pass->output_rect),
+          render_pass->quad_list, render_pass_filters,
+          render_pass_background_filters, ca_layer_overlays))
     return false;
 
   // CALayer overlays are all-or-nothing. If all quads were replaced with
@@ -57,11 +86,21 @@ bool OverlayProcessor::ProcessForCALayers(
   return true;
 }
 
-void OverlayProcessor::ProcessForOverlays(ResourceProvider* resource_provider,
-                                          RenderPass* render_pass,
-                                          OverlayCandidateList* candidates,
-                                          CALayerOverlayList* ca_layer_overlays,
-                                          gfx::Rect* damage_rect) {
+void OverlayProcessor::ProcessForOverlays(
+    ResourceProvider* resource_provider,
+    RenderPass* render_pass,
+    const RenderPassFilterList& render_pass_filters,
+    const RenderPassFilterList& render_pass_background_filters,
+    OverlayCandidateList* candidates,
+    CALayerOverlayList* ca_layer_overlays,
+    gfx::Rect* damage_rect) {
+#if defined(OS_ANDROID)
+  // Be sure to send out notifications, regardless of whether we get to
+  // processing for overlays or not.  If we don't, then we should notify that
+  // they are not promotable.
+  SendPromotionHintsBeforeReturning notifier(resource_provider, candidates);
+#endif
+
   // If we have any copy requests, we can't remove any quads for overlays or
   // CALayers because the framebuffer would be missing the removed quads'
   // contents.
@@ -73,7 +112,8 @@ void OverlayProcessor::ProcessForOverlays(ResourceProvider* resource_provider,
   }
 
   // First attempt to process for CALayers.
-  if (ProcessForCALayers(resource_provider, render_pass, candidates,
+  if (ProcessForCALayers(resource_provider, render_pass, render_pass_filters,
+                         render_pass_background_filters, candidates,
                          ca_layer_overlays, damage_rect)) {
     return;
   }

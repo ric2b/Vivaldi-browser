@@ -152,7 +152,7 @@ WebAssociatedURLLoaderImpl::ClientAdapter::create(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
     const WebAssociatedURLLoaderOptions& options) {
-  return wrapUnique(new ClientAdapter(loader, client, options));
+  return WTF::wrapUnique(new ClientAdapter(loader, client, options));
 }
 
 WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
@@ -319,7 +319,7 @@ class WebAssociatedURLLoaderImpl::Observer final
     clearContext();
   }
 
-  void contextDestroyed() override {
+  void contextDestroyed(ExecutionContext*) override {
     if (m_parent)
       m_parent->documentDestroyed();
   }
@@ -410,8 +410,11 @@ void WebAssociatedURLLoaderImpl::loadAsynchronously(
 
     Document* document = toDocument(m_observer->lifecycleContext());
     DCHECK(document);
+    // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
+    CHECK(!m_loader);
     m_loader = DocumentThreadableLoader::create(
-        *document, m_clientAdapter.get(), options, resourceLoaderOptions);
+        *document, m_clientAdapter.get(), options, resourceLoaderOptions,
+        ThreadableLoader::ClientSpec::kWebAssociatedURLLoader);
     m_loader->start(webcoreRequest);
   }
 

@@ -56,7 +56,8 @@ class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>,
   WTF_MAKE_NONCOPYABLE(LocalFileSystem);
 
  public:
-  static LocalFileSystem* create(std::unique_ptr<FileSystemClient>);
+  LocalFileSystem(LocalFrame&, std::unique_ptr<FileSystemClient>);
+  LocalFileSystem(WorkerClients&, std::unique_ptr<FileSystemClient>);
   ~LocalFileSystem();
 
   void resolveURL(ExecutionContext*,
@@ -66,9 +67,6 @@ class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>,
                          FileSystemType,
                          long long size,
                          std::unique_ptr<AsyncFileSystemCallbacks>);
-  void deleteFileSystem(ExecutionContext*,
-                        FileSystemType,
-                        std::unique_ptr<AsyncFileSystemCallbacks>);
 
   FileSystemClient* client() const { return m_client.get(); }
 
@@ -78,8 +76,6 @@ class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>,
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit LocalFileSystem(std::unique_ptr<FileSystemClient>);
-
   WebFileSystem* getFileSystem() const;
   void fileSystemNotAvailable(ExecutionContext*, CallbackWrapper*);
 
@@ -91,9 +87,6 @@ class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>,
                                  FileSystemType,
                                  CallbackWrapper*);
   void resolveURLInternal(ExecutionContext*, const KURL&, CallbackWrapper*);
-  void deleteFileSystemInternal(ExecutionContext*,
-                                FileSystemType,
-                                CallbackWrapper*);
 
   std::unique_ptr<FileSystemClient> m_client;
 };

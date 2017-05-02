@@ -32,7 +32,6 @@
 #include "core/css/BasicShapeFunctions.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMTypedArray.h"
-#include "core/fetch/ImageResource.h"
 #include "core/layout/shapes/BoxShape.h"
 #include "core/layout/shapes/PolygonShape.h"
 #include "core/layout/shapes/RasterShape.h"
@@ -53,13 +52,13 @@ namespace blink {
 
 static std::unique_ptr<Shape> createInsetShape(const FloatRoundedRect& bounds) {
   ASSERT(bounds.rect().width() >= 0 && bounds.rect().height() >= 0);
-  return makeUnique<BoxShape>(bounds);
+  return WTF::makeUnique<BoxShape>(bounds);
 }
 
 static std::unique_ptr<Shape> createCircleShape(const FloatPoint& center,
                                                 float radius) {
   ASSERT(radius >= 0);
-  return wrapUnique(
+  return WTF::wrapUnique(
       new RectangleShape(FloatRect(center.x() - radius, center.y() - radius,
                                    radius * 2, radius * 2),
                          FloatSize(radius, radius)));
@@ -68,7 +67,7 @@ static std::unique_ptr<Shape> createCircleShape(const FloatPoint& center,
 static std::unique_ptr<Shape> createEllipseShape(const FloatPoint& center,
                                                  const FloatSize& radii) {
   ASSERT(radii.width() >= 0 && radii.height() >= 0);
-  return wrapUnique(new RectangleShape(
+  return WTF::wrapUnique(new RectangleShape(
       FloatRect(center.x() - radii.width(), center.y() - radii.height(),
                 radii.width() * 2, radii.height() * 2),
       radii));
@@ -77,7 +76,7 @@ static std::unique_ptr<Shape> createEllipseShape(const FloatPoint& center,
 static std::unique_ptr<Shape> createPolygonShape(
     std::unique_ptr<Vector<FloatPoint>> vertices,
     WindRule fillRule) {
-  return wrapUnique(new PolygonShape(std::move(vertices), fillRule));
+  return WTF::wrapUnique(new PolygonShape(std::move(vertices), fillRule));
 }
 
 static inline FloatRect physicalRectToLogical(const FloatRect& rect,
@@ -157,7 +156,7 @@ std::unique_ptr<Shape> Shape::createShape(const BasicShape* basicShape,
       size_t valuesSize = values.size();
       ASSERT(!(valuesSize % 2));
       std::unique_ptr<Vector<FloatPoint>> vertices =
-          wrapUnique(new Vector<FloatPoint>(valuesSize / 2));
+          WTF::wrapUnique(new Vector<FloatPoint>(valuesSize / 2));
       for (unsigned i = 0; i < valuesSize; i += 2) {
         FloatPoint vertex(floatValueForLength(values.at(i), boxWidth),
                           floatValueForLength(values.at(i + 1), boxHeight));
@@ -213,9 +212,9 @@ std::unique_ptr<Shape> Shape::createShape(const BasicShape* basicShape,
 std::unique_ptr<Shape> Shape::createEmptyRasterShape(WritingMode writingMode,
                                                      float margin) {
   std::unique_ptr<RasterShapeIntervals> intervals =
-      makeUnique<RasterShapeIntervals>(0, 0);
+      WTF::makeUnique<RasterShapeIntervals>(0, 0);
   std::unique_ptr<RasterShape> rasterShape =
-      wrapUnique(new RasterShape(std::move(intervals), IntSize()));
+      WTF::wrapUnique(new RasterShape(std::move(intervals), IntSize()));
   rasterShape->m_writingMode = writingMode;
   rasterShape->m_margin = margin;
   return std::move(rasterShape);
@@ -230,7 +229,7 @@ std::unique_ptr<Shape> Shape::createRasterShape(Image* image,
   IntRect imageRect = pixelSnappedIntRect(imageR);
   IntRect marginRect = pixelSnappedIntRect(marginR);
 
-  std::unique_ptr<RasterShapeIntervals> intervals = wrapUnique(
+  std::unique_ptr<RasterShapeIntervals> intervals = WTF::wrapUnique(
       new RasterShapeIntervals(marginRect.height(), -marginRect.y()));
   std::unique_ptr<ImageBuffer> imageBuffer =
       ImageBuffer::create(imageRect.size());
@@ -243,9 +242,11 @@ std::unique_ptr<Shape> Shape::createRasterShape(Image* image,
     SkPaint paint;
     IntRect imageSourceRect(IntPoint(), image->size());
     IntRect imageDestRect(IntPoint(), imageRect.size());
+    // TODO(ccameron): No color conversion is required here.
     image->draw(imageBuffer->canvas(), paint, imageDestRect, imageSourceRect,
                 DoNotRespectImageOrientation,
-                Image::DoNotClampImageToSourceRect);
+                Image::DoNotClampImageToSourceRect,
+                ColorBehavior::transformToGlobalTarget());
 
     WTF::ArrayBufferContents contents;
     imageBuffer->getImageData(Unmultiplied,
@@ -283,7 +284,7 @@ std::unique_ptr<Shape> Shape::createRasterShape(Image* image,
   }
 
   std::unique_ptr<RasterShape> rasterShape =
-      wrapUnique(new RasterShape(std::move(intervals), marginRect.size()));
+      WTF::wrapUnique(new RasterShape(std::move(intervals), marginRect.size()));
   rasterShape->m_writingMode = writingMode;
   rasterShape->m_margin = margin;
   return std::move(rasterShape);

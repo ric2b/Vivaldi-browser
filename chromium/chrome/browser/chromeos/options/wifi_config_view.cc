@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/enrollment_dialog_view.h"
 #include "chrome/browser/chromeos/net/shill_error.h"
@@ -1120,12 +1119,12 @@ void WifiConfigView::Init(bool show_8021x) {
             IDS_OPTIONS_SETTINGS_INTERNET_OPTIONS_PASSPHRASE_HIDE));
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_NORMAL,
-        ResourceBundle::GetSharedInstance().
-        GetImageSkiaNamed(IDR_NETWORK_SHOW_PASSWORD));
+        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_NETWORK_SHOW_PASSWORD));
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_HOVERED,
-        ResourceBundle::GetSharedInstance().
-        GetImageSkiaNamed(IDR_NETWORK_SHOW_PASSWORD_HOVER));
+        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_NETWORK_SHOW_PASSWORD_HOVER));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_NORMAL,
         ResourceBundle::GetSharedInstance().

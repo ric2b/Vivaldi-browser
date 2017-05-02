@@ -20,6 +20,9 @@ aria-atomic
 aria-autocomplete
 aria-busy
 aria-checked
+aria-colcount
+aria-colindex
+aria-colspan
 aria-controls
 aria-current
 aria-describedby
@@ -41,11 +44,15 @@ aria-multiline
 aria-multiselectable
 aria-orientation
 aria-owns
+aria-placeholder
 aria-posinset
 aria-pressed
 aria-readonly
 aria-relevant
 aria-required
+aria-rowcount
+aria-rowindex
+aria-rowspan
 aria-selected
 aria-setsize
 aria-sort

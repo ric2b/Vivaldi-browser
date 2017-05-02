@@ -35,14 +35,15 @@
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
+#include "platform/heap/HeapCompact.h"
 #include "platform/heap/MarkingVisitor.h"
 #include "platform/heap/PageMemory.h"
 #include "platform/heap/PagePool.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/ThreadState.h"
-#include "platform/tracing/TraceEvent.h"
-#include "platform/tracing/web_memory_allocator_dump.h"
-#include "platform/tracing/web_process_memory_dump.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
+#include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
@@ -202,11 +203,11 @@ void ThreadHeapStats::decreaseAllocatedSpace(size_t delta) {
 }
 
 ThreadHeap::ThreadHeap()
-    : m_regionTree(makeUnique<RegionTree>()),
-      m_heapDoesNotContainCache(wrapUnique(new HeapDoesNotContainCache)),
-      m_safePointBarrier(makeUnique<SafePointBarrier>()),
-      m_freePagePool(wrapUnique(new FreePagePool)),
-      m_orphanedPagePool(wrapUnique(new OrphanedPagePool)),
+    : m_regionTree(WTF::makeUnique<RegionTree>()),
+      m_heapDoesNotContainCache(WTF::wrapUnique(new HeapDoesNotContainCache)),
+      m_safePointBarrier(WTF::makeUnique<SafePointBarrier>()),
+      m_freePagePool(WTF::wrapUnique(new FreePagePool)),
+      m_orphanedPagePool(WTF::wrapUnique(new OrphanedPagePool)),
       m_markingStack(CallbackStack::create()),
       m_postMarkingCallbackStack(CallbackStack::create()),
       m_globalWeakCallbackStack(CallbackStack::create()),
@@ -255,12 +256,6 @@ void ThreadHeap::detach(ThreadState* thread) {
     m_threads.remove(thread);
     isLastThread = m_threads.isEmpty();
   }
-  // The last thread begin detached should be the owning thread, which would
-  // be the main thread for the mainThreadHeap and a per thread heap enabled
-  // thread otherwise.
-  if (isLastThread)
-    DCHECK(thread->threadHeapMode() == BlinkGC::PerThreadHeapMode ||
-           thread->isMainThread());
   if (thread->isMainThread())
     DCHECK_EQ(heapStats().allocatedSpace(), 0u);
   if (isLastThread)
@@ -275,7 +270,7 @@ void ThreadHeap::resume() {
   m_safePointBarrier->resumeOthers();
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 BasePage* ThreadHeap::findPageFromAddress(Address address) {
   MutexLocker locker(m_threadAttachMutex);
   for (ThreadState* state : m_threads) {
@@ -298,7 +293,7 @@ bool ThreadHeap::isAtSafePoint() {
 Address ThreadHeap::checkAndMarkPointer(Visitor* visitor, Address address) {
   ASSERT(ThreadState::current()->isInGC());
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
   if (m_heapDoesNotContainCache->lookup(address))
     return nullptr;
 #endif
@@ -312,7 +307,7 @@ Address ThreadHeap::checkAndMarkPointer(Visitor* visitor, Address address) {
     return address;
   }
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
   m_heapDoesNotContainCache->addEntry(address);
 #else
   if (!m_heapDoesNotContainCache->lookup(address))
@@ -398,7 +393,7 @@ void ThreadHeap::registerWeakTable(void* table,
   pushPostMarkingCallback(table, iterationDoneCallback);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool ThreadHeap::weakTableRegistered(const void* table) {
   ASSERT(m_ephemeronStack);
   return m_ephemeronStack->hasCallbackForObject(table);
@@ -410,6 +405,25 @@ void ThreadHeap::commitCallbackStacks() {
   m_postMarkingCallbackStack->commit();
   m_globalWeakCallbackStack->commit();
   m_ephemeronStack->commit();
+}
+
+HeapCompact* ThreadHeap::compaction() {
+  if (!m_compaction)
+    m_compaction = HeapCompact::create();
+  return m_compaction.get();
+}
+
+void ThreadHeap::registerMovingObjectReference(MovableReference* slot) {
+  DCHECK(slot);
+  DCHECK(*slot);
+  compaction()->registerMovingObjectReference(slot);
+}
+
+void ThreadHeap::registerMovingObjectCallback(MovableReference reference,
+                                              MovingObjectCallback callback,
+                                              void* callbackData) {
+  DCHECK(reference);
+  compaction()->registerMovingObjectCallback(reference, callback, callbackData);
 }
 
 void ThreadHeap::decommitCallbackStacks() {
@@ -429,6 +443,11 @@ void ThreadHeap::postGC(BlinkGC::GCType gcType) {
   ASSERT(ThreadState::current()->isInGC());
   for (ThreadState* state : m_threads)
     state->postGC(gcType);
+}
+
+void ThreadHeap::preSweep(BlinkGC::GCType gcType) {
+  for (ThreadState* state : m_threads)
+    state->preSweep(gcType);
 }
 
 void ThreadHeap::processMarkingStack(Visitor* visitor) {
@@ -586,7 +605,6 @@ size_t ThreadHeap::objectPayloadSizeForTesting() {
     state->setGCState(ThreadState::GCRunning);
     state->makeConsistentForGC();
     objectPayloadSize += state->objectPayloadSizeForTesting();
-    state->setGCState(ThreadState::EagerSweepScheduled);
     state->setGCState(ThreadState::Sweeping);
     state->setGCState(ThreadState::NoGCScheduled);
   }

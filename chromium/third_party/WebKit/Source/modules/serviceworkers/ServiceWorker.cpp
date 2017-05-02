@@ -127,7 +127,7 @@ bool ServiceWorker::hasPendingActivity() const {
   return m_handle->serviceWorker()->state() != WebServiceWorkerStateRedundant;
 }
 
-void ServiceWorker::contextDestroyed() {
+void ServiceWorker::contextDestroyed(ExecutionContext*) {
   m_wasStopped = true;
 }
 
@@ -144,16 +144,12 @@ ServiceWorker* ServiceWorker::getOrCreate(
     return existingWorker;
   }
 
-  ServiceWorker* newWorker =
-      new ServiceWorker(executionContext, std::move(handle));
-  newWorker->suspendIfNeeded();
-  return newWorker;
+  return new ServiceWorker(executionContext, std::move(handle));
 }
 
 ServiceWorker::ServiceWorker(ExecutionContext* executionContext,
                              std::unique_ptr<WebServiceWorker::Handle> handle)
     : AbstractWorker(executionContext),
-      ActiveScriptWrappable(this),
       m_handle(std::move(handle)),
       m_wasStopped(false) {
   ASSERT(m_handle);

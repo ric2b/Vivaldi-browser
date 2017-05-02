@@ -6,8 +6,6 @@ package org.chromium.chrome.browser.ntp.snippets;
 import android.graphics.Bitmap;
 import android.support.annotation.Nullable;
 
-import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout.ContentSuggestionsCardLayoutEnum;
-
 import java.io.File;
 
 /**
@@ -29,11 +27,8 @@ public class SnippetArticle {
     /** The snippet preview text. */
     public final String mPreviewText;
 
-    /** The URL of this article. */
+    /** The URL of this article. This may be an AMP url. */
     public final String mUrl;
-
-    /** the AMP url for this article (possible for this to be empty). */
-    public final String mAmpUrl;
 
     /** The time when this article was published. */
     public final long mPublishTimestampMilliseconds;
@@ -41,15 +36,11 @@ public class SnippetArticle {
     /** The score expressing relative quality of the article for the user. */
     public final float mScore;
 
-    /** The position of this article within its section. */
-    public final int mPosition;
+    /** The rank of this article within its section. */
+    private int mPerSectionRank = -1;
 
-    /** The position of this article in the complete list. Populated by NewTabPageAdapter. */
-    public int mGlobalPosition = -1;
-
-    /** The layout that should be used to display the snippet. */
-    @ContentSuggestionsCardLayoutEnum
-    public final int mCardLayout;
+    /** The global rank of this article in the complete list. */
+    private int mGlobalRank = -1;
 
     /** Bitmap of the thumbnail, fetched lazily, when the RecyclerView wants to show the snippet. */
     private Bitmap mThumbnailBitmap;
@@ -57,20 +48,14 @@ public class SnippetArticle {
     /** Stores whether impression of this article has been tracked already. */
     private boolean mImpressionTracked;
 
-    /** To be run when the offline status of the article or AMP article changes. */
-    private Runnable mOfflineStatusChangeRunnable;
+    /** Whether the linked article represents an asset download. */
+    public boolean mIsAssetDownload;
 
-    /** Whether the linked article represents a downloaded asset. */
-    public boolean mIsDownloadedAsset;
+    /** The path to the asset download (only for asset download articles). */
+    private File mAssetDownloadFile;
 
-    /** The path to the downloaded asset (only for download asset articles). */
-    private String mDownloadAssetPath;
-
-    /** The downloaded asset (only for download asset articles). */
-    private File mFile;
-
-    /** The mime type of the downloaded asset (only for download asset articles). */
-    private String mDownloadAssetMimeType;
+    /** The mime type of the asset download (only for asset download articles). */
+    private String mAssetDownloadMimeType;
 
     /** The tab id of the corresponding tab (only for recent tab articles). */
     private String mRecentTabId;
@@ -82,19 +67,15 @@ public class SnippetArticle {
      * Creates a SnippetArticleListItem object that will hold the data.
      */
     public SnippetArticle(int category, String idWithinCategory, String title, String publisher,
-            String previewText, String url, String ampUrl, long timestamp, float score,
-            int position, @ContentSuggestionsCardLayoutEnum int cardLayout) {
+            String previewText, String url, long timestamp, float score) {
         mCategory = category;
         mIdWithinCategory = idWithinCategory;
         mTitle = title;
         mPublisher = publisher;
         mPreviewText = previewText;
         mUrl = url;
-        mAmpUrl = ampUrl;
         mPublishTimestampMilliseconds = timestamp;
         mScore = score;
-        mPosition = position;
-        mCardLayout = cardLayout;
     }
 
     @Override
@@ -130,56 +111,49 @@ public class SnippetArticle {
         return true;
     }
 
-    /**
-     * Sets the {@link Runnable} to be run when the article's offline status changes.
-     * Pass null to wipe.
-     */
-    public void setOfflineStatusChangeRunnable(Runnable runnable) {
-        mOfflineStatusChangeRunnable = runnable;
-    }
-
     /** @return whether a snippet is either offline page or asset download. */
     public boolean isDownload() {
         return mCategory == KnownCategories.DOWNLOADS;
     }
 
     /**
-     * @return the downloaded asset. May only be called if mIsDownloadedAsset is {@code true} and
-     * this snippet belongs to DOWNLOADS category.
+     * @return the asset download path. May only be called if {@link #mIsAssetDownload} is
+     * {@code true} (which implies that this snippet belongs to the DOWNLOADS category).
      */
-    public File getDownloadAssetFile() {
+    public File getAssetDownloadFile() {
         assert isDownload();
-        if (mFile == null) mFile = new File(mDownloadAssetPath);
-        return mFile;
+        assert mIsAssetDownload;
+        return mAssetDownloadFile;
     }
 
     /**
-     * @return the mime type of the download asset. May only be called if mIsDownloadAsset is
-     * {@code true} and this snippet belongs to DOWNLOADS category.
+     * @return the mime type of the asset download. May only be called if {@link #mIsAssetDownload}
+     * is {@code true} (which implies that this snippet belongs to the DOWNLOADS category).
      */
-    public String getDownloadAssetMimeType() {
+    public String getAssetDownloadMimeType() {
         assert isDownload();
-        return mDownloadAssetMimeType;
+        assert mIsAssetDownload;
+        return mAssetDownloadMimeType;
     }
 
     /**
-     * Marks the article suggestion as a download asset with the given path and mime type. May only
+     * Marks the article suggestion as an asset download with the given path and mime type. May only
      * be called if this snippet belongs to DOWNLOADS category.
      */
-    public void setDownloadAssetData(String filePath, String mimeType) {
+    public void setAssetDownloadData(String filePath, String mimeType) {
         assert isDownload();
-        mIsDownloadedAsset = true;
-        mDownloadAssetPath = filePath;
-        mDownloadAssetMimeType = mimeType;
+        mIsAssetDownload = true;
+        mAssetDownloadFile = new File(filePath);
+        mAssetDownloadMimeType = mimeType;
     }
 
     /**
-     * Marks the article suggestion as a download offline page with the given id. May only be called
-     * if this snippet belongs to DOWNLOADS category.
+     * Marks the article suggestion as an offline page download with the given id. May only
+     * be called if this snippet belongs to DOWNLOADS category.
      */
-    public void setDownloadOfflinePageData(long offlinePageId) {
+    public void setOfflinePageDownloadData(long offlinePageId) {
         assert isDownload();
-        mIsDownloadedAsset = false;
+        mIsAssetDownload = false;
         setOfflinePageOfflineId(offlinePageId);
     }
 
@@ -216,14 +190,7 @@ public class SnippetArticle {
 
     /** Sets offline id of the corresponding to the snippet offline page. Null to clear.*/
     public void setOfflinePageOfflineId(@Nullable Long offlineId) {
-        Long previous = mOfflinePageOfflineId;
         mOfflinePageOfflineId = offlineId;
-
-        if (mOfflineStatusChangeRunnable == null) return;
-        if ((previous == null) ? (mOfflinePageOfflineId != null)
-                               : !previous.equals(mOfflinePageOfflineId)) {
-            mOfflineStatusChangeRunnable.run();
-        }
     }
 
     /**
@@ -239,5 +206,18 @@ public class SnippetArticle {
     public String toString() {
         // For debugging purposes. Displays the first 42 characters of the title.
         return String.format("{%s, %1.42s}", getClass().getSimpleName(), mTitle);
+    }
+
+    public void setRank(int perSectionRank, int globalRank) {
+        mPerSectionRank = perSectionRank;
+        mGlobalRank = globalRank;
+    }
+
+    public int getGlobalRank() {
+        return mGlobalRank;
+    }
+
+    public int getPerSectionRank() {
+        return mPerSectionRank;
     }
 }

@@ -5,6 +5,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -12,7 +13,6 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_throttle.h"
@@ -40,11 +40,12 @@ class TestResourceDispatcherHostDelegate
   using RequestDeferredHook = base::Callback<void(const base::Closure& resume)>;
   TestResourceDispatcherHostDelegate() : throttle_created_(false) {}
 
-  void RequestBeginning(net::URLRequest* request,
-                        ResourceContext* resource_context,
-                        AppCacheService* appcache_service,
-                        ResourceType resource_type,
-                        ScopedVector<ResourceThrottle>* throttles) override {
+  void RequestBeginning(
+      net::URLRequest* request,
+      ResourceContext* resource_context,
+      AppCacheService* appcache_service,
+      ResourceType resource_type,
+      std::vector<std::unique_ptr<ResourceThrottle>>* throttles) override {
     CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
     ShellResourceDispatcherHostDelegate::RequestBeginning(
         request, resource_context, appcache_service, resource_type, throttles);
@@ -55,8 +56,8 @@ class TestResourceDispatcherHostDelegate
       ASSERT_FALSE(throttle_created_);
       throttle_created_ = true;
 
-      throttles->push_back(
-          new CallbackRunningResourceThrottle(request, this, run_on_start_));
+      throttles->push_back(base::MakeUnique<CallbackRunningResourceThrottle>(
+          request, this, run_on_start_));
     }
   }
 
@@ -108,7 +109,7 @@ class TestResourceDispatcherHostDelegate
       *defer = true;
       base::Closure resume_request_on_io_thread = base::Bind(
           base::IgnoreResult(&BrowserThread::PostTask), BrowserThread::IO,
-          FROM_HERE, base::Bind(&CallbackRunningResourceThrottle::Resume,
+          FROM_HERE, base::Bind(&CallbackRunningResourceThrottle::MarkAndResume,
                                 weak_factory_.GetWeakPtr()));
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
@@ -132,9 +133,9 @@ class TestResourceDispatcherHostDelegate
     }
 
    private:
-    void Resume() {
+    void MarkAndResume() {
       resumed_ = true;
-      controller()->Resume();
+      Resume();
     }
 
     bool resumed_;

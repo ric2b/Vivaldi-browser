@@ -49,7 +49,7 @@ class SharedWorkerRepositoryClientImpl final
  public:
   static std::unique_ptr<SharedWorkerRepositoryClientImpl> create(
       WebSharedWorkerRepositoryClient* client) {
-    return wrapUnique(new SharedWorkerRepositoryClientImpl(client));
+    return WTF::wrapUnique(new SharedWorkerRepositoryClientImpl(client));
   }
 
   ~SharedWorkerRepositoryClientImpl() override {}
@@ -57,8 +57,7 @@ class SharedWorkerRepositoryClientImpl final
   void connect(SharedWorker*,
                WebMessagePortChannelUniquePtr,
                const KURL&,
-               const String& name,
-               ExceptionState&) override;
+               const String& name) override;
   void documentDetached(Document*) override;
 
  private:

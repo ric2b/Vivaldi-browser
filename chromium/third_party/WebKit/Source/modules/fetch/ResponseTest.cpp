@@ -20,6 +20,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/PtrUtil.h"
+#include "wtf/Vector.h"
 #include <memory>
 
 namespace blink {
@@ -36,10 +37,11 @@ std::unique_ptr<WebServiceWorkerResponse> createTestWebServiceWorkerResponse() {
                  {"set-cookie", "foop"},
                  {"foo", "bar"},
                  {0, 0}};
-
+  Vector<WebURL> urlList;
+  urlList.push_back(url);
   std::unique_ptr<WebServiceWorkerResponse> webResponse =
-      makeUnique<WebServiceWorkerResponse>();
-  webResponse->setURL(url);
+      WTF::makeUnique<WebServiceWorkerResponse>();
+  webResponse->setURLList(urlList);
   webResponse->setStatus(status);
   webResponse->setStatusText(statusText);
   webResponse->setResponseType(WebServiceWorkerResponseTypeDefault);
@@ -55,8 +57,9 @@ TEST(ServiceWorkerResponseTest, FromFetchResponseData) {
   const KURL url(ParsedURLString, "http://www.response.com");
 
   FetchResponseData* fetchResponseData = FetchResponseData::create();
-  fetchResponseData->setURL(url);
-
+  Vector<KURL> urlList;
+  urlList.push_back(url);
+  fetchResponseData->setURLList(urlList);
   Response* response = Response::create(&page->document(), fetchResponseData);
   ASSERT(response);
   EXPECT_EQ(url, response->url());
@@ -68,7 +71,8 @@ TEST(ServiceWorkerResponseTest, FromWebServiceWorkerResponse) {
       createTestWebServiceWorkerResponse();
   Response* response = Response::create(scope.getScriptState(), *webResponse);
   ASSERT(response);
-  EXPECT_EQ(webResponse->url(), response->url());
+  ASSERT_EQ(1u, webResponse->urlList().size());
+  EXPECT_EQ(webResponse->urlList()[0], response->url());
   EXPECT_EQ(webResponse->status(), response->status());
   EXPECT_STREQ(webResponse->statusText().utf8().c_str(),
                response->statusText().utf8().data());
@@ -79,7 +83,7 @@ TEST(ServiceWorkerResponseTest, FromWebServiceWorkerResponse) {
   EXPECT_EQ(keys.size(), responseHeaders->headerList()->size());
   for (size_t i = 0, max = keys.size(); i < max; ++i) {
     WebString key = keys[i];
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     EXPECT_STREQ(webResponse->getHeader(key).utf8().c_str(),
                  responseHeaders->get(key, exceptionState).utf8().data());
     EXPECT_FALSE(exceptionState.hadException());
@@ -94,7 +98,7 @@ TEST(ServiceWorkerResponseTest, FromWebServiceWorkerResponseDefault) {
   Response* response = Response::create(scope.getScriptState(), *webResponse);
 
   Headers* responseHeaders = response->headers();
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   EXPECT_STREQ(
       "foop", responseHeaders->get("set-cookie", exceptionState).utf8().data());
   EXPECT_STREQ("bar",
@@ -113,7 +117,7 @@ TEST(ServiceWorkerResponseTest, FromWebServiceWorkerResponseBasic) {
   Response* response = Response::create(scope.getScriptState(), *webResponse);
 
   Headers* responseHeaders = response->headers();
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   EXPECT_STREQ(
       "", responseHeaders->get("set-cookie", exceptionState).utf8().data());
   EXPECT_STREQ("bar",
@@ -132,7 +136,7 @@ TEST(ServiceWorkerResponseTest, FromWebServiceWorkerResponseCORS) {
   Response* response = Response::create(scope.getScriptState(), *webResponse);
 
   Headers* responseHeaders = response->headers();
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   EXPECT_STREQ(
       "", responseHeaders->get("set-cookie", exceptionState).utf8().data());
   EXPECT_STREQ("", responseHeaders->get("foo", exceptionState).utf8().data());
@@ -150,7 +154,7 @@ TEST(ServiceWorkerResponseTest, FromWebServiceWorkerResponseOpaque) {
   Response* response = Response::create(scope.getScriptState(), *webResponse);
 
   Headers* responseHeaders = response->headers();
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   EXPECT_STREQ(
       "", responseHeaders->get("set-cookie", exceptionState).utf8().data());
   EXPECT_STREQ("", responseHeaders->get("foo", exceptionState).utf8().data());
@@ -169,7 +173,7 @@ void checkResponseStream(ScriptState* scriptState,
     EXPECT_FALSE(response->bodyBuffer());
   }
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   Response* clonedResponse = response->clone(scriptState, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
 
@@ -223,7 +227,9 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneDefault) {
   BodyStreamBuffer* buffer = createHelloWorldBuffer(scope.getScriptState());
   FetchResponseData* fetchResponseData =
       FetchResponseData::createWithBuffer(buffer);
-  fetchResponseData->setURL(KURL(ParsedURLString, "http://www.response.com"));
+  Vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, "http://www.response.com"));
+  fetchResponseData->setURLList(urlList);
   Response* response =
       Response::create(scope.getExecutionContext(), fetchResponseData);
   EXPECT_EQ(response->internalBodyBuffer(), buffer);
@@ -235,7 +241,9 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneBasic) {
   BodyStreamBuffer* buffer = createHelloWorldBuffer(scope.getScriptState());
   FetchResponseData* fetchResponseData =
       FetchResponseData::createWithBuffer(buffer);
-  fetchResponseData->setURL(KURL(ParsedURLString, "http://www.response.com"));
+  Vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, "http://www.response.com"));
+  fetchResponseData->setURLList(urlList);
   fetchResponseData = fetchResponseData->createBasicFilteredResponse();
   Response* response =
       Response::create(scope.getExecutionContext(), fetchResponseData);
@@ -248,7 +256,9 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneCORS) {
   BodyStreamBuffer* buffer = createHelloWorldBuffer(scope.getScriptState());
   FetchResponseData* fetchResponseData =
       FetchResponseData::createWithBuffer(buffer);
-  fetchResponseData->setURL(KURL(ParsedURLString, "http://www.response.com"));
+  Vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, "http://www.response.com"));
+  fetchResponseData->setURLList(urlList);
   fetchResponseData = fetchResponseData->createCORSFilteredResponse();
   Response* response =
       Response::create(scope.getExecutionContext(), fetchResponseData);
@@ -261,7 +271,9 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneOpaque) {
   BodyStreamBuffer* buffer = createHelloWorldBuffer(scope.getScriptState());
   FetchResponseData* fetchResponseData =
       FetchResponseData::createWithBuffer(buffer);
-  fetchResponseData->setURL(KURL(ParsedURLString, "http://www.response.com"));
+  Vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, "http://www.response.com"));
+  fetchResponseData->setURLList(urlList);
   fetchResponseData = fetchResponseData->createOpaqueFilteredResponse();
   Response* response =
       Response::create(scope.getExecutionContext(), fetchResponseData);
@@ -276,10 +288,12 @@ TEST(ServiceWorkerResponseTest, BodyStreamBufferCloneError) {
       BytesConsumer::createErrored(BytesConsumer::Error()));
   FetchResponseData* fetchResponseData =
       FetchResponseData::createWithBuffer(buffer);
-  fetchResponseData->setURL(KURL(ParsedURLString, "http://www.response.com"));
+  Vector<KURL> urlList;
+  urlList.push_back(KURL(ParsedURLString, "http://www.response.com"));
+  fetchResponseData->setURLList(urlList);
   Response* response =
       Response::create(scope.getExecutionContext(), fetchResponseData);
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   Response* clonedResponse =
       response->clone(scope.getScriptState(), exceptionState);
   EXPECT_FALSE(exceptionState.hadException());

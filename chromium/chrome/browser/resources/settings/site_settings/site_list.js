@@ -35,15 +35,6 @@ Polymer({
     },
 
     /**
-     * The site that was selected by the user in the dropdown list.
-     * @type {SiteException}
-     */
-    selectedSite: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
      * The site serving as the model for the currently open action menu.
      * @private {?SiteException}
      */
@@ -74,16 +65,6 @@ Polymer({
     categorySubtype: {
       type: String,
       value: settings.INVALID_CATEGORY_SUBTYPE,
-    },
-
-    /**
-     * Represents the state of the main toggle shown for the category. For
-     * example, the Location category can be set to Block/Ask so false, in that
-     * case, represents Block and true represents Ask.
-     */
-    categoryEnabled: {
-      type: Boolean,
-      value: true,
     },
 
     /**
@@ -211,15 +192,17 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  shouldShowMenu_: function(source) {
-    return !(this.isExceptionControlled_(source) || this.allSites);
+  isActionMenuHidden_: function(source) {
+    return this.isExceptionControlled_(source) || this.allSites;
   },
 
   /**
    * A handler for the Add Site button.
+   * @param {!Event} e
    * @private
    */
-  onAddSiteTap_: function() {
+  onAddSiteTap_: function(e) {
+    e.preventDefault();
     var dialog = document.createElement('add-site-dialog');
     dialog.category = this.category;
     dialog.contentSetting = this.categorySubtype;
@@ -240,11 +223,13 @@ Polymer({
     if (this.allSites) {
       this.getAllSitesList_().then(function(lists) {
         this.processExceptions_(lists);
+        this.closeActionMenu_();
       }.bind(this));
     } else {
       this.browserProxy_.getExceptionList(this.category).then(
         function(exceptionList) {
           this.processExceptions_([exceptionList]);
+          this.closeActionMenu_();
       }.bind(this));
     }
   },
@@ -312,34 +297,39 @@ Polymer({
   },
 
   /**
-   * Converts an unordered site list to an ordered array, sorted by site name
-   * then protocol and de-duped (by origin).
-   * @param {!Array<SiteException>} sites A list of sites to sort and de-dupe.
-   * @return {!Array<SiteException>} Sorted and de-duped list.
+   * Converts a list of exceptions received from the C++ handler to
+   * full SiteException objects. If this site-list is used as an all sites
+   * view, the list is sorted by site name, then protocol and port and de-duped
+   * (by origin).
+   * @param {!Array<SiteException>} sites A list of sites to convert.
+   * @return {!Array<SiteException>} A list of full SiteExceptions. Sorted and
+   *    deduped if allSites is set.
    * @private
    */
   toSiteArray_: function(sites) {
     var self = this;
-    sites.sort(function(a, b) {
-      var url1 = self.toUrl(a.origin);
-      var url2 = self.toUrl(b.origin);
-      var comparison = url1.host.localeCompare(url2.host);
-      if (comparison == 0) {
-        comparison = url1.protocol.localeCompare(url2.protocol);
+    if (this.allSites) {
+      sites.sort(function(a, b) {
+        var url1 = self.toUrl(a.origin);
+        var url2 = self.toUrl(b.origin);
+        var comparison = url1.host.localeCompare(url2.host);
         if (comparison == 0) {
-          comparison = url1.port.localeCompare(url2.port);
+          comparison = url1.protocol.localeCompare(url2.protocol);
           if (comparison == 0) {
-            // Compare hosts for the embedding origins.
-            var host1 = self.toUrl(a.embeddingOrigin);
-            var host2 = self.toUrl(b.embeddingOrigin);
-            host1 = (host1 == null) ? '' : host1.host;
-            host2 = (host2 == null) ? '' : host2.host;
-            return host1.localeCompare(host2);
+            comparison = url1.port.localeCompare(url2.port);
+            if (comparison == 0) {
+              // Compare hosts for the embedding origins.
+              var host1 = self.toUrl(a.embeddingOrigin);
+              var host2 = self.toUrl(b.embeddingOrigin);
+              host1 = (host1 == null) ? '' : host1.host;
+              host2 = (host2 == null) ? '' : host2.host;
+              return host1.localeCompare(host2);
+            }
           }
         }
-      }
-      return comparison;
-    });
+        return comparison;
+      });
+    }
     var results = /** @type {!Array<SiteException>} */([]);
     var lastOrigin = '';
     var lastEmbeddingOrigin = '';
@@ -348,14 +338,14 @@ Polymer({
       var siteException = this.expandSiteException(sites[i]);
 
       // The All Sites category can contain duplicates (from other categories).
-      if (siteException.originForDisplay == lastOrigin &&
-          siteException.embeddingOriginForDisplay == lastEmbeddingOrigin) {
+      if (this.allSites && siteException.origin == lastOrigin &&
+          siteException.embeddingOrigin == lastEmbeddingOrigin) {
         continue;
       }
 
       results.push(siteException);
-      lastOrigin = siteException.originForDisplay;
-      lastEmbeddingOrigin = siteException.embeddingOriginForDisplay;
+      lastOrigin = siteException.origin;
+      lastEmbeddingOrigin = siteException.embeddingOrigin;
     }
     return results;
   },
@@ -397,9 +387,8 @@ Polymer({
   onOriginTap_: function(event) {
     if (!this.enableSiteSettings_)
       return;
-    this.selectedSite = event.model.item;
     settings.navigateTo(settings.Route.SITE_SETTINGS_SITE_DETAILS,
-        new URLSearchParams('site=' + this.selectedSite.origin));
+        new URLSearchParams('site=' + event.model.item.origin));
   },
 
   /**
@@ -453,14 +442,14 @@ Polymer({
    * @return {string} The site description.
    */
   computeSiteDescription_: function(item) {
-    if (item.incognito && item.embeddingOriginForDisplay.length > 0) {
+    if (item.incognito && item.embeddingDisplayName.length > 0) {
       return loadTimeData.getStringF('embeddedIncognitoSite',
-          item.embeddingOriginForDisplay);
+          item.embeddingDisplayName);
     }
 
     if (item.incognito)
       return loadTimeData.getString('incognitoSite');
-    return item.embeddingOriginForDisplay;
+    return item.embeddingDisplayName;
   },
 
   /**
@@ -478,7 +467,9 @@ Polymer({
   /** @private */
   closeActionMenu_: function() {
     this.actionMenuSite_ = null;
-    /** @type {!CrActionMenuElement} */ (
-        this.$$('dialog[is=cr-action-menu]')).close();
+    var actionMenu = /** @type {!CrActionMenuElement} */ (
+        this.$$('dialog[is=cr-action-menu]'));
+    if (actionMenu.open)
+      actionMenu.close();
   },
 });

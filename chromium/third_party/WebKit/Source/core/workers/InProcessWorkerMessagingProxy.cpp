@@ -49,30 +49,6 @@
 
 namespace blink {
 
-namespace {
-
-void processUnhandledExceptionOnWorkerGlobalScope(
-    int exceptionId,
-    ExecutionContext* scriptContext) {
-  WorkerGlobalScope* globalScope = toWorkerGlobalScope(scriptContext);
-  globalScope->exceptionUnhandled(exceptionId);
-}
-
-void processMessageOnWorkerGlobalScope(
-    PassRefPtr<SerializedScriptValue> message,
-    std::unique_ptr<MessagePortChannelArray> channels,
-    InProcessWorkerObjectProxy* workerObjectProxy,
-    ExecutionContext* scriptContext) {
-  WorkerGlobalScope* globalScope = toWorkerGlobalScope(scriptContext);
-  MessagePortArray* ports =
-      MessagePort::entanglePorts(*scriptContext, std::move(channels));
-  globalScope->dispatchEvent(MessageEvent::create(ports, std::move(message)));
-  workerObjectProxy->confirmMessageFromWorkerObject();
-  workerObjectProxy->startPendingActivityTimer();
-}
-
-}  // namespace
-
 InProcessWorkerMessagingProxy::InProcessWorkerMessagingProxy(
     InProcessWorkerBase* workerObject,
     WorkerClients* workerClients)
@@ -89,11 +65,9 @@ InProcessWorkerMessagingProxy::InProcessWorkerMessagingProxy(
     : ThreadedMessagingProxyBase(executionContext),
       m_workerObject(workerObject),
       m_workerClients(workerClients),
-      m_unconfirmedMessageCount(0),
-      m_workerGlobalScopeMayHavePendingActivity(false),
       m_weakPtrFactory(this) {
-  m_workerObjectProxy =
-      InProcessWorkerObjectProxy::create(m_weakPtrFactory.createWeakPtr());
+  m_workerObjectProxy = InProcessWorkerObjectProxy::create(
+      m_weakPtrFactory.createWeakPtr(), getParentFrameTaskRunners());
 }
 
 InProcessWorkerMessagingProxy::~InProcessWorkerMessagingProxy() {
@@ -124,14 +98,19 @@ void InProcessWorkerMessagingProxy::startWorkerGlobalScope(
   WorkerThreadStartMode startMode =
       workerInspectorProxy()->workerStartMode(document);
   std::unique_ptr<WorkerSettings> workerSettings =
-      wrapUnique(new WorkerSettings(document->settings()));
+      WTF::wrapUnique(new WorkerSettings(document->settings()));
+  WorkerV8Settings workerV8Settings(WorkerV8Settings::Default());
+  workerV8Settings.m_heapLimitMode =
+      toIsolate(document)->IsHeapLimitIncreasedForDebugging()
+          ? WorkerV8Settings::HeapLimitMode::IncreasedForDebugging
+          : WorkerV8Settings::HeapLimitMode::Default;
   std::unique_ptr<WorkerThreadStartupData> startupData =
       WorkerThreadStartupData::create(
           scriptURL, userAgent, sourceCode, nullptr, startMode,
           csp->headers().get(), referrerPolicy, starterOrigin,
           m_workerClients.release(), document->addressSpace(),
           OriginTrialContext::getTokens(document).get(),
-          std::move(workerSettings));
+          std::move(workerSettings), workerV8Settings);
 
   initializeWorkerThread(std::move(startupData));
   workerInspectorProxy()->workerThreadCreated(document, workerThread(),
@@ -158,16 +137,19 @@ void InProcessWorkerMessagingProxy::postMessageToWorkerGlobalScope(
   if (askedToTerminate())
     return;
 
-  std::unique_ptr<ExecutionContextTask> task = createCrossThreadTask(
-      &processMessageOnWorkerGlobalScope, std::move(message),
-      passed(std::move(channels)), crossThreadUnretained(&workerObjectProxy()));
   if (workerThread()) {
     // A message event is an activity and may initiate another activity.
-    m_workerGlobalScopeMayHavePendingActivity = true;
+    m_workerGlobalScopeHasPendingActivity = true;
     ++m_unconfirmedMessageCount;
+    std::unique_ptr<ExecutionContextTask> task = createCrossThreadTask(
+        &InProcessWorkerObjectProxy::processMessageFromWorkerObject,
+        crossThreadUnretained(&workerObjectProxy()), std::move(message),
+        WTF::passed(std::move(channels)),
+        crossThreadUnretained(workerThread()));
     workerThread()->postTask(BLINK_FROM_HERE, std::move(task));
   } else {
-    m_queuedEarlyTasks.append(std::move(task));
+    m_queuedEarlyTasks.push_back(
+        WTF::makeUnique<QueuedTask>(std::move(message), std::move(channels)));
   }
 }
 
@@ -187,26 +169,34 @@ void InProcessWorkerMessagingProxy::dispatchErrorEvent(
 
   ErrorEvent* event =
       ErrorEvent::create(errorMessage, location->clone(), nullptr);
-  if (m_workerObject->dispatchEvent(event) == DispatchEventResult::NotCanceled)
-    postTaskToWorkerGlobalScope(
-        BLINK_FROM_HERE,
-        createCrossThreadTask(&processUnhandledExceptionOnWorkerGlobalScope,
-                              exceptionId));
+  if (m_workerObject->dispatchEvent(event) != DispatchEventResult::NotCanceled)
+    return;
+
+  postTaskToWorkerGlobalScope(
+      BLINK_FROM_HERE,
+      crossThreadBind(&InProcessWorkerObjectProxy::processUnhandledException,
+                      crossThreadUnretained(m_workerObjectProxy.get()),
+                      exceptionId, crossThreadUnretained(workerThread())));
 }
 
 void InProcessWorkerMessagingProxy::workerThreadCreated() {
+  DCHECK(isParentContextThread());
   ThreadedMessagingProxyBase::workerThreadCreated();
 
-  DCHECK(isParentContextThread());
-
-  DCHECK(!m_unconfirmedMessageCount);
-  m_unconfirmedMessageCount = m_queuedEarlyTasks.size();
-
   // Worker initialization means a pending activity.
-  m_workerGlobalScopeMayHavePendingActivity = true;
+  m_workerGlobalScopeHasPendingActivity = true;
 
-  for (auto& earlyTask : m_queuedEarlyTasks)
-    workerThread()->postTask(BLINK_FROM_HERE, std::move(earlyTask));
+  DCHECK_EQ(0u, m_unconfirmedMessageCount);
+  m_unconfirmedMessageCount = m_queuedEarlyTasks.size();
+  for (auto& queuedTask : m_queuedEarlyTasks) {
+    std::unique_ptr<ExecutionContextTask> task = createCrossThreadTask(
+        &InProcessWorkerObjectProxy::processMessageFromWorkerObject,
+        crossThreadUnretained(&workerObjectProxy()),
+        queuedTask->message.release(),
+        WTF::passed(std::move(queuedTask->channels)),
+        crossThreadUnretained(workerThread()));
+    workerThread()->postTask(BLINK_FROM_HERE, std::move(task));
+  }
   m_queuedEarlyTasks.clear();
 }
 
@@ -225,26 +215,34 @@ void InProcessWorkerMessagingProxy::confirmMessageFromWorkerObject() {
   DCHECK(isParentContextThread());
   if (askedToTerminate())
     return;
-  DCHECK(m_unconfirmedMessageCount);
+  DCHECK(m_workerGlobalScopeHasPendingActivity);
+  DCHECK_GT(m_unconfirmedMessageCount, 0u);
   --m_unconfirmedMessageCount;
 }
 
 void InProcessWorkerMessagingProxy::pendingActivityFinished() {
   DCHECK(isParentContextThread());
-  DCHECK(m_workerGlobalScopeMayHavePendingActivity);
+  DCHECK(m_workerGlobalScopeHasPendingActivity);
   if (m_unconfirmedMessageCount > 0) {
     // Ignore the report because an inflight message event may initiate a
     // new activity.
     return;
   }
-  m_workerGlobalScopeMayHavePendingActivity = false;
+  m_workerGlobalScopeHasPendingActivity = false;
 }
 
 bool InProcessWorkerMessagingProxy::hasPendingActivity() const {
   DCHECK(isParentContextThread());
   if (askedToTerminate())
     return false;
-  return m_unconfirmedMessageCount || m_workerGlobalScopeMayHavePendingActivity;
+  return m_workerGlobalScopeHasPendingActivity;
 }
+
+InProcessWorkerMessagingProxy::QueuedTask::QueuedTask(
+    RefPtr<SerializedScriptValue> message,
+    std::unique_ptr<MessagePortChannelArray> channels)
+    : message(std::move(message)), channels(std::move(channels)) {}
+
+InProcessWorkerMessagingProxy::QueuedTask::~QueuedTask() = default;
 
 }  // namespace blink

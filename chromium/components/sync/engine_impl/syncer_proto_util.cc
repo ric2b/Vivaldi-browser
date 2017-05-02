@@ -522,7 +522,8 @@ bool SyncerProtoUtil::ShouldMaintainPosition(
     const sync_pb::SyncEntity& sync_entity) {
   // Maintain positions for bookmarks that are not server-defined top-level
   // folders.
-  return GetModelType(sync_entity) == BOOKMARKS &&
+  return (GetModelType(sync_entity) == BOOKMARKS ||
+    GetModelType(sync_entity) == NOTES) &&
          !(sync_entity.folder() &&
            !sync_entity.server_defined_unique_tag().empty());
 }
@@ -532,6 +533,7 @@ bool SyncerProtoUtil::ShouldMaintainHierarchy(
     const sync_pb::SyncEntity& sync_entity) {
   // Maintain hierarchy for bookmarks or top-level items.
   return GetModelType(sync_entity) == BOOKMARKS ||
+         GetModelType(sync_entity) == NOTES ||
          sync_entity.parent_id_string() == "0";
 }
 

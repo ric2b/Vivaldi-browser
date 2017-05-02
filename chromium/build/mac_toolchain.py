@@ -24,29 +24,50 @@ import tempfile
 import urllib2
 
 # This can be changed after running /build/package_mac_toolchain.py.
-TOOLCHAIN_REVISION = '5B1008'
-TOOLCHAIN_SUB_REVISION = 3
-TOOLCHAIN_VERSION = '%s-%s' % (TOOLCHAIN_REVISION, TOOLCHAIN_SUB_REVISION)
+MAC_TOOLCHAIN_VERSION = '5B1008'
+MAC_TOOLCHAIN_SUB_REVISION = 3
+MAC_TOOLCHAIN_VERSION = '%s-%s' % (MAC_TOOLCHAIN_VERSION,
+                                   MAC_TOOLCHAIN_SUB_REVISION)
+IOS_TOOLCHAIN_VERSION = '8A218a'
+IOS_TOOLCHAIN_SUB_REVISION = 2
+IOS_TOOLCHAIN_VERSION = '%s-%s' % (IOS_TOOLCHAIN_VERSION,
+                                   IOS_TOOLCHAIN_SUB_REVISION)
+
+# Absolute path to src/ directory.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Absolute path to a file with gclient solutions.
+GCLIENT_CONFIG = os.path.join(os.path.dirname(REPO_ROOT), '.gclient')
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-TOOLCHAIN_BUILD_DIR = os.path.join(BASE_DIR, 'mac_files', 'Xcode.app')
-STAMP_FILE = os.path.join(BASE_DIR, 'mac_files', 'toolchain_build_revision')
+TOOLCHAIN_BUILD_DIR = os.path.join(BASE_DIR, '%s_files', 'Xcode.app')
+STAMP_FILE = os.path.join(BASE_DIR, '%s_files', 'toolchain_build_revision')
 TOOLCHAIN_URL = 'gs://chrome-mac-sdk/'
 
+def GetPlatforms():
+  default_target_os = ["mac"]
+  try:
+    env = {}
+    execfile(GCLIENT_CONFIG, env, env)
+    return env.get('target_os', default_target_os)
+  except:
+    pass
+  return default_target_os
 
-def ReadStampFile():
+
+def ReadStampFile(target_os):
   """Return the contents of the stamp file, or '' if it doesn't exist."""
   try:
-    with open(STAMP_FILE, 'r') as f:
+    with open(STAMP_FILE % target_os, 'r') as f:
       return f.read().rstrip()
   except IOError:
     return ''
 
 
-def WriteStampFile(s):
+def WriteStampFile(target_os, s):
   """Write s to the stamp file."""
-  EnsureDirExists(os.path.dirname(STAMP_FILE))
-  with open(STAMP_FILE, 'w') as f:
+  EnsureDirExists(os.path.dirname(STAMP_FILE % target_os))
+  with open(STAMP_FILE % target_os, 'w') as f:
     f.write(s)
     f.write('\n')
 
@@ -80,6 +101,7 @@ def CanAccessToolchainBucket():
   proc.communicate()
   return proc.returncode == 0
 
+
 def LoadPlist(path):
   """Loads Plist at |path| and returns it as a dictionary."""
   fd, name = tempfile.mkstemp()
@@ -91,7 +113,7 @@ def LoadPlist(path):
     os.unlink(name)
 
 
-def AcceptLicense():
+def AcceptLicense(target_os):
   """Use xcodebuild to accept new toolchain license if necessary.  Don't accept
   the license if a newer license has already been accepted. This only works if
   xcodebuild and xcode-select are passwordless in sudoers."""
@@ -99,7 +121,7 @@ def AcceptLicense():
   # Check old license
   try:
     target_license_plist_path = \
-        os.path.join(TOOLCHAIN_BUILD_DIR,
+        os.path.join(TOOLCHAIN_BUILD_DIR % target_os,
                      *['Contents','Resources','LicenseInfo.plist'])
     target_license_plist = LoadPlist(target_license_plist_path)
     build_type = target_license_plist['licenseType']
@@ -126,17 +148,18 @@ def AcceptLicense():
   old_path = subprocess.Popen(['/usr/bin/xcode-select', '-p'],
                                stdout=subprocess.PIPE).communicate()[0].strip()
   try:
-    build_dir = os.path.join(TOOLCHAIN_BUILD_DIR, 'Contents/Developer')
+    build_dir = os.path.join(
+        TOOLCHAIN_BUILD_DIR % target_os, 'Contents/Developer')
     subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', build_dir])
     subprocess.check_call(['sudo', '/usr/bin/xcodebuild', '-license', 'accept'])
   finally:
     subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', old_path])
 
 
-def _UseHermeticToolchain():
+def _UseHermeticToolchain(target_os):
   current_dir = os.path.dirname(os.path.realpath(__file__))
   script_path = os.path.join(current_dir, 'mac/should_use_hermetic_xcode.py')
-  proc = subprocess.Popen([script_path], stdout=subprocess.PIPE)
+  proc = subprocess.Popen([script_path, target_os], stdout=subprocess.PIPE)
   return '1' in proc.stdout.readline()
 
 
@@ -164,19 +187,17 @@ def RequestGsAuthentication():
   sys.exit(1)
 
 
-def main():
-  if sys.platform != 'darwin':
+def DownloadHermeticBuild(target_os, default_version, toolchain_filename):
+  if not _UseHermeticToolchain(target_os):
+    print 'Using local toolchain for %s.' % target_os
     return 0
 
-  if not _UseHermeticToolchain():
-    print 'Using local toolchain.'
-    return 0
+  toolchain_version = os.environ.get('MAC_TOOLCHAIN_REVISION',
+                                      default_version)
 
-  toolchain_revision = os.environ.get('MAC_TOOLCHAIN_REVISION',
-                                      TOOLCHAIN_VERSION)
-  if ReadStampFile() == toolchain_revision:
-    print 'Toolchain (%s) is already up to date.' % toolchain_revision
-    AcceptLicense()
+  if ReadStampFile(target_os) == toolchain_version:
+    print 'Toolchain (%s) is already up to date.' % toolchain_version
+    AcceptLicense(target_os)
     return 0
 
   if not CanAccessToolchainBucket():
@@ -184,26 +205,47 @@ def main():
     return 1
 
   # Reset the stamp file in case the build is unsuccessful.
-  WriteStampFile('')
+  WriteStampFile(target_os, '')
 
-  toolchain_file = '%s.tgz' % toolchain_revision
+  toolchain_file = '%s.tgz' % toolchain_version
   toolchain_full_url = TOOLCHAIN_URL + toolchain_file
 
-  print 'Updating toolchain to %s...' % toolchain_revision
+  print 'Updating toolchain to %s...' % toolchain_version
   try:
-    toolchain_file = 'toolchain-%s.tgz' % toolchain_revision
+    toolchain_file = toolchain_filename % toolchain_version
     toolchain_full_url = TOOLCHAIN_URL + toolchain_file
-    DownloadAndUnpack(toolchain_full_url, TOOLCHAIN_BUILD_DIR)
-    AcceptLicense()
+    DownloadAndUnpack(toolchain_full_url, TOOLCHAIN_BUILD_DIR % target_os)
+    AcceptLicense(target_os)
 
-    print 'Toolchain %s unpacked.' % toolchain_revision
-    WriteStampFile(toolchain_revision)
+    print 'Toolchain %s unpacked.' % toolchain_version
+    WriteStampFile(target_os, toolchain_version)
     return 0
   except Exception as e:
     print 'Failed to download toolchain %s.' % toolchain_file
     print 'Exception %s' % e
     print 'Exiting.'
     return 1
+
+
+def main():
+  if sys.platform != 'darwin':
+    return 0
+
+  for target_os in GetPlatforms():
+    if target_os == 'ios':
+      default_version = IOS_TOOLCHAIN_VERSION
+      toolchain_filename = 'ios-toolchain-%s.tgz'
+    else:
+      default_version = MAC_TOOLCHAIN_VERSION
+      toolchain_filename = 'toolchain-%s.tgz'
+
+    return_value = DownloadHermeticBuild(
+        target_os, default_version, toolchain_filename)
+    if return_value:
+      return return_value
+
+  return 0
+
 
 if __name__ == '__main__':
   sys.exit(main())

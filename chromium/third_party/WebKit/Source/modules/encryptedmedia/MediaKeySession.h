@@ -28,7 +28,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMArrayPiece.h"
 #include "modules/EventTargetModules.h"
 #include "modules/encryptedmedia/MediaKeyStatusMap.h"
@@ -63,8 +63,8 @@ class MediaKeys;
 // The WebContentDecryptionModuleSession has the same lifetime as this object.
 class MediaKeySession final
     : public EventTargetWithInlineData,
-      public ActiveScriptWrappable,
-      public ActiveDOMObject,
+      public ActiveScriptWrappable<MediaKeySession>,
+      public ContextLifecycleObserver,
       private WebContentDecryptionModuleSession::Client {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MediaKeySession);
@@ -99,8 +99,8 @@ class MediaKeySession final
   // ScriptWrappable
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // ContextLifecycleObserver
+  void contextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 

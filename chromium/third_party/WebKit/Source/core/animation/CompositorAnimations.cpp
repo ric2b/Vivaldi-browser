@@ -42,6 +42,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/FilterEffectBuilder.h"
+#include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/animation/AnimationTranslationUtil.h"
 #include "platform/animation/CompositorAnimation.h"
@@ -344,6 +345,25 @@ bool CompositorAnimations::canStartAnimationOnCompositor(
     const Element& element) {
   if (!Platform::current()->isThreadedAnimationEnabled())
     return false;
+
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    // We query paint property tree state below to determine whether the
+    // animation is compositable. There is a known lifecycle violation where an
+    // animation can be cancelled during style update. See
+    // CompositorAnimations::cancelAnimationOnCompositor and
+    // http://crbug.com/676456. When this is fixed we would like to enable
+    // the DCHECK below.
+    // DCHECK(document().lifecycle().state() >=
+    // DocumentLifecycle::PrePaintClean);
+    const ObjectPaintProperties* paintProperties =
+        element.layoutObject()->paintProperties();
+    const TransformPaintPropertyNode* transformNode =
+        paintProperties->transform();
+    const EffectPaintPropertyNode* effectNode = paintProperties->effect();
+    return (transformNode && transformNode->hasDirectCompositingReasons()) ||
+           (effectNode && effectNode->hasDirectCompositingReasons());
+  }
+
   return element.layoutObject() &&
          element.layoutObject()->compositingState() == PaintsIntoOwnBacking;
 }
@@ -375,7 +395,7 @@ void CompositorAnimations::startAnimationOnCompositor(
     CompositorAnimationPlayer* compositorPlayer = animation.compositorPlayer();
     DCHECK(compositorPlayer);
     compositorPlayer->addAnimation(std::move(compositorAnimation));
-    startedAnimationIds.append(id);
+    startedAnimationIds.push_back(id);
   }
   DCHECK(!startedAnimationIds.isEmpty());
 }
@@ -518,7 +538,7 @@ template <typename PlatformAnimationCurveType>
 void addKeyframesToCurve(
     PlatformAnimationCurveType& curve,
     const AnimatableValuePropertySpecificKeyframeVector& keyframes) {
-  auto* lastKeyframe = keyframes.last().get();
+  auto* lastKeyframe = keyframes.back().get();
   for (const auto& keyframe : keyframes) {
     const TimingFunction* keyframeTimingFunction = 0;
     // Ignore timing function of last frame.
@@ -617,7 +637,7 @@ void CompositorAnimations::getAnimationOnCompositor(
     animation->setDirection(compositorTiming.direction);
     animation->setPlaybackRate(compositorTiming.playbackRate);
     animation->setFillMode(compositorTiming.fillMode);
-    animations.append(std::move(animation));
+    animations.push_back(std::move(animation));
   }
   DCHECK(!animations.isEmpty());
 }

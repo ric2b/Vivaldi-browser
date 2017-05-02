@@ -5,7 +5,7 @@
 #ifndef NavigatorPlugins_h
 #define NavigatorPlugins_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 
 namespace blink {
@@ -16,8 +16,7 @@ class LocalFrame;
 class Navigator;
 
 class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
-                               public Supplement<Navigator>,
-                               public DOMWindowProperty {
+                               public Supplement<Navigator> {
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorPlugins);
 
  public:

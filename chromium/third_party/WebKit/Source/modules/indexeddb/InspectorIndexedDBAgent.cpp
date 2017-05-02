@@ -31,7 +31,6 @@
 #include "modules/indexeddb/InspectorIndexedDBAgent.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
@@ -125,7 +124,7 @@ class GetDatabaseNamesCallback final : public EventListener {
     std::unique_ptr<protocol::Array<String>> databaseNames =
         protocol::Array<String>::create();
     for (size_t i = 0; i < databaseNamesList->length(); ++i)
-      databaseNames->addItem(databaseNamesList->anonymousIndexedGetter(i));
+      databaseNames->addItem(databaseNamesList->item(i));
     m_requestCallback->sendSuccess(std::move(databaseNames));
   }
 
@@ -161,7 +160,7 @@ class ExecutableWithDatabase
         OpenDatabaseCallback<RequestCallback>::create(this);
     UpgradeDatabaseCallback<RequestCallback>* upgradeCallback =
         UpgradeDatabaseCallback<RequestCallback>::create(this);
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     IDBOpenDBRequest* idbOpenDBRequest =
         idbFactory->open(getScriptState(), databaseName, exceptionState);
     if (exceptionState.hadException()) {
@@ -276,7 +275,7 @@ static IDBTransaction* transactionForDatabase(
     IDBDatabase* idbDatabase,
     const String& objectStoreName,
     const String& mode = IndexedDBNames::readonly) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   StringOrStringSequenceOrDOMStringList scope;
   scope.setString(objectStoreName);
   IDBTransaction* idbTransaction =
@@ -289,7 +288,7 @@ static IDBTransaction* transactionForDatabase(
 static IDBObjectStore* objectStoreForTransaction(
     IDBTransaction* idbTransaction,
     const String& objectStoreName) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   IDBObjectStore* idbObjectStore =
       idbTransaction->objectStore(objectStoreName, exceptionState);
   if (exceptionState.hadException())
@@ -299,7 +298,7 @@ static IDBObjectStore* objectStoreForTransaction(
 
 static IDBIndex* indexForObjectStore(IDBObjectStore* idbObjectStore,
                                      const String& indexName) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   IDBIndex* idbIndex = idbObjectStore->index(indexName, exceptionState);
   if (exceptionState.hadException())
     return nullptr;
@@ -434,7 +433,7 @@ static IDBKey* idbKeyFromInspectorObject(protocol::IndexedDB::Key* key) {
     IDBKey::KeyArray keyArray;
     auto array = key->getArray(nullptr);
     for (size_t i = 0; array && i < array->length(); ++i)
-      keyArray.append(idbKeyFromInspectorObject(array->get(i)));
+      keyArray.push_back(idbKeyFromInspectorObject(array->get(i)));
     idbKey = IDBKey::createArray(keyArray);
   } else {
     return nullptr;
@@ -505,7 +504,7 @@ class OpenCursorCallback final : public EventListener {
     IDBCursorWithValue* idbCursor = requestResult->idbCursorWithValue();
 
     if (m_skipCount) {
-      TrackExceptionState exceptionState;
+      DummyExceptionStateForTesting exceptionState;
       idbCursor->advance(m_skipCount, exceptionState);
       if (exceptionState.hadException()) {
         m_requestCallback->sendFailure(
@@ -522,7 +521,7 @@ class OpenCursorCallback final : public EventListener {
 
     // Continue cursor before making injected script calls, otherwise
     // transaction might be finished.
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     idbCursor->continueFunction(nullptr, nullptr, exceptionState);
     if (exceptionState.hadException()) {
       m_requestCallback->sendFailure(
@@ -735,7 +734,7 @@ void InspectorIndexedDBAgent::requestDatabaseNames(
     return;
   }
   ScriptState::Scope scope(scriptState);
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   IDBRequest* idbRequest =
       idbFactory->getDatabaseNames(scriptState, exceptionState);
   if (exceptionState.hadException()) {
@@ -896,7 +895,7 @@ class ClearObjectStore final
       return;
     }
 
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     idbObjectStore->clear(getScriptState(), exceptionState);
     ASSERT(!exceptionState.hadException());
     if (exceptionState.hadException()) {

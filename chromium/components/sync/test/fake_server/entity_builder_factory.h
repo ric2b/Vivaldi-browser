@@ -11,6 +11,7 @@
 
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "url/gurl.h"
+#include "sync/test/fake_server/notes_entity_builder.h"
 
 namespace fake_server {
 
@@ -29,6 +30,9 @@ class EntityBuilderFactory {
   virtual ~EntityBuilderFactory();
 
   BookmarkEntityBuilder NewBookmarkEntityBuilder(const std::string& title);
+  NotesEntityBuilder NewNotesEntityBuilder(const std::string& title,
+                                           const GURL& url,
+                                           const std::string& content);
 
  private:
   // An identifier used when creating entities. This value is used similarly to

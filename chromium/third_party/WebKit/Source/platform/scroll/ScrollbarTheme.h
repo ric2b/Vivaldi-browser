@@ -58,6 +58,10 @@ class PLATFORM_EXPORT ScrollbarTheme {
 
   virtual ScrollbarPart hitTest(const ScrollbarThemeClient&, const IntPoint&);
 
+  // This returns a fixed value regardless of device-scale-factor.
+  // This returns thickness when scrollbar is painted.  i.e. It's not 0 even in
+  // overlay scrollbar mode.
+  // See also Scrollbar::scrollbarThickness().
   virtual int scrollbarThickness(ScrollbarControlSize = RegularScrollbar) {
     return 0;
   }
@@ -71,6 +75,13 @@ class PLATFORM_EXPORT ScrollbarTheme {
   virtual bool usesOverlayScrollbars() const { return false; }
   virtual void updateScrollbarOverlayColorTheme(const ScrollbarThemeClient&) {}
 
+  // If true, scrollbars that become invisible (i.e. overlay scrollbars that
+  // fade out) should be marked as disabled. This option exists since Mac and
+  // Aura overlays implement the fade out differently, with Mac painting code
+  // fading out the scrollbars. Aura scrollbars require disabling the scrollbar
+  // to prevent painting it.
+  virtual bool shouldDisableInvisibleScrollbars() const { return true; }
+
   virtual bool invalidateOnMouseEnterExit() { return false; }
   virtual bool invalidateOnWindowActiveChange() const { return false; }
 
@@ -82,6 +93,10 @@ class PLATFORM_EXPORT ScrollbarTheme {
       float newPosition) const {
     return AllParts;
   }
+
+  // Returns parts of the scrollbar which must be repainted following a change
+  // in enabled state.
+  virtual ScrollbarPart invalidateOnEnabledChange() const { return AllParts; }
 
   virtual void paintScrollCorner(GraphicsContext&,
                                  const DisplayItemClient&,

@@ -61,6 +61,7 @@ namespace sync_bookmarks {
 const char kBookmarkBarTag[] = "bookmark_bar";
 const char kMobileBookmarksTag[] = "synced_bookmarks";
 const char kOtherBookmarksTag[] = "other_bookmarks";
+const char kTrashBookmarksTag[] = "trash_bookmarks";
 
 // Maximum number of bytes to allow in a title (must match sync's internal
 // limits; see write_node.cc).
@@ -415,10 +416,17 @@ bool BookmarkModelAssociator::SyncModelHasUserCreatedNodes(bool* has_nodes) {
     has_mobile_folder = false;
   }
 
+  syncer::ReadNode trash_bookmarks_node(&trans);
+  if (trash_bookmarks_node.InitByTagLookupForBookmarks(kTrashBookmarksTag) !=
+      syncer::BaseNode::INIT_OK) {
+    return false;
+  }
+
   // Sync model has user created nodes if any of the permanent nodes has
   // children.
   *has_nodes = bookmark_bar_node.HasChildren() ||
       other_bookmarks_node.HasChildren() ||
+      trash_bookmarks_node.HasChildren() ||
       (has_mobile_folder && mobile_bookmarks_node.HasChildren());
   return true;
 }
@@ -494,6 +502,14 @@ syncer::SyncError BookmarkModelAssociator::AssociatePermanentFolders(
         FROM_HERE, "Mobile bookmarks node not found", model_type());
   }
 
+  const BookmarkNode *trash_node = bookmark_model_->trash_node();
+  if (trash_node &&
+      !AssociateTaggedPermanentNode(trans, trash_node,
+                                    kTrashBookmarksTag)) {
+    return unrecoverable_error_handler_->CreateAndUploadError(
+        FROM_HERE, "Trash bookmarks node not found", model_type());
+  }
+
   // Note: the root node may have additional extra nodes. Currently none of
   // them are meant to sync.
   int64_t bookmark_bar_sync_id =
@@ -511,12 +527,22 @@ syncer::SyncError BookmarkModelAssociator::AssociatePermanentFolders(
   if (mobile_bookmarks_sync_id != syncer::kInvalidId)
     context->AddBookmarkRoot(bookmark_model_->mobile_node());
 
+  int64_t trash_bookmarks_sync_id = syncer::kInvalidId;
+  if(trash_node) {
+    trash_bookmarks_sync_id =
+        GetSyncIdFromChromeId(trash_node->id());
+    DCHECK_NE(trash_bookmarks_sync_id, syncer::kInvalidId);
+    context->AddBookmarkRoot(trash_node);
+  }
+
   // WARNING: The order in which we push these should match their order in the
   // bookmark model (see BookmarkModel::DoneLoading(..)).
   context->PushNode(bookmark_bar_sync_id);
   context->PushNode(other_bookmarks_sync_id);
   if (mobile_bookmarks_sync_id != syncer::kInvalidId)
     context->PushNode(mobile_bookmarks_sync_id);
+  if (trash_bookmarks_sync_id != syncer::kInvalidId)
+    context->PushNode(trash_bookmarks_sync_id);
 
   return syncer::SyncError();
 }

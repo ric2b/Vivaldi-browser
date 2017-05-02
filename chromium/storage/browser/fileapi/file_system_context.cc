@@ -104,6 +104,7 @@ int FileSystemContext::GetPermissionPolicy(FileSystemType type) {
 
     case kFileSystemTypeRestrictedNativeLocal:
     case kFileSystemTypeArcContent:
+    case kFileSystemTypeArcDocumentsProvider:
       return FILE_PERMISSION_READ_ONLY |
              FILE_PERMISSION_USE_FILE_PERMISSION;
 
@@ -144,7 +145,7 @@ FileSystemContext::FileSystemContext(
     ExternalMountPoints* external_mount_points,
     storage::SpecialStoragePolicy* special_storage_policy,
     storage::QuotaManagerProxy* quota_manager_proxy,
-    ScopedVector<FileSystemBackend> additional_backends,
+    std::vector<std::unique_ptr<FileSystemBackend>> additional_backends,
     const std::vector<URLRequestAutoMountHandler>& auto_mount_handlers,
     const base::FilePath& partition_path,
     const FileSystemOptions& options)
@@ -172,11 +173,8 @@ FileSystemContext::FileSystemContext(
   RegisterBackend(sandbox_backend_.get());
   RegisterBackend(plugin_private_backend_.get());
 
-  for (ScopedVector<FileSystemBackend>::const_iterator iter =
-          additional_backends_.begin();
-       iter != additional_backends_.end(); ++iter) {
-    RegisterBackend(*iter);
-  }
+  for (const auto& backend : additional_backends_)
+    RegisterBackend(backend.get());
 
   // If the embedder's additional backends already provide support for
   // kFileSystemTypeNativeLocal and kFileSystemTypeNativeForPlatformApp then
@@ -197,11 +195,8 @@ FileSystemContext::FileSystemContext(
   sandbox_backend_->Initialize(this);
   isolated_backend_->Initialize(this);
   plugin_private_backend_->Initialize(this);
-  for (ScopedVector<FileSystemBackend>::const_iterator iter =
-          additional_backends_.begin();
-       iter != additional_backends_.end(); ++iter) {
-    (*iter)->Initialize(this);
-  }
+  for (const auto& backend : additional_backends_)
+    backend->Initialize(this);
 
   // Additional mount points must be added before regular system-wide
   // mount points.
@@ -483,11 +478,9 @@ FileSystemURL FileSystemContext::CreateCrackedFileSystemURL(
   return CrackFileSystemURL(FileSystemURL(origin, type, path));
 }
 
-#if defined(OS_CHROMEOS)
 void FileSystemContext::EnableTemporaryFileSystemInIncognito() {
   sandbox_backend_->set_enable_temporary_file_system_in_incognito(true);
 }
-#endif
 
 bool FileSystemContext::CanServeURLRequest(const FileSystemURL& url) const {
   // We never support accessing files in isolated filesystems via an URL.

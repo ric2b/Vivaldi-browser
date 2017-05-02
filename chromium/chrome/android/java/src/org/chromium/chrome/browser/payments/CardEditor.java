@@ -6,9 +6,13 @@ package org.chromium.chrome.browser.payments;
 
 import android.os.AsyncTask;
 import android.os.Handler;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
+import android.text.style.AbsoluteSizeSpan;
+import android.text.style.ForegroundColorSpan;
 import android.util.Pair;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.CreditCardScanner;
@@ -21,12 +25,14 @@ import org.chromium.chrome.browser.payments.ui.EditorFieldModel.EditorFieldValid
 import org.chromium.chrome.browser.payments.ui.EditorFieldModel.EditorValueIconGenerator;
 import org.chromium.chrome.browser.payments.ui.EditorModel;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge.DropdownKeyValue;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.payments.mojom.PaymentMethodData;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -67,6 +73,16 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         }
     }
 
+    /** The support credit card names. */
+    private static final String AMEX = "amex";
+    private static final String DINERS = "diners";
+    private static final String DISCOVER = "discover";
+    private static final String JCB = "jcb";
+    private static final String MASTERCARD = "mastercard";
+    private static final String MIR = "mir";
+    private static final String UNIONPAY = "unionpay";
+    private static final String VISA = "visa";
+
     /** The dropdown key that triggers the address editor to add a new billing address. */
     private static final String BILLING_ADDRESS_ADD_NEW = "add";
 
@@ -82,6 +98,9 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
      * updates this cache.
      */
     private final List<AutofillProfile> mProfilesForBillingAddress;
+
+    /** A map of GUIDs of the incomplete profiles to their edit required message resource Ids. */
+    private final Map<String, Integer> mIncompleteProfilesForBillingAddress;
 
     /** Used for verifying billing address completeness and also editing billing addresses. */
     private final AddressEditor mAddressEditor;
@@ -101,6 +120,13 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
      * in the validator.
      */
     private final Set<String> mAcceptedCardTypes;
+
+    /**
+     * The card types accepted by the merchant website that should have "basic-card" as the payment
+     * method. This is a subset of the accepted card types. Used when creating the complete payment
+     * instrument.
+     */
+    private final Set<String> mAcceptedBasicCardTypes;
 
     /**
      * The information about the accepted card types. Used in the editor as a hint to the user about
@@ -147,36 +173,51 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         List<AutofillProfile> profiles =
                 PersonalDataManager.getInstance().getBillingAddressesToSuggest();
         mProfilesForBillingAddress = new ArrayList<>();
+        mIncompleteProfilesForBillingAddress = new HashMap<>();
         for (int i = 0; i < profiles.size(); i++) {
             AutofillProfile profile = profiles.get(i);
-            // 1) Include only local profiles, because GUIDs of server profiles change on every
-            //    browser restart. Server profiles are not supported as billing addresses.
-            // 2) Include only complete profiles, so that user launches the editor only when
-            //    explicitly selecting [+ ADD ADDRESS] in the dropdown.
-            if (profile.getIsLocal()
-                    && AutofillAddress.checkAddressCompletionStatus(profile)
-                            == AutofillAddress.COMPLETE) {
-                mProfilesForBillingAddress.add(profile);
+            // Include only local profiles, because GUIDs of server profiles change on every browser
+            // restart. Server profiles are not supported as billing addresses.
+            if (!profile.getIsLocal()) continue;
+            // Do not include profiles without street address.
+            if (TextUtils.isEmpty(profile.getStreetAddress())) continue;
+            mProfilesForBillingAddress.add(profile);
+            Pair<Integer, Integer> editMessageResIds = AutofillAddress.getEditMessageAndTitleResIds(
+                    AutofillAddress.checkAddressCompletionStatus(profile));
+            if (editMessageResIds.first.intValue() != 0) {
+                mIncompleteProfilesForBillingAddress.put(
+                        profile.getGUID(), editMessageResIds.first);
             }
         }
 
+        // Sort profiles for billing address according to completeness.
+        Collections.sort(mProfilesForBillingAddress, new Comparator<AutofillProfile>() {
+            @Override
+            public int compare(AutofillProfile a, AutofillProfile b) {
+                boolean isAComplete =
+                        AutofillAddress.checkAddressCompletionStatus(a) == AutofillAddress.COMPLETE;
+                boolean isBComplete =
+                        AutofillAddress.checkAddressCompletionStatus(b) == AutofillAddress.COMPLETE;
+                return ApiCompatibilityUtils.compareBoolean(isBComplete, isAComplete);
+            }
+        });
+
         mCardTypes = new HashMap<>();
-        mCardTypes.put("amex",
-                new CardTypeInfo(R.drawable.pr_amex, R.string.autofill_cc_amex));
-        mCardTypes.put("diners",
-                new CardTypeInfo(R.drawable.pr_dinersclub, R.string.autofill_cc_diners));
-        mCardTypes.put("discover",
-                new CardTypeInfo(R.drawable.pr_discover, R.string.autofill_cc_discover));
-        mCardTypes.put("jcb",
-                new CardTypeInfo(R.drawable.pr_jcb, R.string.autofill_cc_jcb));
-        mCardTypes.put("mastercard",
-                new CardTypeInfo(R.drawable.pr_mc, R.string.autofill_cc_mastercard));
-        mCardTypes.put("unionpay",
-                new CardTypeInfo(R.drawable.pr_unionpay, R.string.autofill_cc_union_pay));
-        mCardTypes.put("visa",
-                new CardTypeInfo(R.drawable.pr_visa, R.string.autofill_cc_visa));
+        mCardTypes.put(AMEX, new CardTypeInfo(R.drawable.pr_amex, R.string.autofill_cc_amex));
+        mCardTypes.put(
+                DINERS, new CardTypeInfo(R.drawable.pr_dinersclub, R.string.autofill_cc_diners));
+        mCardTypes.put(
+                DISCOVER, new CardTypeInfo(R.drawable.pr_discover, R.string.autofill_cc_discover));
+        mCardTypes.put(JCB, new CardTypeInfo(R.drawable.pr_jcb, R.string.autofill_cc_jcb));
+        mCardTypes.put(
+                MASTERCARD, new CardTypeInfo(R.drawable.pr_mc, R.string.autofill_cc_mastercard));
+        mCardTypes.put(MIR, new CardTypeInfo(R.drawable.pr_mir, R.string.autofill_cc_mir));
+        mCardTypes.put(
+                UNIONPAY, new CardTypeInfo(R.drawable.pr_unionpay, R.string.autofill_cc_union_pay));
+        mCardTypes.put(VISA, new CardTypeInfo(R.drawable.pr_visa, R.string.autofill_cc_visa));
 
         mAcceptedCardTypes = new HashSet<>();
+        mAcceptedBasicCardTypes = new HashSet<>();
         mAcceptedCardTypeInfos = new ArrayList<>();
         mHandler = new Handler();
 
@@ -187,6 +228,11 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
                         && mAcceptedCardTypes.contains(
                                    PersonalDataManager.getInstance().getBasicCardPaymentType(
                                            value.toString(), true));
+            }
+
+            @Override
+            public boolean isLengthMaximum(@Nullable CharSequence value) {
+                return isCardNumberLengthMaximum(value);
             }
         };
 
@@ -211,20 +257,65 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         mCalendar.execute();
     }
 
+    private boolean isCardNumberLengthMaximum(@Nullable CharSequence value) {
+        if (TextUtils.isEmpty(value)) return false;
+        String cardType =
+                PersonalDataManager.getInstance().getBasicCardPaymentType(value.toString(), false);
+        if (TextUtils.isEmpty(cardType)) return false;
+
+        // Below maximum values are consistent with the values used to check the validity of the
+        // credit card number in autofill::IsValidCreditCardNumber.
+        String cardNumber = removeSpaceAndBar(value);
+        switch (cardType) {
+            case AMEX:
+                return cardNumber.length() == 15;
+            case DINERS:
+                return cardNumber.length() == 14;
+            case UNIONPAY:
+                return cardNumber.length() == 19;
+            default:
+                // Valid DISCOVER, JCB, MASTERCARD, MIR and VISA cards have at most 16 digits.
+                return cardNumber.length() == 16;
+        }
+    }
+
+    private static String removeSpaceAndBar(CharSequence value) {
+        return value.toString().replace(" ", "").replace("-", "");
+    }
+
     /**
      * Adds accepted payment methods to the editor, if they are recognized credit card types.
      *
-     * @param acceptedMethods The accepted method payments.
+     * @param data Supported methods and method specific data. Should not be null.
      */
-    public void addAcceptedPaymentMethodsIfRecognized(String[] acceptedMethods) {
-        assert acceptedMethods != null;
-        for (int i = 0; i < acceptedMethods.length; i++) {
-            String method = acceptedMethods[i];
+    public void addAcceptedPaymentMethodsIfRecognized(PaymentMethodData data) {
+        assert data != null;
+        for (int i = 0; i < data.supportedMethods.length; i++) {
+            String method = data.supportedMethods[i];
             if (mCardTypes.containsKey(method)) {
-                assert !mAcceptedCardTypes.contains(method);
-                mAcceptedCardTypes.add(method);
-                mAcceptedCardTypeInfos.add(mCardTypes.get(method));
+                addAcceptedNetwork(method);
+            } else if (AutofillPaymentApp.BASIC_CARD_METHOD_NAME.equals(method)) {
+                Set<String> basicCardNetworks = AutofillPaymentApp.convertBasicCardToNetworks(data);
+                if (basicCardNetworks != null) {
+                    mAcceptedBasicCardTypes.addAll(basicCardNetworks);
+                    for (String network : basicCardNetworks) {
+                        addAcceptedNetwork(network);
+                    }
+                }
             }
+        }
+    }
+
+    /**
+     * Adds a card network to the list of accepted networks.
+     *
+     * @param network An accepted network. Will be shown in UI only once, regardless of how many
+     *                times this method is called.
+     */
+    private void addAcceptedNetwork(String network) {
+        if (!mAcceptedCardTypes.contains(network)) {
+            mAcceptedCardTypes.add(network);
+            mAcceptedCardTypeInfos.add(mCardTypes.get(network));
         }
     }
 
@@ -253,7 +344,8 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
 
         // Ensure that |instrument| and |card| are never null.
         final AutofillPaymentInstrument instrument = isNewCard
-                ? new AutofillPaymentInstrument(mContext, mWebContents, new CreditCard(), null)
+                ? new AutofillPaymentInstrument(mContext, mWebContents, new CreditCard(),
+                          null /* billingAddress */, null /* methodName */)
                 : toEdit;
         final CreditCard card = instrument.getCard();
 
@@ -291,11 +383,12 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         // Allow saving new cards on disk.
         if (isNewCard) addSaveCardCheckbox(editor);
 
-        // If the user clicks [Cancel], send a null card back to the caller.
+        // If the user clicks [Cancel], send |toEdit| card back to the caller (will return original
+        // state, which could be null, a full card, or a partial card).
         editor.setCancelCallback(new Runnable() {
             @Override
             public void run() {
-                callback.onResult(null);
+                callback.onResult(toEdit);
             }
         });
 
@@ -305,13 +398,18 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
             @Override
             public void run() {
                 commitChanges(card, isNewCard);
-                for (int i = 0; i < mProfilesForBillingAddress.size(); ++i) {
-                    if (TextUtils.equals(mProfilesForBillingAddress.get(i).getGUID(),
-                            card.getBillingAddressId())) {
-                        instrument.completeInstrument(card, mProfilesForBillingAddress.get(i));
-                        break;
-                    }
+
+                String methodName = card.getBasicCardPaymentType();
+                if (mAcceptedBasicCardTypes.contains(methodName)) {
+                    methodName = AutofillPaymentApp.BASIC_CARD_METHOD_NAME;
                 }
+                assert methodName != null;
+
+                AutofillProfile billingAddress =
+                        findTargetProfile(mProfilesForBillingAddress, card.getBillingAddressId());
+                assert billingAddress != null;
+
+                instrument.completeInstrument(card, methodName, billingAddress);
                 callback.onResult(instrument);
             }
         });
@@ -333,12 +431,14 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
             if (TextUtils.equals(mProfilesForBillingAddress.get(i).getGUID(),
                         billingAddress.getIdentifier())) {
                 mProfilesForBillingAddress.set(i, billingAddress.getProfile());
+                mIncompleteProfilesForBillingAddress.remove(billingAddress.getIdentifier());
                 return;
             }
         }
 
         // No matching profile was found. Add the new profile at the top of the list.
-        mProfilesForBillingAddress.add(0, billingAddress.getProfile());
+        billingAddress.setBillingAddressLabel();
+        mProfilesForBillingAddress.add(0, new AutofillProfile(billingAddress.getProfile()));
     }
 
     /**
@@ -366,9 +466,7 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
 
         // Card scanner is expensive to query.
         if (mCardScanner == null) {
-            mCardScanner = CreditCardScanner.create(mContext,
-                    ContentViewCore.fromWebContents(mWebContents).getWindowAndroid(),
-                    this);
+            mCardScanner = CreditCardScanner.create(mContext, mWebContents, this);
             mCanScan = mCardScanner.canScan();
         }
 
@@ -426,6 +524,11 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
                         return year > mCurrentYear
                               || (year == mCurrentYear && month >= mCurrentMonth);
                     }
+
+                    @Override
+                    public boolean isLengthMaximum(@Nullable CharSequence value) {
+                        return false;
+                    }
                 };
             }
 
@@ -472,7 +575,7 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         List<DropdownKeyValue> result = new ArrayList<>();
 
         Locale locale = Locale.getDefault();
-        SimpleDateFormat keyFormatter = new SimpleDateFormat("M", locale);
+        SimpleDateFormat keyFormatter = new SimpleDateFormat("MM", locale);
         SimpleDateFormat valueFormatter = new SimpleDateFormat("MMMM (MM)", locale);
 
         calendar.set(Calendar.DAY_OF_MONTH, 1);
@@ -520,8 +623,31 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         final List<DropdownKeyValue> billingAddresses = new ArrayList<>();
 
         for (int i = 0; i < mProfilesForBillingAddress.size(); ++i) {
-            billingAddresses.add(new DropdownKeyValue(mProfilesForBillingAddress.get(i).getGUID(),
-                    mProfilesForBillingAddress.get(i).getLabel()));
+            AutofillProfile profile = mProfilesForBillingAddress.get(i);
+            SpannableStringBuilder builder = new SpannableStringBuilder(profile.getLabel());
+
+            // Append the edit required message if the address is incomplete.
+            if (mIncompleteProfilesForBillingAddress.containsKey(profile.getGUID())) {
+                builder.append(mContext.getString(R.string.autofill_address_summary_separator));
+
+                int startIndex = builder.length();
+                int editMessageResId =
+                        mIncompleteProfilesForBillingAddress.get(profile.getGUID()).intValue();
+                String editMessage = mContext.getString(editMessageResId);
+                builder.append(editMessage);
+                int endIndex = builder.length();
+
+                Object foregroundSpanner = new ForegroundColorSpan(ApiCompatibilityUtils.getColor(
+                        mContext.getResources(), R.color.google_blue_700));
+                builder.setSpan(foregroundSpanner, startIndex, endIndex, 0);
+
+                // The text size in the dropdown is 14dp.
+                Object sizeSpanner = new AbsoluteSizeSpan(14, true);
+                builder.setSpan(sizeSpanner, startIndex, endIndex, 0);
+            }
+
+            billingAddresses.add(
+                    new DropdownKeyValue(mProfilesForBillingAddress.get(i).getGUID(), builder));
         }
 
         billingAddresses.add(new DropdownKeyValue(BILLING_ADDRESS_ADD_NEW,
@@ -540,23 +666,55 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         mBillingAddressField.setDropdownCallback(new Callback<Pair<String, Runnable>>() {
             @Override
             public void onResult(final Pair<String, Runnable> eventData) {
-                if (!BILLING_ADDRESS_ADD_NEW.equals(eventData.first)) {
+                final boolean isAddingNewAddress = BILLING_ADDRESS_ADD_NEW.equals(eventData.first);
+                final boolean isSelectingIncompleteAddress =
+                        mIncompleteProfilesForBillingAddress.containsKey(eventData.first);
+                if (!isAddingNewAddress && !isSelectingIncompleteAddress) {
                     if (mObserverForTest != null) {
                         mObserverForTest.onPaymentRequestServiceBillingAddressChangeProcessed();
                     }
                     return;
                 }
 
-                mAddressEditor.edit(null, new Callback<AutofillAddress>() {
+                final AutofillAddress editAddress = isSelectingIncompleteAddress
+                        ? new AutofillAddress(mContext,
+                                  findTargetProfile(mProfilesForBillingAddress, eventData.first))
+                        : null;
+                mAddressEditor.edit(editAddress, new Callback<AutofillAddress>() {
                     @Override
                     public void onResult(AutofillAddress billingAddress) {
-                        if (billingAddress == null) {
-                            // User has cancelled the address editor.
-                            mBillingAddressField.setValue(null);
+                        if (billingAddress == null || !billingAddress.isComplete()) {
+                            // User cancelled out of the add or edit flow. Restore the selection
+                            // to the card's billing address, if any, else clear the selection.
+                            if (mBillingAddressField.getDropdownKeys().contains(
+                                        card.getBillingAddressId())) {
+                                mBillingAddressField.setValue(card.getBillingAddressId());
+                            } else {
+                                mBillingAddressField.setValue(null);
+                            }
                         } else {
-                            // User has added a new complete address. Add it to the top of the
-                            // dropdown.
-                            mProfilesForBillingAddress.add(billingAddress.getProfile());
+                            // Set the billing address label.
+                            billingAddress.setBillingAddressLabel();
+
+                            if (isSelectingIncompleteAddress) {
+                                // User completed an incomplete address.
+                                mIncompleteProfilesForBillingAddress.remove(
+                                        billingAddress.getProfile().getGUID());
+
+                                // Remove the old key-value from the dropdown.
+                                for (int i = 0; i < billingAddresses.size(); i++) {
+                                    if (billingAddresses.get(i).first.equals(
+                                                billingAddress.getIdentifier())) {
+                                        billingAddresses.remove(i);
+                                        break;
+                                    }
+                                }
+                            } else {
+                                // User added a new complete address.
+                                mProfilesForBillingAddress.add(billingAddress.getProfile());
+                            }
+
+                            // Add the newly added or edited address to the top of the dropdown.
                             billingAddresses.add(
                                     0, new DropdownKeyValue(billingAddress.getIdentifier(),
                                                billingAddress.getSublabel()));
@@ -576,6 +734,14 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         }
 
         editor.addField(mBillingAddressField);
+    }
+
+    private static AutofillProfile findTargetProfile(List<AutofillProfile> profiles, String guid) {
+        for (int i = 0; i < profiles.size(); i++) {
+            if (profiles.get(i).getGUID().equals(guid)) return profiles.get(i);
+        }
+        assert false : "Never reached.";
+        return null;
     }
 
     /** Adds the "save this card" checkbox to the editor. */
@@ -601,11 +767,11 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
 
         PersonalDataManager pdm = PersonalDataManager.getInstance();
         if (!card.getIsLocal()) {
-            pdm.updateServerCardBillingAddress(card.getServerId(), card.getBillingAddressId());
+            pdm.updateServerCardBillingAddress(card);
             return;
         }
 
-        card.setNumber(mNumberField.getValue().toString().replace(" ", "").replace("-", ""));
+        card.setNumber(removeSpaceAndBar(mNumberField.getValue()));
         card.setName(mNameField.getValue().toString());
         card.setMonth(mMonthField.getValue().toString());
         card.setYear(mYearField.getValue().toString());

@@ -46,7 +46,7 @@ class PLATFORM_EXPORT TimerBase {
   WTF_MAKE_NONCOPYABLE(TimerBase);
 
  public:
-  explicit TimerBase(WebTaskRunner*);
+  explicit TimerBase(RefPtr<WebTaskRunner>);
   virtual ~TimerBase();
 
   void start(double nextFireInterval,
@@ -75,18 +75,20 @@ class PLATFORM_EXPORT TimerBase {
     m_repeatInterval += delta;
   }
 
+  void moveToNewTaskRunner(RefPtr<WebTaskRunner>);
+
   struct PLATFORM_EXPORT Comparator {
     bool operator()(const TimerBase* a, const TimerBase* b) const;
   };
 
  protected:
-  static WebTaskRunner* getTimerTaskRunner();
-  static WebTaskRunner* getUnthrottledTaskRunner();
+  static RefPtr<WebTaskRunner> getTimerTaskRunner();
+  static RefPtr<WebTaskRunner> getUnthrottledTaskRunner();
 
  private:
   virtual void fired() = 0;
 
-  virtual WebTaskRunner* timerTaskRunner() const;
+  virtual RefPtr<WebTaskRunner> timerTaskRunner() const;
 
   NO_SANITIZE_ADDRESS
   virtual bool canFire() const { return true; }
@@ -100,7 +102,7 @@ class PLATFORM_EXPORT TimerBase {
   double m_nextFireTime;    // 0 if inactive
   double m_repeatInterval;  // 0 if not repeating
   WebTraceLocation m_location;
-  std::unique_ptr<WebTaskRunner> m_webTaskRunner;
+  RefPtr<WebTaskRunner> m_webTaskRunner;
 
 #if DCHECK_IS_ON()
   ThreadIdentifier m_thread;
@@ -131,10 +133,10 @@ class TaskRunnerTimer : public TimerBase {
  public:
   using TimerFiredFunction = void (TimerFiredClass::*)(TimerBase*);
 
-  TaskRunnerTimer(WebTaskRunner* webTaskRunner,
+  TaskRunnerTimer(RefPtr<WebTaskRunner> webTaskRunner,
                   TimerFiredClass* o,
                   TimerFiredFunction f)
-      : TimerBase(webTaskRunner), m_object(o), m_function(f) {}
+      : TimerBase(std::move(webTaskRunner)), m_object(o), m_function(f) {}
 
   ~TaskRunnerTimer() override {}
 
@@ -179,6 +181,8 @@ class Timer : public TaskRunnerTimer<TimerFiredClass> {
 // This subclass of Timer posts its tasks on the current thread's default task
 // runner.  Tasks posted on there are not throttled when the tab is in the
 // background.
+//
+// DEPRECATED: Use TaskRunnerHelper::get with TaskType::Unthrottled.
 template <typename TimerFiredClass>
 class UnthrottledThreadTimer : public TaskRunnerTimer<TimerFiredClass> {
  public:
@@ -196,7 +200,9 @@ class UnthrottledThreadTimer : public TaskRunnerTimer<TimerFiredClass> {
 
 NO_SANITIZE_ADDRESS
 inline bool TimerBase::isActive() const {
-  ASSERT(m_thread == currentThread());
+#if DCHECK_IS_ON()
+  DCHECK_EQ(m_thread, currentThread());
+#endif
   return m_weakPtrFactory.hasWeakPtrs();
 }
 

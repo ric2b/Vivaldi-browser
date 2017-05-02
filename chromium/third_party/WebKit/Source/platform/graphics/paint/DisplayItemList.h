@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class JSONArray;
 struct PaintChunk;
 
 // kDisplayItemAlignment must be a multiple of alignof(derived display item) for
@@ -67,6 +68,19 @@ class PLATFORM_EXPORT DisplayItemList
   };
   Range<iterator> itemsInPaintChunk(const PaintChunk&);
   Range<const_iterator> itemsInPaintChunk(const PaintChunk&) const;
+
+  enum JsonOptions {
+    Default = 0,
+    ShowPictures = 1,
+    SkipNonDrawings = 1 << 1,
+    ShowClientDebugName = 1 << 2,
+    ShownOnlyDisplayItemTypes = 1 << 3
+  };
+  typedef unsigned JsonFlags;
+
+  std::unique_ptr<JSONArray> subsequenceAsJSON(size_t beginIndex,
+                                               size_t endIndex,
+                                               JsonFlags options) const;
 
  private:
   Vector<IntRect> m_visualRects;

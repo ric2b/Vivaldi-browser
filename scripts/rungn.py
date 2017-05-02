@@ -20,6 +20,7 @@ gn_releasedir = os.path.join(gn_workdir, "Release")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--refresh", action="store_true");
+parser.add_argument("--bootstrap", action="store_true");
 parser.add_argument("--name");
 parser.add_argument("--no-ide", action="store_true");
 parser.add_argument("--ide")
@@ -30,10 +31,13 @@ args = parser.parse_args()
 
 extra_subprocess_flags = {}
 if is_windows:
-  import win32con
-  extra_subprocess_flags["creationflags"] = win32con.NORMAL_PRIORITY_CLASS
+  try:
+    import win32con
+    extra_subprocess_flags["creationflags"] = win32con.NORMAL_PRIORITY_CLASS
+  except:
+    pass
 
-if args.refresh or not os.access(gn_path, os.F_OK):
+if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
   start_time = datetime.datetime.now()
   try:
     os.makedirs(bin_dir)
@@ -44,7 +48,7 @@ if args.refresh or not os.access(gn_path, os.F_OK):
     if x in bootstrap_env:
       del bootstrap_env[x]
   full_bootstrap = True
-  if os.access(os.path.join(gn_workdir, "Release", "build.ninja"), os.F_OK):
+  if not args.bootstrap and os.access(os.path.join(gn_workdir, "Release", "build.ninja"), os.F_OK):
     full_bootstrap = False
     if subprocess.call(["ninja",
         "-C", gn_releasedir,

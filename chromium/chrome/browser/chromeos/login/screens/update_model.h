@@ -7,10 +7,6 @@
 
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 
-namespace base {
-class ListValue;
-}
-
 namespace chromeos {
 
 class BaseScreenDelegate;
@@ -30,9 +26,6 @@ class UpdateModel : public BaseScreen {
 
   explicit UpdateModel(BaseScreenDelegate* base_screen_delegate);
   ~UpdateModel() override;
-
-  // BaseScreen implementation:
-  std::string GetName() const override;
 
   // This method is called, when view is being destroyed. Note, if model
   // is destroyed earlier then it has to call Unbind().

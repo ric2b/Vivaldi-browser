@@ -59,7 +59,7 @@ TEST_F(ProtoValueConversionsTest, ProtoChangeCheck) {
   // If this number changes, that means we added or removed a data
   // type.  Don't forget to add a unit test for {New
   // type}SpecificsToValue below.
-  EXPECT_EQ(39, MODEL_TYPE_COUNT);
+  EXPECT_EQ(39+1 /*notes*/, MODEL_TYPE_COUNT);
 
   // We'd also like to check if we changed any field in our messages.
   // However, that's hard to do: sizeof could work, but it's
@@ -90,6 +90,13 @@ TEST_F(ProtoValueConversionsTest, TabNavigationToValue) {
 
 TEST_F(ProtoValueConversionsTest, NavigationRedirectToValue) {
   TestSpecificsToValue(NavigationRedirectToValue);
+}
+
+TEST_F(ProtoValueConversionsTest, PasswordSpecifics) {
+  sync_pb::PasswordSpecifics specifics;
+  specifics.mutable_client_only_encrypted_data();
+  auto value = PasswordSpecificsToValue(specifics);
+  EXPECT_FALSE(value->Get("client_only_encrypted_data", nullptr));
 }
 
 TEST_F(ProtoValueConversionsTest, PasswordSpecificsData) {
@@ -385,6 +392,8 @@ TEST_F(ProtoValueConversionsTest, EntitySpecificsToValue) {
   SET_FIELD(theme);
   SET_FIELD(typed_url);
   SET_FIELD(wifi_credential);
+  SET_FIELD(notes);
+
   SET_FIELD(autofill_wallet);
   SET_FIELD(wallet_metadata);
 

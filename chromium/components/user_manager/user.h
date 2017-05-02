@@ -78,7 +78,10 @@ class USER_MANAGER_EXPORT User : public UserInfo {
     ONLINE = 4,        // WallpaperInfo.location denotes an URL.
     POLICY = 5,        // Controlled by policy, can't be changed by the user.
     THIRDPARTY = 6,    // Current wallpaper is set by a third party app.
-    WALLPAPER_TYPE_COUNT = 7
+    DEVICE = 7,        // Current wallpaper is the device policy controlled
+                       // wallpaper. It shows on the login screen if the device
+                       // is an enterprise managed device.
+    WALLPAPER_TYPE_COUNT = 8
   };
 
   // Returns true if user type has gaia account.
@@ -103,6 +106,9 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // Returns true if user has gaia account. True for users of types
   // USER_TYPE_REGULAR and USER_TYPE_CHILD.
   virtual bool HasGaiaAccount() const;
+
+  // Returns true if it's Active Directory user.
+  virtual bool IsActiveDirectoryUser() const;
 
   // Returns true if user is supervised.
   virtual bool IsSupervised() const;
@@ -135,8 +141,13 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   int image_index() const { return image_index_; }
   bool has_image_bytes() const { return user_image_->has_image_bytes(); }
   // Returns bytes representation of static user image for WebUI.
-  const UserImage::Bytes& image_bytes() const {
+  scoped_refptr<base::RefCountedBytes> image_bytes() const {
     return user_image_->image_bytes();
+  }
+  // Returns image format of the bytes representation of static user image
+  // for WebUI.
+  UserImage::ImageFormat image_format() const {
+    return user_image_->image_format();
   }
 
   // Whether |user_image_| contains data in format that is considered safe to

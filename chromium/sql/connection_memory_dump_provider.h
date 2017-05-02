@@ -13,6 +13,12 @@
 
 struct sqlite3;
 
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
+
 namespace sql {
 
 class ConnectionMemoryDumpProvider
@@ -28,7 +34,18 @@ class ConnectionMemoryDumpProvider
       const base::trace_event::MemoryDumpArgs& args,
       base::trace_event::ProcessMemoryDump* process_memory_dump) override;
 
+  // Reports memory usage into provided memory dump with the given |dump_name|.
+  // Called by sql::Connection when its owner asks it to report memory usage.
+  bool ReportMemoryUsage(base::trace_event::ProcessMemoryDump* pmd,
+                         const std::string& dump_name);
+
  private:
+  bool GetDbMemoryUsage(int* cache_size,
+                        int* schema_size,
+                        int* statement_size);
+
+  std::string FormatDumpName() const;
+
   sqlite3* db_;  // not owned.
   base::Lock lock_;
   std::string connection_name_;

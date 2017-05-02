@@ -36,8 +36,8 @@ namespace blink {
 
 class SpeechSynthesisUtterance final
     : public EventTargetWithInlineData,
-      public PlatformSpeechSynthesisUtteranceClient,
-      public ContextLifecycleObserver {
+      public ContextClient,
+      public PlatformSpeechSynthesisUtteranceClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesisUtterance);
 
@@ -77,7 +77,9 @@ class SpeechSynthesisUtterance final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(mark);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(boundary);
 
-  ExecutionContext* getExecutionContext() const override;
+  ExecutionContext* getExecutionContext() const override {
+    return ContextClient::getExecutionContext();
+  }
 
   PlatformSpeechSynthesisUtterance* platformUtterance() const {
     return m_platformUtterance;

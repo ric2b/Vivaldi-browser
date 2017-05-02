@@ -7,7 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "content/browser/payments/payment_app_context.h"
+#include "base/optional.h"
+#include "content/browser/payments/payment_app.pb.h"
+#include "content/browser/payments/payment_app_context_impl.h"
+#include "content/browser/payments/payment_app_database.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/service_worker/service_worker_registration.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
@@ -17,7 +22,7 @@ PaymentAppManager::~PaymentAppManager() {
 }
 
 PaymentAppManager::PaymentAppManager(
-    PaymentAppContext* payment_app_context,
+    PaymentAppContextImpl* payment_app_context,
     mojo::InterfaceRequest<payments::mojom::PaymentAppManager> request)
     : payment_app_context_(payment_app_context),
       binding_(this, std::move(request)),
@@ -30,16 +35,32 @@ PaymentAppManager::PaymentAppManager(
                  base::Unretained(this)));
 }
 
-void PaymentAppManager::OnConnectionError() {
-  payment_app_context_->ServiceHadConnectionError(this);
+void PaymentAppManager::Init(const std::string& scope) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  scope_ = GURL(scope);
 }
 
 void PaymentAppManager::SetManifest(
-    const std::string& scope,
     payments::mojom::PaymentAppManifestPtr manifest,
     const SetManifestCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  callback.Run(payments::mojom::PaymentAppManifestError::NOT_IMPLEMENTED);
+
+  // TODO(zino): Should implement requesting a permission for users to allow
+  // the payment app to be registered. Please see http://crbug.com/665949.
+
+  payment_app_context_->payment_app_database()->WriteManifest(
+      scope_, std::move(manifest), callback);
+}
+
+void PaymentAppManager::GetManifest(const GetManifestCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  payment_app_context_->payment_app_database()->ReadManifest(scope_, callback);
+}
+
+void PaymentAppManager::OnConnectionError() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  payment_app_context_->PaymentAppManagerHadConnectionError(this);
 }
 
 }  // namespace content

@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/download/download_shelf_view.h"
@@ -222,10 +221,8 @@ gfx::Rect BrowserViewLayout::GetFindBarBoundingBox() const {
     find_bar_y = top_container_bounds.bottom();
   } else {
     // Overlap the find bar atop |top_container_|.
-    // The find bar should look connected to the top container when material
-    // design is not enabled.
-    find_bar_y = top_container_bounds.bottom() -
-                 GetLayoutConstant(FIND_BAR_TOOLBAR_OVERLAP);
+    const int kTopOverlap = 6;
+    find_bar_y = top_container_bounds.bottom() - kTopOverlap;
   }
 
   // Grow the height of |bounding_box| by the height of any elements between
@@ -452,12 +449,10 @@ int BrowserViewLayout::LayoutBookmarkBar(int top) {
 
 int BrowserViewLayout::LayoutInfoBar(int top) {
   // In immersive fullscreen, the infobar always starts near the top of the
-  // screen, just under the "light bar" rectangular stripes.
-  if (immersive_mode_controller_->IsEnabled()) {
+  // screen.
+  if (immersive_mode_controller_->IsEnabled())
     top = browser_view_->y();
-    if (!immersive_mode_controller_->ShouldHideTabIndicators())
-      top += TabStrip::GetImmersiveHeight();
-  }
+
   infobar_container_->SetVisible(InfobarVisible());
   infobar_container_->SetBounds(
       vertical_layout_rect_.x(), top, vertical_layout_rect_.width(),

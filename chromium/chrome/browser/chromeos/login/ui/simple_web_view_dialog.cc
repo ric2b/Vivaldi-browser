@@ -296,9 +296,7 @@ SimpleWebViewDialog::GetContentSettingBubbleModelDelegate() {
 }
 
 void SimpleWebViewDialog::ShowWebsiteSettings(
-    content::WebContents* web_contents,
-    const GURL& virtual_url,
-    const security_state::SecurityInfo& security_info) {
+    content::WebContents* web_contents) {
   NOTIMPLEMENTED();
   // TODO (markusheintz@): implement this
 }
@@ -341,7 +339,8 @@ void SimpleWebViewDialog::ExecuteCommandWithDisposition(
     case IDC_RELOAD_BYPASSING_CACHE:
     case IDC_RELOAD_CLEARING_CACHE:
       location_bar_->Revert();
-      web_contents->GetController().ReloadBypassingCache(true);
+      web_contents->GetController().Reload(content::ReloadType::BYPASSING_CACHE,
+                                           true);
       break;
     default:
       NOTREACHED();

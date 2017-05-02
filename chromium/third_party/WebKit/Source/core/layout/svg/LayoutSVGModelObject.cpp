@@ -80,11 +80,12 @@ void LayoutSVGModelObject::absoluteRects(
     const LayoutPoint& accumulatedOffset) const {
   IntRect rect = enclosingIntRect(strokeBoundingBox());
   rect.moveBy(roundedIntPoint(accumulatedOffset));
-  rects.append(rect);
+  rects.push_back(rect);
 }
 
-void LayoutSVGModelObject::absoluteQuads(Vector<FloatQuad>& quads) const {
-  quads.append(localToAbsoluteQuad(strokeBoundingBox()));
+void LayoutSVGModelObject::absoluteQuads(Vector<FloatQuad>& quads,
+                                         MapCoordinatesFlags mode) const {
+  quads.push_back(localToAbsoluteQuad(strokeBoundingBox(), mode));
 }
 
 FloatRect LayoutSVGModelObject::localBoundingBoxRectForAccessibility() const {
@@ -125,6 +126,9 @@ void LayoutSVGModelObject::styleDidChange(StyleDifference diff,
       parent()->descendantIsolationRequirementsChanged(
           style()->hasBlendMode() ? DescendantIsolationRequired
                                   : DescendantIsolationNeedsUpdate);
+
+    if (hasBlendModeChanged)
+      setNeedsPaintPropertyUpdate();
   }
 
   LayoutObject::styleDidChange(diff, oldStyle);

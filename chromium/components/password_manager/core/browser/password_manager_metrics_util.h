@@ -172,6 +172,12 @@ enum CredentialManagerGetMediation {
   CREDENTIAL_MANAGER_GET_UNMEDIATED
 };
 
+enum PasswordReusePasswordFieldDetected {
+  NO_PASSWORD_FIELD,
+  HAS_PASSWORD_FIELD,
+  PASSWORD_REUSE_PASSWORD_FIELD_DETECTED_COUNT
+};
+
 // A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
 // to vary over the program's runtime.
 void LogUMAHistogramBoolean(const std::string& name, bool sample);
@@ -216,6 +222,12 @@ void LogAccountChooserUserActionManyAccounts(AccountChooserUserAction action);
 // Log a user action on showing the Chrome sign in promo.
 void LogSyncSigninPromoUserAction(SyncSignInUserAction action);
 
+// Logs whether a password was rejected due to same origin but different scheme.
+void LogShouldBlockPasswordForSameOriginButDifferentScheme(bool should_block);
+
+// Logs number of passwords migrated from HTTP to HTTPS.
+void LogCountHttpMigratedPasswords(int count);
+
 // Log if the account chooser has empty username or duplicate usernames.
 void LogAccountChooserUsability(AccountChooserUsabilityMetric usability);
 
@@ -223,6 +235,20 @@ void LogAccountChooserUsability(AccountChooserUsabilityMetric usability);
 // "unmediated" parameter of the API method.
 void LogCredentialManagerGetResult(CredentialManagerGetResult result,
                                    CredentialManagerGetMediation status);
+
+// Log the password reuse.
+void LogPasswordReuse(int password_length,
+                      int saved_passwords,
+                      int number_matches,
+                      bool password_field_detected);
+
+// Log when the user selects the "Login not secure" warning in the password
+// autofill dropdown to show more information about the warning.
+void LogShowedHttpNotSecureExplanation();
+
+// Log that the Form-Not-Secure warning was shown. Should be called at most once
+// per main-frame navigation.
+void LogShowedFormNotSecureWarningOnCurrentNavigation();
 
 }  // namespace metrics_util
 

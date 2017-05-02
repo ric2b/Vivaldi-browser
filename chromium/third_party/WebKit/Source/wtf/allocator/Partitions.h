@@ -31,9 +31,11 @@
 #ifndef Partitions_h
 #define Partitions_h
 
+#include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/synchronization/spin_lock.h"
+#include "wtf/Assertions.h"
 #include "wtf/WTF.h"
 #include "wtf/WTFExport.h"
-#include "wtf/allocator/PartitionAlloc.h"
 #include <string.h>
 
 namespace WTF {
@@ -47,37 +49,35 @@ class WTF_EXPORT Partitions {
   static const char* const kAllocatedObjectPoolName;
 
   static void initialize(ReportPartitionAllocSizeFunction);
-  static void shutdown();
-  ALWAYS_INLINE static PartitionRootGeneric* bufferPartition() {
-    ASSERT(s_initialized);
+  ALWAYS_INLINE static base::PartitionRootGeneric* bufferPartition() {
+    DCHECK(s_initialized);
     return m_bufferAllocator.root();
   }
 
-  ALWAYS_INLINE static PartitionRootGeneric* fastMallocPartition() {
-    ASSERT(s_initialized);
+  ALWAYS_INLINE static base::PartitionRootGeneric* fastMallocPartition() {
+    DCHECK(s_initialized);
     return m_fastMallocAllocator.root();
   }
 
-  ALWAYS_INLINE static PartitionRoot* nodePartition() {
-    ASSERT_NOT_REACHED();
+  ALWAYS_INLINE static base::PartitionRoot* nodePartition() {
+    NOTREACHED();
     return nullptr;
   }
-  ALWAYS_INLINE static PartitionRoot* layoutPartition() {
-    ASSERT(s_initialized);
+  ALWAYS_INLINE static base::PartitionRoot* layoutPartition() {
+    DCHECK(s_initialized);
     return m_layoutAllocator.root();
   }
 
   static size_t currentDOMMemoryUsage() {
-    ASSERT(s_initialized);
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return 0;
   }
 
   static size_t totalSizeOfCommittedPages() {
     size_t totalSize = 0;
-    totalSize += m_fastMallocAllocator.root()->totalSizeOfCommittedPages;
-    totalSize += m_bufferAllocator.root()->totalSizeOfCommittedPages;
-    totalSize += m_layoutAllocator.root()->totalSizeOfCommittedPages;
+    totalSize += m_fastMallocAllocator.root()->total_size_of_committed_pages;
+    totalSize += m_bufferAllocator.root()->total_size_of_committed_pages;
+    totalSize += m_layoutAllocator.root()->total_size_of_committed_pages;
     return totalSize;
   }
 
@@ -85,24 +85,24 @@ class WTF_EXPORT Partitions {
 
   static void reportMemoryUsageHistogram();
 
-  static void dumpMemoryStats(bool isLightDump, PartitionStatsDumper*);
+  static void dumpMemoryStats(bool isLightDump, base::PartitionStatsDumper*);
 
   ALWAYS_INLINE static void* bufferMalloc(size_t n, const char* typeName) {
-    return partitionAllocGeneric(bufferPartition(), n, typeName);
+    return PartitionAllocGeneric(bufferPartition(), n, typeName);
   }
   ALWAYS_INLINE static void* bufferRealloc(void* p,
                                            size_t n,
                                            const char* typeName) {
-    return partitionReallocGeneric(bufferPartition(), p, n, typeName);
+    return PartitionReallocGeneric(bufferPartition(), p, n, typeName);
   }
   ALWAYS_INLINE static void bufferFree(void* p) {
-    partitionFreeGeneric(bufferPartition(), p);
+    PartitionFreeGeneric(bufferPartition(), p);
   }
   ALWAYS_INLINE static size_t bufferActualSize(size_t n) {
-    return partitionAllocActualSize(bufferPartition(), n);
+    return PartitionAllocActualSize(bufferPartition(), n);
   }
   static void* fastMalloc(size_t n, const char* typeName) {
-    return partitionAllocGeneric(Partitions::fastMallocPartition(), n,
+    return PartitionAllocGeneric(Partitions::fastMallocPartition(), n,
                                  typeName);
   }
   static void* fastZeroedMalloc(size_t n, const char* typeName) {
@@ -111,17 +111,17 @@ class WTF_EXPORT Partitions {
     return result;
   }
   static void* fastRealloc(void* p, size_t n, const char* typeName) {
-    return partitionReallocGeneric(Partitions::fastMallocPartition(), p, n,
+    return PartitionReallocGeneric(Partitions::fastMallocPartition(), p, n,
                                    typeName);
   }
   static void fastFree(void* p) {
-    partitionFreeGeneric(Partitions::fastMallocPartition(), p);
+    PartitionFreeGeneric(Partitions::fastMallocPartition(), p);
   }
 
   static void handleOutOfMemory();
 
  private:
-  static SpinLock s_initializationLock;
+  static base::subtle::SpinLock s_initializationLock;
   static bool s_initialized;
 
   // We have the following four partitions.
@@ -136,11 +136,36 @@ class WTF_EXPORT Partitions {
   //     scripts. Vectors, HashTables, ArrayBufferContents and Strings are
   //     allocated in the buffer partition.
   //   - Fast malloc partition: A partition to allocate all other objects.
-  static PartitionAllocatorGeneric m_fastMallocAllocator;
-  static PartitionAllocatorGeneric m_bufferAllocator;
-  static SizeSpecificPartitionAllocator<1024> m_layoutAllocator;
+  static base::PartitionAllocatorGeneric m_fastMallocAllocator;
+  static base::PartitionAllocatorGeneric m_bufferAllocator;
+  static base::SizeSpecificPartitionAllocator<1024> m_layoutAllocator;
   static ReportPartitionAllocSizeFunction m_reportSizeFunction;
 };
+
+using base::kGenericMaxDirectMapped;
+using base::kPageAllocationGranularity;
+using base::kPageAllocationGranularityBaseMask;
+using base::kPageAllocationGranularityOffsetMask;
+using base::kSystemPageSize;
+
+using base::AllocPages;
+using base::DecommitSystemPages;
+using base::DiscardSystemPages;
+using base::PartitionFree;
+using base::FreePages;
+using base::GetAllocPageErrorCode;
+using base::RecommitSystemPages;
+using base::RoundDownToSystemPage;
+using base::RoundUpToSystemPage;
+using base::SetSystemPagesAccessible;
+using base::SetSystemPagesInaccessible;
+
+using base::PageAccessible;
+using base::PageInaccessible;
+using base::PartitionStatsDumper;
+using base::PartitionMemoryStats;
+using base::PartitionBucketMemoryStats;
+using base::PartitionAllocHooks;
 
 }  // namespace WTF
 

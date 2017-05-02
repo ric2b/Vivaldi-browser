@@ -34,6 +34,10 @@ struct CONTENT_EXPORT StreamOverrideParameters {
   ResourceResponseHead response;
   std::vector<GURL> redirects;
   std::vector<ResourceResponseInfo> redirect_responses;
+
+  // The delta between the actual transfer size and the one reported by the
+  // AsyncResourceLoader due to not having the ResourceResponse.
+  int total_transfer_size_delta;
 };
 
 class CONTENT_EXPORT WebURLLoaderImpl
@@ -60,7 +64,8 @@ class CONTENT_EXPORT WebURLLoaderImpl
                          blink::WebURLResponse& response,
                          blink::WebURLError& error,
                          blink::WebData& data,
-                         int64_t& encoded_data_length) override;
+                         int64_t& encoded_data_length,
+                         int64_t& encoded_body_length) override;
   void loadAsynchronously(
       const blink::WebURLRequest& request,
       blink::WebURLLoaderClient* client) override;

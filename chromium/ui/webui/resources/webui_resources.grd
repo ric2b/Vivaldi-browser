@@ -197,8 +197,8 @@ without changes to the corresponding grd file. -->
       <include name="IDR_WEBUI_IMAGES_TRASH"
                file="images/trash.png" type="BINDATA" />
 
-      <if expr="chromeos">
-        <part file="cr_elements_images_chromeos.grdp" />
+      <if expr="not is_android">
+        <part file="cr_elements_images.grdp" />
       </if>
     </includes>
     <structures>
@@ -298,6 +298,18 @@ without changes to the corresponding grd file. -->
                  type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_FOCUS_ROW"
                  file="html/cr/ui/focus_row.html" type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_LIST"
+                 file="html/cr/ui/list.html"
+                 type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_LIST_ITEM"
+                 file="html/cr/ui/list_item.html"
+                 type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_LIST_SELECTION_CONTROLLER"
+                 file="html/cr/ui/list_selection_controller.html"
+                 type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_LIST_SELECTION_MODEL"
+                 file="html/cr/ui/list_selection_model.html"
+                 type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_MENU"
                  file="html/cr/ui/menu.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_MENU_BUTTON"
@@ -306,6 +318,12 @@ without changes to the corresponding grd file. -->
                  file="html/cr/ui/menu_item.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_OVERLAY"
                  file="html/cr/ui/overlay.html" type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_PAGE_MANAGER_PAGE"
+                 file="html/cr/ui/page_manager/page.html" type="chrome_html"
+                 flattenhtml="true" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_PAGE_MANAGER_PAGE_MANAGER"
+                 file="html/cr/ui/page_manager/page_manager.html"
+                 type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_POSITION_UTIL"
                  file="html/cr/ui/position_util.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_EVENT_TRACKER"

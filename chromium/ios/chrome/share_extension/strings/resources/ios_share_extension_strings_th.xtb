@@ -1,7 +1,9 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="th">
-<translation id="2702801445560668637">รายการที่จะอ่าน</translation>
-<translation id="7791543448312431591">เพิ่ม</translation>
-<translation id="8820817407110198400">บุ๊กมาร์ก</translation>
+<translation id="1613742542373525524">APPLICATION_NAME ไม่สามารถจัดการลิงก์นี้</translation>
+<translation id="4743991241988563337">อ่านภายหลัง</translation>
+<translation id="6930009216791986919">เพิ่มลงในบุ๊กมาร์ก</translation>
+<translation id="6965382102122355670">ตกลง</translation>
+<translation id="8258999165172757081">มีแล้ว</translation>
 </translationbundle>

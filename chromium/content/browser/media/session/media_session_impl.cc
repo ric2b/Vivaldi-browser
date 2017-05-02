@@ -6,11 +6,13 @@
 
 #include <algorithm>
 #include "content/browser/media/session/audio_focus_delegate.h"
+#include "content/browser/media/session/media_session_controller.h"
 #include "content/browser/media/session/media_session_player_observer.h"
 #include "content/browser/media/session/media_session_service_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/media_session_observer.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_content_type.h"
 
@@ -24,6 +26,26 @@ namespace {
 
 const double kDefaultVolumeMultiplier = 1.0;
 const double kDuckingVolumeMultiplier = 0.2;
+
+using MapRenderFrameHostToDepth = std::map<RenderFrameHost*, size_t>;
+
+size_t ComputeFrameDepth(RenderFrameHost* rfh,
+                         MapRenderFrameHostToDepth* map_rfh_to_depth) {
+  DCHECK(rfh);
+  size_t depth = 0;
+  RenderFrameHost* current_frame = rfh;
+  while (current_frame) {
+    auto it = map_rfh_to_depth->find(current_frame);
+    if (it != map_rfh_to_depth->end()) {
+      depth += it->second;
+      break;
+    }
+    ++depth;
+    current_frame = current_frame->GetParent();
+  }
+  (*map_rfh_to_depth)[rfh] = depth;
+  return depth;
+}
 
 }  // anonymous namespace
 
@@ -89,9 +111,19 @@ void MediaSessionImpl::WebContentsDestroyed() {
   AbandonSystemAudioFocusIfNeeded();
 }
 
-void MediaSessionImpl::SetMediaSessionService(
-    MediaSessionServiceImpl* service) {
-  service_ = service;
+void MediaSessionImpl::RenderFrameDeleted(RenderFrameHost* rfh) {
+  if (services_.count(rfh))
+    OnServiceDestroyed(services_[rfh]);
+}
+
+void MediaSessionImpl::DidFinishNavigation(
+    NavigationHandle* navigation_handle) {
+  if (!navigation_handle->HasCommitted() || navigation_handle->IsSamePage())
+    return;
+
+  RenderFrameHost* rfh = navigation_handle->GetRenderFrameHost();
+  if (services_.count(rfh))
+    services_[rfh]->DidFinishNavigation();
 }
 
 void MediaSessionImpl::AddObserver(MediaSessionObserver* observer) {
@@ -102,11 +134,16 @@ void MediaSessionImpl::RemoveObserver(MediaSessionObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void MediaSessionImpl::SetMetadata(
+void MediaSessionImpl::NotifyMediaSessionMetadataChange(
     const base::Optional<MediaMetadata>& metadata) {
-  metadata_ = metadata;
   for (auto& observer : observers_)
     observer.MediaSessionMetadataChanged(metadata);
+}
+
+void MediaSessionImpl::NotifyMediaSessionActionsChange(
+    const std::set<blink::mojom::MediaSessionAction>& actions) {
+  for (auto& observer : observers_)
+    observer.MediaSessionActionsChanged(actions);
 }
 
 bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
@@ -150,8 +187,9 @@ bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
     normal_players_.clear();
 
   normal_players_.insert(PlayerIdentifier(observer, player_id));
-  NotifyAboutStateChange();
 
+  UpdateRoutedService();
+  NotifyAboutStateChange();
   return true;
 }
 
@@ -174,6 +212,7 @@ void MediaSessionImpl::RemovePlayer(MediaSessionPlayerObserver* observer,
     one_shot_players_.erase(it);
 
   AbandonSystemAudioFocusIfNeeded();
+  UpdateRoutedService();
 
   // The session may become controllable after removing a one-shot player.
   // However AbandonSystemAudioFocusIfNeeded will short-return and won't notify
@@ -207,6 +246,7 @@ void MediaSessionImpl::RemovePlayers(MediaSessionPlayerObserver* observer) {
   }
 
   AbandonSystemAudioFocusIfNeeded();
+  UpdateRoutedService();
 
   // The session may become controllable after removing a one-shot player.
   // However AbandonSystemAudioFocusIfNeeded will short-return and won't notify
@@ -274,7 +314,8 @@ void MediaSessionImpl::Resume(SuspendType suspend_type) {
 }
 
 void MediaSessionImpl::Suspend(SuspendType suspend_type) {
-  DCHECK(!IsSuspended());
+  if (IsSuspended())
+    return;
 
   OnSuspendInternal(suspend_type, State::SUSPENDED);
 }
@@ -297,24 +338,6 @@ void MediaSessionImpl::Stop(SuspendType suspend_type) {
   normal_players_.clear();
 
   AbandonSystemAudioFocusIfNeeded();
-}
-
-void MediaSessionImpl::DidReceiveAction(
-    blink::mojom::MediaSessionAction action) {
-  if (service_)
-    service_->GetClient()->DidReceiveAction(action);
-}
-
-void MediaSessionImpl::OnMediaSessionEnabledAction(
-    blink::mojom::MediaSessionAction action) {
-  for (auto& observer : observers_)
-    observer.MediaSessionEnabledAction(action);
-}
-
-void MediaSessionImpl::OnMediaSessionDisabledAction(
-    blink::mojom::MediaSessionAction action) {
-  for (auto& observer : observers_)
-    observer.MediaSessionDisabledAction(action);
 }
 
 void MediaSessionImpl::StartDucking() {
@@ -470,7 +493,7 @@ MediaSessionImpl::MediaSessionImpl(WebContents* web_contents)
       audio_focus_type_(
           AudioFocusManager::AudioFocusType::GainTransientMayDuck),
       is_ducking_(false),
-      service_(nullptr) {
+      routed_service_(nullptr) {
 #if defined(OS_ANDROID)
   session_android_.reset(new MediaSessionAndroid(this));
 #endif  // defined(OS_ANDROID)
@@ -504,9 +527,21 @@ void MediaSessionImpl::AbandonSystemAudioFocusIfNeeded() {
 }
 
 void MediaSessionImpl::NotifyAboutStateChange() {
+  bool is_actually_suspended = IsSuspended();
+  // Compute the actual playback state using both the MediaSessionService state
+  // and real state.
+  //
+  // TODO(zqzhang): Maybe also compute for IsControllable()? See
+  // https://crbug.com/674983
+  if (routed_service_ &&
+      routed_service_->playback_state() ==
+          blink::mojom::MediaSessionPlaybackState::PLAYING) {
+    is_actually_suspended = false;
+  }
+
   media_session_state_listeners_.Notify(audio_focus_state_);
   for (auto& observer : observers_)
-    observer.MediaSessionStateChanged(IsControllable(), IsSuspended());
+    observer.MediaSessionStateChanged(IsControllable(), is_actually_suspended);
 }
 
 void MediaSessionImpl::SetAudioFocusState(State audio_focus_state) {
@@ -550,6 +585,145 @@ bool MediaSessionImpl::AddOneShotPlayer(MediaSessionPlayerObserver* observer,
   NotifyAboutStateChange();
 
   return true;
+}
+
+// MediaSessionService-related methods
+
+void MediaSessionImpl::OnServiceCreated(MediaSessionServiceImpl* service) {
+  RenderFrameHost* rfh = service->GetRenderFrameHost();
+  if (!rfh)
+    return;
+
+  services_[rfh] = service;
+  UpdateRoutedService();
+}
+
+void MediaSessionImpl::OnServiceDestroyed(MediaSessionServiceImpl* service) {
+  services_.erase(service->GetRenderFrameHost());
+  if (routed_service_ == service) {
+    routed_service_ = nullptr;
+    UpdateRoutedService();
+  }
+}
+
+void MediaSessionImpl::OnMediaSessionPlaybackStateChanged(
+    MediaSessionServiceImpl* service) {
+  if (service != routed_service_)
+    return;
+  NotifyAboutStateChange();
+}
+
+void MediaSessionImpl::OnMediaSessionMetadataChanged(
+    MediaSessionServiceImpl* service) {
+  if (service != routed_service_)
+    return;
+
+  NotifyMediaSessionMetadataChange(routed_service_->metadata());
+}
+
+void MediaSessionImpl::OnMediaSessionActionsChanged(
+    MediaSessionServiceImpl* service) {
+  if (service != routed_service_)
+    return;
+
+  NotifyMediaSessionActionsChange(routed_service_->actions());
+}
+
+void MediaSessionImpl::DidReceiveAction(
+    blink::mojom::MediaSessionAction action) {
+  // Pause all players in non-routed frames if the action is PAUSE.
+  //
+  // This is the default PAUSE action handler per Media Session API spec. The
+  // reason for pausing all players in all other sessions is to avoid the
+  // players in other frames keep the session active so that the UI will always
+  // show the pause button but it does not pause anything (as the routed frame
+  // already pauses when responding to the PAUSE action while other frames does
+  // not).
+  //
+  // TODO(zqzhang): Currently, this might not work well on desktop as Pepper and
+  // OneShot players are not really suspended, so that the session is still
+  // active after this. See https://crbug.com/619084 and
+  // https://crbug.com/596516.
+  if (blink::mojom::MediaSessionAction::PAUSE == action) {
+    RenderFrameHost* rfh_of_routed_service =
+        routed_service_ ? routed_service_->GetRenderFrameHost() : nullptr;
+    for (const auto& player : normal_players_) {
+      if (player.observer->GetRenderFrameHost() != rfh_of_routed_service)
+        player.observer->OnSuspend(player.player_id);
+    }
+    for (const auto& player : pepper_players_) {
+      if (player.observer->GetRenderFrameHost() != rfh_of_routed_service) {
+        player.observer->OnSetVolumeMultiplier(player.player_id,
+                                               kDuckingVolumeMultiplier);
+      }
+    }
+    for (const auto& player : one_shot_players_) {
+      if (player.observer->GetRenderFrameHost() != rfh_of_routed_service)
+        player.observer->OnSuspend(player.player_id);
+    }
+  }
+
+  if (!routed_service_)
+    return;
+
+  routed_service_->GetClient()->DidReceiveAction(action);
+}
+
+bool MediaSessionImpl::IsServiceActiveForRenderFrameHost(RenderFrameHost* rfh) {
+  return services_.find(rfh) != services_.end();
+}
+
+void MediaSessionImpl::UpdateRoutedService() {
+  MediaSessionServiceImpl* new_service = ComputeServiceForRouting();
+  if (new_service == routed_service_)
+    return;
+
+  routed_service_ = new_service;
+  if (routed_service_) {
+    NotifyMediaSessionMetadataChange(routed_service_->metadata());
+    NotifyMediaSessionActionsChange(routed_service_->actions());
+  }
+}
+
+MediaSessionServiceImpl* MediaSessionImpl::ComputeServiceForRouting() {
+  // The service selection strategy is: select a frame that has a playing/paused
+  // player and has a corresponding MediaSessionService and return the
+  // corresponding MediaSessionService. If multiple frames satisfy the criteria,
+  // prefer the top-most frame.
+  std::set<RenderFrameHost*> frames;
+  for (const auto& player : normal_players_) {
+    RenderFrameHost* frame = player.observer->GetRenderFrameHost();
+    if (frame)
+      frames.insert(frame);
+  }
+
+  for (const auto& player : one_shot_players_) {
+    RenderFrameHost* frame = player.observer->GetRenderFrameHost();
+    if (frame)
+      frames.insert(frame);
+  }
+
+  for (const auto& player : pepper_players_) {
+    RenderFrameHost* frame = player.observer->GetRenderFrameHost();
+    if (frame)
+      frames.insert(frame);
+  }
+
+  RenderFrameHost* best_frame = nullptr;
+  size_t min_depth = std::numeric_limits<size_t>::max();
+  std::map<RenderFrameHost*, size_t> map_rfh_to_depth;
+
+  for (RenderFrameHost* frame : frames) {
+    size_t depth = ComputeFrameDepth(frame, &map_rfh_to_depth);
+    if (depth >= min_depth)
+      continue;
+    if (!IsServiceActiveForRenderFrameHost(frame))
+      continue;
+    best_frame = frame;
+    min_depth = depth;
+  }
+
+  return best_frame ? services_[best_frame] : nullptr;
 }
 
 }  // namespace content

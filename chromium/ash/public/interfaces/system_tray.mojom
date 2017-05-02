@@ -4,11 +4,28 @@
 
 module ash.mojom;
 
+import "ash/public/interfaces/update.mojom";
+
 // Allows clients (e.g. Chrome browser) to control the ash system tray menu.
 interface SystemTray {
+  // Sets the client interface.
+  SetClient(SystemTrayClient client);
+
+  // Sets the enabled state of the tray on the primary display. If not |enabled|
+  // any open menu will be closed.
+  SetPrimaryTrayEnabled(bool enabled);
+
+  // Sets the visibility of the tray on the primary display.
+  SetPrimaryTrayVisible(bool visible);
+
   // Sets the clock to use 24 hour time formatting if |use_24_hour| is true.
   // Otherwise sets 12 hour time formatting.
   SetUse24HourClock(bool use_24_hour);
+
+  // Shows an icon in the system tray indicating that a software update is
+  // available. Once shown the icon persists until reboot. |severity| and
+  // |factory_reset_required| are used to set the icon, color, and tooltip.
+  ShowUpdateIcon(UpdateSeverity severity, bool factory_reset_required);
 };
 
 // Allows ash system tray to control a client (e.g. Chrome browser). Requests
@@ -63,6 +80,10 @@ interface SystemTrayClient {
   // network type from third_party/cros_system_api/dbus/shill/dbus-constants.h
   // ('wifi', 'cellular', etc.).
   ShowNetworkCreate(string type);
+
+  // Shows the "add network" UI to create a third-party extension-backed VPN
+  // connection (e.g. Cisco AnyConnect).
+  ShowThirdPartyVpnCreate(string extension_id);
 
   // Shows settings related to networking. If |network_id| is empty, shows
   // general settings. Otherwise shows settings for the individual network.

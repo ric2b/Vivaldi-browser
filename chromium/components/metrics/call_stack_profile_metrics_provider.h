@@ -19,6 +19,20 @@ class ChromeUserMetricsExtension;
 // Performs metrics logging for the stack sampling profiler.
 class CallStackProfileMetricsProvider : public MetricsProvider {
  public:
+  // These milestones of a process lifetime can be passed as process "mile-
+  // stones" to StackSmaplingProfile::SetProcessMilestone(). Be sure to update
+  // the translation constants at the top of the .cc file when this is changed.
+  enum Milestones : int {
+    MAIN_LOOP_START,
+    MAIN_NAVIGATION_START,
+    MAIN_NAVIGATION_FINISHED,
+    FIRST_NONEMPTY_PAINT,
+
+    SHUTDOWN_START,
+
+    MILESTONES_MAX_VALUE
+  };
+
   CallStackProfileMetricsProvider();
   ~CallStackProfileMetricsProvider() override;
 

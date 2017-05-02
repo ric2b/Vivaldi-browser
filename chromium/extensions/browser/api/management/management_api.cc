@@ -164,9 +164,8 @@ management::ExtensionInfo CreateExtensionInfo(
     for (icon_iter = icons.begin(); icon_iter != icons.end(); ++icon_iter) {
       management::IconInfo icon_info;
       icon_info.size = icon_iter->first;
-      GURL url =
-          delegate->GetIconURL(&extension, icon_info.size,
-                               ExtensionIconSet::MATCH_EXACTLY, false, nullptr);
+      GURL url = delegate->GetIconURL(&extension, icon_info.size,
+                                      ExtensionIconSet::MATCH_EXACTLY, false);
       icon_info.url = url.spec();
       info.icons->push_back(std::move(icon_info));
     }
@@ -348,7 +347,7 @@ bool ManagementGetPermissionWarningsByManifestFunction::RunAsync() {
 
 void ManagementGetPermissionWarningsByManifestFunction::OnParseSuccess(
     std::unique_ptr<base::Value> value) {
-  if (!value->IsType(base::Value::TYPE_DICTIONARY)) {
+  if (!value->IsType(base::Value::Type::DICTIONARY)) {
     OnParseFailure(keys::kManifestParseError);
     return;
   }

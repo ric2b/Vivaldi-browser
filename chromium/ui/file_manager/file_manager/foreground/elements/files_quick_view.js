@@ -9,12 +9,18 @@ var FilesQuickView = Polymer({
     // File media type, e.g. image, video.
     type: String,
     filePath: String,
+    // If there is a task to open the file.
+    hasTask: Boolean,
     // URLs should be accessible from webview since contets are rendered inside
     // it. Hint: use URL.createObjectURL.
     contentUrl: String,
     videoPoster: String,
     audioArtwork: String,
     autoplay: Boolean,
+    // True if this file is not image, audio nor video but supported on Chrome,
+    // i.e. preview-able by directly src-ing the file path to webview.
+    // Example: pdf, text.
+    browsable: Boolean,
 
     // metadata-box-active-changed event is fired on attribute change.
     metadataBoxActive: {
@@ -37,10 +43,12 @@ var FilesQuickView = Polymer({
   clear: function() {
     this.type = '';
     this.filePath = '';
+    this.hasTask = false;
     this.contentUrl = '';
     this.videoPoster = '';
     this.audioArtwork = '';
     this.autoplay = false;
+    this.browsable = false;
   },
 
   // Opens the dialog.
@@ -154,8 +162,9 @@ var FilesQuickView = Polymer({
    *
    * @private
    */
-  isUnsupported_: function(type) {
-    return !this.isImage_(type) && !this.isVideo_(type) && !this.isAudio_(type);
+  isUnsupported_: function(type, browsable) {
+    return !this.isImage_(type) && !this.isVideo_(type) &&
+        !this.isAudio_(type) && !browsable;
   },
 
 });

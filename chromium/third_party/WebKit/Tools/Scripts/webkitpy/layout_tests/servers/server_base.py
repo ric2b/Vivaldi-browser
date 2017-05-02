@@ -32,7 +32,6 @@ import errno
 import logging
 import socket
 import tempfile
-import time
 
 
 _log = logging.getLogger(__name__)
@@ -231,12 +230,12 @@ class ServerBase(object):
         """Repeat the action for wait_sec or until it succeeds, sleeping for sleep_secs
         in between each attempt. Returns whether it succeeded.
         """
-        start_time = time.time()
-        while time.time() - start_time < wait_secs:
+        start_time = self._port_obj.host.time()
+        while self._port_obj.host.time() - start_time < wait_secs:
             if action():
                 return True
             _log.debug("Waiting for action: %s", action)
-            time.sleep(sleep_secs)
+            self._port_obj.host.sleep(sleep_secs)
 
         return False
 
@@ -255,10 +254,10 @@ class ServerBase(object):
             try:
                 s.connect(('localhost', port))
                 _log.debug("Server running on %d", port)
-            except IOError as e:
-                if e.errno not in (errno.ECONNREFUSED, errno.ECONNRESET):
+            except IOError as error:
+                if error.errno not in (errno.ECONNREFUSED, errno.ECONNRESET):
                     raise
-                _log.debug("Server NOT running on %d: %s", port, e)
+                _log.debug("Server NOT running on %d: %s", port, error)
                 return False
             finally:
                 s.close()
@@ -272,10 +271,10 @@ class ServerBase(object):
             port = mapping['port']
             try:
                 s.bind(('localhost', port))
-            except IOError as e:
-                if e.errno in (errno.EALREADY, errno.EADDRINUSE):
+            except IOError as error:
+                if error.errno in (errno.EALREADY, errno.EADDRINUSE):
                     raise ServerError('Port %d is already in use.' % port)
-                elif self._platform.is_win() and e.errno in (errno.WSAEACCES,):  # pylint: disable=E1101
+                elif self._platform.is_win() and error.errno in (errno.WSAEACCES,):  # pylint: disable=no-member
                     raise ServerError('Port %d is already in use.' % port)
                 else:
                     raise

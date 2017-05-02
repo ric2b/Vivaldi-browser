@@ -92,19 +92,22 @@ static inline bool shouldAlwaysUseDirectionalSelection(LocalFrame* frame) {
   return frame->editor().behavior().shouldConsiderSelectionAsDirectional();
 }
 
-FrameSelection::FrameSelection(LocalFrame* frame)
+FrameSelection::FrameSelection(LocalFrame& frame)
     : m_frame(frame),
       m_pendingSelection(PendingSelection::create(*this)),
-      m_selectionEditor(SelectionEditor::create(*this)),
+      m_selectionEditor(SelectionEditor::create(frame)),
       m_granularity(CharacterGranularity),
       m_xPosForVerticalArrowNavigation(NoXPosForVerticalArrowNavigation()),
-      m_focused(frame->page() &&
-                frame->page()->focusController().focusedFrame() == frame),
-      m_frameCaret(new FrameCaret(frame, *m_selectionEditor)) {
-  DCHECK(frame);
-}
+      m_focused(frame.page() &&
+                frame.page()->focusController().focusedFrame() == frame),
+      m_frameCaret(new FrameCaret(frame, *m_selectionEditor)) {}
 
 FrameSelection::~FrameSelection() {}
+
+const DisplayItemClient& FrameSelection::caretDisplayItemClientForTesting()
+    const {
+  return m_frameCaret->displayItemClient();
+}
 
 const Document& FrameSelection::document() const {
   DCHECK(m_document);
@@ -276,7 +279,7 @@ void FrameSelection::setSelectionAlgorithm(
   notifyAccessibilityForSelectionChange();
   notifyCompositorForSelectionChange();
   notifyEventHandlerForSelectionChange();
-  m_frame->localDOMWindow()->enqueueDocumentEvent(
+  m_frame->domWindow()->enqueueDocumentEvent(
       Event::create(EventTypeNames::selectionchange));
 }
 
@@ -457,7 +460,7 @@ void FrameSelection::respondToNodeModification(Node& node,
     selection().start().document()->layoutViewItem().clearSelection();
 
   if (clearDOMTreeSelection)
-    setSelection(VisibleSelection(), DoNotSetFocus);
+    setSelection(SelectionInDOMTree(), DoNotSetFocus);
   m_frameCaret->setCaretRectNeedsUpdate();
 
   // TODO(yosin): We should move to call |TypingCommand::closeTyping()| to
@@ -693,7 +696,7 @@ void FrameSelection::clear() {
   m_granularity = CharacterGranularity;
   if (m_granularityStrategy)
     m_granularityStrategy->Clear();
-  setSelection(VisibleSelection());
+  setSelection(SelectionInDOMTree());
 }
 
 void FrameSelection::documentAttached(Document* document) {
@@ -847,6 +850,8 @@ void FrameSelection::selectFrameElementInParentIfFullySelected() {
   // Focus on the parent frame, and then select from before this element to
   // after.
   VisibleSelection newSelection = createVisibleSelection(builder.build());
+  // TODO(yosin): We should call |FocusController::setFocusedFrame()| before
+  // |createVisibleSelection()|.
   page->focusController().setFocusedFrame(parent);
   // setFocusedFrame can dispatch synchronous focus/blur events.  The document
   // tree might be modified.
@@ -1037,6 +1042,11 @@ void FrameSelection::commitAppearanceIfNeeded(LayoutView& layoutView) {
   return m_pendingSelection->commit(layoutView);
 }
 
+void FrameSelection::didLayout() {
+  setCaretRectNeedsUpdate();
+  updateAppearance();
+}
+
 void FrameSelection::updateAppearance() {
   m_frameCaret->updateAppearance();
 
@@ -1112,7 +1122,7 @@ String FrameSelection::selectedText(TextIteratorBehavior behavior) const {
 
 String FrameSelection::selectedTextForClipboard() const {
   if (m_frame->settings() &&
-      m_frame->settings()->selectionIncludesAltImageText())
+      m_frame->settings()->getSelectionIncludesAltImageText())
     return extractSelectedText(*this, TextIteratorEmitsImageAltText);
   return extractSelectedText(*this, TextIteratorDefaultBehavior);
 }
@@ -1287,22 +1297,32 @@ void FrameSelection::scheduleVisualUpdate() const {
     page->animator().scheduleVisualUpdate(m_frame->localFrameRoot());
 }
 
+static bool hasNonSeparatorCharacter(const String& text) {
+  for (unsigned i = 0; i < text.length(); i++) {
+    if (!isSeparator(text.characterStartingAt(i)))
+      return true;
+  }
+  return false;
+}
+
 bool FrameSelection::selectWordAroundPosition(const VisiblePosition& position) {
   static const EWordSide wordSideList[2] = {RightWordIfOnBoundary,
                                             LeftWordIfOnBoundary};
   for (EWordSide wordSide : wordSideList) {
+    // TODO(yoichio): We should have Position version of |start/endOfWord|
+    // for avoiding unnecessary canonicalization.
+    // Then we don't need |hasNonSeparatorCharacter|.
     VisiblePosition start = startOfWord(position, wordSide);
     VisiblePosition end = endOfWord(position, wordSide);
     String text =
         plainText(EphemeralRange(start.deepEquivalent(), end.deepEquivalent()));
-    if (!text.isEmpty() && !isSeparator(text.characterStartingAt(0))) {
-      setSelection(
-          createVisibleSelection(SelectionInDOMTree::Builder()
-                                     .collapse(start.toPositionWithAffinity())
-                                     .extend(end.deepEquivalent())
-                                     .build()),
-          CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded,
-          WordGranularity);
+    if (!text.isEmpty() && hasNonSeparatorCharacter(text)) {
+      setSelection(SelectionInDOMTree::Builder()
+                       .collapse(start.toPositionWithAffinity())
+                       .extend(end.deepEquivalent())
+                       .build(),
+                   CloseTyping | ClearTypingStyle,
+                   CursorAlignOnScroll::IfNeeded, WordGranularity);
       return true;
     }
   }
@@ -1316,16 +1336,17 @@ GranularityStrategy* FrameSelection::granularityStrategy() {
   // set yet.
   SelectionStrategy strategyType = SelectionStrategy::Character;
   Settings* settings = m_frame ? m_frame->settings() : 0;
-  if (settings && settings->selectionStrategy() == SelectionStrategy::Direction)
+  if (settings &&
+      settings->getSelectionStrategy() == SelectionStrategy::Direction)
     strategyType = SelectionStrategy::Direction;
 
   if (m_granularityStrategy && m_granularityStrategy->GetType() == strategyType)
     return m_granularityStrategy.get();
 
   if (strategyType == SelectionStrategy::Direction)
-    m_granularityStrategy = makeUnique<DirectionGranularityStrategy>();
+    m_granularityStrategy = WTF::makeUnique<DirectionGranularityStrategy>();
   else
-    m_granularityStrategy = makeUnique<CharacterGranularityStrategy>();
+    m_granularityStrategy = WTF::makeUnique<CharacterGranularityStrategy>();
   return m_granularityStrategy.get();
 }
 
@@ -1378,10 +1399,6 @@ bool FrameSelection::shouldPaintCaretForTesting() const {
 
 bool FrameSelection::isPreviousCaretDirtyForTesting() const {
   return m_frameCaret->isPreviousCaretDirtyForTesting();
-}
-
-bool FrameSelection::isCaretBoundsDirty() const {
-  return m_frameCaret->isCaretBoundsDirty();
 }
 
 void FrameSelection::setCaretRectNeedsUpdate() {

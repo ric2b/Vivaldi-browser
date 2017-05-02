@@ -605,7 +605,7 @@ Timeline.TimelineUIUtils = class {
       case recordType.ResourceFinish:
         var url = TimelineModel.TimelineData.forEvent(event).url;
         if (url)
-          details = Components.linkifyResourceAsNode(url);
+          details = Components.Linkifier.linkifyURL(url);
         break;
       case recordType.FunctionCall:
       case recordType.JSFrame:
@@ -734,7 +734,7 @@ Timeline.TimelineUIUtils = class {
 
     var contentHelper = new Timeline.TimelineDetailsContentHelper(model.targetByEvent(event), linkifier);
     contentHelper.addSection(
-        Timeline.TimelineUIUtils.eventTitle(event), Timeline.TimelineUIUtils.eventStyle(event).category);
+        Timeline.TimelineUIUtils.eventTitle(event), Timeline.TimelineUIUtils.eventStyle(event).category.color);
 
     var eventData = event.args['data'];
     var timelineData = TimelineModel.TimelineData.forEvent(event);
@@ -782,7 +782,7 @@ Timeline.TimelineUIUtils = class {
       case recordTypes.ResourceFinish:
         var url = timelineData.url;
         if (url)
-          contentHelper.appendElementRow(Common.UIString('Resource'), Components.linkifyResourceAsNode(url));
+          contentHelper.appendElementRow(Common.UIString('Resource'), Components.Linkifier.linkifyURL(url));
         if (eventData['requestMethod'])
           contentHelper.appendTextRow(Common.UIString('Request Method'), eventData['requestMethod']);
         if (typeof eventData['statusCode'] === 'number')
@@ -827,13 +827,13 @@ Timeline.TimelineUIUtils = class {
         relatedNodeLabel = Common.UIString('Owner Element');
         if (timelineData.url) {
           contentHelper.appendElementRow(
-              Common.UIString('Image URL'), Components.linkifyResourceAsNode(timelineData.url));
+              Common.UIString('Image URL'), Components.Linkifier.linkifyURL(timelineData.url));
         }
         break;
       case recordTypes.ParseAuthorStyleSheet:
         var url = eventData['styleSheetUrl'];
         if (url)
-          contentHelper.appendElementRow(Common.UIString('Stylesheet URL'), Components.linkifyResourceAsNode(url));
+          contentHelper.appendElementRow(Common.UIString('Stylesheet URL'), Components.Linkifier.linkifyURL(url));
         break;
       case recordTypes.UpdateLayoutTree:  // We don't want to see default details.
       case recordTypes.RecalculateStyles:
@@ -993,8 +993,6 @@ Timeline.TimelineUIUtils = class {
    * @param {!Object} aggregatedStats
    */
   static _collectAggregatedStatsForRecord(record, startTime, endTime, aggregatedStats) {
-    var records = [];
-
     if (!record.endTime() || record.endTime() < startTime || record.startTime() > endTime)
       return;
 
@@ -1019,38 +1017,47 @@ Timeline.TimelineUIUtils = class {
    * @return {!Promise<!DocumentFragment>}
    */
   static buildNetworkRequestDetails(request, model, linkifier) {
-    var target = model.targetByEvent(request.children[0]);
-    var contentHelper = new Timeline.TimelineDetailsContentHelper(target, linkifier);
+    const target = model.targetByEvent(request.children[0]);
+    const contentHelper = new Timeline.TimelineDetailsContentHelper(target, linkifier);
+    const category = Timeline.TimelineUIUtils.networkRequestCategory(request);
+    const color = Timeline.TimelineUIUtils.networkCategoryColor(category);
+    contentHelper.addSection(Common.UIString('Network request'), color);
 
-    var duration = request.endTime - (request.startTime || -Infinity);
-    var items = [];
+    const duration = request.endTime - (request.startTime || -Infinity);
     if (request.url)
-      contentHelper.appendElementRow(Common.UIString('URL'), Components.Linkifier.linkifyURLAsNode(request.url));
+      contentHelper.appendElementRow(Common.UIString('URL'), Components.Linkifier.linkifyURL(request.url));
     if (isFinite(duration))
       contentHelper.appendTextRow(Common.UIString('Duration'), Number.millisToString(duration, true));
     if (request.requestMethod)
       contentHelper.appendTextRow(Common.UIString('Request Method'), request.requestMethod);
     if (typeof request.priority === 'string') {
-      var priority =
+      const priority =
           Components.uiLabelForPriority(/** @type {!Protocol.Network.ResourcePriority} */ (request.priority));
       contentHelper.appendTextRow(Common.UIString('Priority'), priority);
     }
     if (request.mimeType)
       contentHelper.appendTextRow(Common.UIString('Mime Type'), request.mimeType);
-
-    var title = Common.UIString('Initiator');
-    var sendRequest = request.children[0];
-    var topFrame = TimelineModel.TimelineData.forEvent(sendRequest).topFrame();
+    var lengthText = '';
+    if (request.fromCache)
+      lengthText += Common.UIString('(from cache) ');
+    if (request.fromServiceWorker)
+      lengthText += Common.UIString('(from service worker)');
+    if (request.encodedDataLength || !lengthText)
+      lengthText = `${Number.bytesToString(request.encodedDataLength)} ${lengthText}`;
+    contentHelper.appendTextRow(Common.UIString('Encoded Length'), lengthText);
+    const title = Common.UIString('Initiator');
+    const sendRequest = request.children[0];
+    const topFrame = TimelineModel.TimelineData.forEvent(sendRequest).topFrame();
     if (topFrame) {
-      var link = linkifier.maybeLinkifyConsoleCallFrame(target, topFrame);
+      const link = linkifier.maybeLinkifyConsoleCallFrame(target, topFrame);
       if (link)
         contentHelper.appendElementRow(title, link);
     } else {
-      var initiator = TimelineModel.TimelineData.forEvent(sendRequest).initiator();
+      const initiator = TimelineModel.TimelineData.forEvent(sendRequest).initiator();
       if (initiator) {
-        var initiatorURL = TimelineModel.TimelineData.forEvent(initiator).url;
+        const initiatorURL = TimelineModel.TimelineData.forEvent(initiator).url;
         if (initiatorURL) {
-          var link = linkifier.maybeLinkifyScriptLocation(target, null, initiatorURL, 0);
+          const link = linkifier.maybeLinkifyScriptLocation(target, null, initiatorURL, 0);
           if (link)
             contentHelper.appendElementRow(title, link);
         }
@@ -1196,7 +1203,7 @@ Timeline.TimelineUIUtils = class {
         break;
     }
 
-    var invalidationsTreeOutline = new TreeOutlineInShadow();
+    var invalidationsTreeOutline = new UI.TreeOutlineInShadow();
     invalidationsTreeOutline.registerRequiredCSS('timeline/invalidationsTree.css');
     invalidationsTreeOutline.element.classList.add('invalidations-tree');
 
@@ -1335,7 +1342,7 @@ Timeline.TimelineUIUtils = class {
 
     function showPaintProfiler() {
       Timeline.TimelinePanel.instance().select(
-          Timeline.TimelineSelection.fromTraceEvent(event), Timeline.TimelinePanel.DetailsTab.PaintProfiler);
+          Timeline.TimelineSelection.fromTraceEvent(event), Timeline.TimelineDetailsView.Tab.PaintProfiler);
     }
   }
 
@@ -1453,7 +1460,7 @@ Timeline.TimelineUIUtils = class {
       total += aggregatedStats[categoryName];
 
     var element = createElementWithClass('div', 'timeline-details-view-pie-chart-wrapper hbox');
-    var pieChart = new UI.PieChart(100);
+    var pieChart = new PerfUI.PieChart(100);
     pieChart.element.classList.add('timeline-details-view-pie-chart');
     pieChart.setTotal(total);
     var pieChartContainer = element.createChild('div', 'vbox');
@@ -1507,11 +1514,10 @@ Timeline.TimelineUIUtils = class {
   /**
    * @param {!TimelineModel.TimelineFrameModel} frameModel
    * @param {!TimelineModel.TimelineFrame} frame
-   * @param {?Components.FilmStripModel.Frame} filmStripFrame
+   * @param {?SDK.FilmStripModel.Frame} filmStripFrame
    * @return {!Element}
    */
   static generateDetailsContentForFrame(frameModel, frame, filmStripFrame) {
-    var pieChart = Timeline.TimelineUIUtils.generatePieChart(frame.timeByCategory);
     var contentHelper = new Timeline.TimelineDetailsContentHelper(null, null);
     contentHelper.addSection(Common.UIString('Frame'));
 
@@ -1527,10 +1533,10 @@ Timeline.TimelineUIUtils = class {
     contentHelper.appendTextRow(Common.UIString('FPS'), Math.floor(1000 / durationInMillis));
     contentHelper.appendTextRow(Common.UIString('CPU time'), Number.millisToString(frame.cpuTime, true));
 
-    if (Runtime.experiments.isEnabled('layersPanel') && frame.layerTree) {
+    if (frame.layerTree) {
       contentHelper.appendElementRow(
           Common.UIString('Layer tree'),
-          Components.Linkifier.linkifyUsingRevealer(frame.layerTree, Common.UIString('show')));
+          Components.Linkifier.linkifyRevealable(frame.layerTree, Common.UIString('show')));
     }
 
     /**
@@ -1543,10 +1549,10 @@ Timeline.TimelineUIUtils = class {
     }
 
     /**
-     * @param {!Components.FilmStripModel.Frame} filmStripFrame
+     * @param {!SDK.FilmStripModel.Frame} filmStripFrame
      */
     function frameClicked(filmStripFrame) {
-      new Components.FilmStripView.Dialog(filmStripFrame, 0);
+      new PerfUI.FilmStripView.Dialog(filmStripFrame, 0);
     }
 
     return contentHelper.fragment;
@@ -1636,13 +1642,13 @@ Timeline.TimelineUIUtils = class {
    * @return {!Timeline.TimelineMarkerStyle}
    */
   static markerStyleForEvent(event) {
-    var red = 'rgb(255, 0, 0)';
-    var blue = 'rgb(0, 0, 255)';
-    var orange = 'rgb(255, 178, 23)';
-    var green = 'rgb(0, 130, 0)';
-    var tallMarkerDashStyle = [10, 5];
-
-    var title = Timeline.TimelineUIUtils.eventTitle(event);
+    const red = 'rgb(255, 0, 0)';
+    const blue = 'rgb(0, 0, 255)';
+    const orange = 'rgb(255, 178, 23)';
+    const green = 'rgb(0, 130, 0)';
+    const purple = '#a2f';
+    const tallMarkerDashStyle = [10, 5];
+    const title = Timeline.TimelineUIUtils.eventTitle(event);
 
     if (event.hasCategory(TimelineModel.TimelineModel.Category.Console) ||
         event.hasCategory(TimelineModel.TimelineModel.Category.UserTiming)) {
@@ -1650,7 +1656,7 @@ Timeline.TimelineUIUtils = class {
         title: title,
         dashStyle: tallMarkerDashStyle,
         lineWidth: 0.5,
-        color: orange,
+        color: event.hasCategory(TimelineModel.TimelineModel.Category.UserTiming) ? purple : orange,
         tall: false,
         lowPriority: false,
       };
@@ -1706,7 +1712,7 @@ Timeline.TimelineUIUtils = class {
   static colorForURL(url) {
     if (!Timeline.TimelineUIUtils.colorForURL._colorGenerator) {
       Timeline.TimelineUIUtils.colorForURL._colorGenerator =
-          new UI.FlameChart.ColorGenerator({min: 30, max: 330}, {min: 50, max: 80, count: 3}, 85);
+          new PerfUI.FlameChart.ColorGenerator({min: 30, max: 330}, {min: 50, max: 80, count: 3}, 85);
     }
     return Timeline.TimelineUIUtils.colorForURL._colorGenerator.colorForID(url);
   }
@@ -1737,6 +1743,12 @@ Timeline.TimelineUIUtils = class {
         span.textContent = Common.UIString(
             'Idle callback execution extended beyond deadline by ' +
             Number.millisToString(event.duration - eventData['allottedMilliseconds'], true));
+        break;
+      case warnings.LongHandler:
+        span.textContent = Common.UIString('Handler took %s', Number.millisToString(event.duration, true));
+        break;
+      case warnings.LongRecurringHandler:
+        span.textContent = Common.UIString('Recurring handler took %s', Number.millisToString(event.duration, true));
         break;
       case warnings.V8Deopt:
         span.appendChild(UI.createExternalLink(
@@ -1796,7 +1808,7 @@ Timeline.TimelineUIUtils._aggregatedStatsKey = Symbol('aggregatedStats');
 /**
  * @unrestricted
  */
-Timeline.TimelineUIUtils.InvalidationsGroupElement = class extends TreeElement {
+Timeline.TimelineUIUtils.InvalidationsGroupElement = class extends UI.TreeElement {
   /**
    * @param {!SDK.Target} target
    * @param {?Map<number, ?SDK.DOMNode>} relatedNodesMap
@@ -1891,7 +1903,7 @@ Timeline.TimelineUIUtils.InvalidationsGroupElement = class extends TreeElement {
       }
     }
 
-    var contentTreeElement = new TreeElement(content, false);
+    var contentTreeElement = new UI.TreeElement(content, false);
     contentTreeElement.selectable = false;
     this.appendChild(contentTreeElement);
   }
@@ -2110,9 +2122,9 @@ Timeline.TimelineDetailsContentHelper = class {
 
   /**
    * @param {string} title
-   * @param {!Timeline.TimelineCategory=} category
+   * @param {string=} swatchColor
    */
-  addSection(title, category) {
+  addSection(title, swatchColor) {
     if (!this._tableElement.hasChildNodes()) {
       this.element.removeChildren();
     } else {
@@ -2122,8 +2134,8 @@ Timeline.TimelineDetailsContentHelper = class {
 
     if (title) {
       var titleElement = this.element.createChild('div', 'timeline-details-chip-title');
-      if (category)
-        titleElement.createChild('div').style.backgroundColor = category.color;
+      if (swatchColor)
+        titleElement.createChild('div').style.backgroundColor = swatchColor;
       titleElement.createTextChild(title);
     }
 

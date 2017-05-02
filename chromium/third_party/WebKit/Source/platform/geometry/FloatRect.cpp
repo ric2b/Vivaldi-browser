@@ -60,7 +60,7 @@ FloatRect FloatRect::narrowPrecision(double x,
                    clampTo<float>(height));
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool FloatRect::mayNotHaveExactIntRectRepresentation() const {
   static const float maxExactlyExpressible = 1 << FLT_MANT_DIG;
   return fabs(x()) > maxExactlyExpressible ||
@@ -182,13 +182,6 @@ FloatRect unionRect(const Vector<FloatRect>& rects) {
     result.unite(rects[i]);
 
   return result;
-}
-
-IntRect enclosingIntRect(const FloatRect& rect) {
-  IntPoint location = flooredIntPoint(rect.minXMinYCorner());
-  IntPoint maxPoint = ceiledIntPoint(rect.maxXMaxYCorner());
-
-  return IntRect(location, maxPoint - location);
 }
 
 IntRect enclosedIntRect(const FloatRect& rect) {

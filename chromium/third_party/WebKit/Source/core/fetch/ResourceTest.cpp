@@ -26,7 +26,7 @@ class MockPlatform final : public TestingPlatformSupport {
 
   // From blink::Platform:
   void cacheMetadata(const WebURL& url, int64_t, const char*, size_t) override {
-    m_cachedURLs.append(url);
+    m_cachedURLs.push_back(url);
   }
 
   const Vector<WebURL>& cachedURLs() const { return m_cachedURLs; }
@@ -55,20 +55,20 @@ void createTestResourceAndSetCachedMetadata(const ResourceResponse& response) {
 }  // anonymous namespace
 
 TEST(ResourceTest, SetCachedMetadata_SendsMetadataToPlatform) {
-  MockPlatform mock;
+  ScopedTestingPlatformSupport<MockPlatform> mock;
   ResourceResponse response(createTestResourceResponse());
   createTestResourceAndSetCachedMetadata(response);
-  EXPECT_EQ(1u, mock.cachedURLs().size());
+  EXPECT_EQ(1u, mock->cachedURLs().size());
 }
 
 TEST(
     ResourceTest,
     SetCachedMetadata_DoesNotSendMetadataToPlatformWhenFetchedViaServiceWorker) {
-  MockPlatform mock;
+  ScopedTestingPlatformSupport<MockPlatform> mock;
   ResourceResponse response(createTestResourceResponse());
   response.setWasFetchedViaServiceWorker(true);
   createTestResourceAndSetCachedMetadata(response);
-  EXPECT_EQ(0u, mock.cachedURLs().size());
+  EXPECT_EQ(0u, mock->cachedURLs().size());
 }
 
 TEST(ResourceTest, RevalidateWithFragment) {

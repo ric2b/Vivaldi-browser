@@ -21,6 +21,8 @@
 namespace {
 
 const char kCallbackId[] = "test-callback-id";
+const char kSetting[] = "setting";
+const char kSource[] = "source";
 
 }
 
@@ -40,7 +42,8 @@ class SiteSettingsHandlerTest : public testing::Test {
   content::TestWebUI* web_ui() { return &web_ui_; }
   SiteSettingsHandler* handler() { return &handler_; }
 
-  void ValidateDefault(const std::string& expected_default,
+  void ValidateDefault(const std::string& expected_setting,
+                       const std::string& expected_source,
                        size_t expected_total_calls) {
     EXPECT_EQ(expected_total_calls, web_ui()->call_data().size());
 
@@ -55,13 +58,19 @@ class SiteSettingsHandlerTest : public testing::Test {
     ASSERT_TRUE(data.arg2()->GetAsBoolean(&success));
     ASSERT_TRUE(success);
 
-    std::string default_value;
-    ASSERT_TRUE(data.arg3()->GetAsString(&default_value));
-    EXPECT_EQ(expected_default, default_value);
+    const base::DictionaryValue* default_value = nullptr;
+    ASSERT_TRUE(data.arg3()->GetAsDictionary(&default_value));
+    std::string setting;
+    ASSERT_TRUE(default_value->GetString(kSetting, &setting));
+    EXPECT_EQ(expected_setting, setting);
+    std::string source;
+    if (default_value->GetString(kSource, &source))
+      EXPECT_EQ(expected_source, source);
   }
 
   void ValidateOrigin(
       const std::string& expected_origin,
+      const std::string& expected_display_name,
       const std::string& expected_embedding,
       const std::string& expected_setting,
       const std::string& expected_source,
@@ -83,9 +92,12 @@ class SiteSettingsHandlerTest : public testing::Test {
     EXPECT_EQ(1U, exceptions->GetSize());
     const base::DictionaryValue* exception;
     ASSERT_TRUE(exceptions->GetDictionary(0, &exception));
-    std::string origin, embedding_origin, setting, source;
+    std::string origin, embedding_origin, display_name, setting, source;
     ASSERT_TRUE(exception->GetString(site_settings::kOrigin, &origin));
     ASSERT_EQ(expected_origin, origin);
+    ASSERT_TRUE(
+        exception->GetString(site_settings::kDisplayName, &display_name));
+    ASSERT_EQ(expected_display_name, display_name);
     ASSERT_TRUE(exception->GetString(
         site_settings::kEmbeddingOrigin, &embedding_origin));
     ASSERT_EQ(expected_embedding, embedding_origin);
@@ -208,7 +220,7 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
   getArgs.AppendString(kCallbackId);
   getArgs.AppendString("notifications");
   handler()->HandleGetDefaultValueForContentType(&getArgs);
-  ValidateDefault("ask", 1U);
+  ValidateDefault("ask", "default", 1U);
 
   // Set the default to 'Blocked'.
   base::ListValue setArgs;
@@ -220,7 +232,7 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
 
   // Verify that the default has been set to 'Blocked'.
   handler()->HandleGetDefaultValueForContentType(&getArgs);
-  ValidateDefault("block", 3U);
+  ValidateDefault("block", "default", 3U);
 }
 
 TEST_F(SiteSettingsHandlerTest, Origins) {
@@ -241,7 +253,7 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
   listArgs.AppendString(kCallbackId);
   listArgs.AppendString("notifications");
   handler()->HandleGetExceptionList(&listArgs);
-  ValidateOrigin(google, google, "block", "preference", 2U);
+  ValidateOrigin(google, google, google, "block", "preference", 2U);
 
   // Reset things back to how they were.
   base::ListValue resetArgs;
@@ -261,12 +273,14 @@ TEST_F(SiteSettingsHandlerTest, ExceptionHelpers) {
   ContentSettingsPattern pattern =
       ContentSettingsPattern::FromString("[*.]google.com");
   std::unique_ptr<base::DictionaryValue> exception =
-      site_settings::GetExceptionForPage(pattern, pattern,
-          CONTENT_SETTING_BLOCK, "preference", false);
+      site_settings::GetExceptionForPage(pattern, pattern, pattern.ToString(),
+                                         CONTENT_SETTING_BLOCK, "preference",
+                                         false);
 
-  std::string primary_pattern, secondary_pattern, type;
+  std::string primary_pattern, secondary_pattern, display_name, type;
   bool incognito;
   CHECK(exception->GetString(site_settings::kOrigin, &primary_pattern));
+  CHECK(exception->GetString(site_settings::kDisplayName, &display_name));
   CHECK(exception->GetString(site_settings::kEmbeddingOrigin,
                              &secondary_pattern));
   CHECK(exception->GetString(site_settings::kSetting, &type));
@@ -300,6 +314,7 @@ TEST_F(SiteSettingsHandlerTest, ExceptionHelpers) {
   const base::DictionaryValue* dictionary;
   CHECK(exceptions->GetDictionary(0, &dictionary));
   CHECK(dictionary->GetString(site_settings::kOrigin, &primary_pattern));
+  CHECK(dictionary->GetString(site_settings::kDisplayName, &display_name));
   CHECK(dictionary->GetString(site_settings::kEmbeddingOrigin,
                               &secondary_pattern));
   CHECK(dictionary->GetString(site_settings::kSetting, &type));

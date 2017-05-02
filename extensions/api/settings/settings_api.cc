@@ -50,6 +50,7 @@ struct PrefsMapping kPrefsValues[] {
   { prefs::kWebKitMinimumFontSize, integerPreftype },
   { prefs::kDefaultCharset, stringPreftype },
   { password_manager::prefs::kPasswordManagerSavingEnabled, booleanPreftype },
+  { password_manager::prefs::kCredentialsEnableService, booleanPreftype },
 
   // Download preferences
   { prefs::kDownloadDefaultDirectory, stringPreftype },
@@ -66,6 +67,10 @@ struct PrefsMapping kPrefsValues[] {
   { vivaldiprefs::kVivaldiHomepage, stringPreftype },
   { vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, numberPreftype },
 
+  // Plugin preferences
+  { prefs::kPluginsAlwaysOpenPdfExternally, booleanPreftype },
+  { vivaldiprefs::kPluginsWidevideEnabled, booleanPreftype },
+
   // Control if tab only cycles input fields and tab index fields or not.
   { vivaldiprefs::kVivaldiTabsToLinks, booleanPreftype },
 
@@ -73,6 +78,8 @@ struct PrefsMapping kPrefsValues[] {
   { vivaldiprefs::kDeferredTabLoadingAfterRestore, booleanPreftype },
   // Always load restored pinned tabs.
   { vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore, booleanPreftype },
+  // Enable autoupdate.
+  { vivaldiprefs::kAutoUpdateEnabled, booleanPreftype },
 
   // Startup preferences:
   // An integer pref. Holds one of several values:
@@ -305,9 +312,12 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
   registry->RegisterBooleanPref(vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore,
                                 true);
 
+  registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
   registry->RegisterIntegerPref(
       vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, 90,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(vivaldiprefs::kPluginsWidevideEnabled, true);
 
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
 

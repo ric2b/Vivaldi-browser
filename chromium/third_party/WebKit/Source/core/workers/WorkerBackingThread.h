@@ -28,24 +28,20 @@ class WebThreadSupportingGC;
 // WorkerGlobalScopes) can share one WorkerBackingThread.
 class CORE_EXPORT WorkerBackingThread final {
  public:
-  static std::unique_ptr<WorkerBackingThread> create(
-      const char* name,
-      BlinkGC::ThreadHeapMode threadHeapMode) {
-    return wrapUnique(new WorkerBackingThread(name, false, threadHeapMode));
+  static std::unique_ptr<WorkerBackingThread> create(const char* name) {
+    return WTF::wrapUnique(new WorkerBackingThread(name, false));
   }
   static std::unique_ptr<WorkerBackingThread> create(WebThread* thread) {
-    return wrapUnique(new WorkerBackingThread(thread, false));
+    return WTF::wrapUnique(new WorkerBackingThread(thread, false));
   }
 
   // These are needed to suppress leak reports. See
   // https://crbug.com/590802 and https://crbug.com/v8/1428.
-  static std::unique_ptr<WorkerBackingThread> createForTest(
-      const char* name,
-      BlinkGC::ThreadHeapMode threadHeapMode) {
-    return wrapUnique(new WorkerBackingThread(name, true, threadHeapMode));
+  static std::unique_ptr<WorkerBackingThread> createForTest(const char* name) {
+    return WTF::wrapUnique(new WorkerBackingThread(name, true));
   }
   static std::unique_ptr<WorkerBackingThread> createForTest(WebThread* thread) {
-    return wrapUnique(new WorkerBackingThread(thread, true));
+    return WTF::wrapUnique(new WorkerBackingThread(thread, true));
   }
 
   ~WorkerBackingThread();
@@ -70,9 +66,7 @@ class CORE_EXPORT WorkerBackingThread final {
   static void setRAILModeOnWorkerThreadIsolates(v8::RAILMode);
 
  private:
-  WorkerBackingThread(const char* name,
-                      bool shouldCallGCOnShutdown,
-                      BlinkGC::ThreadHeapMode);
+  WorkerBackingThread(const char* name, bool shouldCallGCOnShutdown);
   WorkerBackingThread(WebThread*, bool shouldCallGCOnSHutdown);
 
   std::unique_ptr<WebThreadSupportingGC> m_backingThread;

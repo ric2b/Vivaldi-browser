@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/resource_devtools_info.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_timing_info.h"
@@ -116,9 +117,9 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // considering the CORS preflight logic.
   bool was_fallback_required_by_service_worker;
 
-  // The original URL of the response which was fetched by the ServiceWorker.
-  // This may be empty if the response was created inside the ServiceWorker.
-  GURL original_url_via_service_worker;
+  // The URL list of the response which was served by the ServiceWorker. See
+  // ServiceWorkerResponseInfo::url_list_via_service_worker().
+  std::vector<GURL> url_list_via_service_worker;
 
   // The type of the response which was fetched by the ServiceWorker.
   blink::WebServiceWorkerResponseType response_type_via_service_worker;
@@ -141,8 +142,9 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // the ServiceWorker. Empty if the response isn't from the CacheStorage.
   std::string cache_storage_cache_name;
 
-  // Whether or not the request was for a LoFi version of the resource.
-  bool is_using_lofi;
+  // A bitmask of potentially several Previews optimizations that the resource
+  // could have requested.
+  PreviewsState previews_state;
 
   // Effective connection type when the resource was fetched. This is populated
   // only for responses that correspond to main frame requests.
@@ -176,6 +178,10 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // In case this is a CORS response fetched by a ServiceWorker, this is the
   // set of headers that should be exposed.
   std::vector<std::string> cors_exposed_header_names;
+
+  // True if service worker navigation preload was performed due to the request
+  // for this response.
+  bool did_service_worker_navigation_preload;
 };
 
 }  // namespace content

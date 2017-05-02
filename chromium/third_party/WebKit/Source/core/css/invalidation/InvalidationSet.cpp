@@ -33,7 +33,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Element.h"
 #include "core/inspector/InspectorTraceEvents.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "wtf/Compiler.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/text/StringBuilder.h"
@@ -62,8 +62,7 @@ InvalidationSet::InvalidationSet(InvalidationType type)
       m_customPseudoInvalid(false),
       m_treeBoundaryCrossing(false),
       m_insertionPointCrossing(false),
-      m_invalidatesSlotted(false),
-      m_isAlive(true) {}
+      m_invalidatesSlotted(false) {}
 
 bool InvalidationSet::invalidatesElement(Element& element) const {
   if (m_allDescendantsMightBeInvalid)
@@ -109,10 +108,8 @@ bool InvalidationSet::invalidatesElement(Element& element) const {
 }
 
 void InvalidationSet::combine(const InvalidationSet& other) {
-  RELEASE_ASSERT(m_isAlive);
-  RELEASE_ASSERT(other.m_isAlive);
-  RELEASE_ASSERT(&other != this);
-  RELEASE_ASSERT(type() == other.type());
+  DCHECK(&other != this);
+  DCHECK(type() == other.type());
   if (type() == InvalidateSiblings) {
     SiblingInvalidationSet& siblings = toSiblingInvalidationSet(*this);
     const SiblingInvalidationSet& otherSiblings =
@@ -182,53 +179,53 @@ void InvalidationSet::destroy() {
 
 HashSet<AtomicString>& InvalidationSet::ensureClassSet() {
   if (!m_classes)
-    m_classes = wrapUnique(new HashSet<AtomicString>);
+    m_classes = WTF::wrapUnique(new HashSet<AtomicString>);
   return *m_classes;
 }
 
 HashSet<AtomicString>& InvalidationSet::ensureIdSet() {
   if (!m_ids)
-    m_ids = wrapUnique(new HashSet<AtomicString>);
+    m_ids = WTF::wrapUnique(new HashSet<AtomicString>);
   return *m_ids;
 }
 
 HashSet<AtomicString>& InvalidationSet::ensureTagNameSet() {
   if (!m_tagNames)
-    m_tagNames = wrapUnique(new HashSet<AtomicString>);
+    m_tagNames = WTF::wrapUnique(new HashSet<AtomicString>);
   return *m_tagNames;
 }
 
 HashSet<AtomicString>& InvalidationSet::ensureAttributeSet() {
   if (!m_attributes)
-    m_attributes = wrapUnique(new HashSet<AtomicString>);
+    m_attributes = WTF::wrapUnique(new HashSet<AtomicString>);
   return *m_attributes;
 }
 
 void InvalidationSet::addClass(const AtomicString& className) {
   if (wholeSubtreeInvalid())
     return;
-  RELEASE_ASSERT(!className.isEmpty());
+  DCHECK(!className.isEmpty());
   ensureClassSet().add(className);
 }
 
 void InvalidationSet::addId(const AtomicString& id) {
   if (wholeSubtreeInvalid())
     return;
-  RELEASE_ASSERT(!id.isEmpty());
+  DCHECK(!id.isEmpty());
   ensureIdSet().add(id);
 }
 
 void InvalidationSet::addTagName(const AtomicString& tagName) {
   if (wholeSubtreeInvalid())
     return;
-  RELEASE_ASSERT(!tagName.isEmpty());
+  DCHECK(!tagName.isEmpty());
   ensureTagNameSet().add(tagName);
 }
 
 void InvalidationSet::addAttribute(const AtomicString& attribute) {
   if (wholeSubtreeInvalid())
     return;
-  RELEASE_ASSERT(!attribute.isEmpty());
+  DCHECK(!attribute.isEmpty());
   ensureAttributeSet().add(attribute);
 }
 

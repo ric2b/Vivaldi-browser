@@ -25,6 +25,7 @@
 
 #include "modules/webaudio/DelayDSPKernel.h"
 #include "modules/webaudio/DelayProcessor.h"
+#include "platform/audio/AudioUtilities.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
@@ -44,7 +45,15 @@ DelayProcessor::~DelayProcessor() {
 }
 
 std::unique_ptr<AudioDSPKernel> DelayProcessor::createKernel() {
-  return makeUnique<DelayDSPKernel>(this);
+  return WTF::makeUnique<DelayDSPKernel>(this);
+}
+
+void DelayProcessor::processOnlyAudioParams(size_t framesToProcess) {
+  DCHECK_LE(framesToProcess, AudioUtilities::kRenderQuantumFrames);
+
+  float values[AudioUtilities::kRenderQuantumFrames];
+
+  m_delayTime->calculateSampleAccurateValues(values, framesToProcess);
 }
 
 }  // namespace blink

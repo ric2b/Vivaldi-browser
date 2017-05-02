@@ -26,6 +26,7 @@ FakePictureLayerTilingClient::FakePictureLayerTilingClient(
     : resource_pool_(
           ResourcePool::Create(resource_provider,
                                base::ThreadTaskRunnerHandle::Get().get(),
+                               ResourceProvider::TEXTURE_HINT_IMMUTABLE,
                                ResourcePool::kDefaultExpirationDelay)),
       tile_manager_(
           new FakeTileManager(&tile_manager_client_, resource_pool_.get())),
@@ -37,7 +38,7 @@ FakePictureLayerTilingClient::FakePictureLayerTilingClient(
 FakePictureLayerTilingClient::~FakePictureLayerTilingClient() {
 }
 
-ScopedTilePtr FakePictureLayerTilingClient::CreateTile(
+std::unique_ptr<Tile> FakePictureLayerTilingClient::CreateTile(
     const Tile::CreateInfo& info) {
   return tile_manager_->CreateTile(info, 0, 0, 0);
 }
@@ -65,8 +66,7 @@ FakePictureLayerTilingClient::GetPendingOrActiveTwinTiling(
   if (!twin_set_)
     return twin_tiling_;
   for (size_t i = 0; i < twin_set_->num_tilings(); ++i) {
-    if (twin_set_->tiling_at(i)->contents_scale_key() ==
-        tiling->contents_scale_key())
+    if (twin_set_->tiling_at(i)->contents_scale() == tiling->contents_scale())
       return twin_set_->tiling_at(i);
   }
   return nullptr;

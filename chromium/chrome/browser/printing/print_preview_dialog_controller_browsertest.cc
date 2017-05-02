@@ -127,11 +127,6 @@ void PluginsLoadedCallback(
   quit_closure.Run();
 }
 
-void PluginEnabledCallback(const base::Closure& quit_closure, bool can_enable) {
-  EXPECT_TRUE(can_enable);
-  quit_closure.Run();
-}
-
 bool GetPdfPluginInfo(content::WebPluginInfo* info) {
   base::FilePath pdf_plugin_path = base::FilePath::FromUTF8Unsafe(
       ChromeContentClient::kPDFPluginPath);
@@ -178,6 +173,11 @@ class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
     printing::PrintPreviewDialogController* dialog_controller =
         printing::PrintPreviewDialogController::GetInstance();
     return dialog_controller->GetPrintPreviewForContents(initiator_);
+  }
+
+  void SetAlwaysOpenPdfExternallyForTests(bool always_open_pdf_externally) {
+    PluginPrefs::GetForProfile(browser()->profile())
+        ->SetAlwaysOpenPdfExternallyForTests(always_open_pdf_externally);
   }
 
  private:
@@ -292,14 +292,7 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   ASSERT_TRUE(GetPdfPluginInfo(&pdf_plugin_info));
 
   // Disable the PDF plugin.
-  {
-    base::RunLoop run_loop;
-    PluginPrefs::GetForProfile(browser()->profile())->EnablePlugin(
-        false,
-        base::FilePath::FromUTF8Unsafe(ChromeContentClient::kPDFPluginPath),
-        base::Bind(&PluginEnabledCallback, run_loop.QuitClosure()));
-    run_loop.Run();
-  }
+  SetAlwaysOpenPdfExternallyForTests(true);
 
   // Make sure it is actually disabled for webpages.
   ChromePluginServiceFilter* filter = ChromePluginServiceFilter::GetInstance();
@@ -337,7 +330,7 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   preview_dialog->ForEachFrame(base::Bind(&CheckPdfPluginForRenderFrame));
 }
 
-#if defined(ENABLE_TASK_MANAGER)
+#if !defined(OS_ANDROID)
 
 namespace {
 
@@ -403,4 +396,4 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
 
 }  // namespace
 
-#endif  // defined(ENABLE_TASK_MANAGER)
+#endif  // !defined(OS_ANDROID)

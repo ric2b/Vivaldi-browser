@@ -83,6 +83,19 @@ bool BaseNode::DecryptIfNecessary() {
       unencrypted_data_.CopyFrom(specifics);
       unencrypted_data_.mutable_bookmark()->set_title(server_legal_title);
     }
+    else if (GetModelType() == NOTES &&
+        !specifics.notes().has_subject() &&
+        !GetTitle().empty()) {  // Last check ensures this isn't a new node.
+      // We need to fill in the title.
+      std::string title = GetTitle();
+      std::string server_legal_title;
+      SyncAPINameToServerName(title, &server_legal_title);
+      DVLOG(1) << "Reading from legacy note, manually returning title "
+               << title;
+      unencrypted_data_.CopyFrom(specifics);
+      unencrypted_data_.mutable_notes()->set_subject(
+          server_legal_title);
+    }
     return true;
   }
 
@@ -131,6 +144,20 @@ const sync_pb::EntitySpecifics& BaseNode::GetUnencryptedSpecifics(
         DCHECK_EQ(GetModelTypeFromSpecifics(unencrypted_data_), BOOKMARKS);
         return unencrypted_data_;
       }
+    } else if (GetModelType() == NOTES) {
+      const sync_pb::NotesSpecifics& notes_specifics =
+          specifics.notes();
+      if (notes_specifics.has_subject() || notes_specifics.has_content() ||
+          GetTitle().empty() ||  // For the empty node case
+          GetIsPermanentFolder()) {
+        // It's possible we previously had to convert and set
+        // |unencrypted_data_| but then wrote our own data, so we allow
+        // |unencrypted_data_| to be non-empty.
+        return specifics;
+      } else {
+        DCHECK_EQ(GetModelTypeFromSpecifics(unencrypted_data_), NOTES);
+        return unencrypted_data_;
+      }
     } else {
       DCHECK_EQ(GetModelTypeFromSpecifics(unencrypted_data_), UNSPECIFIED);
       return specifics;
@@ -172,6 +199,10 @@ std::string BaseNode::GetTitle() const {
       GetEntry()->GetSpecifics().has_encrypted()) {
     // Special case for legacy bookmarks dealing with encryption.
     ServerNameToSyncAPIName(GetBookmarkSpecifics().title(), &result);
+  } else if (NOTES == GetModelType() &&
+      GetEntry()->GetSpecifics().has_encrypted()) {
+    // Special case for legacy bookmarks dealing with encryption.
+    ServerNameToSyncAPIName(GetNotesSpecifics().subject(), &result);
   } else {
     ServerNameToSyncAPIName(GetEntry()->GetNonUniqueName(), &result);
   }
@@ -232,6 +263,11 @@ const syncable::Id& BaseNode::GetSyncId() const {
 const sync_pb::BookmarkSpecifics& BaseNode::GetBookmarkSpecifics() const {
   DCHECK_EQ(GetModelType(), BOOKMARKS);
   return GetEntitySpecifics().bookmark();
+}
+
+const sync_pb::NotesSpecifics& BaseNode::GetNotesSpecifics() const {
+  DCHECK_EQ(GetModelType(), NOTES);
+  return GetEntitySpecifics().notes();
 }
 
 const sync_pb::NigoriSpecifics& BaseNode::GetNigoriSpecifics() const {

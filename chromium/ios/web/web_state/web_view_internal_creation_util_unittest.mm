@@ -7,16 +7,16 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <WebKit/WebKit.h>
 
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
+#import "ios/web/public/test/fakes/test_web_client.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
-#include "ios/web/public/test/test_browser_state.h"
-#import "ios/web/public/test/test_web_client.h"
 #include "ios/web/public/test/web_test.h"
 #import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest_mac.h"
+#import "testing/gtest_mac.h"
 
 namespace {
 
@@ -48,14 +48,13 @@ class WebViewCreationUtilsTest : public WebTest {
   web::ScopedTestingWebClient web_client_;
 };
 
-// Tests web::CreateWKWebView function that it correctly returns a WKWebView
+// Tests web::BuildWKWebView function that it correctly returns a WKWebView
 // with the correct frame, WKProcessPool and calls WebClient::PreWebViewCreation
 // method.
 TEST_F(WebViewCreationUtilsTest, WKWebViewCreationWithBrowserState) {
   EXPECT_CALL(*creation_utils_web_client(), PreWebViewCreation()).Times(1);
 
-  base::scoped_nsobject<WKWebView> web_view(
-      CreateWKWebView(kTestFrame, GetBrowserState()));
+  WKWebView* web_view = BuildWKWebView(kTestFrame, GetBrowserState());
 
   EXPECT_TRUE([web_view isKindOfClass:[WKWebView class]]);
   EXPECT_TRUE(CGRectEqualToRect(kTestFrame, [web_view frame]));
@@ -69,14 +68,12 @@ TEST_F(WebViewCreationUtilsTest, WKWebViewCreationWithBrowserState) {
             [[web_view configuration] processPool]);
 }
 
-// Tests that web::CreateWKWebView always returns a web view with the same
+// Tests that web::BuildWKWebView always returns a web view with the same
 // processPool.
 TEST_F(WebViewCreationUtilsTest, WKWebViewsShareProcessPool) {
-  base::scoped_nsobject<WKWebView> web_view(
-      CreateWKWebView(kTestFrame, GetBrowserState()));
+  WKWebView* web_view = BuildWKWebView(kTestFrame, GetBrowserState());
   ASSERT_TRUE(web_view);
-  base::scoped_nsobject<WKWebView> web_view2(
-      CreateWKWebView(kTestFrame, GetBrowserState()));
+  WKWebView* web_view2 = BuildWKWebView(kTestFrame, GetBrowserState());
   ASSERT_TRUE(web_view2);
 
   // Make sure that web views share the same non-nil process pool. Otherwise

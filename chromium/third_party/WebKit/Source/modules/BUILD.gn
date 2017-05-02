@@ -81,6 +81,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:non_test_config",
     "//third_party/WebKit/Source:inside_blink",
+    "//third_party/WebKit/Source/core:blink_core_pch",
   ]
 
   deps = [
@@ -118,6 +119,7 @@ target(modules_target_type, "modules") {
     "//third_party/WebKit/Source/modules/imagebitmap",
     "//third_party/WebKit/Source/modules/imagecapture",
     "//third_party/WebKit/Source/modules/indexeddb",
+    "//third_party/WebKit/Source/modules/installation",
     "//third_party/WebKit/Source/modules/installedapp",
     "//third_party/WebKit/Source/modules/mediacapturefromelement",
     "//third_party/WebKit/Source/modules/mediarecorder",
@@ -175,8 +177,16 @@ source_set("modules_testing") {
   sources = [
     "$bindings_modules_v8_output_dir/V8InternalsPartial.cpp",
     "$bindings_modules_v8_output_dir/V8InternalsPartial.h",
+    "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.cpp",
+    "$bindings_modules_v8_output_dir/V8WorkerInternalsPartial.h",
     "accessibility/testing/InternalsAccessibility.cpp",
     "accessibility/testing/InternalsAccessibility.h",
+    "fetch/testing/InternalsFetch.cpp",
+    "fetch/testing/InternalsFetch.h",
+    "fetch/testing/WorkerInternalsFetch.cpp",
+    "fetch/testing/WorkerInternalsFetch.h",
+    "mediastream/testing/InternalsMediaStream.cpp",
+    "mediastream/testing/InternalsMediaStream.h",
     "navigatorcontentutils/testing/InternalsNavigatorContentUtils.cpp",
     "navigatorcontentutils/testing/InternalsNavigatorContentUtils.h",
     "navigatorcontentutils/testing/NavigatorContentUtilsClientMock.cpp",
@@ -198,6 +208,7 @@ source_set("modules_testing") {
   configs += [
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:inside_blink",
+    "//third_party/WebKit/Source/core:blink_core_pch",
   ]
 
   deps = [
@@ -258,6 +269,7 @@ source_set("unit_tests") {
     "payments/CompleteTest.cpp",
     "payments/OnPaymentResponseTest.cpp",
     "payments/PaymentAddressTest.cpp",
+    "payments/PaymentAppRequestDataConversionTest.cpp",
     "payments/PaymentRequestDetailsTest.cpp",
     "payments/PaymentRequestTest.cpp",
     "payments/PaymentRequestUpdateEventTest.cpp",
@@ -268,6 +280,7 @@ source_set("unit_tests") {
     "peerconnection/RTCDataChannelTest.cpp",
     "presentation/PresentationAvailabilityTest.cpp",
     "presentation/PresentationReceiverTest.cpp",
+    "presentation/PresentationRequestTest.cpp",
     "push_messaging/PushManagerTest.cpp",
     "push_messaging/PushMessageDataTest.cpp",
     "remoteplayback/RemotePlaybackTest.cpp",
@@ -287,6 +300,7 @@ source_set("unit_tests") {
   configs += [
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:inside_blink",
+    "//third_party/WebKit/Source/core:blink_core_pch",
   ]
 
   deps = [

@@ -6,21 +6,28 @@ Polymer({
   is: 'history-synced-device-card',
 
   properties: {
-    // Name of the synced device.
-    device: String,
-
-    // When the device information was last updated.
-    lastUpdateTime: String,
-
     /**
      * The list of tabs open for this device.
      * @type {!Array<!ForeignSessionTab>}
      */
     tabs: {
       type: Array,
-      value: function() { return []; },
+      value: function() {
+        return [];
+      },
       observer: 'updateIcons_'
     },
+
+    // Name of the synced device.
+    device: String,
+
+    // When the device information was last updated.
+    lastUpdateTime: String,
+
+    // Whether the card is open.
+    opened: Boolean,
+
+    searchTerm: String,
 
     /**
      * The indexes where a window separator should be shown. The use of a
@@ -30,16 +37,13 @@ Polymer({
      */
     separatorIndexes: Array,
 
-    // Whether the card is open.
-    opened: Boolean,
-
-    searchTerm: String,
-
     // Internal identifier for the device.
     sessionTag: String,
   },
 
-  listeners: {'dom-change': 'notifyFocusUpdate_'},
+  listeners: {
+    'dom-change': 'notifyFocusUpdate_',
+  },
 
   /**
    * Create FocusRows for this card. One is always made for the card heading and
@@ -70,7 +74,7 @@ Polymer({
    * @private
    */
   openTab_: function(e) {
-    var tab = /** @type {ForeignSessionTab} */(e.model.tab);
+    var tab = /** @type {ForeignSessionTab} */ (e.model.tab);
     var browserService = md_history.BrowserService.getInstance();
     browserService.recordHistogram(
         SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.LINK_CLICKED,
@@ -89,8 +93,7 @@ Polymer({
         SyncedTabsHistogram.EXPAND_SESSION;
 
     md_history.BrowserService.getInstance().recordHistogram(
-        SYNCED_TABS_HISTOGRAM_NAME, histogramValue,
-        SyncedTabsHistogram.LIMIT);
+        SYNCED_TABS_HISTOGRAM_NAME, histogramValue, SyncedTabsHistogram.LIMIT);
 
     this.$.collapse.toggle();
     this.$['dropdown-indicator'].icon =
@@ -149,9 +152,9 @@ Polymer({
    * @private
    */
   onMenuButtonTap_: function(e) {
-    this.fire('toggle-menu', {
+    this.fire('open-menu', {
       target: Polymer.dom(e).localTarget,
-      tag: this.sessionTag
+      tag: this.sessionTag,
     });
     e.stopPropagation();  // Prevent iron-collapse.
   },

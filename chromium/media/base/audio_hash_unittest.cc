@@ -15,14 +15,14 @@ namespace media {
 
 static const int kChannelCount = 2;
 static const int kFrameCount = 1024;
+static const int kSampleRate = 48000;
 
 class AudioHashTest : public testing::Test {
  public:
   AudioHashTest()
       : bus_one_(AudioBus::Create(kChannelCount, kFrameCount)),
         bus_two_(AudioBus::Create(kChannelCount, kFrameCount)),
-        fake_callback_(0.01) {
-
+        fake_callback_(0.01, kSampleRate) {
     // Fill each channel in each bus with unique data.
     GenerateUniqueChannels(bus_one_.get());
     GenerateUniqueChannels(bus_two_.get());
@@ -37,7 +37,8 @@ class AudioHashTest : public testing::Test {
     // audio data, we need to fill each channel manually.
     for (int ch = 0; ch < audio_bus->channels(); ++ch) {
       wrapped_bus->SetChannelData(0, audio_bus->channel(ch));
-      fake_callback_.Render(wrapped_bus.get(), 0, 0);
+      fake_callback_.Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                            wrapped_bus.get());
     }
   }
 

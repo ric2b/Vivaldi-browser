@@ -42,9 +42,6 @@ class WebsiteSettingsPopupViewTestApi;
 }
 
 namespace views {
-class ImageButton;
-class Label;
-class LabelButton;
 class Link;
 class Widget;
 }
@@ -121,8 +118,11 @@ class WebsiteSettingsPopupView : public content::WebContentsObserver,
       const WebsiteSettingsUI::ChosenObjectInfo& info) override;
 
   // views::BubbleDialogDelegateView implementation.
+  base::string16 GetWindowTitle() const override;
+  bool ShouldShowCloseButton() const override;
   void OnWidgetDestroying(views::Widget* widget) override;
   int GetDialogButtons() const override;
+  const gfx::FontList& GetTitleFontList() const override;
 
   // views::ButtonListener implementation.
   void ButtonPressed(views::Button* button, const ui::Event& event) override;
@@ -143,12 +143,10 @@ class WebsiteSettingsPopupView : public content::WebContentsObserver,
   void SetPermissionInfo(const PermissionInfoList& permission_info_list,
                          ChosenObjectInfoList chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
-  // TODO(lgarron): Remove SetSelectedTab() with https://crbug.com/571533
-  void SetSelectedTab(TabId tab_id) override;
 
   // Creates the contents of the |site_settings_view_|. The ownership of the
   // returned view is transferred to the caller.
-  views::View* CreateSiteSettingsView() WARN_UNUSED_RESULT;
+  views::View* CreateSiteSettingsView(int side_margin) WARN_UNUSED_RESULT;
 
   // Used to asynchronously handle clicks since these calls may cause the
   // destruction of the settings view and the base class window still needs to
@@ -165,6 +163,9 @@ class WebsiteSettingsPopupView : public content::WebContentsObserver,
 
   // The header section (containing security-related information).
   PopupHeaderView* header_;
+
+  // The security summary for the current page.
+  base::string16 summary_text_;
 
   // The separator between the header and the site settings view.
   views::Separator* separator_;

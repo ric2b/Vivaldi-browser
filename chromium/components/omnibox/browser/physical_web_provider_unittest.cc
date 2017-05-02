@@ -8,14 +8,18 @@
 #include <string>
 
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
+#include "components/physical_web/data_source/fake_physical_web_data_source.h"
 #include "components/physical_web/data_source/physical_web_data_source.h"
 #include "components/physical_web/data_source/physical_web_listener.h"
+#include "components/variations/entropy_provider.h"
+#include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -23,51 +27,21 @@
 #include "ui/gfx/text_elider.h"
 #include "url/gurl.h"
 
+using physical_web::FakePhysicalWebDataSource;
+using physical_web::PhysicalWebDataSource;
+using physical_web::PhysicalWebListener;
+
 namespace {
 
-// A mock implementation of the Physical Web data source that allows setting
-// metadata for nearby URLs directly.
-class MockPhysicalWebDataSource : public PhysicalWebDataSource {
- public:
-  MockPhysicalWebDataSource() : metadata_(new base::ListValue()) {}
-  ~MockPhysicalWebDataSource() override {}
-
-  void StartDiscovery(bool network_request_enabled) override {}
-  void StopDiscovery() override {}
-
-  std::unique_ptr<base::ListValue> GetMetadata() override {
-    return metadata_->CreateDeepCopy();
-  }
-
-  bool HasUnresolvedDiscoveries() override {
-    return false;
-  }
-
-  void RegisterListener(PhysicalWebListener* physical_web_listener) override {}
-
-  void UnregisterListener(
-      PhysicalWebListener* physical_web_listener) override {}
-
-  // for testing
-  void SetMetadata(std::unique_ptr<base::ListValue> metadata) {
-    metadata_ = std::move(metadata);
-  }
-
- private:
-  std::unique_ptr<base::ListValue> metadata_;
-};
-
-// An autocomplete provider client that embeds the mock Physical Web data
+// An autocomplete provider client that embeds the fake Physical Web data
 // source.
 class FakeAutocompleteProviderClient
     : public testing::NiceMock<MockAutocompleteProviderClient> {
  public:
   FakeAutocompleteProviderClient()
       : physical_web_data_source_(
-            base::MakeUnique<MockPhysicalWebDataSource>()),
-        is_off_the_record_(false)
-  {
-  }
+            base::MakeUnique<FakePhysicalWebDataSource>()),
+        is_off_the_record_(false) {}
 
   const AutocompleteSchemeClassifier& GetSchemeClassifier() const override {
     return scheme_classifier_;
@@ -81,8 +55,8 @@ class FakeAutocompleteProviderClient
     return is_off_the_record_;
   }
 
-  // Convenience method to avoid downcasts when accessing the mock data source.
-  MockPhysicalWebDataSource* GetMockPhysicalWebDataSource() {
+  // Convenience method to avoid downcasts when accessing the fake data source.
+  FakePhysicalWebDataSource* GetFakePhysicalWebDataSource() {
     return physical_web_data_source_.get();
   }
 
@@ -92,7 +66,7 @@ class FakeAutocompleteProviderClient
   }
 
  private:
-  std::unique_ptr<MockPhysicalWebDataSource> physical_web_data_source_;
+  std::unique_ptr<FakePhysicalWebDataSource> physical_web_data_source_;
   TestSchemeClassifier scheme_classifier_;
   bool is_off_the_record_;
 };
@@ -101,10 +75,15 @@ class FakeAutocompleteProviderClient
 
 class PhysicalWebProviderTest : public testing::Test {
  protected:
-  PhysicalWebProviderTest() : provider_(NULL) {}
+  PhysicalWebProviderTest() : provider_(NULL) {
+    ResetFieldTrialList();
+  }
+
   ~PhysicalWebProviderTest() override {}
 
   void SetUp() override {
+    base::FieldTrial* trial = CreatePhysicalWebFieldTrial();
+    trial->group();
     client_.reset(new FakeAutocompleteProviderClient());
     provider_ = PhysicalWebProvider::Create(client_.get(), nullptr);
   }
@@ -113,23 +92,40 @@ class PhysicalWebProviderTest : public testing::Test {
     provider_ = NULL;
   }
 
+  void ResetFieldTrialList() {
+    // Destroy the existing FieldTrialList before creating a new one to avoid a
+    // DCHECK.
+    field_trial_list_.reset();
+    field_trial_list_.reset(new base::FieldTrialList(
+        base::MakeUnique<metrics::SHA1EntropyProvider>("foo")));
+    variations::testing::ClearAllVariationParams();
+  }
+
+  static base::FieldTrial* CreatePhysicalWebFieldTrial() {
+    std::map<std::string, std::string> params;
+    params[OmniboxFieldTrial::kPhysicalWebZeroSuggestRule] = "true";
+    params[OmniboxFieldTrial::kPhysicalWebAfterTypingRule] = "true";
+    variations::AssociateVariationParams(
+        OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A", params);
+    return base::FieldTrialList::CreateFieldTrial(
+        OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
+  }
+
   // Create a dummy metadata list with |metadata_count| items. Each item is
   // populated with a unique scanned URL and page metadata.
-  static std::unique_ptr<base::ListValue> CreateMetadata(
+  static std::unique_ptr<physical_web::MetadataList> CreateMetadata(
       size_t metadata_count) {
-    auto metadata_list = base::MakeUnique<base::ListValue>();
+    auto metadata_list = base::MakeUnique<physical_web::MetadataList>();
     for (size_t i = 0; i < metadata_count; ++i) {
       std::string item_id = base::SizeTToString(i);
       std::string url = "https://example.com/" + item_id;
-      auto metadata_item = base::MakeUnique<base::DictionaryValue>();
-      metadata_item->SetString(kPhysicalWebScannedUrlKey, url);
-      metadata_item->SetString(kPhysicalWebResolvedUrlKey, url);
-      metadata_item->SetString(kPhysicalWebIconUrlKey, url);
-      metadata_item->SetString(kPhysicalWebTitleKey,
-                               "Example title " + item_id);
-      metadata_item->SetString(kPhysicalWebDescriptionKey,
-                               "Example description " + item_id);
-      metadata_list->Append(std::move(metadata_item));
+      metadata_list->emplace_back();
+      auto& metadata_item = metadata_list->back();
+      metadata_item.scanned_url = GURL(url);
+      metadata_item.resolved_url = GURL(url);
+      metadata_item.icon_url = GURL(url);
+      metadata_item.title = "Example title " + item_id;
+      metadata_item.description = "Example description " + item_id;
     }
     return metadata_list;
   }
@@ -201,19 +197,20 @@ class PhysicalWebProviderTest : public testing::Test {
   // that a default match and overflow item are only present when
   // |should_expect_default_match| or |should_expect_overflow_item| are true.
   // Metadata matches are not checked.
-  void OverflowItemTestCase(const AutocompleteInput& input,
-                            std::unique_ptr<base::ListValue> metadata_list,
-                            const std::string& title_truncated,
-                            size_t expected_match_count,
-                            bool should_expect_default_match,
-                            bool should_expect_overflow_item) {
-    const size_t metadata_count = metadata_list->GetSize();
+  void OverflowItemTestCase(
+      const AutocompleteInput& input,
+      std::unique_ptr<physical_web::MetadataList> metadata_list,
+      const std::string& title_truncated,
+      size_t expected_match_count,
+      bool should_expect_default_match,
+      bool should_expect_overflow_item) {
+    const size_t metadata_count = metadata_list->size();
 
-    MockPhysicalWebDataSource* data_source =
-        client_->GetMockPhysicalWebDataSource();
+    FakePhysicalWebDataSource* data_source =
+        client_->GetFakePhysicalWebDataSource();
     EXPECT_TRUE(data_source);
 
-    data_source->SetMetadata(std::move(metadata_list));
+    data_source->SetMetadataList(std::move(metadata_list));
 
     provider_->Start(input, false);
 
@@ -250,17 +247,18 @@ class PhysicalWebProviderTest : public testing::Test {
 
   std::unique_ptr<FakeAutocompleteProviderClient> client_;
   scoped_refptr<PhysicalWebProvider> provider_;
+  std::unique_ptr<base::FieldTrialList> field_trial_list_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PhysicalWebProviderTest);
 };
 
 TEST_F(PhysicalWebProviderTest, TestEmptyMetadataListCreatesNoMatches) {
-  MockPhysicalWebDataSource* data_source =
-      client_->GetMockPhysicalWebDataSource();
+  FakePhysicalWebDataSource* data_source =
+      client_->GetFakePhysicalWebDataSource();
   EXPECT_TRUE(data_source);
 
-  data_source->SetMetadata(CreateMetadata(0));
+  data_source->SetMetadataList(CreateMetadata(0));
 
   // Run the test with no text in the omnibox input to simulate NTP.
   provider_->Start(CreateInputForNTP(), false);
@@ -272,22 +270,18 @@ TEST_F(PhysicalWebProviderTest, TestEmptyMetadataListCreatesNoMatches) {
 }
 
 TEST_F(PhysicalWebProviderTest, TestSingleMetadataItemCreatesOneMatch) {
-  MockPhysicalWebDataSource* data_source =
-      client_->GetMockPhysicalWebDataSource();
+  FakePhysicalWebDataSource* data_source =
+      client_->GetFakePhysicalWebDataSource();
   EXPECT_TRUE(data_source);
 
   // Extract the URL and title before inserting the metadata into the data
   // source.
-  std::unique_ptr<base::ListValue> metadata_list = CreateMetadata(1);
-  base::DictionaryValue* metadata_item;
-  EXPECT_TRUE(metadata_list->GetDictionary(0, &metadata_item));
-  std::string resolved_url;
-  EXPECT_TRUE(metadata_item->GetString(kPhysicalWebResolvedUrlKey,
-                                       &resolved_url));
-  std::string title;
-  EXPECT_TRUE(metadata_item->GetString(kPhysicalWebTitleKey, &title));
+  auto metadata_list = CreateMetadata(1);
+  const auto& metadata_item = metadata_list->front();
+  std::string resolved_url = metadata_item.resolved_url.spec();
+  std::string title = metadata_item.title;
 
-  data_source->SetMetadata(std::move(metadata_list));
+  data_source->SetMetadataList(std::move(metadata_list));
 
   // Run the test with no text in the omnibox input to simulate NTP.
   provider_->Start(CreateInputForNTP(), false);
@@ -319,11 +313,11 @@ TEST_F(PhysicalWebProviderTest, TestSingleMetadataItemCreatesOneMatch) {
 }
 
 TEST_F(PhysicalWebProviderTest, TestNoMatchesWithUserInput) {
-  MockPhysicalWebDataSource* data_source =
-      client_->GetMockPhysicalWebDataSource();
+  FakePhysicalWebDataSource* data_source =
+      client_->GetFakePhysicalWebDataSource();
   EXPECT_TRUE(data_source);
 
-  data_source->SetMetadata(CreateMetadata(1));
+  data_source->SetMetadataList(CreateMetadata(1));
 
   // Construct an AutocompleteInput to simulate user input in the omnibox input
   // field. The provider should not generate any matches.
@@ -358,9 +352,8 @@ TEST_F(PhysicalWebProviderTest, TestLongPageTitleIsTruncatedInOverflowItem) {
   // Set a long title for the first item. The page title for this item will
   // appear in the overflow item's content string.
   auto metadata_list = CreateMetadata(AutocompleteProvider::kMaxMatches + 1);
-  base::DictionaryValue* metadata_item;
-  EXPECT_TRUE(metadata_list->GetDictionary(0, &metadata_item));
-  metadata_item->SetString(kPhysicalWebTitleKey, "Extra long example title 0");
+  auto& metadata_item = metadata_list->front();
+  metadata_item.title = "Extra long example title 0";
 
   OverflowItemTestCase(CreateInputForNTP(), std::move(metadata_list),
                        "Extra long exa" + std::string(gfx::kEllipsis),
@@ -372,9 +365,8 @@ TEST_F(PhysicalWebProviderTest, TestEmptyPageTitleInOverflowItem) {
   // Set an empty title for the first item. Because the title is empty, we will
   // display an alternate string in the overflow item's contents.
   auto metadata_list = CreateMetadata(AutocompleteProvider::kMaxMatches + 1);
-  base::DictionaryValue* metadata_item;
-  EXPECT_TRUE(metadata_list->GetDictionary(0, &metadata_item));
-  metadata_item->SetString(kPhysicalWebTitleKey, "");
+  auto& metadata_item = metadata_list->front();
+  metadata_item.title = "";
 
   OverflowItemTestCase(CreateInputForNTP(), std::move(metadata_list), "",
                        PhysicalWebProvider::kPhysicalWebMaxMatches, false,
@@ -384,9 +376,8 @@ TEST_F(PhysicalWebProviderTest, TestEmptyPageTitleInOverflowItem) {
 TEST_F(PhysicalWebProviderTest, TestRTLPageTitleInOverflowItem) {
   // Set a Hebrew title for the first item.
   auto metadata_list = CreateMetadata(AutocompleteProvider::kMaxMatches + 1);
-  base::DictionaryValue* metadata_item;
-  EXPECT_TRUE(metadata_list->GetDictionary(0, &metadata_item));
-  metadata_item->SetString(kPhysicalWebTitleKey, "ויקיפדיה");
+  auto& metadata_item = metadata_list->front();
+  metadata_item.title = "ויקיפדיה";
 
   OverflowItemTestCase(CreateInputForNTP(), std::move(metadata_list),
                        "ויקיפדיה", PhysicalWebProvider::kPhysicalWebMaxMatches,
@@ -397,11 +388,11 @@ TEST_F(PhysicalWebProviderTest, TestNoMatchesInIncognito) {
   // Enable incognito mode
   client_->SetOffTheRecord(true);
 
-  MockPhysicalWebDataSource* data_source =
-      client_->GetMockPhysicalWebDataSource();
+  FakePhysicalWebDataSource* data_source =
+      client_->GetFakePhysicalWebDataSource();
   EXPECT_TRUE(data_source);
 
-  data_source->SetMetadata(CreateMetadata(1));
+  data_source->SetMetadataList(CreateMetadata(1));
   provider_->Start(CreateInputForNTP(), false);
 
   EXPECT_TRUE(provider_->matches().empty());

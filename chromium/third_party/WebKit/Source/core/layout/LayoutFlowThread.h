@@ -92,7 +92,8 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
       const ComputedStyle& oldStyle) {}
 
   void absoluteQuadsForDescendant(const LayoutBox& descendant,
-                                  Vector<FloatQuad>&);
+                                  Vector<FloatQuad>&,
+                                  MapCoordinatesFlags mode = 0);
 
   bool nodeAtPoint(HitTestResult&,
                    const HitTestLocation& locationInContainer,
@@ -109,7 +110,7 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
   bool hasColumnSets() const { return m_multiColumnSetList.size(); }
 
   void validateColumnSets();
-  void invalidateColumnSets();
+  void invalidateColumnSets() { m_columnSetsInvalidated = true; }
   bool hasValidColumnSetInfo() const {
     return !m_columnSetsInvalidated && !m_multiColumnSetList.isEmpty();
   }
@@ -141,6 +142,7 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
       LayoutUnit contentLogicalHeight) const;
 
   virtual bool isPageLogicalHeightKnown() const { return true; }
+  virtual bool mayHaveNonUniformPageLogicalHeight() const = 0;
   bool pageLogicalSizeChanged() const { return m_pageLogicalSizeChanged; }
 
   // Return the visual bounding box based on the supplied flow-thread bounding

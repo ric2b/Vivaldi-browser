@@ -62,6 +62,23 @@ void SessionManager::SessionStarted() {
   session_started_ = true;
 }
 
+bool SessionManager::IsInSecondaryLoginScreen() const {
+  return session_state_ == SessionState::LOGIN_SECONDARY;
+}
+
+bool SessionManager::IsScreenLocked() const {
+  return session_state_ == SessionState::LOCKED;
+}
+
+uint32_t SessionManager::GetMaximumNumberOfUserSessions() const {
+  // Limits the number of logged in users to 10 due to memory constraints.
+  return 10u;
+}
+
+bool SessionManager::IsUserSessionBlocked() const {
+  return session_state_ != SessionState::ACTIVE;
+}
+
 void SessionManager::AddObserver(SessionManagerObserver* observer) {
   observers_.AddObserver(observer);
 }

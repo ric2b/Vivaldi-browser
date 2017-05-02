@@ -38,6 +38,18 @@
 #include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 
+#define STATIC_ASSERT_ENUM(a, b)                            \
+  static_assert(static_cast<int>(a) == static_cast<int>(b), \
+                "mismatching enums: " #a)
+
+STATIC_ASSERT_ENUM(WTF::LenientUTF8Conversion,
+                   blink::WebString::UTF8ConversionMode::kLenient);
+STATIC_ASSERT_ENUM(WTF::StrictUTF8Conversion,
+                   blink::WebString::UTF8ConversionMode::kStrict);
+STATIC_ASSERT_ENUM(
+    WTF::StrictUTF8ConversionReplacingUnpairedSurrogatesWithFFFD,
+    blink::WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD);
+
 namespace blink {
 
 void WebString::reset() {
@@ -68,8 +80,9 @@ const WebUChar* WebString::data16() const {
   return !m_private.isNull() && !is8Bit() ? m_private->characters16() : 0;
 }
 
-std::string WebString::utf8() const {
-  StringUTF8Adaptor utf8(m_private.get());
+std::string WebString::utf8(UTF8ConversionMode mode) const {
+  StringUTF8Adaptor utf8(m_private.get(),
+                         static_cast<WTF::UTF8ConversionMode>(mode));
   return std::string(utf8.data(), utf8.length());
 }
 
@@ -79,6 +92,21 @@ WebString WebString::fromUTF8(const char* data, size_t length) {
 
 WebString WebString::fromUTF8(const char* data) {
   return String::fromUTF8(data);
+}
+
+WebString WebString::fromUTF16(const base::string16& s) {
+  WebString string;
+  string.assign(s.data(), s.length());
+  return string;
+}
+
+WebString WebString::fromUTF16(const base::NullableString16& s) {
+  WebString string;
+  if (s.is_null())
+    string.reset();
+  else
+    string.assign(s.string().data(), s.string().length());
+  return string;
 }
 
 std::string WebString::latin1() const {

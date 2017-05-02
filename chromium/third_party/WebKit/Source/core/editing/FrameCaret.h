@@ -27,20 +27,33 @@
 #define FrameCaret_h
 
 #include "core/CoreExport.h"
-#include "core/editing/CaretBase.h"
-#include "platform/geometry/IntRect.h"
+#include "core/editing/PositionWithAffinity.h"
+#include "platform/Timer.h"
+#include "platform/geometry/LayoutRect.h"
+#include "platform/heap/GarbageCollected.h"
+#include "platform/heap/Member.h"
+#include <memory>
 
 namespace blink {
 
+class CaretBase;
+class CharacterData;
+class DisplayItemClient;
+class Document;
+class GraphicsContext;
+class Node;
+class LocalFrame;
 class SelectionEditor;
 
 enum class CaretVisibility { Visible, Hidden };
 
-class CORE_EXPORT FrameCaret final : public CaretBase {
+class CORE_EXPORT FrameCaret final
+    : public GarbageCollectedFinalized<FrameCaret> {
  public:
-  FrameCaret(LocalFrame*, const SelectionEditor&);
-  ~FrameCaret() override;
+  FrameCaret(LocalFrame&, const SelectionEditor&);
+  ~FrameCaret();
 
+  const DisplayItemClient& displayItemClient() const;
   bool isActive() const { return caretPosition().isNotNull(); }
 
   void updateAppearance();
@@ -54,12 +67,11 @@ class CORE_EXPORT FrameCaret final : public CaretBase {
   void startBlinkCaret();
 
   void setCaretVisibility(CaretVisibility);
-  bool isCaretBoundsDirty() const { return m_caretRectDirty; }
   void setCaretRectNeedsUpdate();
   // If |forceInvalidation| is true the caret's previous and new rectangles
   // are forcibly invalidated regardless of the state of the blink timer.
   void invalidateCaretRect(bool forceInvalidation);
-  IntRect absoluteCaretBounds();
+  IntRect absoluteCaretBounds() const;
 
   bool shouldShowBlockCursor() const { return m_shouldShowBlockCursor; }
   void setShouldShowBlockCursor(bool);
@@ -75,7 +87,7 @@ class CORE_EXPORT FrameCaret final : public CaretBase {
   bool shouldPaintCaretForTesting() const { return m_shouldPaintCaret; }
   bool isPreviousCaretDirtyForTesting() const { return m_previousCaretNode; }
 
-  DECLARE_VIRTUAL_TRACE();
+  DECLARE_TRACE();
 
  private:
   friend class FrameSelectionTest;
@@ -88,6 +100,7 @@ class CORE_EXPORT FrameCaret final : public CaretBase {
 
   const Member<const SelectionEditor> m_selectionEditor;
   const Member<LocalFrame> m_frame;
+  const std::unique_ptr<CaretBase> m_caretBase;
   // The last node which painted the caret. Retained for clearing the old
   // caret when it moves.
   Member<Node> m_previousCaretNode;
@@ -95,7 +108,8 @@ class CORE_EXPORT FrameCaret final : public CaretBase {
   LayoutRect m_previousCaretRect;
   CaretVisibility m_caretVisibility;
   CaretVisibility m_previousCaretVisibility;
-  Timer<FrameCaret> m_caretBlinkTimer;
+  // TODO(https://crbug.com/668758): Consider using BeginFrame update for this.
+  TaskRunnerTimer<FrameCaret> m_caretBlinkTimer;
   bool m_caretRectDirty : 1;
   bool m_shouldPaintCaret : 1;
   bool m_isCaretBlinkingSuspended : 1;

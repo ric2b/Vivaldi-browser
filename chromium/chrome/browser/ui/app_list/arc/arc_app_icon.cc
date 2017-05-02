@@ -127,15 +127,17 @@ ArcAppIcon::Source::~Source() {
 
 gfx::ImageSkiaRep ArcAppIcon::Source::GetImageForScale(float scale) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (host_)
-    host_->LoadForScaleFactor(ui::GetSupportedScaleFactor(scale));
 
   // Host loads icon asynchronously, so use default icon so far.
   int resource_id;
   if (host_ && host_->app_id() == arc::kPlayStoreAppId) {
+    // Don't request icon from Android side. Use overloaded Chrome icon for Play
+    // Store that is adopted according Chrome style.
     resource_id = scale >= 1.5f ?
         IDR_ARC_SUPPORT_ICON_96 : IDR_ARC_SUPPORT_ICON_48;
   } else {
+    if (host_)
+      host_->LoadForScaleFactor(ui::GetSupportedScaleFactor(scale));
     resource_id = IDR_APP_DEFAULT_ICON;
   }
 
@@ -321,10 +323,9 @@ void ArcAppIcon::OnIconRead(
     RequestIcon(read_result->scale_factor);
 
   if (!read_result->unsafe_icon_data.empty()) {
-    decode_requests_.push_back(
-        new DecodeRequest(weak_ptr_factory_.GetWeakPtr(),
-                          resource_size_in_dip_,
-                          read_result->scale_factor));
+    decode_requests_.push_back(base::MakeUnique<DecodeRequest>(
+        weak_ptr_factory_.GetWeakPtr(), resource_size_in_dip_,
+        read_result->scale_factor));
     if (disable_safe_decoding) {
       SkBitmap bitmap;
       if (!read_result->unsafe_icon_data.empty() &&
@@ -338,7 +339,7 @@ void ArcAppIcon::OnIconRead(
         decode_requests_.back()->OnDecodeImageFailed();
       }
     } else {
-      ImageDecoder::Start(decode_requests_.back(),
+      ImageDecoder::Start(decode_requests_.back().get(),
                           read_result->unsafe_icon_data);
     }
   }
@@ -364,9 +365,10 @@ void ArcAppIcon::Update(const gfx::ImageSkia* image) {
 void ArcAppIcon::DiscardDecodeRequest(DecodeRequest* request) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  ScopedVector<DecodeRequest>::iterator it = std::find(decode_requests_.begin(),
-                                                       decode_requests_.end(),
-                                                       request);
+  auto it = std::find_if(decode_requests_.begin(), decode_requests_.end(),
+                         [request](const std::unique_ptr<DecodeRequest>& ptr) {
+                           return ptr.get() == request;
+                         });
   CHECK(it != decode_requests_.end());
   decode_requests_.erase(it);
 }

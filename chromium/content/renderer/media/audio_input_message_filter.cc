@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/audio_input_message_filter.h"
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -84,9 +86,7 @@ bool AudioInputMessageFilter::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(AudioInputMessageFilter, message)
     IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamCreated,
                         OnStreamCreated)
-    IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamVolume, OnStreamVolume)
-    IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamStateChanged,
-                        OnStreamStateChanged)
+    IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamError, OnStreamError)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -114,7 +114,7 @@ void AudioInputMessageFilter::OnChannelClosing() {
   DLOG_IF(WARNING, !delegates_.IsEmpty())
       << "Not all audio devices have been closed.";
 
-  IDMap<media::AudioInputIPCDelegate>::iterator it(&delegates_);
+  IDMap<media::AudioInputIPCDelegate*>::iterator it(&delegates_);
   while (!it.IsAtEnd()) {
     it.GetCurrentValue()->OnIPCClosed();
     delegates_.Remove(it.GetCurrentKey());
@@ -145,19 +145,7 @@ void AudioInputMessageFilter::OnStreamCreated(
   delegate->OnStreamCreated(handle, socket_handle, length, total_segments);
 }
 
-void AudioInputMessageFilter::OnStreamVolume(int stream_id, double volume) {
-  DCHECK(io_task_runner_->BelongsToCurrentThread());
-  media::AudioInputIPCDelegate* delegate = delegates_.Lookup(stream_id);
-  if (!delegate) {
-    DLOG(WARNING) << "Got audio stream event for a non-existent or removed"
-                  << " audio capturer.";
-    return;
-  }
-  delegate->OnVolume(volume);
-}
-
-void AudioInputMessageFilter::OnStreamStateChanged(
-    int stream_id, media::AudioInputIPCDelegateState state) {
+void AudioInputMessageFilter::OnStreamError(int stream_id) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   media::AudioInputIPCDelegate* delegate = delegates_.Lookup(stream_id);
   if (!delegate) {
@@ -165,7 +153,7 @@ void AudioInputMessageFilter::OnStreamStateChanged(
                   << " audio renderer.";
     return;
   }
-  delegate->OnStateChanged(state);
+  delegate->OnError();
 }
 
 AudioInputMessageFilter::AudioInputIPCImpl::AudioInputIPCImpl(
@@ -215,6 +203,8 @@ void AudioInputMessageFilter::AudioInputIPCImpl::RecordStream() {
 
 void AudioInputMessageFilter::AudioInputIPCImpl::SetVolume(double volume) {
   DCHECK_NE(stream_id_, kStreamIDNotSet);
+  DCHECK_GE(volume, 0);
+  DCHECK_LE(volume, 1);
   filter_->Send(new AudioInputHostMsg_SetVolume(stream_id_, volume));
 }
 

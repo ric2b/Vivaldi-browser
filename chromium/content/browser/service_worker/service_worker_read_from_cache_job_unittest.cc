@@ -35,6 +35,7 @@ const int64_t kRegistrationId = 1;
 const int64_t kVersionId = 2;
 const int64_t kMainScriptResourceId = 10;
 const int64_t kImportedScriptResourceId = 11;
+const int64_t kNonExistentResourceId = 12;
 const int64_t kResourceSize = 100;
 
 void DidStoreRegistration(ServiceWorkerStatusCode* status_out,
@@ -189,10 +190,7 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
   MockURLRequestDelegate delegate_;
 };
 
-class ServiceWorkerReadFromCacheJobTestP
-    : public MojoServiceWorkerTestP<ServiceWorkerReadFromCacheJobTest> {};
-
-TEST_P(ServiceWorkerReadFromCacheJobTestP, ReadMainScript) {
+TEST_F(ServiceWorkerReadFromCacheJobTest, ReadMainScript) {
   // Read the main script from the diskcache.
   std::unique_ptr<net::URLRequest> request =
       url_request_context_->CreateRequest(main_script_.url,
@@ -210,7 +208,7 @@ TEST_P(ServiceWorkerReadFromCacheJobTestP, ReadMainScript) {
             DeduceStartWorkerFailureReason(SERVICE_WORKER_OK));
 }
 
-TEST_P(ServiceWorkerReadFromCacheJobTestP, ReadImportedScript) {
+TEST_F(ServiceWorkerReadFromCacheJobTest, ReadImportedScript) {
   // Read the imported script from the diskcache.
   std::unique_ptr<net::URLRequest> request =
       url_request_context_->CreateRequest(imported_script_.url,
@@ -227,14 +225,23 @@ TEST_P(ServiceWorkerReadFromCacheJobTestP, ReadImportedScript) {
             DeduceStartWorkerFailureReason(SERVICE_WORKER_OK));
 }
 
-TEST_P(ServiceWorkerReadFromCacheJobTestP, ResourceNotFound) {
+TEST_F(ServiceWorkerReadFromCacheJobTest, ResourceNotFound) {
   ASSERT_EQ(SERVICE_WORKER_OK, FindRegistration());
 
-  // Try to read a nonexistent resource from the diskcache.
+  // Populate the script cache map with a nonexistent resource.
+  ServiceWorkerScriptCacheMap* script_cache_map = version_->script_cache_map();
+  script_cache_map->resource_map_.clear();
+  using Record = ServiceWorkerDatabase::ResourceRecord;
+  std::vector<Record> resources = {
+      Record(kNonExistentResourceId, main_script_.url, main_script_.size_bytes),
+      Record(imported_script_.resource_id, imported_script_.url,
+             imported_script_.size_bytes)};
+  script_cache_map->SetResources(resources);
+
+  // Attempt to read it from the disk cache.
   std::unique_ptr<net::URLRequest> request =
-      url_request_context_->CreateRequest(
-          GURL("http://example.com/nonexistent"), net::DEFAULT_PRIORITY,
-          &delegate_);
+      url_request_context_->CreateRequest(main_script_.url,
+                                          net::DEFAULT_PRIORITY, &delegate_);
   const int64_t kNonexistentResourceId = 100;
   test_job_interceptor_->set_main_intercept_job(
       base::MakeUnique<ServiceWorkerReadFromCacheJob>(
@@ -252,9 +259,5 @@ TEST_P(ServiceWorkerReadFromCacheJobTestP, ResourceNotFound) {
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version_->status());
   EXPECT_EQ(SERVICE_WORKER_ERROR_NOT_FOUND, FindRegistration());
 }
-
-INSTANTIATE_TEST_CASE_P(ServiceWorkerReadFromCacheJobTest,
-                        ServiceWorkerReadFromCacheJobTestP,
-                        testing::Bool());
 
 }  // namespace content

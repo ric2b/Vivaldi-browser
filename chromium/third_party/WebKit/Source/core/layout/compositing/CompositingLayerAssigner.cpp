@@ -31,7 +31,7 @@
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -244,7 +244,7 @@ void CompositingLayerAssigner::updateSquashingAssignment(
     // already-existing squashing layer.
     TRACE_LAYER_INVALIDATION(
         layer, InspectorLayerInvalidationTrackingEvent::AddedToSquashingLayer);
-    layersNeedingPaintInvalidation.append(layer);
+    layersNeedingPaintInvalidation.push_back(layer);
     m_layersChanged = true;
   } else if (compositedLayerUpdate == RemoveFromSquashingLayer) {
     if (layer->groupedMapping()) {
@@ -262,7 +262,7 @@ void CompositingLayerAssigner::updateSquashingAssignment(
     TRACE_LAYER_INVALIDATION(
         layer,
         InspectorLayerInvalidationTrackingEvent::RemovedFromSquashingLayer);
-    layersNeedingPaintInvalidation.append(layer);
+    layersNeedingPaintInvalidation.push_back(layer);
     m_layersChanged = true;
 
     layer->setLostGroupedMapping(false);
@@ -295,7 +295,7 @@ void CompositingLayerAssigner::assignLayersToBackingsInternal(
           layer, compositedLayerUpdate)) {
     TRACE_LAYER_INVALIDATION(
         layer, InspectorLayerInvalidationTrackingEvent::NewCompositedLayer);
-    layersNeedingPaintInvalidation.append(layer);
+    layersNeedingPaintInvalidation.push_back(layer);
     m_layersChanged = true;
     if (ScrollingCoordinator* scrollingCoordinator =
             scrollingCoordinatorFromLayer(*layer)) {

@@ -30,6 +30,7 @@
 #include "core/html/DocumentNameCollection.h"
 #include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLElement.h"
+#include "core/html/HTMLFormControlElement.h"
 #include "core/html/HTMLObjectElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLOptionsCollection.h"
@@ -78,7 +79,8 @@ static bool shouldTypeOnlyIncludeDirectChildren(CollectionType type) {
   return false;
 }
 
-static NodeListRootType rootTypeFromCollectionType(CollectionType type) {
+static NodeListRootType rootTypeFromCollectionType(const ContainerNode& owner,
+                                                   CollectionType type) {
   switch (type) {
     case DocImages:
     case DocApplets:
@@ -90,7 +92,6 @@ static NodeListRootType rootTypeFromCollectionType(CollectionType type) {
     case DocAll:
     case WindowNamedItems:
     case DocumentNamedItems:
-    case FormControls:
       return NodeListRootType::TreeScope;
     case ClassCollectionType:
     case TagCollectionType:
@@ -105,6 +106,11 @@ static NodeListRootType rootTypeFromCollectionType(CollectionType type) {
     case DataListOptions:
     case MapAreas:
       return NodeListRootType::Node;
+    case FormControls:
+      if (isHTMLFieldSetElement(owner))
+        return NodeListRootType::Node;
+      DCHECK(isHTMLFormElement(owner));
+      return NodeListRootType::TreeScope;
     case NameNodeListType:
     case RadioNodeListType:
     case RadioImgNodeListType:
@@ -164,7 +170,7 @@ HTMLCollection::HTMLCollection(ContainerNode& ownerNode,
                                CollectionType type,
                                ItemAfterOverrideType itemAfterOverrideType)
     : LiveNodeListBase(ownerNode,
-                       rootTypeFromCollectionType(type),
+                       rootTypeFromCollectionType(ownerNode, type),
                        invalidationTypeExcludingIdAndNameAttributes(type),
                        type),
       m_overridesItemAfter(itemAfterOverrideType == OverridesItemAfter),
@@ -233,12 +239,14 @@ static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection,
              element.fastHasAttribute(hrefAttr);
     case DocAnchors:
       return element.hasTagName(aTag) && element.fastHasAttribute(nameAttr);
+    case FormControls:
+      DCHECK(isHTMLFieldSetElement(htmlCollection.ownerNode()));
+      return isHTMLObjectElement(element) || isHTMLFormControlElement(element);
     case ClassCollectionType:
     case TagCollectionType:
     case HTMLTagCollectionType:
     case DocAll:
     case NodeChildren:
-    case FormControls:
     case TableRows:
     case WindowNamedItems:
     case NameNodeListType:
@@ -413,11 +421,11 @@ Element* HTMLCollection::namedItem(const AtomicString& name) const {
   const NamedItemCache& cache = namedItemCache();
   HeapVector<Member<Element>>* idResults = cache.getElementsById(name);
   if (idResults && !idResults->isEmpty())
-    return idResults->first();
+    return idResults->front();
 
   HeapVector<Member<Element>>* nameResults = cache.getElementsByName(name);
   if (nameResults && !nameResults->isEmpty())
-    return nameResults->first();
+    return nameResults->front();
 
   return nullptr;
 }
@@ -449,7 +457,7 @@ void HTMLCollection::supportedPropertyNames(Vector<String>& names) {
       HashSet<AtomicString>::AddResult addResult =
           existingNames.add(idAttribute);
       if (addResult.isNewEntry)
-        names.append(idAttribute);
+        names.push_back(idAttribute);
     }
     if (!element->isHTMLElement())
       continue;
@@ -460,7 +468,7 @@ void HTMLCollection::supportedPropertyNames(Vector<String>& names) {
       HashSet<AtomicString>::AddResult addResult =
           existingNames.add(nameAttribute);
       if (addResult.isNewEntry)
-        names.append(nameAttribute);
+        names.push_back(nameAttribute);
     }
   }
 }
@@ -504,13 +512,13 @@ void HTMLCollection::namedItems(const AtomicString& name,
 
   const NamedItemCache& cache = namedItemCache();
   if (HeapVector<Member<Element>>* idResults = cache.getElementsById(name)) {
-    for (unsigned i = 0; i < idResults->size(); ++i)
-      result.append(idResults->at(i));
+    for (const auto& element : *idResults)
+      result.push_back(element);
   }
   if (HeapVector<Member<Element>>* nameResults =
           cache.getElementsByName(name)) {
-    for (unsigned i = 0; i < nameResults->size(); ++i)
-      result.append(nameResults->at(i));
+    for (const auto& element : *nameResults)
+      result.push_back(element);
   }
 }
 

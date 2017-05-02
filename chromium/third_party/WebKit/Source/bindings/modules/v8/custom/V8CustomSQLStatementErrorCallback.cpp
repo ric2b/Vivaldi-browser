@@ -40,19 +40,19 @@ namespace blink {
 
 bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction,
                                               SQLError* error) {
-  if (!canInvokeCallback())
-    return true;
-
   v8::Isolate* isolate = m_scriptState->isolate();
+  ExecutionContext* executionContext = m_scriptState->getExecutionContext();
+  if (!executionContext || executionContext->isContextSuspended() ||
+      executionContext->isContextDestroyed())
+    return true;
   if (!m_scriptState->contextIsValid())
     return true;
-
   ScriptState::Scope scope(m_scriptState.get());
 
   v8::Local<v8::Value> transactionHandle =
-      toV8(transaction, m_scriptState->context()->Global(), isolate);
+      ToV8(transaction, m_scriptState->context()->Global(), isolate);
   v8::Local<v8::Value> errorHandle =
-      toV8(error, m_scriptState->context()->Global(), isolate);
+      ToV8(error, m_scriptState->context()->Global(), isolate);
   ASSERT(transactionHandle->IsObject());
 
   v8::Local<v8::Value> argv[] = {transactionHandle, errorHandle};
@@ -69,7 +69,7 @@ bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction,
   // the error callback did not return false, or there was no error callback.
   // Jump to the last step in the overall steps.
   if (!V8ScriptRunner::callFunction(m_callback.newLocal(isolate),
-                                    getExecutionContext(),
+                                    m_scriptState->getExecutionContext(),
                                     m_scriptState->context()->Global(),
                                     WTF_ARRAY_LENGTH(argv), argv, isolate)
            .ToLocal(&result))

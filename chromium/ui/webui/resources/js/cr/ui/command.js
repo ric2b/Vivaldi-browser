@@ -108,8 +108,8 @@ cr.define('cr.ui', function() {
      * @param {Node=} opt_node Node for which to actuate command state.
      */
     canExecuteChange: function(opt_node) {
-      dispatchCanExecuteEvent(this,
-                              opt_node || this.ownerDocument.activeElement);
+      dispatchCanExecuteEvent(
+          this, opt_node || this.ownerDocument.activeElement);
     },
 
     /**
@@ -141,8 +141,8 @@ cr.define('cr.ui', function() {
 
         // Set this after the keyboardShortcuts_ since that might throw.
         this.shortcut_ = shortcut;
-        cr.dispatchPropertyChange(this, 'shortcut', this.shortcut_,
-                                  oldShortcut);
+        cr.dispatchPropertyChange(
+            this, 'shortcut', this.shortcut_, oldShortcut);
       }
     },
 
@@ -323,8 +323,5 @@ cr.define('cr.ui', function() {
   };
 
   // Export
-  return {
-    Command: Command,
-    CanExecuteEvent: CanExecuteEvent
-  };
+  return {Command: Command, CanExecuteEvent: CanExecuteEvent};
 });

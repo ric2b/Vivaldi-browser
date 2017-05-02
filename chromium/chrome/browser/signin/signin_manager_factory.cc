@@ -17,6 +17,10 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/core/browser/signin_manager.h"
 
+#include "app/vivaldi_apptools.h"
+#include "sync/vivaldi_signin_manager.h"
+#include "sync/vivaldi_signin_manager_factory.h"
+
 SigninManagerFactory::SigninManagerFactory()
     : BrowserContextKeyedServiceFactory(
         "SigninManager",
@@ -76,6 +80,10 @@ const SigninManager* SigninManagerFactory::GetForProfileIfExists(
 
 // static
 SigninManagerFactory* SigninManagerFactory::GetInstance() {
+#if defined(VIVALDI_BUILD)
+  if(vivaldi::IsVivaldiRunning())
+    return vivaldi::VivaldiSigninManagerFactory::GetInstance();
+#endif
   return base::Singleton<SigninManagerFactory>::get();
 }
 

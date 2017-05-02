@@ -9,7 +9,7 @@
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
@@ -33,17 +33,17 @@ std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result,
   CFTypeID result_type = CFGetTypeID(wk_result);
   if (result_type == CFStringGetTypeID()) {
     result.reset(new base::StringValue(base::SysNSStringToUTF16(wk_result)));
-    DCHECK(result->IsType(base::Value::TYPE_STRING));
+    DCHECK(result->IsType(base::Value::Type::STRING));
   } else if (result_type == CFNumberGetTypeID()) {
     result.reset(new base::FundamentalValue([wk_result doubleValue]));
-    DCHECK(result->IsType(base::Value::TYPE_DOUBLE));
+    DCHECK(result->IsType(base::Value::Type::DOUBLE));
   } else if (result_type == CFBooleanGetTypeID()) {
     result.reset(
         new base::FundamentalValue(static_cast<bool>([wk_result boolValue])));
-    DCHECK(result->IsType(base::Value::TYPE_BOOLEAN));
+    DCHECK(result->IsType(base::Value::Type::BOOLEAN));
   } else if (result_type == CFNullGetTypeID()) {
     result = base::Value::CreateNullValue();
-    DCHECK(result->IsType(base::Value::TYPE_NULL));
+    DCHECK(result->IsType(base::Value::Type::NONE));
   } else if (result_type == CFDictionaryGetTypeID()) {
     std::unique_ptr<base::DictionaryValue> dictionary =
         base::MakeUnique<base::DictionaryValue>();
@@ -78,7 +78,7 @@ std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result,
 namespace web {
 
 NSString* const kJSEvaluationErrorDomain = @"JSEvaluationError";
-int const kMaximumParsingRecursionDepth = 6;
+int const kMaximumParsingRecursionDepth = 8;
 
 std::unique_ptr<base::Value> ValueResultFromWKResult(id wk_result) {
   return ::ValueResultFromWKResult(wk_result, kMaximumParsingRecursionDepth);

@@ -4,18 +4,20 @@
 
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/math_util.h"
+#include "cc/layers/layer.h"
 #include "cc/proto/gfx_conversions.h"
+#include "cc/trees/property_tree.h"
 #include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/point3_f.h"
 
 namespace cc {
 
 TransformNode::TransformNode()
-    : id(-1),
-      parent_id(-1),
-      owner_id(-1),
+    : id(TransformTree::kInvalidNodeId),
+      parent_id(TransformTree::kInvalidNodeId),
+      owning_layer_id(Layer::INVALID_ID),
       sticky_position_constraint_id(-1),
-      source_node_id(-1),
+      source_node_id(TransformTree::kInvalidNodeId),
       sorting_context_id(0),
       needs_local_transform_update(true),
       node_and_ancestors_are_animated_or_invertible(true),
@@ -42,9 +44,9 @@ TransformNode::TransformNode(const TransformNode&) = default;
 
 bool TransformNode::operator==(const TransformNode& other) const {
   return id == other.id && parent_id == other.parent_id &&
-         owner_id == other.owner_id && pre_local == other.pre_local &&
-         local == other.local && post_local == other.post_local &&
-         to_parent == other.to_parent &&
+         owning_layer_id == other.owning_layer_id &&
+         pre_local == other.pre_local && local == other.local &&
+         post_local == other.post_local && to_parent == other.to_parent &&
          source_node_id == other.source_node_id &&
          sorting_context_id == other.sorting_context_id &&
          needs_local_transform_update == other.needs_local_transform_update &&
@@ -103,7 +105,7 @@ void TransformNode::update_post_local_transform(
 void TransformNode::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetInteger("id", id);
   value->SetInteger("parent_id", parent_id);
-  value->SetInteger("owner_id", owner_id);
+  value->SetInteger("owning_layer_id", owning_layer_id);
   MathUtil::AddToTracedValue("pre_local", pre_local, value);
   MathUtil::AddToTracedValue("local", local, value);
   MathUtil::AddToTracedValue("post_local", post_local, value);

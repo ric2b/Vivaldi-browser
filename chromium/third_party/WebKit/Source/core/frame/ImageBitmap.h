@@ -21,10 +21,12 @@
 #include <memory>
 
 namespace blink {
+class Float32ImageData;
 class HTMLCanvasElement;
 class HTMLVideoElement;
 class ImageData;
 class ImageDecoder;
+class OffscreenCanvas;
 
 enum AlphaDisposition {
   PremultiplyAlpha,
@@ -33,6 +35,10 @@ enum AlphaDisposition {
 enum DataColorFormat {
   RGBAColorType,
   N32ColorType,
+};
+enum ColorSpaceInfoUpdate {
+  UpdateColorSpaceInformation,
+  DontUpdateColorSpaceInformation,
 };
 
 class CORE_EXPORT ImageBitmap final
@@ -54,7 +60,13 @@ class CORE_EXPORT ImageBitmap final
   static ImageBitmap* create(HTMLCanvasElement*,
                              Optional<IntRect>,
                              const ImageBitmapOptions& = ImageBitmapOptions());
+  static ImageBitmap* create(OffscreenCanvas*,
+                             Optional<IntRect>,
+                             const ImageBitmapOptions& = ImageBitmapOptions());
   static ImageBitmap* create(ImageData*,
+                             Optional<IntRect>,
+                             const ImageBitmapOptions& = ImageBitmapOptions());
+  static ImageBitmap* create(Float32ImageData*,
                              Optional<IntRect>,
                              const ImageBitmapOptions& = ImageBitmapOptions());
   static ImageBitmap* create(ImageBitmap*,
@@ -74,7 +86,11 @@ class CORE_EXPORT ImageBitmap final
                              uint32_t height,
                              bool isImageBitmapPremultiplied,
                              bool isImageBitmapOriginClean);
-  static sk_sp<SkImage> getSkImageFromDecoder(std::unique_ptr<ImageDecoder>);
+  static sk_sp<SkImage> getSkImageFromDecoder(
+      std::unique_ptr<ImageDecoder>,
+      SkColorType* decodedColorType = nullptr,
+      sk_sp<SkColorSpace>* decodedColorSpace = nullptr,
+      ColorSpaceInfoUpdate = DontUpdateColorSpaceInformation);
   static bool isResizeOptionValid(const ImageBitmapOptions&, ExceptionState&);
   static bool isSourceSizeValid(int sourceWidth,
                                 int sourceHeight,
@@ -136,7 +152,9 @@ class CORE_EXPORT ImageBitmap final
               Document*,
               const ImageBitmapOptions&);
   ImageBitmap(HTMLCanvasElement*, Optional<IntRect>, const ImageBitmapOptions&);
+  ImageBitmap(OffscreenCanvas*, Optional<IntRect>, const ImageBitmapOptions&);
   ImageBitmap(ImageData*, Optional<IntRect>, const ImageBitmapOptions&);
+  ImageBitmap(Float32ImageData*, Optional<IntRect>, const ImageBitmapOptions&);
   ImageBitmap(ImageBitmap*, Optional<IntRect>, const ImageBitmapOptions&);
   ImageBitmap(PassRefPtr<StaticBitmapImage>);
   ImageBitmap(PassRefPtr<StaticBitmapImage>,

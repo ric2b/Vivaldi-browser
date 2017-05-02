@@ -6,17 +6,18 @@
 #define CC_PLAYBACK_IMAGE_HIJACK_CANVAS_H_
 
 #include "base/macros.h"
+#include "cc/base/cc_export.h"
 #include "third_party/skia/include/utils/SkNWayCanvas.h"
 
 namespace cc {
 
-class ImageDecodeController;
+class ImageDecodeCache;
 
-class ImageHijackCanvas : public SkNWayCanvas {
+class CC_EXPORT ImageHijackCanvas : public SkNWayCanvas {
  public:
   ImageHijackCanvas(int width,
                     int height,
-                    ImageDecodeController* image_decode_controller);
+                    ImageDecodeCache* image_decode_cache);
 
  private:
   // Ensure that pictures are unpacked by this canvas, instead of being
@@ -24,7 +25,6 @@ class ImageHijackCanvas : public SkNWayCanvas {
   void onDrawPicture(const SkPicture* picture,
                      const SkMatrix* matrix,
                      const SkPaint* paint) override;
-
   void onDrawImage(const SkImage* image,
                    SkScalar x,
                    SkScalar y,
@@ -34,12 +34,21 @@ class ImageHijackCanvas : public SkNWayCanvas {
                        const SkRect& dst,
                        const SkPaint* paint,
                        SrcRectConstraint constraint) override;
+  void onDrawRect(const SkRect&, const SkPaint&) override;
+  void onDrawPath(const SkPath& path, const SkPaint& paint) override;
+  void onDrawOval(const SkRect& r, const SkPaint& paint) override;
+  void onDrawArc(const SkRect& r,
+                 SkScalar start_angle,
+                 SkScalar sweep_angle,
+                 bool use_center,
+                 const SkPaint& paint) override;
+  void onDrawRRect(const SkRRect& rr, const SkPaint& paint) override;
   void onDrawImageNine(const SkImage* image,
                        const SkIRect& center,
                        const SkRect& dst,
                        const SkPaint* paint) override;
 
-  ImageDecodeController* image_decode_controller_;
+  ImageDecodeCache* image_decode_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageHijackCanvas);
 };

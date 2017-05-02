@@ -29,6 +29,10 @@ bool IsDesktopMirroringMediaSource(const MediaSource& source);
 bool IsTabMirroringMediaSource(const MediaSource& source);
 bool IsMirroringMediaSource(const MediaSource& source);
 
+// Returns true if |source| is a media source type that can be connected to the
+// Presentation API by from a request initiated by the browser.
+bool CanConnectToMediaSource(const MediaSource& source);
+
 // Parses the |source| and returns the SessionTabHelper tab ID referencing a
 // source tab. Returns a non-positive value on error.
 int TabIdFromMediaSource(const MediaSource& source);
@@ -39,6 +43,9 @@ bool IsValidMediaSource(const MediaSource& source);
 
 // Returns true if |url| is a valid presentation URL.
 bool IsValidPresentationUrl(const GURL& url);
+
+// Returns true if |presentation_id| is an ID used by auto-join requests.
+bool IsAutoJoinPresentationId(const std::string& presentation_id);
 
 }  // namespace media_router
 

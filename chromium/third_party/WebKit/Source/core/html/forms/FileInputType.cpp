@@ -22,7 +22,7 @@
 
 #include "core/html/forms/FileInputType.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/StyleChangeReason.h"
@@ -73,9 +73,9 @@ Vector<FileChooserFileInfo> FileInputType::filesFromFormControlState(
   Vector<FileChooserFileInfo> files;
   for (size_t i = 0; i < state.valueSize(); i += 2) {
     if (!state[i + 1].isEmpty())
-      files.append(FileChooserFileInfo(state[i], state[i + 1]));
+      files.push_back(FileChooserFileInfo(state[i], state[i + 1]));
     else
-      files.append(FileChooserFileInfo(state[i]));
+      files.push_back(FileChooserFileInfo(state[i]));
   }
   return files;
 }
@@ -225,24 +225,22 @@ FileList* FileInputType::createFileList(
     int rootLength = rootPath.length();
     if (rootPath[rootLength - 1] != '\\' && rootPath[rootLength - 1] != '/')
       rootLength += 1;
-    for (size_t i = 0; i < size; ++i) {
+    for (const auto& file : files) {
       // Normalize backslashes to slashes before exposing the relative path to
       // script.
-      String relativePath =
-          files[i].path.substring(rootLength).replace('\\', '/');
-      fileList->append(
-          File::createWithRelativePath(files[i].path, relativePath));
+      String relativePath = file.path.substring(rootLength).replace('\\', '/');
+      fileList->append(File::createWithRelativePath(file.path, relativePath));
     }
     return fileList;
   }
 
-  for (size_t i = 0; i < size; ++i) {
-    if (files[i].fileSystemURL.isEmpty()) {
+  for (const auto& file : files) {
+    if (file.fileSystemURL.isEmpty()) {
       fileList->append(
-          File::createForUserProvidedFile(files[i].path, files[i].displayName));
+          File::createForUserProvidedFile(file.path, file.displayName));
     } else {
       fileList->append(File::createForFileSystemFile(
-          files[i].fileSystemURL, files[i].metadata, File::IsUserVisible));
+          file.fileSystemURL, file.metadata, File::IsUserVisible));
     }
   }
   return fileList;
@@ -259,7 +257,7 @@ void FileInputType::countUsage() {
 void FileInputType::createShadowSubtree() {
   DCHECK(element().shadow());
   HTMLInputElement* button =
-      HTMLInputElement::create(element().document(), 0, false);
+      HTMLInputElement::create(element().document(), false);
   button->setType(InputTypeNames::button);
   button->setAttribute(
       valueAttr,
@@ -334,7 +332,7 @@ void FileInputType::setFilesFromDirectory(const String& path) {
     HTMLInputElement& input = element();
     settings.allowsDirectoryUpload = true;
     settings.allowsMultipleFiles = true;
-    settings.selectedFiles.append(path);
+    settings.selectedFiles.push_back(path);
     settings.acceptMIMETypes = input.acceptMIMETypes();
     settings.acceptFileExtensions = input.acceptFileExtensions();
     chromeClient->enumerateChosenDirectory(newFileChooser(settings));
@@ -352,14 +350,14 @@ void FileInputType::setFilesFromPaths(const Vector<String>& paths) {
   }
 
   Vector<FileChooserFileInfo> files;
-  for (unsigned i = 0; i < paths.size(); ++i)
-    files.append(FileChooserFileInfo(paths[i]));
+  for (const auto& path : paths)
+    files.push_back(FileChooserFileInfo(path));
 
   if (input.fastHasAttribute(multipleAttr)) {
     filesChosen(files);
   } else {
     Vector<FileChooserFileInfo> firstFileOnly;
-    firstFileOnly.append(files[0]);
+    firstFileOnly.push_back(files[0]);
     filesChosen(firstFileOnly);
   }
 }

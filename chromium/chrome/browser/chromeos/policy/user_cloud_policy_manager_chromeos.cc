@@ -11,6 +11,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/sequenced_task_runner.h"
@@ -21,7 +22,7 @@
 #include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
-#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
+#include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/policy/wildcard_login_checker.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/common/chrome_content_client.h"
@@ -118,6 +119,14 @@ UserCloudPolicyManagerChromeOS::UserCloudPolicyManagerChromeOS(
   }
 }
 
+void UserCloudPolicyManagerChromeOS::ForceTimeoutForTest() {
+  DCHECK(policy_fetch_timeout_.IsRunning());
+  // Stop the timer to mimic what happens when a real timer fires, then invoke
+  // the timer callback directly.
+  policy_fetch_timeout_.Stop();
+  OnBlockingFetchTimeout();
+}
+
 UserCloudPolicyManagerChromeOS::~UserCloudPolicyManagerChromeOS() {}
 
 void UserCloudPolicyManagerChromeOS::Connect(
@@ -131,10 +140,11 @@ void UserCloudPolicyManagerChromeOS::Connect(
   // Use the system request context here instead of a context derived
   // from the Profile because Connect() is called before the profile is
   // fully initialized (required so we can perform the initial policy load).
-  std::unique_ptr<CloudPolicyClient> cloud_policy_client(new CloudPolicyClient(
-      std::string(), std::string(), kPolicyVerificationKeyHash,
-      device_management_service, system_request_context,
-      nullptr /* signing_service */));
+  std::unique_ptr<CloudPolicyClient> cloud_policy_client =
+      base::MakeUnique<CloudPolicyClient>(
+          std::string() /* machine_id */, std::string() /* machine_model */,
+          device_management_service, system_request_context,
+          nullptr /* signing_service */);
   CreateComponentCloudPolicyService(
       dm_protocol::kChromeExtensionPolicyType, component_policy_cache_path_,
       system_request_context, cloud_policy_client.get(), schema_registry());
@@ -317,6 +327,7 @@ void UserCloudPolicyManagerChromeOS::OnStoreLoaded(
   em::PolicyData const* const policy_data = cloud_policy_store->policy();
 
   if (policy_data) {
+    DCHECK(policy_data->has_username());
     chromeos::AffiliationIDSet set_of_user_affiliation_ids(
         policy_data->user_affiliation_ids().begin(),
         policy_data->user_affiliation_ids().end());

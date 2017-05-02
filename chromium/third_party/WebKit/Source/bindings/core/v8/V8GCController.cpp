@@ -45,7 +45,7 @@
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/Platform.h"
 #include "wtf/Vector.h"
@@ -184,7 +184,7 @@ class MajorGCWrapperVisitor : public v8::PersistentHandleVisitor {
       // TODO(haraken): Implement correct lifetime using traceWrapper.
       ExecutionContext* context =
           toExecutionContext(wrapper->CreationContext());
-      if (context && !context->activeDOMObjectsAreStopped()) {
+      if (context && !context->isContextDestroyed()) {
         m_isolate->SetObjectGroupId(*value, liveRootId());
         ++m_domObjectsWithPendingActivity;
       }
@@ -200,7 +200,7 @@ class MajorGCWrapperVisitor : public v8::PersistentHandleVisitor {
       m_isolate->SetObjectGroupId(
           *value, v8::UniqueId(reinterpret_cast<intptr_t>(root)));
       if (m_constructRetainedObjectInfos)
-        m_groupsWhichNeedRetainerInfo.append(root);
+        m_groupsWhichNeedRetainerInfo.push_back(root);
     } else if (classId == WrapperTypeInfo::ObjectClassId) {
       if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
         type->visitDOMWrapper(m_isolate, toScriptWrappable(wrapper),
@@ -227,10 +227,11 @@ class MajorGCWrapperVisitor : public v8::PersistentHandleVisitor {
         alreadyAdded = root;
       }
     }
-    if (m_liveRootGroupIdSet)
+    if (m_liveRootGroupIdSet) {
       profiler->SetRetainedObjectInfo(
           liveRootId(),
-          new ActiveDOMObjectsInfo(m_domObjectsWithPendingActivity));
+          new SuspendableObjectsInfo(m_domObjectsWithPendingActivity));
+    }
   }
 
  private:
@@ -517,7 +518,7 @@ class PendingActivityVisitor : public v8::PersistentHandleVisitor {
       ExecutionContext* context =
           toExecutionContext(wrapper->CreationContext());
       if (context == m_executionContext && context &&
-          !context->activeDOMObjectsAreStopped())
+          !context->isContextDestroyed())
         m_pendingActivityFound = true;
     }
   }

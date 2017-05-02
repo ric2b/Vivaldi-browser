@@ -11,8 +11,22 @@ source_set("data_source") {
     "physical_web_listener.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
+    "//url",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "fake_physical_web_data_source.cc",
+    "fake_physical_web_data_source.h",
+  ]
+  deps = [
+    ":data_source",
+    "//base",
+    "//url",
   ]
 }
 
@@ -26,5 +40,6 @@ source_set("unit_tests") {
     ":data_source",
     "//base",
     "//testing/gtest",
+    "//url",
   ]
 }

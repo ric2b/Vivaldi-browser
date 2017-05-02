@@ -15,9 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
-#include "chrome/browser/ui/search/search_tab_helper_delegate.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/infobars/core/infobar_manager.h"
@@ -28,13 +26,6 @@
 
 class GURL;
 class Profile;
-class SkBitmap;
-
-namespace blimp {
-namespace client {
-class BlimpContents;
-}
-}
 
 namespace cc {
 class Layer;
@@ -53,17 +44,11 @@ namespace content {
 class WebContents;
 }
 
-namespace infobars {
-class InfoBar;
-}
-
 namespace prerender {
 class PrerenderManager;
 }
 
 class TabAndroid : public CoreTabHelperDelegate,
-                   public InstantServiceObserver,
-                   public SearchTabHelperDelegate,
                    public content::NotificationObserver,
                    public favicon::FaviconDriverObserver {
  public:
@@ -95,11 +80,6 @@ class TabAndroid : public CoreTabHelperDelegate,
 
   // Return the WebContents, if any, currently owned by this TabAndroid.
   content::WebContents* web_contents() const { return web_contents_.get(); }
-
-  // Return the BlimpContents, if any, currently owned by this TabAndroid.
-  blimp::client::BlimpContents* blimp_contents() const {
-    return blimp_contents_.get();
-  }
 
   // Return the cc::Layer that represents the content for this TabAndroid.
   scoped_refptr<cc::Layer> GetContentLayer() const;
@@ -140,14 +120,6 @@ class TabAndroid : public CoreTabHelperDelegate,
                        bool did_start_load,
                        bool did_finish_load) override;
 
-  // Overridden from InstantServiceObserver:
-  void DefaultSearchProviderChanged(
-      bool google_base_url_domain_changed) override;
-
-  // Overridden from SearchTabHelperDelegate:
-  void OnWebContentsInstantSupportDisabled(
-      const content::WebContents* web_contents) override;
-
   // Overridden from NotificationObserver:
   void Observe(int type,
                const content::NotificationSource& source,
@@ -170,11 +142,6 @@ class TabAndroid : public CoreTabHelperDelegate,
       const base::android::JavaParamRef<jobject>& jweb_contents,
       const base::android::JavaParamRef<jobject>& jweb_contents_delegate,
       const base::android::JavaParamRef<jobject>& jcontext_menu_populator);
-  base::android::ScopedJavaLocalRef<jobject> InitBlimpContents(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& j_profile,
-      jlong window_android_ptr);
   void UpdateDelegates(
         JNIEnv* env,
         const base::android::JavaParamRef<jobject>& obj,
@@ -282,8 +249,6 @@ class TabAndroid : public CoreTabHelperDelegate,
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<android::TabWebContentsDelegateAndroid>
       web_contents_delegate_;
-
-  std::unique_ptr<blimp::client::BlimpContents> blimp_contents_;
 
   std::unique_ptr<browser_sync::SyncedTabDelegateAndroid> synced_tab_delegate_;
 

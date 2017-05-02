@@ -24,27 +24,6 @@
 
 namespace {
 
-// Returns the variation value for |parameter_name|. If the value is
-// unavailable, |default_value| is returned.
-std::string GetStringValueForVariationParamWithDefaultValue(
-    const std::string& parameter_name,
-    const std::string& default_value) {
-  std::map<std::string, std::string> network_quality_estimator_params;
-  // Name of the network quality estimator field trial.
-  variations::GetVariationParams("NetworkQualityEstimator",
-                                 &network_quality_estimator_params);
-
-  const auto it = network_quality_estimator_params.find(parameter_name);
-  return it == network_quality_estimator_params.end() ? default_value
-                                                      : it->second;
-}
-
-// Returns true if persistent caching has been enabled in the field trial.
-bool persistent_caching_enabled() {
-  return GetStringValueForVariationParamWithDefaultValue(
-             "persistent_caching_enabled", "false") == "true";
-}
-
 // PrefDelegateImpl writes the provided dictionary value to the network quality
 // estimator prefs on the disk.
 class PrefDelegateImpl
@@ -59,17 +38,15 @@ class PrefDelegateImpl
 
   void SetDictionaryValue(const base::DictionaryValue& value) override {
     DCHECK(thread_checker_.CalledOnValidThread());
-    if (!persistent_caching_enabled())
-      return;
 
     pref_service_->Set(path_, value);
-    UMA_HISTOGRAM_COUNTS_1000("NQE.Prefs.WriteCount", 1);
+    UMA_HISTOGRAM_EXACT_LINEAR("NQE.Prefs.WriteCount", 1, 2);
   }
 
-  const base::DictionaryValue& GetDictionaryValue() override {
+  std::unique_ptr<base::DictionaryValue> GetDictionaryValue() override {
     DCHECK(thread_checker_.CalledOnValidThread());
-    UMA_HISTOGRAM_COUNTS_1000("NQE.Prefs.ReadCount", 1);
-    return *pref_service_->GetDictionary(path_);
+    UMA_HISTOGRAM_EXACT_LINEAR("NQE.Prefs.ReadCount", 1, 2);
+    return pref_service_->GetDictionary(path_)->CreateDeepCopy();
   }
 
  private:

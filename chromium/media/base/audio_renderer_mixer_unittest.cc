@@ -88,7 +88,8 @@ class AudioRendererMixerTest
     // Allocate one callback for generating expected results.
     double step = kSineCycles / static_cast<double>(
         output_parameters_.frames_per_buffer());
-    expected_callback_.reset(new FakeAudioRenderCallback(step));
+    expected_callback_.reset(
+        new FakeAudioRenderCallback(step, output_parameters_.sample_rate()));
   }
 
   AudioRendererMixer* GetMixer(int owner_id,
@@ -121,7 +122,8 @@ class AudioRendererMixerTest
            static_cast<double>(output_parameters_.frames_per_buffer()));
 
       for (int j = 0; j < inputs_per_sample_rate; ++j, ++input) {
-        fake_callbacks_.push_back(new FakeAudioRenderCallback(step));
+        fake_callbacks_.push_back(new FakeAudioRenderCallback(
+            step, output_parameters_.sample_rate()));
         mixer_inputs_.push_back(CreateMixerInput());
         mixer_inputs_[input]->Initialize(input_parameters_[i],
                                          fake_callbacks_[input]);
@@ -163,12 +165,14 @@ class AudioRendererMixerTest
     }
 
     // Render actual audio data.
-    int frames = mixer_callback_->Render(audio_bus_.get(), 0, 0);
+    int frames = mixer_callback_->Render(
+        base::TimeDelta(), base::TimeTicks::Now(), 0, audio_bus_.get());
     if (frames != audio_bus_->frames())
       return false;
 
     // Render expected audio data (without scaling).
-    expected_callback_->Render(expected_audio_bus_.get(), 0, 0);
+    expected_callback_->Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                               expected_audio_bus_.get());
 
     if (half_fill_) {
       // In this case, just verify that every frame was initialized, this will
@@ -489,7 +493,8 @@ TEST_P(AudioRendererMixerBehavioralTest, MixerPausesStream) {
   const base::TimeDelta kSleepTime = base::TimeDelta::FromMilliseconds(100);
   base::TimeTicks start_time = base::TimeTicks::Now();
   while (!pause_event.IsSignaled()) {
-    mixer_callback_->Render(audio_bus_.get(), 0, 0);
+    mixer_callback_->Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                            audio_bus_.get());
     base::PlatformThread::Sleep(kSleepTime);
     ASSERT_TRUE(base::TimeTicks::Now() - start_time < kTestTimeout);
   }
@@ -504,7 +509,8 @@ TEST_P(AudioRendererMixerBehavioralTest, MixerPausesStream) {
   // Ensure once the input is paused the sink eventually pauses.
   start_time = base::TimeTicks::Now();
   while (!pause_event.IsSignaled()) {
-    mixer_callback_->Render(audio_bus_.get(), 0, 0);
+    mixer_callback_->Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                            audio_bus_.get());
     base::PlatformThread::Sleep(kSleepTime);
     ASSERT_TRUE(base::TimeTicks::Now() - start_time < kTestTimeout);
   }
@@ -547,7 +553,7 @@ INSTANTIATE_TEST_CASE_P(
 // support single item lists and we don't want these test cases to run for every
 // parameter set.
 INSTANTIATE_TEST_CASE_P(
-    AudioRendererMixerBehavioralTest,
+    /* no prefix */,
     AudioRendererMixerBehavioralTest,
     testing::ValuesIn(std::vector<AudioRendererMixerTestData>(
         1,

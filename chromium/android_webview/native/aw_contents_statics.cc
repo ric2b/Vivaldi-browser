@@ -5,6 +5,7 @@
 #include "android_webview/native/aw_contents_statics.h"
 
 #include "android_webview/browser/aw_browser_context.h"
+#include "android_webview/browser/aw_safe_browsing_config_helper.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 #include "android_webview/common/aw_version_info_values.h"
 #include "android_webview/native/aw_contents_io_thread_client_impl.h"
@@ -20,6 +21,7 @@
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
@@ -28,10 +30,10 @@ namespace android_webview {
 
 namespace {
 
-void ClientCertificatesCleared(ScopedJavaGlobalRef<jobject>* callback) {
+void ClientCertificatesCleared(const JavaRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
-  Java_AwContentsStatics_clientCertificatesCleared(env, *callback);
+  Java_AwContentsStatics_clientCertificatesCleared(env, callback);
 }
 
 void NotifyClientCertificatesChanged() {
@@ -46,13 +48,11 @@ void ClearClientCertPreferences(JNIEnv* env,
                                 const JavaParamRef<jclass>&,
                                 const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ScopedJavaGlobalRef<jobject>* j_callback = new ScopedJavaGlobalRef<jobject>();
-  j_callback->Reset(env, callback);
   BrowserThread::PostTaskAndReply(
-      BrowserThread::IO,
-      FROM_HERE,
+      BrowserThread::IO, FROM_HERE,
       base::Bind(&NotifyClientCertificatesChanged),
-      base::Bind(&ClientCertificatesCleared, base::Owned(j_callback)));
+      base::Bind(&ClientCertificatesCleared,
+                 ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
 // static
@@ -77,6 +77,19 @@ ScopedJavaLocalRef<jstring> GetProductVersion(JNIEnv* env,
 }
 
 // static
+jboolean GetSafeBrowsingEnabled(JNIEnv* env,
+                            const JavaParamRef<jclass>&) {
+  return AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled();
+}
+
+// static
+void SetSafeBrowsingEnabled(JNIEnv* env,
+                            const JavaParamRef<jclass>&,
+                            jboolean enable) {
+  AwSafeBrowsingConfigHelper::SetSafeBrowsingEnabled(enable);
+}
+
+// static
 void SetServiceWorkerIoThreadClient(
     JNIEnv* env,
     const JavaParamRef<jclass>&,
@@ -85,7 +98,6 @@ void SetServiceWorkerIoThreadClient(
   AwContentsIoThreadClientImpl::SetServiceWorkerIoThreadClient(
       io_thread_client, browser_context);
 }
-
 
 bool RegisterAwContentsStatics(JNIEnv* env) {
   return RegisterNativesImpl(env);

@@ -25,7 +25,7 @@ void CompositingReasonFinder::updateTriggers() {
   m_compositingTriggers = 0;
 
   Settings& settings = m_layoutView.document().page()->settings();
-  if (settings.preferCompositingToLCDTextEnabled()) {
+  if (settings.getPreferCompositingToLCDTextEnabled()) {
     m_compositingTriggers |= ScrollableInnerFrameTrigger;
     m_compositingTriggers |= OverflowScrollTrigger;
     m_compositingTriggers |= ViewportConstrainedPositionedTrigger;
@@ -74,7 +74,7 @@ CompositingReasonFinder::potentialCompositingReasonsFromStyle(
 
   const ComputedStyle& style = layoutObject->styleRef();
 
-  if (requiresCompositingForTransform(layoutObject))
+  if (requiresCompositingForTransform(*layoutObject))
     reasons |= CompositingReason3DTransform;
 
   if (style.backfaceVisibility() == BackfaceVisibilityHidden)
@@ -132,12 +132,12 @@ CompositingReasonFinder::potentialCompositingReasonsFromStyle(
 }
 
 bool CompositingReasonFinder::requiresCompositingForTransform(
-    LayoutObject* layoutObject) const {
+    const LayoutObject& layoutObject) {
   // Note that we ask the layoutObject if it has a transform, because the style
   // may have transforms, but the layoutObject may be an inline that doesn't
   // support them.
-  return layoutObject->hasTransformRelatedProperty() &&
-         layoutObject->style()->has3DTransform();
+  return layoutObject.hasTransformRelatedProperty() &&
+         layoutObject.styleRef().has3DTransform();
 }
 
 CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(
@@ -171,11 +171,31 @@ CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(
 }
 
 bool CompositingReasonFinder::requiresCompositingForAnimation(
-    const ComputedStyle& style) const {
+    const ComputedStyle& style) {
   if (style.subtreeWillChangeContents())
     return style.isRunningAnimationOnCompositor();
 
   return style.shouldCompositeForCurrentAnimations();
+}
+
+bool CompositingReasonFinder::requiresCompositingForEffectAnimation(
+    const ComputedStyle& style) {
+  if (style.subtreeWillChangeContents()) {
+    return style.isRunningOpacityAnimationOnCompositor() ||
+           style.isRunningFilterAnimationOnCompositor() ||
+           style.isRunningBackdropFilterAnimationOnCompositor();
+  }
+
+  return style.hasCurrentOpacityAnimation() ||
+         style.hasCurrentFilterAnimation() ||
+         style.hasCurrentBackdropFilterAnimation();
+}
+
+bool CompositingReasonFinder::requiresCompositingForTransformAnimation(
+    const ComputedStyle& style) {
+  return style.subtreeWillChangeContents()
+             ? style.isRunningTransformAnimationOnCompositor()
+             : style.hasCurrentTransformAnimation();
 }
 
 bool CompositingReasonFinder::requiresCompositingForScrollDependentPosition(
@@ -194,7 +214,7 @@ bool CompositingReasonFinder::requiresCompositingForScrollDependentPosition(
   // Don't promote fixed position elements that are descendants of a non-view
   // container, e.g. transformed elements.  They will stay fixed wrt the
   // container rather than the enclosing frame.
-  if (layer->scrollsWithViewport())
+  if (layer->sticksToViewport())
     return m_layoutView.frameView()->isScrollable();
   return layer->layoutObject()->style()->position() == StickyPosition &&
          layer->ancestorOverflowLayer()->scrollsOverflow();

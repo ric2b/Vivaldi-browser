@@ -33,7 +33,7 @@ namespace blink {
 
 TransformOperations::TransformOperations(bool makeIdentity) {
   if (makeIdentity)
-    m_operations.append(IdentityTransformOperation::create());
+    m_operations.push_back(IdentityTransformOperation::create());
 }
 
 bool TransformOperations::operator==(const TransformOperations& o) const {
@@ -52,14 +52,14 @@ bool TransformOperations::operator==(const TransformOperations& o) const {
 bool TransformOperations::operationsMatch(
     const TransformOperations& other) const {
   size_t numOperations = operations().size();
-  // If the sizes of the function lists don't match, the lists don't match
   if (numOperations != other.operations().size())
     return false;
 
-  // If the types of each function are not the same, the lists don't match
   for (size_t i = 0; i < numOperations; ++i) {
-    if (!operations()[i]->isSameType(*other.operations()[i]))
+    if (operations()[i]->primitiveType() !=
+        other.operations()[i]->primitiveType()) {
       return false;
+    }
   }
   return true;
 }
@@ -82,16 +82,16 @@ TransformOperations TransformOperations::blendByMatchingOperations(
                     : (fromOperation ? fromOperation->blend(0, progress, true)
                                      : nullptr);
     if (blendedOperation)
-      result.operations().append(blendedOperation);
+      result.operations().push_back(blendedOperation);
     else {
       RefPtr<TransformOperation> identityOperation =
           IdentityTransformOperation::create();
       if (progress > 0.5)
-        result.operations().append(toOperation ? toOperation
-                                               : identityOperation);
+        result.operations().push_back(toOperation ? toOperation
+                                                  : identityOperation);
       else
-        result.operations().append(fromOperation ? fromOperation
-                                                 : identityOperation);
+        result.operations().push_back(fromOperation ? fromOperation
+                                                    : identityOperation);
     }
   }
 
@@ -115,6 +115,7 @@ TransformOperations::blendByUsingMatrixInterpolation(
   return Matrix3DTransformOperation::create(toTransform);
 }
 
+// https://drafts.csswg.org/css-transforms-1/#interpolation-of-transforms
 TransformOperations TransformOperations::blend(const TransformOperations& from,
                                                double progress) const {
   if (from == *this || (!from.size() && !size()))
@@ -126,7 +127,8 @@ TransformOperations TransformOperations::blend(const TransformOperations& from,
     return blendByMatchingOperations(from, progress);
 
   TransformOperations result;
-  result.operations().append(blendByUsingMatrixInterpolation(from, progress));
+  result.operations().push_back(
+      blendByUsingMatrixInterpolation(from, progress));
   return result;
 }
 
@@ -281,16 +283,10 @@ bool TransformOperations::blendedBoundsForBox(const FloatBox& box,
         (i < fromSize) ? from.operations()[i] : nullptr;
     RefPtr<TransformOperation> toOperation =
         (i < toSize) ? operations()[i] : nullptr;
-    if (fromOperation && fromOperation->type() == TransformOperation::None)
-      fromOperation = nullptr;
 
-    if (toOperation && toOperation->type() == TransformOperation::None)
-      toOperation = nullptr;
-
+    DCHECK(fromOperation || toOperation);
     TransformOperation::OperationType interpolationType =
-        toOperation
-            ? toOperation->type()
-            : fromOperation ? fromOperation->type() : TransformOperation::None;
+        toOperation ? toOperation->type() : fromOperation->type();
     if (fromOperation && toOperation &&
         !fromOperation->canBlendWith(*toOperation.get()))
       return false;
@@ -406,12 +402,11 @@ bool TransformOperations::blendedBoundsForBox(const FloatBox& box,
         }
       }
         continue;
-      case TransformOperation::None:
-        continue;
       case TransformOperation::Matrix:
       case TransformOperation::Matrix3D:
       case TransformOperation::Interpolated:
-        return (false);
+      case TransformOperation::RotateAroundOrigin:
+        return false;
     }
   }
 
@@ -429,7 +424,7 @@ TransformOperations TransformOperations::add(
 TransformOperations TransformOperations::zoom(double factor) const {
   TransformOperations result;
   for (auto& transformOperation : m_operations)
-    result.m_operations.append(transformOperation->zoom(factor));
+    result.m_operations.push_back(transformOperation->zoom(factor));
   return result;
 }
 

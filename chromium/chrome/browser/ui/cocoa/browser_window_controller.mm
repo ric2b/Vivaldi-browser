@@ -19,6 +19,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
@@ -55,13 +56,13 @@
 #import "chrome/browser/ui/cocoa/find_bar/find_bar_bridge.h"
 #import "chrome/browser/ui/cocoa/find_bar/find_bar_cocoa_controller.h"
 #import "chrome/browser/ui/cocoa/framed_browser_window.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.h"
 #include "chrome/browser/ui/cocoa/fullscreen_low_power_coordinator.h"
 #import "chrome/browser/ui/cocoa/fullscreen_window.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
-#import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
-#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.h"
-#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
+#import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_base_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_button_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_icon_controller.h"
@@ -95,6 +96,7 @@
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/display/screen.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
@@ -509,14 +511,11 @@ bool IsTabDetachingInFullscreenEnabled() {
 - (void)destroyBrowser {
   [NSApp removeWindowsItem:[self window]];
 
-  // We need the window to go away now.
-  // We can't actually use |-autorelease| here because there's an embedded
-  // run loop in the |-performClose:| which contains its own autorelease pool.
-  // Instead call it after a zero-length delay, which gets us back to the main
-  // event loop.
-  [self performSelector:@selector(autorelease)
-             withObject:nil
-             afterDelay:0];
+  // This is invoked from chrome::SessionEnding() which will terminate the
+  // process without spinning another RunLoop. So no need to perform an
+  // autorelease. Note this is currently controlled by an experiment. See
+  // features::kDesktopFastShutdown in chrome/browser/features.cc.
+  DCHECK_EQ(browser_shutdown::GetShutdownType(), browser_shutdown::END_SESSION);
 }
 
 // Called when the window meets the criteria to be closed (ie,
@@ -524,13 +523,26 @@ bool IsTabDetachingInFullscreenEnabled() {
 // semantics of BrowserWindow::Close() and not call the Browser's dtor directly
 // from this method.
 - (void)windowWillClose:(NSNotification*)notification {
+  // Speculative fix for http://crbug.com/671213. It seems possible that AppKit
+  // may invoke -windowWillClose: twice under rare conditions. That would cause
+  // the logic below to post a second -autorelease, resulting in a double free.
+  // (Well, actually, a zombie access when the closure tries to call release on
+  // the strongly captured |self| pointer).
+  DCHECK(!didWindowWillClose_) << "If hit, please update crbug.com/671213.";
+  if (didWindowWillClose_)
+    return;
+
+  didWindowWillClose_ = YES;
+
   DCHECK_EQ([notification object], [self window]);
   DCHECK(browser_->tab_strip_model()->empty());
   [savedRegularWindow_ close];
+
   // We delete statusBubble here because we need to kill off the dependency
   // that its window has on our window before our window goes away.
   delete statusBubble_;
   statusBubble_ = NULL;
+
   // We can't actually use |-autorelease| here because there's an embedded
   // run loop in the |-performClose:| which contains its own autorelease pool.
   // Instead call it after a zero-length delay, which gets us back to the main
@@ -1013,11 +1025,7 @@ bool IsTabDetachingInFullscreenEnabled() {
       manager->DisplayPendingRequests();
   }
 
-  // If the web contents want to focus on the location bar, do not call the
-  // animation since the location bar will drop down when it's focused.
-  bool willFocusLocationBar =
-      newContents && newContents->FocusLocationBarByDefault();
-  if ([self isInAnyFullscreenMode] && !willFocusLocationBar)
+  if ([self isInAnyFullscreenMode])
     [[self fullscreenToolbarController] revealToolbarForTabStripChanges];
 }
 
@@ -1406,6 +1414,10 @@ bool IsTabDetachingInFullscreenEnabled() {
   return !manager || !manager->IsDialogActive();
 }
 
+- (CGFloat)menubarOffset {
+  return [[self fullscreenToolbarController] computeLayout].menubarOffset;
+}
+
 // TabStripControllerDelegate protocol.
 - (void)onActivateTabWithContents:(WebContents*)contents {
   // Update various elements that are interested in knowing the current
@@ -1451,10 +1463,8 @@ bool IsTabDetachingInFullscreenEnabled() {
 }
 
 - (void)onTabInsertedInForeground:(BOOL)inForeground {
-  if ([self isInAnyFullscreenMode] && !inForeground &&
-      ![toolbarController_ isLocationBarFocused]) {
+  if ([self isInAnyFullscreenMode] && !inForeground)
     [[self fullscreenToolbarController] revealToolbarForTabStripChanges];
-  }
 }
 
 - (void)userChangedTheme {
@@ -1508,7 +1518,7 @@ bool IsTabDetachingInFullscreenEnabled() {
 
   bookmarkBubbleObserver_.reset(new BookmarkBubbleObserverCocoa(self));
 
-  if (chrome::ToolkitViewsDialogsEnabled()) {
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     chrome::ShowBookmarkBubbleViewsAtPoint(
         gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
             [self window], [self bookmarkBubblePoint])),

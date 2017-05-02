@@ -12,7 +12,6 @@
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wallpaper/wallpaper_widget_controller.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/display/mouse_cursor_event_filter.h"
@@ -84,10 +83,8 @@ void ExpectAllContainers() {
       Shell::GetContainer(root_window, kShellWindowId_OverlayContainer));
   EXPECT_TRUE(Shell::GetContainer(root_window,
                                   kShellWindowId_ImeWindowParentContainer));
-#if defined(OS_CHROMEOS)
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_MouseCursorContainer));
-#endif
 }
 
 class ModalWindow : public views::WidgetDelegateView {
@@ -375,8 +372,9 @@ TEST_F(ShellTest, ManagedWindowModeBasics) {
   EXPECT_TRUE(shelf_widget->IsVisible());
   // Shelf is at bottom-left of screen.
   EXPECT_EQ(0, shelf_widget->GetWindowBoundsInScreen().x());
-  EXPECT_EQ(Shell::GetPrimaryRootWindow()->GetHost()->GetBounds().height(),
-            shelf_widget->GetWindowBoundsInScreen().bottom());
+  EXPECT_EQ(
+      Shell::GetPrimaryRootWindow()->GetHost()->GetBoundsInPixels().height(),
+      shelf_widget->GetWindowBoundsInScreen().bottom());
   // We have a wallpaper but not a bare layer.
   // TODO (antrim): enable once we find out why it fails component build.
   //  WallpaperWidgetController* wallpaper =

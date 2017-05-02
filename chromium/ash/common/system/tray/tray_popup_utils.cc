@@ -15,6 +15,7 @@
 #include "ash/common/system/tray/tray_popup_label_button.h"
 #include "ash/common/system/tray/tray_popup_label_button_border.h"
 #include "ash/common/wm_shell.h"
+#include "base/memory/ptr_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -117,13 +118,7 @@ class BorderlessLabelButton : public views::LabelButton {
       SetBorder(views::CreateEmptyBorder(gfx::Insets(0, kHorizontalPadding)));
       TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::BUTTON);
       style.SetupLabel(label());
-      // TODO(tdanderson): Update focus rect for material design. See
-      // crbug.com/615892
-      // Hack alert: CreateSolidFocusPainter should add 0.5f to all insets to
-      // make the lines align to pixel centers, but for now it doesn't. We can
-      // get around this by relying on Skia rounding up integer coordinates.
-      SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-          kFocusBorderColor, gfx::Insets(0, 0, 1, 1)));
+      SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
     } else {
       SetBorder(std::unique_ptr<views::Border>(new TrayPopupLabelButtonBorder));
       SetFocusPainter(views::Painter::CreateSolidFocusPainter(
@@ -255,7 +250,6 @@ views::ImageView* TrayPopupUtils::CreateMoreImageView() {
 views::Slider* TrayPopupUtils::CreateSlider(views::SliderListener* listener) {
   const bool is_material = MaterialDesignController::IsSystemTrayMenuMaterial();
   views::Slider* slider = views::Slider::CreateSlider(is_material, listener);
-  slider->set_focus_border_color(kFocusBorderColor);
   if (is_material) {
     slider->SetBorder(
         views::CreateEmptyBorder(gfx::Insets(0, kTrayPopupSliderPaddingMD)));
@@ -276,12 +270,14 @@ views::ToggleButton* TrayPopupUtils::CreateToggleButton(
       (kTrayToggleButtonWidth - toggle_size.width()) / 2;
   toggle->SetBorder(views::CreateEmptyBorder(
       gfx::Insets(vertical_padding, horizontal_padding)));
-  // TODO(tdanderson): Update the focus rect color, border thickness, and
-  // location for material design.
-  toggle->SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1)));
+  toggle->SetFocusPainter(CreateFocusPainter());
   toggle->SetAccessibleName(l10n_util::GetStringUTF16(accessible_name_id));
   return toggle;
+}
+
+std::unique_ptr<views::Painter> TrayPopupUtils::CreateFocusPainter() {
+  return views::Painter::CreateSolidFocusPainter(
+      kFocusBorderColor, kFocusBorderThickness, gfx::InsetsF());
 }
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {

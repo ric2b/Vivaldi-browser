@@ -9,7 +9,6 @@
 #include <stdint.h>
 
 #include "base/callback_forward.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 
@@ -19,28 +18,15 @@ class URLRequest;
 class URLRequestContext;
 }
 
-@class CRNForwardingNetworkClientFactory;
-@class CRNSimpleNetworkClientFactory;
-class GURL;
-
 namespace net {
 
-// RequestTracker can be used to observe the network requests and customize the
-// behavior of the network stack with CRNForwardingNetworkClients.
+// RequestTracker can be used to observe the network requests.
 // Each network request can be associated with a RequestTracker through the
 // GetRequestTracker().
 // RequestTracker requires a RequestTrackerFactory.
 // The RequestTracker can be created on one thread and used on a different one.
 class RequestTracker {
  public:
-  enum CacheMode {
-    CACHE_NORMAL,
-    CACHE_RELOAD,
-    CACHE_HISTORY,
-    CACHE_BYPASS,
-    CACHE_ONLY,
-  };
-
   typedef base::Callback<void(bool)> SSLCallback;
 
   class RequestTrackerFactory {
@@ -75,43 +61,8 @@ class RequestTracker {
   // This function has to be called before using the tracker.
   virtual void Init();
 
-  // Add a factory that may create network clients for requests going through
-  // this tracker.
-  void AddNetworkClientFactory(CRNForwardingNetworkClientFactory* factory);
-
-  // Registers a factory with the class that will be added to all trackers.
-  // Requests without associated trackers can add clients from these factories
-  // using GlobalClientsHandlingAnyRequest().
-  // Only |-clientHandlingAnyRequest| will be called on |factory|, the other
-  // methods are not supported.
-  static void AddGlobalNetworkClientFactory(
-      CRNForwardingNetworkClientFactory* factory);
-
   // Gets the request context associated with the tracker.
   virtual URLRequestContext* GetRequestContext() = 0;
-
-  // Network client generation methods. All of these four ClientsHandling...
-  // methods return an array of CRNForwardingNetworkClient instances, according
-  // to the CRNForwardingNetworkClientFactories added to the tracker. The array
-  // may be empty. The caller is responsible for taking ownership of the clients
-  // in the array.
-
-  // Static method that returns clients that can handle any request, for use
-  // in cases where a request isn't associated with any request_tracker.
-  static NSArray* GlobalClientsHandlingAnyRequest();
-
-  // Returns clients that can handle any request.
-  NSArray* ClientsHandlingAnyRequest();
-  // Returns clients that can handle |request|.
-  NSArray* ClientsHandlingRequest(const URLRequest& request);
-  // Returns clients that can handle |request| with |response|.
-  NSArray* ClientsHandlingRequestAndResponse(const URLRequest& request,
-                                             NSURLResponse* response);
-  // Returns clients that can handle a redirect of |request| to |new_url| based
-  // on |redirect_response|.
-  NSArray* ClientsHandlingRedirect(const URLRequest& request,
-                                   const GURL& new_url,
-                                   NSURLResponse* redirect_response);
 
   // Informs the tracker that a request has started.
   virtual void StartRequest(URLRequest* request) = 0;
@@ -149,22 +100,13 @@ class RequestTracker {
                                      bool recoverable,
                                      const SSLCallback& should_continue) = 0;
 
-  // Gets and sets the cache mode.
-  CacheMode GetCacheMode() const;
-  void SetCacheMode(RequestTracker::CacheMode mode);
-
  protected:
   virtual ~RequestTracker();
 
   void InvalidateWeakPtrs();
 
  private:
-  // Array of client factories that may be added by CRNHTTPProtocolHandler. The
-  // array lives on the IO thread.
-  base::scoped_nsobject<NSMutableArray> client_factories_;
-
   bool initialized_;
-  CacheMode cache_mode_;
   base::ThreadChecker thread_checker_;
 
   base::WeakPtrFactory<RequestTracker> weak_ptr_factory_;

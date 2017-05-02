@@ -4,36 +4,43 @@
 
 package org.chromium.chrome.browser.omnibox.geo;
 
-import android.content.Context;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.SystemClock;
-import android.test.InstrumentationTestCase;
-import android.test.UiThreadTest;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
+import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 
 /**
  * Tests for GeolocationHeader and GeolocationTracker.
  */
-public class GeolocationHeaderTest extends InstrumentationTestCase {
-
+public class GeolocationHeaderTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     private static final String SEARCH_URL_1 = "https://www.google.com/search?q=potatoes";
     private static final String SEARCH_URL_2 = "https://www.google.co.jp/webhp?#q=dinosaurs";
+    private static final String ENABLE_CONSISTENT_GEOLOCATION_FEATURE =
+            "enable-features=ConsistentOmniboxGeolocation";
+    private static final String DISABLE_CONSISTENT_GEOLOCATION_FEATURE =
+            "disable-features=ConsistentOmniboxGeolocation";
+    private static final String GOOGLE_BASE_URL_SWITCH = "google-base-url=https://www.google.com";
+
+    public GeolocationHeaderTest() {
+        super(ChromeActivity.class);
+    }
 
     @SmallTest
     @Feature({"Location"})
-    @UiThreadTest
+    @CommandLineFlags.Add(DISABLE_CONSISTENT_GEOLOCATION_FEATURE)
     public void testGeolocationHeader() throws ProcessInitException {
-        Context targetContext = getInstrumentation().getTargetContext();
-        ChromeBrowserInitializer.getInstance(targetContext).handleSynchronousStartup();
-
         setMockLocation(20.3, 155.8, System.currentTimeMillis());
 
         // X-Geo should be sent for Google search results page URLs.
@@ -52,44 +59,137 @@ public class GeolocationHeaderTest extends InstrumentationTestCase {
         // X-Geo shouldn't be sent over HTTP.
         assertNullHeader("http://www.google.com/search?q=potatoes", false);
         assertNullHeader("http://www.google.com/webhp?#q=dinosaurs", false);
+    }
+
+    @SmallTest
+    @Feature({"Location"})
+    @CommandLineFlags.Add({ENABLE_CONSISTENT_GEOLOCATION_FEATURE, GOOGLE_BASE_URL_SWITCH})
+    public void testConsistentHeader() throws ProcessInitException {
+        setMockLocation(20.3, 155.8, System.currentTimeMillis());
+
+        // X-Geo should be sent for Google search results page URLs.
+        assertNonNullHeader(SEARCH_URL_1, false);
+
+        // But only the current CCTLD.
+        assertNullHeader(SEARCH_URL_2, false);
+
+        // X-Geo shouldn't be sent in incognito mode.
+        assertNullHeader(SEARCH_URL_1, true);
+        assertNullHeader(SEARCH_URL_2, true);
+
+        // X-Geo shouldn't be sent with URLs that aren't the Google search results page.
+        assertNullHeader("invalid$url", false);
+        assertNullHeader("https://www.chrome.fr/", false);
+        assertNullHeader("https://www.google.com/", false);
+
+        // X-Geo shouldn't be sent over HTTP.
+        assertNullHeader("http://www.google.com/search?q=potatoes", false);
+        assertNullHeader("http://www.google.com/webhp?#q=dinosaurs", false);
+    }
+
+    @SmallTest
+    @Feature({"Location"})
+    @CommandLineFlags.Add(DISABLE_CONSISTENT_GEOLOCATION_FEATURE)
+    public void testPermissions() throws ProcessInitException {
+        setMockLocation(20.3, 155.8, System.currentTimeMillis());
 
         // X-Geo shouldn't be sent when location is disallowed for https origin.
         // If https origin doesn't have a location setting, fall back to value for http origin.
-        assertNotNull(getHeaderWithPermissions(ContentSetting.ALLOW, ContentSetting.ALLOW));
-        assertNotNull(getHeaderWithPermissions(ContentSetting.ALLOW, ContentSetting.DEFAULT));
-        assertNotNull(getHeaderWithPermissions(ContentSetting.ALLOW, ContentSetting.BLOCK));
-        assertNotNull(getHeaderWithPermissions(ContentSetting.DEFAULT, ContentSetting.ALLOW));
-        assertNotNull(getHeaderWithPermissions(ContentSetting.DEFAULT, ContentSetting.DEFAULT));
-        assertNull(getHeaderWithPermissions(ContentSetting.DEFAULT, ContentSetting.BLOCK));
-        assertNull(getHeaderWithPermissions(ContentSetting.BLOCK, ContentSetting.ALLOW));
-        assertNull(getHeaderWithPermissions(ContentSetting.BLOCK, ContentSetting.DEFAULT));
-        assertNull(getHeaderWithPermissions(ContentSetting.BLOCK, ContentSetting.BLOCK));
+        checkHeaderWithPermissions(ContentSetting.ALLOW, ContentSetting.ALLOW, false);
+        checkHeaderWithPermissions(ContentSetting.ALLOW, ContentSetting.DEFAULT, false);
+        checkHeaderWithPermissions(ContentSetting.ALLOW, ContentSetting.BLOCK, false);
+        checkHeaderWithPermissions(ContentSetting.DEFAULT, ContentSetting.ALLOW, false);
+        checkHeaderWithPermissions(ContentSetting.DEFAULT, ContentSetting.DEFAULT, false);
+        checkHeaderWithPermissions(ContentSetting.DEFAULT, ContentSetting.BLOCK, true);
+        checkHeaderWithPermissions(ContentSetting.BLOCK, ContentSetting.ALLOW, true);
+        checkHeaderWithPermissions(ContentSetting.BLOCK, ContentSetting.DEFAULT, true);
+        checkHeaderWithPermissions(ContentSetting.BLOCK, ContentSetting.BLOCK, true);
+    }
+
+    @SmallTest
+    @Feature({"Location"})
+    @CommandLineFlags.Add({ENABLE_CONSISTENT_GEOLOCATION_FEATURE, GOOGLE_BASE_URL_SWITCH})
+    public void testPermissionAndSetting() throws ProcessInitException {
+        setMockLocation(20.3, 155.8, System.currentTimeMillis());
+
+        // X-Geo shouldn't be sent when location is disallowed for the origin, or when the DSE
+        // geolocation setting is off.
+        checkHeaderWithPermissionAndSetting(ContentSetting.ALLOW, true, false);
+        checkHeaderWithPermissionAndSetting(ContentSetting.DEFAULT, true, false);
+        checkHeaderWithPermissionAndSetting(ContentSetting.DEFAULT, false, true);
+        checkHeaderWithPermissionAndSetting(ContentSetting.BLOCK, false, true);
+    }
+
+    @SmallTest
+    @Feature({"Location"})
+    @CommandLineFlags.Add(DISABLE_CONSISTENT_GEOLOCATION_FEATURE)
+    public void testOnlyNonStale() throws ProcessInitException {
+        setMockLocation(20.3, 155.8, System.currentTimeMillis());
 
         // X-Geo should be sent only with non-stale locations.
         long now = System.currentTimeMillis();
         long oneHour = 60 * 60 * 1000;
         long oneWeek = 7 * 24 * 60 * 60 * 1000;
-        assertNotNull(getHeaderWithLocation(20.3, 155.8, now));
-        assertNotNull(getHeaderWithLocation(20.3, 155.8, now - oneHour));
-        assertNull(getHeaderWithLocation(20.3, 155.8, now - oneWeek));
+        checkHeaderWithLocation(20.3, 155.8, now, false);
+        checkHeaderWithLocation(20.3, 155.8, now - oneHour, false);
+        checkHeaderWithLocation(20.3, 155.8, now - oneWeek, true);
         GeolocationTracker.setLocationForTesting(null);
         assertNullHeader(SEARCH_URL_1, false);
     }
 
-    private String getHeaderWithPermissions(ContentSetting httpsPermission,
-            ContentSetting httpPermission) {
-        GeolocationInfo infoHttps = new GeolocationInfo("https://www.google.de", null, false);
-        GeolocationInfo infoHttp = new GeolocationInfo("http://www.google.de", null, false);
-        infoHttps.setContentSetting(httpsPermission);
-        infoHttp.setContentSetting(httpPermission);
-        return GeolocationHeader.getGeoHeader(getInstrumentation().getTargetContext(),
-                "https://www.google.de/search?q=kartoffelsalat", false);
+    private void checkHeaderWithPermissions(final ContentSetting httpsPermission,
+            final ContentSetting httpPermission, final boolean shouldBeNull) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                GeolocationInfo infoHttps =
+                        new GeolocationInfo("https://www.google.de", null, false);
+                GeolocationInfo infoHttp = new GeolocationInfo("http://www.google.de", null, false);
+                infoHttps.setContentSetting(httpsPermission);
+                infoHttp.setContentSetting(httpPermission);
+                String header = GeolocationHeader.getGeoHeader(
+                        "https://www.google.de/search?q=kartoffelsalat",
+                        getActivity().getActivityTab());
+                assertHeaderState(header, shouldBeNull);
+            }
+        });
     }
 
-    private String getHeaderWithLocation(double latitute, double longitude, long time) {
-        setMockLocation(latitute, longitude, time);
-        return GeolocationHeader.getGeoHeader(getInstrumentation().getTargetContext(),
-                SEARCH_URL_1, false);
+    private void checkHeaderWithPermissionAndSetting(final ContentSetting httpsPermission,
+            final boolean settingValue, final boolean shouldBeNull) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                GeolocationInfo infoHttps =
+                        new GeolocationInfo(SEARCH_URL_1, null, false);
+                infoHttps.setContentSetting(httpsPermission);
+                WebsitePreferenceBridge.setDSEGeolocationSetting(settingValue);
+                String header = GeolocationHeader.getGeoHeader(
+                        SEARCH_URL_1, getActivity().getActivityTab());
+                assertHeaderState(header, shouldBeNull);
+            }
+        });
+    }
+
+    private void checkHeaderWithLocation(final double latitute, final double longitude,
+            final long time, final boolean shouldBeNull) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                setMockLocation(latitute, longitude, time);
+                String header = GeolocationHeader.getGeoHeader(SEARCH_URL_1,
+                        getActivity().getActivityTab());
+                assertHeaderState(header, shouldBeNull);
+            }
+        });
+    }
+
+    private void assertHeaderState(String header, boolean shouldBeNull) {
+        if (shouldBeNull) {
+            assertNull(header);
+        } else {
+            assertNotNull(header);
+        }
     }
 
     private void setMockLocation(double latitute, double longitude, long time) {
@@ -105,13 +205,36 @@ public class GeolocationHeaderTest extends InstrumentationTestCase {
         GeolocationTracker.setLocationForTesting(location);
     }
 
-    private void assertNullHeader(String url, boolean isIncognito) {
-        Context targetContext = getInstrumentation().getTargetContext();
-        assertNull(GeolocationHeader.getGeoHeader(targetContext, url, isIncognito));
+    private void assertNullHeader(final String url, final boolean isIncognito) {
+        try {
+            final Tab tab = loadUrlInNewTab("about:blank", isIncognito);
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertNull(GeolocationHeader.getGeoHeader(url, tab));
+                }
+            });
+        } catch (InterruptedException e) {
+            fail(e.getMessage());
+        }
     }
 
-    private void assertNonNullHeader(String url, boolean isIncognito) {
-        Context targetContext = getInstrumentation().getTargetContext();
-        assertNotNull(GeolocationHeader.getGeoHeader(targetContext, url, isIncognito));
+    private void assertNonNullHeader(final String url, final boolean isIncognito) {
+        try {
+            final Tab tab = loadUrlInNewTab("about:blank", isIncognito);
+            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+                @Override
+                public void run() {
+                    assertNotNull(GeolocationHeader.getGeoHeader(url, tab));
+                }
+            });
+        } catch (InterruptedException e) {
+            fail(e.getMessage());
+        }
+    }
+
+    @Override
+    public void startMainActivity() throws InterruptedException {
+        startMainActivityOnBlankPage();
     }
 }

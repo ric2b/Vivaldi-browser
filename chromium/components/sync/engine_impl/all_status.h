@@ -20,7 +20,6 @@
 namespace syncer {
 
 class ScopedStatusLock;
-struct ServerConnectionEvent;
 struct SyncCycleEvent;
 
 // This class watches various sync engine components, updating its internal
@@ -66,6 +65,8 @@ class AllStatus : public SyncEngineEventListener {
   void SetInvalidatorClientId(const std::string& invalidator_client_id);
 
   void IncrementNudgeCounter(NudgeSource source);
+
+  void SetLocalBackendFolder(const std::string& folder);
 
  protected:
   // Examines syncer to calculate syncing and the unsynced count,

@@ -8,7 +8,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "services/ui/display/platform_screen.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/event_dispatcher.h"
@@ -64,6 +63,7 @@ void DisplayManager::DestroyDisplay(Display* display) {
 
     DCHECK(displays_.count(display));
     displays_.erase(display);
+    window_server_->OnDisplayDestroyed(display);
   }
   delete display;
 
@@ -180,8 +180,6 @@ void DisplayManager::OnDisplayAdded(int64_t id,
 
   ws::Display* display = new ws::Display(window_server_);
   display->Init(params, nullptr);
-
-  window_server_->delegate()->UpdateTouchTransforms();
 }
 
 void DisplayManager::OnDisplayRemoved(int64_t id) {

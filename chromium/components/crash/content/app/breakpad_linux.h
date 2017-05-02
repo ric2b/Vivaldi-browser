@@ -31,6 +31,11 @@ extern void InitMicrodumpCrashHandlerIfNecessary(
 
 extern void AddGpuFingerprintToMicrodumpCrashHandler(
     const std::string& gpu_fingerprint);
+
+// Calling SuppressDumpGeneration causes subsequent crashes to not
+// generate dumps. Calling base::debug::DumpWithoutCrashing will still
+// generate a dump.
+extern void SuppressDumpGeneration();
 #endif
 
 // Checks if crash reporting is enabled. Note that this is not the same as
@@ -38,6 +43,8 @@ extern void AddGpuFingerprintToMicrodumpCrashHandler(
 // whether InitCrashReporter() is called.
 bool IsCrashReporterEnabled();
 
+// Generates a minidump on demand for this process, writing it to |dump_fd|.
+void GenerateMinidumpOnDemandForAndroid(int dump_fd);
 }  // namespace breakpad
 
 #endif  // COMPONENTS_CRASH_CONTENT_APP_BREAKPAD_LINUX_H_

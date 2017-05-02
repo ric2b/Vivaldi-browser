@@ -13,6 +13,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -44,8 +45,8 @@
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/result_codes.h"
+#include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
-#include "device/power_monitor/power_monitor_message_broadcaster.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
 
@@ -96,8 +97,6 @@ class ConnectionFilterImpl : public ConnectionFilter {
   bool OnConnect(const service_manager::Identity& remote_identity,
                  service_manager::InterfaceRegistry* registry,
                  service_manager::Connector* connector) override {
-    registry->AddInterface(
-        base::Bind(&device::PowerMonitorMessageBroadcaster::Create));
     return true;
   }
 
@@ -163,6 +162,7 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
     : data_(process_type),
       delegate_(delegate),
       child_token_(mojo::edk::GenerateRandomToken()),
+      channel_(nullptr),
       is_channel_connected_(false),
       notify_child_disconnected_(false),
       weak_factory_(this) {
@@ -219,29 +219,21 @@ void BrowserChildProcessHostImpl::TerminateAll() {
 // static
 void BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(
     base::CommandLine* cmd_line) {
-  std::string enabled_features;
-  std::string disabled_features;
-  base::FeatureList::GetInstance()->GetFeatureOverrides(&enabled_features,
-                                                        &disabled_features);
-  if (!enabled_features.empty())
-    cmd_line->AppendSwitchASCII(switches::kEnableFeatures, enabled_features);
-  if (!disabled_features.empty())
-    cmd_line->AppendSwitchASCII(switches::kDisableFeatures, disabled_features);
-
   // If we run base::FieldTrials, we want to pass to their state to the
   // child process so that it can act in accordance with each state.
-  base::FieldTrialList::CopyFieldTrialStateToFlags(switches::kFieldTrialHandle,
-                                                   cmd_line);
+  base::FieldTrialList::CopyFieldTrialStateToFlags(
+      switches::kFieldTrialHandle, switches::kEnableFeatures,
+      switches::kDisableFeatures, cmd_line);
 }
 
 void BrowserChildProcessHostImpl::Launch(
-    SandboxedProcessLauncherDelegate* delegate,
-    base::CommandLine* cmd_line,
+    std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
+    std::unique_ptr<base::CommandLine> cmd_line,
     bool terminate_on_shutdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  GetContentClient()->browser()->AppendExtraCommandLineSwitches(
-      cmd_line, data_.id);
+  GetContentClient()->browser()->AppendExtraCommandLineSwitches(cmd_line.get(),
+                                                                data_.id);
 
   const base::CommandLine& browser_command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -264,7 +256,7 @@ void BrowserChildProcessHostImpl::Launch(
 
   notify_child_disconnected_ = true;
   child_process_.reset(new ChildProcessLauncher(
-      delegate, cmd_line, data_.id, this, child_token_,
+      std::move(delegate), std::move(cmd_line), data_.id, this, child_token_,
       base::Bind(&BrowserChildProcessHostImpl::OnMojoError,
                  weak_factory_.GetWeakPtr(),
                  base::ThreadTaskRunnerHandle::Get()),
@@ -303,6 +295,10 @@ void BrowserChildProcessHostImpl::SetName(const base::string16& name) {
 void BrowserChildProcessHostImpl::SetHandle(base::ProcessHandle handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   data_.handle = handle;
+}
+
+std::string BrowserChildProcessHostImpl::GetServiceRequestChannelToken() {
+  return child_connection_->service_token();
 }
 
 void BrowserChildProcessHostImpl::ForceShutdown() {
@@ -379,18 +375,19 @@ void BrowserChildProcessHostImpl::OnChannelError() {
 
 void BrowserChildProcessHostImpl::OnBadMessageReceived(
     const IPC::Message& message) {
-  TerminateOnBadMessageReceived(message.type());
+  std::string log_message =
+      base::StringPrintf("Bad message received of type: %u", message.type());
+  TerminateOnBadMessageReceived(log_message);
 }
 
-void BrowserChildProcessHostImpl::TerminateOnBadMessageReceived(uint32_t type) {
+void BrowserChildProcessHostImpl::TerminateOnBadMessageReceived(
+    const std::string& error) {
   HistogramBadMessageTerminated(data_.process_type);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableKillAfterBadIPC)) {
     return;
   }
-  LOG(ERROR) << "Terminating child process for bad IPC message of type "
-             << type;
-
+  LOG(ERROR) << "Terminating child process for bad IPC message: " << error;
   // Create a memory dump. This will contain enough stack frames to work out
   // what the bad message was.
   base::debug::DumpWithoutCrashing();
@@ -400,6 +397,10 @@ void BrowserChildProcessHostImpl::TerminateOnBadMessageReceived(uint32_t type) {
 
 bool BrowserChildProcessHostImpl::CanShutdown() {
   return delegate_->CanShutdown();
+}
+
+void BrowserChildProcessHostImpl::OnChannelInitialized(IPC::Channel* channel) {
+  channel_ = channel;
 }
 
 void BrowserChildProcessHostImpl::OnChildDisconnected() {
@@ -461,6 +462,7 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
     }
 #endif
   }
+  channel_ = nullptr;
   delete delegate_;  // Will delete us
 }
 
@@ -588,6 +590,7 @@ void BrowserChildProcessHostImpl::OnMojoError(
     task_runner->PostTask(
         FROM_HERE, base::Bind(&BrowserChildProcessHostImpl::OnMojoError,
                               process, task_runner, error));
+    return;
   }
   if (!process)
     return;

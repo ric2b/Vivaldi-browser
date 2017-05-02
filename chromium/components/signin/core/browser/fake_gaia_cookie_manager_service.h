@@ -11,10 +11,6 @@
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 
-namespace content {
-class BrowserContext;
-}
-
 class FakeGaiaCookieManagerService : public GaiaCookieManagerService {
  public:
   FakeGaiaCookieManagerService(OAuth2TokenService* token_service,
@@ -44,8 +40,8 @@ class FakeGaiaCookieManagerService : public GaiaCookieManagerService {
 
  private:
   std::string GetSourceForRequest(
-      const GaiaCookieManagerService::GaiaCookieRequest& request,
-      const std::string& source_default) override;
+      const GaiaCookieManagerService::GaiaCookieRequest& request) override;
+  std::string GetDefaultSourceForRequest() override;
 
   // Provide a fake response for calls to /ListAccounts.
   net::FakeURLFetcherFactory* url_fetcher_factory_;

@@ -8,7 +8,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "mojo/common/common_type_converters.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/cpp/input_event_handler.h"
 #include "services/ui/public/cpp/property_type_converters.h"
@@ -40,13 +39,8 @@ Id server_id(ui::Window* window) {
 
 }  // namespace
 
-mojo::Array<uint8_t> Int32ToPropertyTransportValue(int32_t value) {
-  const std::vector<uint8_t> bytes =
-      mojo::ConvertTo<std::vector<uint8_t>>(value);
-  mojo::Array<uint8_t> transport_value;
-  transport_value.resize(bytes.size());
-  memcpy(&transport_value.front(), &(bytes.front()), bytes.size());
-  return transport_value;
+std::vector<uint8_t> Int32ToPropertyTransportValue(int32_t value) {
+  return mojo::ConvertTo<std::vector<uint8_t>>(value);
 }
 
 class TestWindowTreeClientDelegate : public WindowTreeClientDelegate {
@@ -779,8 +773,12 @@ TEST_F(WindowTreeClientTest, NewTopLevelWindowGetsAllChangesInFlight) {
   data->window_id = server_id(root2);
   data->bounds.SetRect(1, 2, 3, 4);
   data->visible = true;
-  data->properties["xx"] = mojo::Array<uint8_t>::From(std::string("server_xx"));
-  data->properties["yy"] = mojo::Array<uint8_t>::From(std::string("server_yy"));
+  constexpr char kXxName[] = "server_xx";
+  data->properties["xx"] =
+      std::vector<uint8_t>(kXxName, kXxName + strlen(kXxName));
+  constexpr char kYyName[] = "server_yy";
+  data->properties["yy"] =
+      std::vector<uint8_t>(kYyName, kYyName + strlen(kYyName));
   const int64_t display_id = 1;
   setup.window_tree_client()->OnTopLevelCreated(
       new_window_in_flight_change_id, std::move(data), display_id, true);

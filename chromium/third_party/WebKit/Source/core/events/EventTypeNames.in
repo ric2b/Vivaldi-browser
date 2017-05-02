@@ -20,6 +20,7 @@ addtrack
 animationend
 animationiteration
 animationstart
+appinstalled
 audioend
 audioprocess
 audiostart
@@ -150,7 +151,6 @@ mouseup
 mousewheel
 mute
 negotiationneeded
-nexttrack
 nomatch
 notificationclick
 notificationclose
@@ -165,10 +165,10 @@ pagehide
 pageshow
 paste
 pause
+paymentrequest
 periodicsync
 play
 playing
-playpause
 pointercancel
 pointerdown
 pointerenter
@@ -180,7 +180,6 @@ pointerout
 pointerover
 pointerup
 popstate
-previoustrack
 progress
 push
 ratechange
@@ -198,9 +197,7 @@ resume
 scroll
 search
 securitypolicyviolation
-seekbackward
 seeked
-seekforward
 seeking
 select
 selectionchange
@@ -275,7 +272,6 @@ webkitprerenderdomcontentloaded
 webkitprerenderload
 webkitprerenderstart
 webkitprerenderstop
-webkitresourcetimingbufferfull
 webkitspeechchange
 webkitvisibilitychange
 wheel

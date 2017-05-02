@@ -45,9 +45,8 @@ namespace blink {
 
 WebImage WebImage::fromData(const WebData& data, const WebSize& desiredSize) {
   RefPtr<SharedBuffer> buffer = PassRefPtr<SharedBuffer>(data);
-  std::unique_ptr<ImageDecoder> decoder(
-      ImageDecoder::create(buffer, true, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::ColorSpaceIgnored));
+  std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
+      buffer, true, ImageDecoder::AlphaPremultiplied, ColorBehavior::ignore()));
   if (!decoder || !decoder->isSizeAvailable())
     return WebImage();
 
@@ -84,9 +83,8 @@ WebVector<WebImage> WebImage::framesFromData(const WebData& data) {
   const size_t maxFrameCount = 8;
 
   RefPtr<SharedBuffer> buffer = PassRefPtr<SharedBuffer>(data);
-  std::unique_ptr<ImageDecoder> decoder(
-      ImageDecoder::create(buffer, true, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::ColorSpaceIgnored));
+  std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
+      buffer, true, ImageDecoder::AlphaPremultiplied, ColorBehavior::ignore()));
   if (!decoder || !decoder->isSizeAvailable())
     return WebVector<WebImage>();
 
@@ -108,7 +106,7 @@ WebVector<WebImage> WebImage::framesFromData(const WebData& data) {
 
     SkBitmap bitmap = frame->bitmap();
     if (!bitmap.isNull() && frame->getStatus() == ImageFrame::FrameComplete)
-      frames.append(WebImage(bitmap));
+      frames.push_back(WebImage(bitmap));
   }
 
   return frames;
@@ -134,7 +132,10 @@ WebImage::WebImage(PassRefPtr<Image> image) {
   if (!image)
     return;
 
-  if (sk_sp<SkImage> skImage = image->imageForCurrentFrame())
+  // TODO(ccameron): WebImage needs to be consistent about color spaces.
+  // https://crbug.com/672315
+  if (sk_sp<SkImage> skImage =
+          image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget()))
     skImage->asLegacyBitmap(&m_bitmap, SkImage::kRO_LegacyBitmapMode);
 }
 

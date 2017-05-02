@@ -40,16 +40,20 @@ class PersistentMemoryAllocatorTest : public testing::Test {
   uint32_t kAllocAlignment;
 
   struct TestObject1 {
-    int onething;
+    static constexpr uint32_t kPersistentTypeId = 1;
+    static constexpr size_t kExpectedInstanceSize = 4 + 1 + 3;
+    int32_t onething;
     char oranother;
   };
 
   struct TestObject2 {
-    int thiis;
-    long that;
+    static constexpr uint32_t kPersistentTypeId = 2;
+    static constexpr size_t kExpectedInstanceSize = 8 + 4 + 4 + 8 + 8;
+    int64_t thiis;
+    int32_t that;
     float andthe;
-    char other;
-    double thing;
+    double other;
+    char thing[8];
   };
 
   PersistentMemoryAllocatorTest() {
@@ -107,10 +111,12 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
 
   // Validate allocation of test object and make sure it can be referenced
   // and all metadata looks correct.
-  Reference block1 = allocator_->Allocate(sizeof(TestObject1), 1);
-  EXPECT_NE(0U, block1);
-  EXPECT_NE(nullptr, allocator_->GetAsObject<TestObject1>(block1, 1));
-  EXPECT_EQ(nullptr, allocator_->GetAsObject<TestObject2>(block1, 1));
+  TestObject1* obj1 = allocator_->AllocateObject<TestObject1>();
+  ASSERT_TRUE(obj1);
+  Reference block1 = allocator_->GetAsReference(obj1);
+  ASSERT_NE(0U, block1);
+  EXPECT_NE(nullptr, allocator_->GetAsObject<TestObject1>(block1));
+  EXPECT_EQ(nullptr, allocator_->GetAsObject<TestObject2>(block1));
   EXPECT_LE(sizeof(TestObject1), allocator_->GetAllocSize(block1));
   EXPECT_GT(sizeof(TestObject1) + kAllocAlignment,
             allocator_->GetAllocSize(block1));
@@ -118,6 +124,18 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
   allocator_->GetMemoryInfo(&meminfo1);
   EXPECT_EQ(meminfo0.total, meminfo1.total);
   EXPECT_GT(meminfo0.free, meminfo1.free);
+
+  // Verify that pointers can be turned back into references and that invalid
+  // addresses return null.
+  char* memory1 = allocator_->GetAsArray<char>(block1, 1, 1);
+  ASSERT_TRUE(memory1);
+  EXPECT_EQ(block1, allocator_->GetAsReference(memory1, 0));
+  EXPECT_EQ(block1, allocator_->GetAsReference(memory1, 1));
+  EXPECT_EQ(0U, allocator_->GetAsReference(memory1, 2));
+  EXPECT_EQ(0U, allocator_->GetAsReference(memory1 + 1, 0));
+  EXPECT_EQ(0U, allocator_->GetAsReference(memory1 + 16, 0));
+  EXPECT_EQ(0U, allocator_->GetAsReference(nullptr, 0));
+  EXPECT_EQ(0U, allocator_->GetAsReference(&base_name, 0));
 
   // Ensure that the test-object can be made iterable.
   PersistentMemoryAllocator::Iterator iter1a(allocator_.get());
@@ -133,10 +151,12 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
 
   // Create second test-object and ensure everything is good and it cannot
   // be confused with test-object of another type.
-  Reference block2 = allocator_->Allocate(sizeof(TestObject2), 2);
-  EXPECT_NE(0U, block2);
-  EXPECT_NE(nullptr, allocator_->GetAsObject<TestObject2>(block2, 2));
-  EXPECT_EQ(nullptr, allocator_->GetAsObject<TestObject2>(block2, 1));
+  TestObject2* obj2 = allocator_->AllocateObject<TestObject2>();
+  ASSERT_TRUE(obj2);
+  Reference block2 = allocator_->GetAsReference(obj2);
+  ASSERT_NE(0U, block2);
+  EXPECT_NE(nullptr, allocator_->GetAsObject<TestObject2>(block2));
+  EXPECT_EQ(nullptr, allocator_->GetAsObject<TestObject1>(block2));
   EXPECT_LE(sizeof(TestObject2), allocator_->GetAllocSize(block2));
   EXPECT_GT(sizeof(TestObject2) + kAllocAlignment,
             allocator_->GetAllocSize(block2));
@@ -146,7 +166,7 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
   EXPECT_GT(meminfo1.free, meminfo2.free);
 
   // Ensure that second test-object can also be made iterable.
-  allocator_->MakeIterable(block2);
+  allocator_->MakeIterable(obj2);
   EXPECT_EQ(block2, iter1a.GetNext(&type));
   EXPECT_EQ(2U, type);
   EXPECT_EQ(block2, iter1a.GetLast());
@@ -200,11 +220,11 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
   EXPECT_EQ(1, allocs_samples->GetCount(0));
 #endif
 
-  // Check that an objcet's type can be changed.
+  // Check that an object's type can be changed.
   EXPECT_EQ(2U, allocator_->GetType(block2));
   allocator_->ChangeType(block2, 3, 2);
   EXPECT_EQ(3U, allocator_->GetType(block2));
-  allocator_->ChangeType(block2, 2, 3);
+  allocator_->ChangeObject<TestObject2>(block2, 3);
   EXPECT_EQ(2U, allocator_->GetType(block2));
 
   // Create second allocator (read/write) using the same memory segment.
@@ -221,8 +241,8 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
   EXPECT_EQ(block1, iter2.GetNext(&type));
   EXPECT_EQ(block2, iter2.GetNext(&type));
   EXPECT_EQ(0U, iter2.GetNext(&type));
-  EXPECT_NE(nullptr, allocator2->GetAsObject<TestObject1>(block1, 1));
-  EXPECT_NE(nullptr, allocator2->GetAsObject<TestObject2>(block2, 2));
+  EXPECT_NE(nullptr, allocator2->GetAsObject<TestObject1>(block1));
+  EXPECT_NE(nullptr, allocator2->GetAsObject<TestObject2>(block2));
 
   // Create a third allocator (read-only) using the same memory segment.
   std::unique_ptr<const PersistentMemoryAllocator> allocator3(
@@ -237,13 +257,23 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
   EXPECT_EQ(block1, iter3.GetNext(&type));
   EXPECT_EQ(block2, iter3.GetNext(&type));
   EXPECT_EQ(0U, iter3.GetNext(&type));
-  EXPECT_NE(nullptr, allocator3->GetAsObject<TestObject1>(block1, 1));
-  EXPECT_NE(nullptr, allocator3->GetAsObject<TestObject2>(block2, 2));
+  EXPECT_NE(nullptr, allocator3->GetAsObject<TestObject1>(block1));
+  EXPECT_NE(nullptr, allocator3->GetAsObject<TestObject2>(block2));
 
   // Ensure that GetNextOfType works.
   PersistentMemoryAllocator::Iterator iter1c(allocator_.get());
-  EXPECT_EQ(block2, iter1c.GetNextOfType(2));
+  EXPECT_EQ(block2, iter1c.GetNextOfType<TestObject2>());
   EXPECT_EQ(0U, iter1c.GetNextOfType(2));
+
+  // Ensure that GetNextOfObject works.
+  PersistentMemoryAllocator::Iterator iter1d(allocator_.get());
+  EXPECT_EQ(obj2, iter1d.GetNextOfObject<TestObject2>());
+  EXPECT_EQ(nullptr, iter1d.GetNextOfObject<TestObject2>());
+
+  // Ensure that deleting an object works.
+  allocator_->DeleteObject(obj2);
+  PersistentMemoryAllocator::Iterator iter1z(allocator_.get());
+  EXPECT_EQ(nullptr, iter1z.GetNextOfObject<TestObject2>());
 }
 
 TEST_F(PersistentMemoryAllocatorTest, PageTest) {
@@ -786,7 +816,8 @@ TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
       uint32_t type_id;
       Reference ref;
       while ((ref = iter.GetNext(&type_id)) != 0) {
-        const char* data = allocator.GetAsObject<char>(ref, 0);
+        const char* data = allocator.GetAsArray<char>(
+            ref, 0, PersistentMemoryAllocator::kSizeAny);
         uint32_t type = allocator.GetType(ref);
         size_t size = allocator.GetAllocSize(ref);
         // Ensure compiler can't optimize-out above variables.

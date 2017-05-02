@@ -21,8 +21,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
 #include "chrome/browser/chromeos/login/auth/chrome_login_performer.h"
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_user_context_initializer.h"
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_user_flow.h"
@@ -515,7 +517,7 @@ void ExistingUserController::SetDisplayEmail(const std::string& email) {
 }
 
 void ExistingUserController::ShowWrongHWIDScreen() {
-  host_->StartWizard(WizardController::kWrongHWIDScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_WRONG_HWID);
 }
 
 void ExistingUserController::Signout() {
@@ -560,23 +562,23 @@ void ExistingUserController::OnEnrollmentOwnershipCheckCompleted(
 }
 
 void ExistingUserController::ShowEnrollmentScreen() {
-  host_->StartWizard(WizardController::kEnrollmentScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_OOBE_ENROLLMENT);
 }
 
 void ExistingUserController::ShowResetScreen() {
-  host_->StartWizard(WizardController::kResetScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_OOBE_RESET);
 }
 
 void ExistingUserController::ShowEnableDebuggingScreen() {
-  host_->StartWizard(WizardController::kEnableDebuggingScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_OOBE_ENABLE_DEBUGGING);
 }
 
 void ExistingUserController::ShowKioskEnableScreen() {
-  host_->StartWizard(WizardController::kKioskEnableScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_KIOSK_ENABLE);
 }
 
 void ExistingUserController::ShowKioskAutolaunchScreen() {
-  host_->StartWizard(WizardController::kKioskAutolaunchScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_KIOSK_AUTOLAUNCH);
 }
 
 void ExistingUserController::ShowTPMError() {
@@ -945,9 +947,7 @@ void ExistingUserController::LoginAsKioskApp(const std::string& app_id,
 }
 
 void ExistingUserController::LoginAsArcKioskApp(const AccountId& account_id) {
-  login_performer_.reset(nullptr);
-  login_performer_.reset(new ChromeLoginPerformer(this));
-  login_performer_->LoginAsArcKioskAccount(account_id);
+  host_->StartArcKiosk(account_id);
 }
 
 void ExistingUserController::ConfigureAutoLogin() {
@@ -983,7 +983,8 @@ void ExistingUserController::ConfigureAutoLogin() {
       user_manager::UserManager::Get()->FindUser(
           arc_kiosk_auto_login_account_id_);
   if (!arc_kiosk_user ||
-      arc_kiosk_user->GetType() != user_manager::USER_TYPE_ARC_KIOSK_APP) {
+      arc_kiosk_user->GetType() != user_manager::USER_TYPE_ARC_KIOSK_APP ||
+      KioskAppLaunchError::Get() != KioskAppLaunchError::NONE) {
     arc_kiosk_auto_login_account_id_ = EmptyAccountId();
   }
 

@@ -8,7 +8,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#import "chrome/browser/ui/cocoa/base_bubble_controller.h"
+#import "chrome/browser/ui/cocoa/omnibox_decoration_bubble_controller.h"
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -31,7 +31,7 @@ struct SecurityInfo;
 //
 // TODO(palmer): Normalize all WebsiteSettings*, SiteSettings*, PageInfo*, et c.
 // to OriginInfo*.
-@interface WebsiteSettingsBubbleController : BaseBubbleController {
+@interface WebsiteSettingsBubbleController : OmniboxDecorationBubbleController {
  @private
   content::WebContents* webContents_;
 
@@ -148,7 +148,6 @@ class WebsiteSettingsUIBridge : public content::WebContentsObserver,
   void SetPermissionInfo(const PermissionInfoList& permission_info_list,
                          ChosenObjectInfoList chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
-  void SetSelectedTab(TabId tab_id) override;
 
  private:
   // The WebContents the bubble UI is attached to.

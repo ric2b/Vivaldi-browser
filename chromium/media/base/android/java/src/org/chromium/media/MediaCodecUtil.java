@@ -6,6 +6,7 @@ package org.chromium.media;
 
 import android.annotation.TargetApi;
 import android.media.MediaCodec;
+import android.media.MediaCodec.CryptoInfo;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Build;
@@ -35,8 +36,8 @@ class MediaCodecUtil {
      * Class to pass parameters from createDecoder()
      */
     public static class CodecCreationInfo {
-        public MediaCodec mediaCodec = null;
-        public boolean supportsAdaptivePlayback = false;
+        public MediaCodec mediaCodec;
+        public boolean supportsAdaptivePlayback;
         public BitrateAdjustmentTypes bitrateAdjustmentType = BitrateAdjustmentTypes.NO_ADJUSTMENT;
     }
 
@@ -280,7 +281,7 @@ class MediaCodecUtil {
                 // We copy blacklisting patterns from software_renderin_list_json.cc
                 // although they are broader than the bugs they refer to.
 
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
                     // Samsung Galaxy Note 2, http://crbug.com/308721.
                     if (Build.MODEL.startsWith("GT-")) return false;
 
@@ -289,12 +290,21 @@ class MediaCodecUtil {
 
                     // Samsung Galaxy Tab, http://crbug.com/408353.
                     if (Build.MODEL.startsWith("SM-T")) return false;
+
+                    // http://crbug.com/600454
+                    if (Build.MODEL.startsWith("SM-G")) return false;
                 }
             }
 
             // MediaTek decoders do not work properly on vp8. See http://crbug.com/446974 and
             // http://crbug.com/597836.
             if (Build.HARDWARE.startsWith("mt")) return false;
+
+            // http://crbug.com/600454
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT
+                    && Build.MODEL.startsWith("Lenovo A6000")) {
+                return false;
+            }
         } else if (mime.equals("video/x-vnd.on2.vp9")) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return false;
 
@@ -471,6 +481,18 @@ class MediaCodecUtil {
     }
 
     /**
+     * Provides a way to blacklist MediaCodec.setOutputSurface() on devices.
+     * @return true if setOutputSurface() is expected to work.
+     */
+    @CalledByNative
+    static boolean isSetOutputSurfaceSupported() {
+        // All Huawei devices based on this processor will immediately hang during
+        // MediaCodec.setOutputSurface().  http://crbug.com/683401
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !Build.HARDWARE.equalsIgnoreCase("hi6210sft");
+    }
+
+    /**
      * Find HW encoder with given MIME type.
      * @param mime MIME type of the media.
      * @return HWEncoderProperties object.
@@ -513,5 +535,28 @@ class MediaCodecUtil {
 
         Log.w(TAG, "HW encoder for " + mime + " is not available on this device.");
         return null;
+    }
+
+    /**
+     * Returns true if and only if the platform we are running on supports the 'cbcs'
+     * encryption scheme, specifically AES CBC encryption with possibility of pattern
+     * encryption.
+     * While 'cbcs' scheme was originally implemented in N, there was a bug (in the
+     * DRM code) which means that it didn't really work properly until post-N).
+     */
+    static boolean platformSupportsCbcsEncryption() {
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.N;
+    }
+
+    /**
+     * Sets the encryption pattern value if and only if CryptoInfo.setPattern method is
+     * supported.
+     * This method was introduced in Android N. Note that if platformSupportsCbcsEncryption
+     * returns true, then this function will set the pattern.
+     */
+    static void setPatternIfSupported(CryptoInfo cryptoInfo, int encrypt, int skip) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            cryptoInfo.setPattern(new CryptoInfo.Pattern(encrypt, skip));
+        }
     }
 }

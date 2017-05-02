@@ -8,10 +8,10 @@
 #include <map>
 #include <memory>
 
-#include "base/logging.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/quic_config_peer.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
@@ -78,22 +78,23 @@ class BbrSenderTest : public ::testing::Test {
                   "BBR sender",
                   Perspective::IS_SERVER,
                   42) {
+    FLAGS_quic_reloadable_flag_quic_bbr_faster_startup = true;
+
     rtt_stats_ = bbr_sender_.connection()->sent_packet_manager().GetRttStats();
-    sender_ = new BbrSender(simulator_.GetClock(), rtt_stats_,
-                            QuicSentPacketManagerPeer::GetUnackedPacketMap(
-                                QuicConnectionPeer::GetSentPacketManager(
-                                    bbr_sender_.connection(), kDefaultPathId)),
-                            kInitialCongestionWindowPackets,
-                            kDefaultMaxCongestionWindowPackets, &random_);
-    QuicConnectionPeer::SetSendAlgorithm(bbr_sender_.connection(),
-                                         kDefaultPathId, sender_);
+    sender_ = new BbrSender(
+        rtt_stats_,
+        QuicSentPacketManagerPeer::GetUnackedPacketMap(
+            QuicConnectionPeer::GetSentPacketManager(bbr_sender_.connection())),
+        kInitialCongestionWindowPackets, kDefaultMaxCongestionWindowPackets,
+        &random_);
+    QuicConnectionPeer::SetSendAlgorithm(bbr_sender_.connection(), sender_);
 
     clock_ = simulator_.GetClock();
     simulator_.set_random_generator(&random_);
 
     uint64_t seed = QuicRandom::GetInstance()->RandUint64();
     random_.set_seed(seed);
-    LOG(INFO) << "BbrSenderTest simulator set up.  Seed: " << seed;
+    QUIC_LOG(INFO) << "BbrSenderTest simulator set up.  Seed: " << seed;
   }
 
   simulator::Simulator simulator_;
@@ -109,6 +110,7 @@ class BbrSenderTest : public ::testing::Test {
   const QuicClock* clock_;
   const RttStats* rtt_stats_;
   BbrSender* sender_;
+  QuicFlagSaver flags_;
 
   // Creates a default setup, which is a network with a bottleneck between the
   // receiver and the switch.  The switch has the buffers four times larger than
@@ -143,7 +145,7 @@ class BbrSenderTest : public ::testing::Test {
     EXPECT_TRUE(simulator_result)
         << "Simple transfer failed.  Bytes remaining: "
         << bbr_sender_.bytes_to_transfer();
-    LOG(INFO) << "Simple transfer state: " << sender_->ExportDebugState();
+    QUIC_LOG(INFO) << "Simple transfer state: " << sender_->ExportDebugState();
   }
 
   // Drive the simulator by sending enough data to enter PROBE_BW.
@@ -233,7 +235,7 @@ TEST_F(BbrSenderTest, PacketLossOnSmallBufferStartup) {
   float loss_rate =
       static_cast<float>(bbr_sender_.connection()->GetStats().packets_lost) /
       bbr_sender_.connection()->GetStats().packets_sent;
-  EXPECT_LE(loss_rate, 0.20);
+  EXPECT_LE(loss_rate, 0.27);
 }
 
 // Ensures the code transitions loss recovery states correctly (NOT_IN_RECOVERY
@@ -428,6 +430,37 @@ TEST_F(BbrSenderTest, InFlightAwareGainCycling) {
   simulator_.RunFor(0.75 * sender_->ExportDebugState().min_rtt);
   EXPECT_EQ(BbrSender::PROBE_BW, sender_->ExportDebugState().mode);
   EXPECT_EQ(2, sender_->ExportDebugState().gain_cycle_index);
+}
+
+// Ensure that the pacing rate does not drop at startup.
+TEST_F(BbrSenderTest, NoBandwidthDropOnStartup) {
+  CreateDefaultSetup();
+
+  const QuicTime::Delta timeout = QuicTime::Delta::FromSeconds(5);
+  bool simulator_result;
+
+  QuicBandwidth initial_rate = QuicBandwidth::FromBytesAndTimeDelta(
+      kInitialCongestionWindowPackets * kDefaultTCPMSS,
+      QuicTime::Delta::FromMicroseconds(rtt_stats_->initial_rtt_us()));
+  EXPECT_GE(sender_->PacingRate(0), initial_rate);
+
+  // Send a packet.
+  bbr_sender_.AddBytesToTransfer(1000);
+  simulator_result = simulator_.RunUntilOrTimeout(
+      [this]() { return receiver_.bytes_received() == 1000; }, timeout);
+  ASSERT_TRUE(simulator_result);
+  EXPECT_GE(sender_->PacingRate(0), initial_rate);
+
+  // Wait for a while.
+  simulator_.RunFor(QuicTime::Delta::FromSeconds(2));
+  EXPECT_GE(sender_->PacingRate(0), initial_rate);
+
+  // Send another packet.
+  bbr_sender_.AddBytesToTransfer(1000);
+  simulator_result = simulator_.RunUntilOrTimeout(
+      [this]() { return receiver_.bytes_received() == 2000; }, timeout);
+  ASSERT_TRUE(simulator_result);
+  EXPECT_GE(sender_->PacingRate(0), initial_rate);
 }
 
 }  // namespace test

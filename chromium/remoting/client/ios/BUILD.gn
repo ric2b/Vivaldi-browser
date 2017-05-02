@@ -2,10 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//remoting/build/config/remoting_build.gni")
+
 group("all") {
   testonly = true
 
   deps = [
+    ":ios_core",
+    ":main",
     "./bridge:all",
   ]
 }
@@ -14,15 +18,56 @@ group("all_test") {
   testonly = true
 
   deps = [
+    ":ios_core_unit_tests",
     "./bridge:bridge_unit_tests",
   ]
 }
 
+source_set("main") {
+  sources = [
+    "app_delegate.h",
+    "app_delegate.mm",
+    "example_view_controller.h",
+    "example_view_controller.mm",
+    "main.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//remoting/base",
+    "//remoting/client",
+    "//remoting/client/ios/bridge",
+    "//remoting/protocol",
+    "//third_party/google_toolbox_for_mac",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/resources",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
 source_set("ios_core") {
   sources = [
+    "app_runtime.cc",
+    "app_runtime.h",
+    "client_gestures.h",
+    "client_gestures.mm",
+    "host.h",
+    "host.mm",
+    "host_preferences.h",
+    "host_preferences.mm",
+    "host_preferences_persistence.h",
+    "key_input.h",
+    "key_input.mm",
+    "key_map_us.h",
     "utility.h",
     "utility.mm",
   ]
+
+  if (!is_chrome_branded) {
+    sources += [ "host_preferences_persistence_chromium.mm" ]
+  }
 
   public_deps = [
     "//third_party/webrtc/base:rtc_base",
@@ -31,6 +76,7 @@ source_set("ios_core") {
 
   deps = [
     "//base",
+    "//remoting/protocol",
   ]
 
   libs = [
@@ -40,4 +86,28 @@ source_set("ios_core") {
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("ios_core_unit_tests") {
+  testonly = true
+
+  include_dirs = [
+    "$root_gen_dir",
+    "//third_party/protobuf/src",
+  ]
+
+  sources = [
+    #    "host_refresh_unittest.mm",
+    #    "host_refresh_unittest_helper.h",
+    "key_input_unittest.mm",
+  ]
+
+  deps = [
+    ":ios_core",
+    "//testing/gtest",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  data = []
 }

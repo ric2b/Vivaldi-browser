@@ -153,9 +153,9 @@ String AXListBoxOption::textAlternative(bool recursive,
   nameFrom = AXNameFromContents;
   textAlternative = toHTMLOptionElement(getNode())->displayLabel();
   if (nameSources) {
-    nameSources->append(NameSource(foundTextAlternative));
-    nameSources->last().type = nameFrom;
-    nameSources->last().text = textAlternative;
+    nameSources->push_back(NameSource(foundTextAlternative));
+    nameSources->back().type = nameFrom;
+    nameSources->back().text = textAlternative;
     foundTextAlternative = true;
   }
 

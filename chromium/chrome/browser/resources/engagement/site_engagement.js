@@ -5,15 +5,13 @@
 'use strict';
 
 define('main', [
-    'mojo/public/js/connection',
     'chrome/browser/ui/webui/engagement/site_engagement.mojom',
     'content/public/renderer/frame_interfaces',
-], function(connection, siteEngagementMojom, frameInterfaces) {
+], function(siteEngagementMojom, frameInterfaces) {
   return function() {
-    var uiHandler = connection.bindHandleToProxy(
+    var uiHandler = new siteEngagementMojom.SiteEngagementUIHandlerPtr(
         frameInterfaces.getInterface(
-            siteEngagementMojom.SiteEngagementUIHandler.name),
-        siteEngagementMojom.SiteEngagementUIHandler);
+            siteEngagementMojom.SiteEngagementUIHandler.name));
 
     var engagementTableBody = $('engagement-table-body');
     var updateInterval = null;
@@ -74,6 +72,10 @@ define('main', [
       row.appendChild(originCell);
       row.appendChild(scoreCell);
       row.appendChild(engagementBarCell);
+
+      // Stores correspondent engagementBarCell to change it's length on
+      // scoreChange event.
+      scoreInput.barCellRef = engagementBar;
       return row;
     }
 
@@ -90,13 +92,17 @@ define('main', [
     }
 
     /**
-     * Sets the engagement score when a score input is changed. Also resets the
-     * update interval.
+     * Sets the engagement score when a score input is changed.
+     * Resets the length of engagement-bar-cell to match the new score.
+     * Also resets the update interval.
      * @param {string} origin The origin of the engagement score to set.
      * @param {Event} e
      */
     function handleScoreChange(origin, e) {
-      uiHandler.setSiteEngagementScoreForOrigin(origin, e.target.value);
+      var scoreInput = e.target;
+      uiHandler.setSiteEngagementScoreForOrigin(origin, scoreInput.value);
+      scoreInput.barCellRef.style.width = (scoreInput.value * 4) + 'px';
+      scoreInput.blur();
       enableAutoupdate();
     }
 

@@ -13,6 +13,7 @@ import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.chromium.base.VisibleForTesting;
@@ -119,16 +120,7 @@ public class ConfirmImportSyncDataDialog extends DialogFragment
         View v = inflater.inflate(R.layout.confirm_import_sync_data, null);
 
         TextView prompt = (TextView) v.findViewById(R.id.sync_import_data_prompt);
-
-        if (importSyncType == ImportSyncType.SWITCHING_SYNC_ACCOUNTS) {
-            prompt.setText(getActivity().getString(
-                    R.string.sync_import_data_prompt_switching_accounts,
-                    newAccountName, oldAccountName));
-        } else {
-            prompt.setText(getActivity().getString(
-                    R.string.sync_import_data_prompt_existing_data,
-                    newAccountName, oldAccountName));
-        }
+        prompt.setText(getActivity().getString(R.string.sync_import_data_prompt, oldAccountName));
 
         mConfirmImportOption = (RadioButtonWithDescription)
                 v.findViewById(R.id.sync_confirm_import_choice);
@@ -137,11 +129,14 @@ public class ConfirmImportSyncDataDialog extends DialogFragment
 
         mConfirmImportOption.setDescriptionText(getActivity().getString(
                 R.string.sync_import_existing_data_subtext, newAccountName));
-        mKeepSeparateOption.setDescriptionText(getActivity().getString(
-                (importSyncType == ImportSyncType.SWITCHING_SYNC_ACCOUNTS
-                        ? R.string.sync_keep_existing_data_separate_subtext_switching_accounts
-                        : R.string.sync_keep_existing_data_separate_subtext_existing_data),
-                newAccountName, oldAccountName));
+        if (importSyncType == ImportSyncType.SWITCHING_SYNC_ACCOUNTS) {
+            mKeepSeparateOption.setDescriptionText(getActivity().getString(
+                    R.string.sync_keep_existing_data_separate_subtext_switching_accounts,
+                    oldAccountName));
+        } else {
+            mKeepSeparateOption.setDescriptionText(getActivity().getString(
+                    R.string.sync_keep_existing_data_separate_subtext_existing_data));
+        }
 
         List<RadioButtonWithDescription> radioGroup =
                 Arrays.asList(mConfirmImportOption, mKeepSeparateOption);
@@ -165,8 +160,15 @@ public class ConfirmImportSyncDataDialog extends DialogFragment
             }
         }
 
+        if (importSyncType == ImportSyncType.SWITCHING_SYNC_ACCOUNTS) {
+            // Re-order the buttons so that Import Data is last and Don't Import (the default) is
+            // at the top.
+            LinearLayout layout = (LinearLayout) v.findViewById(R.id.sync_import_data_content);
+            layout.removeView(mConfirmImportOption);
+            layout.addView(mConfirmImportOption);
+        }
+
         return new AlertDialog.Builder(getActivity(), R.style.AlertDialogTheme)
-                .setTitle(R.string.sync_import_data_title)
                 .setPositiveButton(R.string.continue_button, this)
                 .setNegativeButton(R.string.cancel, this)
                 .setView(v)

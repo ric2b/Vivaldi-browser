@@ -65,7 +65,7 @@ void AXTableColumn::headerObjectsForColumn(AXObjectVector& headers) {
   if (toAXTable(m_parent)->isAriaTable()) {
     for (const auto& cell : children()) {
       if (cell->roleValue() == ColumnHeaderRole)
-        headers.append(cell);
+        headers.push_back(cell);
     }
     return;
   }
@@ -92,7 +92,7 @@ void AXTableColumn::headerObjectsForColumn(AXObjectVector& headers) {
         continue;
 
       if (toAXTableCell(cell)->scanToDecideHeaderRole() == ColumnHeaderRole)
-        headers.append(cell);
+        headers.push_back(cell);
     }
   }
 }
@@ -137,10 +137,10 @@ void AXTableColumn::addChildren() {
       continue;
 
     // make sure the last one isn't the same as this one (rowspan cells)
-    if (m_children.size() > 0 && m_children.last() == cell)
+    if (m_children.size() > 0 && m_children.back() == cell)
       continue;
 
-    m_children.append(cell);
+    m_children.push_back(cell);
   }
 }
 

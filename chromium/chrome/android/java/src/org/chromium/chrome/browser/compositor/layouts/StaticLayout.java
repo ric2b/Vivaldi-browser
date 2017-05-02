@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.compositor.layouts;
 
 import android.content.Context;
-import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Handler;
 
 import org.chromium.chrome.R;
@@ -83,8 +83,8 @@ public class StaticLayout extends Layout {
     }
 
     @Override
-    public int getSizingFlags() {
-        return SizingFlags.HELPER_SUPPORTS_FULLSCREEN;
+    public ViewportMode getViewportMode() {
+        return ViewportMode.DYNAMIC_BROWSER_CONTROLS;
     }
 
     /**
@@ -219,7 +219,7 @@ public class StaticLayout extends Layout {
     }
 
     @Override
-    protected void updateSceneLayer(Rect viewport, Rect contentViewport,
+    protected void updateSceneLayer(RectF viewport, RectF contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
             ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
         super.updateSceneLayer(viewport, contentViewport, layerTitleCache, tabContentManager,
@@ -233,8 +233,8 @@ public class StaticLayout extends Layout {
         LayoutTab layoutTab = tabs[0];
         final float dpToPx = getContext().getResources().getDisplayMetrics().density;
 
-        mSceneLayer.update(dpToPx, contentViewport, layerTitleCache, tabContentManager,
-                fullscreenManager, layoutTab);
+        mSceneLayer.update(
+                dpToPx, layerTitleCache, tabContentManager, fullscreenManager, layoutTab);
 
         // TODO(dtrainor): Find the best way to properly track this metric for cold starts.
         // We should probably erase the thumbnail when we select a tab that we need to restore.

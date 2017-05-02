@@ -6,7 +6,7 @@ package org.chromium.content.browser.input;
 
 import android.annotation.TargetApi;
 import android.os.Build;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.view.inputmethod.CursorAnchorInfo;
 import android.view.inputmethod.InputConnection;
 
@@ -21,8 +21,6 @@ import java.util.concurrent.Callable;
 
 /**
  * Integration tests for text input for Android L (or above) features.
- * Note this inherits from ImeTest, so we run each test case twice, once with ImeThread feature and
- * once without it.
  */
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
@@ -81,8 +79,7 @@ public class ImeLollipopTest extends ImeTest {
         });
     }
 
-    private void waitForUpdateCursorAnchorInfoComposingText(final String expected)
-            throws InterruptedException {
+    private void waitForUpdateCursorAnchorInfoComposingText(final String expected) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {

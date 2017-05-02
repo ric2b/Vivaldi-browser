@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_error_controller.h"
@@ -17,8 +18,8 @@
 #include "net/base/network_change_notifier.h"
 #endif
 
-namespace content_settings {
-class CookieSettings;
+namespace net {
+class URLRequestContext;
 }
 
 class Profile;
@@ -102,6 +103,7 @@ class ChromeSigninClient
 #endif
 
   void AfterCredentialsCopied() override;
+  int number_of_request_context_pointer_changes() const override;
 
  protected:
   virtual void ShowUserManager(const base::FilePath& profile_path);
@@ -112,6 +114,8 @@ class ChromeSigninClient
   void OnCloseBrowsersSuccess(const base::Callback<void()>& sign_out,
                               const base::FilePath& profile_path);
   void OnCloseBrowsersAborted(const base::FilePath& profile_path);
+  void RequestContextPointerReply(net::URLRequestContext* pointer);
+
   Profile* profile_;
 
   SigninErrorController* signin_error_controller_;
@@ -124,6 +128,12 @@ class ChromeSigninClient
 
   std::unique_ptr<gaia::GaiaOAuthClient> oauth_client_;
   std::unique_ptr<OAuth2TokenService::Request> oauth_request_;
+
+  // These members are used to debug channel id binding problems in chrome.
+  void* request_context_pointer_;
+  int number_of_request_context_pointer_changes_;
+
+  base::WeakPtrFactory<ChromeSigninClient> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeSigninClient);
 };

@@ -25,6 +25,7 @@
 #include "printing/features/features.h"
 #include "printing/print_job_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebRange.h"
@@ -339,14 +340,15 @@ TEST_F(MAYBE_PrintWebViewHelperTest, AllowUserOriginatedPrinting) {
 
   gfx::Rect bounds = GetElementBounds("print");
   EXPECT_FALSE(bounds.IsEmpty());
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   mouse_event.button = blink::WebMouseEvent::Button::Left;
   mouse_event.x = bounds.CenterPoint().x();
   mouse_event.y = bounds.CenterPoint().y();
   mouse_event.clickCount = 1;
   SendWebMouseEvent(mouse_event);
-  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.setType(blink::WebInputEvent::MouseUp);
   SendWebMouseEvent(mouse_event);
   ProcessPendingMessages();
 
@@ -645,14 +647,15 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, PrintWithJavaScript) {
 
   gfx::Rect bounds = GetElementBounds("print");
   EXPECT_FALSE(bounds.IsEmpty());
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   mouse_event.button = blink::WebMouseEvent::Button::Left;
   mouse_event.x = bounds.CenterPoint().x();
   mouse_event.y = bounds.CenterPoint().y();
   mouse_event.clickCount = 1;
   SendWebMouseEvent(mouse_event);
-  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.setType(blink::WebInputEvent::MouseUp);
   SendWebMouseEvent(mouse_event);
 
   VerifyPreviewRequest(true);

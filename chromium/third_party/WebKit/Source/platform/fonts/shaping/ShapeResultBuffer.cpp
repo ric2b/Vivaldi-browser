@@ -17,15 +17,30 @@ namespace blink {
 
 namespace {
 
+inline void addIsSkipInkException(GlyphBuffer* glyphBuffer,
+                                  const TextRun& run,
+                                  unsigned characterIndex) {
+  // We want to skip descenders in general, but it is undesirable renderings for
+  // CJK characters.
+  DCHECK(!run.is8Bit()) << "8Bit() is always false, better to avoid to call";
+  UChar32 baseCharacter = run.codepointAt(characterIndex);
+  glyphBuffer->addIsSkipInkException(
+      Character::isCJKIdeographOrSymbol(baseCharacter));
+}
+
 inline void addGlyphToBuffer(GlyphBuffer* glyphBuffer,
                              float advance,
                              hb_direction_t direction,
                              const SimpleFontData* fontData,
-                             const HarfBuzzRunGlyphData& glyphData) {
+                             const HarfBuzzRunGlyphData& glyphData,
+                             const TextRun& run,
+                             unsigned characterIndex) {
   FloatPoint startOffset = HB_DIRECTION_IS_HORIZONTAL(direction)
                                ? FloatPoint(advance, 0)
                                : FloatPoint(0, advance);
   glyphBuffer->add(glyphData.glyph, fontData, startOffset + glyphData.offset);
+  if (glyphBuffer->hasSkipInkExceptions())
+    addIsSkipInkException(glyphBuffer, run, characterIndex);
 }
 
 inline void addEmphasisMark(GlyphBuffer* buffer,
@@ -78,6 +93,7 @@ inline unsigned countGraphemesInCluster(const UChar* str,
 template <TextDirection direction>
 float ShapeResultBuffer::fillGlyphBufferForRun(GlyphBuffer* glyphBuffer,
                                                const ShapeResult::RunInfo* run,
+                                               const TextRun& textRun,
                                                float initialAdvance,
                                                unsigned from,
                                                unsigned to,
@@ -90,13 +106,16 @@ float ShapeResultBuffer::fillGlyphBufferForRun(GlyphBuffer* glyphBuffer,
     const HarfBuzzRunGlyphData& glyphData = run->m_glyphData[i];
     uint16_t currentCharacterIndex =
         run->m_startIndex + glyphData.characterIndex + runOffset;
-    if ((direction == RTL && currentCharacterIndex >= to) ||
-        (direction == LTR && currentCharacterIndex < from)) {
+    if ((direction == TextDirection::kRtl && currentCharacterIndex >= to) ||
+        (direction == TextDirection::kLtr && currentCharacterIndex < from)) {
       advanceSoFar += glyphData.advance;
-    } else if ((direction == RTL && currentCharacterIndex >= from) ||
-               (direction == LTR && currentCharacterIndex < to)) {
+    } else if ((direction == TextDirection::kRtl &&
+                currentCharacterIndex >= from) ||
+               (direction == TextDirection::kLtr &&
+                currentCharacterIndex < to)) {
       addGlyphToBuffer(glyphBuffer, advanceSoFar, run->m_direction,
-                       run->m_fontData.get(), glyphData);
+                       run->m_fontData.get(), glyphData, textRun,
+                       currentCharacterIndex);
       advanceSoFar += glyphData.advance;
     }
   }
@@ -131,8 +150,9 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasisRun(
   // linearly split the sum of corresponding glyph advances by the number of
   // grapheme clusters in order to find positions for emphasis mark drawing.
   uint16_t clusterStart = static_cast<uint16_t>(
-      direction == RTL ? run->m_startIndex + run->m_numCharacters + runOffset
-                       : run->glyphToCharacterIndex(0) + runOffset);
+      direction == TextDirection::kRtl
+          ? run->m_startIndex + run->m_numCharacters + runOffset
+          : run->glyphToCharacterIndex(0) + runOffset);
 
   float advanceSoFar = initialAdvance;
   const unsigned numGlyphs = run->m_glyphData.size();
@@ -145,10 +165,10 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasisRun(
         isRunEnd || (run->glyphToCharacterIndex(i + 1) + runOffset !=
                      currentCharacterIndex);
 
-    if ((direction == RTL && currentCharacterIndex >= to) ||
-        (direction != RTL && currentCharacterIndex < from)) {
+    if ((direction == TextDirection::kRtl && currentCharacterIndex >= to) ||
+        (direction != TextDirection::kRtl && currentCharacterIndex < from)) {
       advanceSoFar += glyphData.advance;
-      direction == RTL ? --clusterStart : ++clusterStart;
+      direction == TextDirection::kRtl ? --clusterStart : ++clusterStart;
       continue;
     }
 
@@ -163,7 +183,7 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasisRun(
       advanceSoFar += glyphAdvanceX;
     } else if (isClusterEnd) {
       uint16_t clusterEnd;
-      if (direction == RTL)
+      if (direction == TextDirection::kRtl)
         clusterEnd = currentCharacterIndex;
       else
         clusterEnd = static_cast<uint16_t>(
@@ -194,13 +214,14 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasisRun(
 
 float ShapeResultBuffer::fillFastHorizontalGlyphBuffer(
     GlyphBuffer* glyphBuffer,
-    TextDirection dir) const {
+    const TextRun& textRun) const {
   ASSERT(!hasVerticalOffsets());
 
   float advance = 0;
 
+  unsigned characterIndex = 0;
   for (unsigned i = 0; i < m_results.size(); ++i) {
-    const auto& wordResult = isLeftToRightDirection(dir)
+    const auto& wordResult = isLeftToRightDirection(textRun.direction())
                                  ? m_results[i]
                                  : m_results[m_results.size() - 1 - i];
     ASSERT(!wordResult->hasVerticalOffsets());
@@ -214,9 +235,15 @@ float ShapeResultBuffer::fillFastHorizontalGlyphBuffer(
 
         glyphBuffer->add(glyphData.glyph, run->m_fontData.get(),
                          advance + glyphData.offset.width());
+        if (glyphBuffer->hasSkipInkExceptions()) {
+          addIsSkipInkException(glyphBuffer, textRun,
+                                characterIndex + glyphData.characterIndex);
+        }
+
         advance += glyphData.advance;
       }
     }
+    characterIndex += wordResult->m_numCharacters;
   }
 
   ASSERT(!glyphBuffer->hasVerticalOffsets());
@@ -230,7 +257,7 @@ float ShapeResultBuffer::fillGlyphBuffer(GlyphBuffer* glyphBuffer,
                                          unsigned to) const {
   // Fast path: full run with no vertical offsets
   if (!from && to == textRun.length() && !hasVerticalOffsets())
-    return fillFastHorizontalGlyphBuffer(glyphBuffer, textRun.direction());
+    return fillFastHorizontalGlyphBuffer(glyphBuffer, textRun);
 
   float advance = 0;
 
@@ -240,9 +267,9 @@ float ShapeResultBuffer::fillGlyphBuffer(GlyphBuffer* glyphBuffer,
       unsigned resolvedIndex = m_results.size() - 1 - j;
       const RefPtr<const ShapeResult>& wordResult = m_results[resolvedIndex];
       for (unsigned i = 0; i < wordResult->m_runs.size(); i++) {
-        advance += fillGlyphBufferForRun<RTL>(
-            glyphBuffer, wordResult->m_runs[i].get(), advance, from, to,
-            wordOffset - wordResult->numCharacters());
+        advance += fillGlyphBufferForRun<TextDirection::kRtl>(
+            glyphBuffer, wordResult->m_runs[i].get(), textRun, advance, from,
+            to, wordOffset - wordResult->numCharacters());
       }
       wordOffset -= wordResult->numCharacters();
     }
@@ -251,9 +278,9 @@ float ShapeResultBuffer::fillGlyphBuffer(GlyphBuffer* glyphBuffer,
     for (unsigned j = 0; j < m_results.size(); j++) {
       const RefPtr<const ShapeResult>& wordResult = m_results[j];
       for (unsigned i = 0; i < wordResult->m_runs.size(); i++) {
-        advance +=
-            fillGlyphBufferForRun<LTR>(glyphBuffer, wordResult->m_runs[i].get(),
-                                       advance, from, to, wordOffset);
+        advance += fillGlyphBufferForRun<TextDirection::kLtr>(
+            glyphBuffer, wordResult->m_runs[i].get(), textRun, advance, from,
+            to, wordOffset);
       }
       wordOffset += wordResult->numCharacters();
     }
@@ -297,7 +324,7 @@ CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
   bool foundFromX = false;
   bool foundToX = false;
 
-  if (direction == RTL)
+  if (direction == TextDirection::kRtl)
     currentX = totalWidth;
 
   // The absoluteFrom and absoluteTo arguments represent the start/end offset
@@ -309,7 +336,7 @@ CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
   unsigned totalNumCharacters = 0;
   for (unsigned j = 0; j < m_results.size(); j++) {
     const RefPtr<const ShapeResult> result = m_results[j];
-    if (direction == RTL) {
+    if (direction == TextDirection::kRtl) {
       // Convert logical offsets to visual offsets, because results are in
       // logical order while runs are in visual order.
       if (!foundFromX && from >= 0 &&
@@ -323,7 +350,7 @@ CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
     for (unsigned i = 0; i < result->m_runs.size(); i++) {
       if (!result->m_runs[i])
         continue;
-      ASSERT((direction == RTL) == result->m_runs[i]->rtl());
+      DCHECK_EQ(direction == TextDirection::kRtl, result->m_runs[i]->rtl());
       int numCharacters = result->m_runs[i]->m_numCharacters;
       if (!foundFromX && from >= 0 && from < numCharacters) {
         fromX =
@@ -346,24 +373,24 @@ CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
         break;
       currentX += result->m_runs[i]->m_width;
     }
-    if (direction == RTL)
+    if (direction == TextDirection::kRtl)
       currentX -= result->width();
     totalNumCharacters += result->numCharacters();
   }
 
   // The position in question might be just after the text.
   if (!foundFromX && absoluteFrom == totalNumCharacters) {
-    fromX = direction == RTL ? 0 : totalWidth;
+    fromX = direction == TextDirection::kRtl ? 0 : totalWidth;
     foundFromX = true;
   }
   if (!foundToX && absoluteTo == totalNumCharacters) {
-    toX = direction == RTL ? 0 : totalWidth;
+    toX = direction == TextDirection::kRtl ? 0 : totalWidth;
     foundToX = true;
   }
   if (!foundFromX)
     fromX = 0;
   if (!foundToX)
-    toX = direction == RTL ? 0 : totalWidth;
+    toX = direction == TextDirection::kRtl ? 0 : totalWidth;
 
   // None of our runs is part of the selection, possibly invalid arguments.
   if (!foundToX && !foundFromX)
@@ -388,9 +415,9 @@ void ShapeResultBuffer::addRunInfoRanges(const ShapeResult::RunInfo& runInfo,
 
     // To match getCharacterRange we flip ranges to ensure start <= end.
     if (end < start)
-      ranges.append(CharacterRange(end, start));
+      ranges.push_back(CharacterRange(end, start));
     else
-      ranges.append(CharacterRange(start, end));
+      ranges.push_back(CharacterRange(start, end));
   }
 }
 
@@ -398,17 +425,18 @@ Vector<CharacterRange> ShapeResultBuffer::individualCharacterRanges(
     TextDirection direction,
     float totalWidth) const {
   Vector<CharacterRange> ranges;
-  float currentX = direction == RTL ? totalWidth : 0;
+  float currentX = direction == TextDirection::kRtl ? totalWidth : 0;
   for (const RefPtr<const ShapeResult> result : m_results) {
-    if (direction == RTL)
+    if (direction == TextDirection::kRtl)
       currentX -= result->width();
     unsigned runCount = result->m_runs.size();
     for (unsigned index = 0; index < runCount; index++) {
-      unsigned runIndex = direction == RTL ? runCount - 1 - index : index;
+      unsigned runIndex =
+          direction == TextDirection::kRtl ? runCount - 1 - index : index;
       addRunInfoRanges(*result->m_runs[runIndex], currentX, ranges);
       currentX += result->m_runs[runIndex]->m_width;
     }
-    if (direction == RTL)
+    if (direction == TextDirection::kRtl)
       currentX -= result->width();
   }
   return ranges;

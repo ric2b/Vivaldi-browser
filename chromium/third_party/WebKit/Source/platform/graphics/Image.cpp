@@ -27,7 +27,6 @@
 #include "platform/graphics/Image.h"
 
 #include "platform/Length.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/PlatformInstrumentation.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
@@ -37,7 +36,8 @@
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -88,20 +88,20 @@ Image::SizeAvailability Image::setData(PassRefPtr<SharedBuffer> data,
   return dataChanged(allDataReceived);
 }
 
-void Image::drawTiled(GraphicsContext& ctxt,
-                      const FloatRect& destRect,
-                      const FloatPoint& srcPoint,
-                      const FloatSize& scaledTileSize,
-                      SkBlendMode op,
-                      const FloatSize& repeatSpacing) {
-  FloatSize intrinsicTileSize = FloatSize(size());
+void Image::drawTiledBackground(GraphicsContext& ctxt,
+                                const FloatRect& destRect,
+                                const FloatPoint& srcPoint,
+                                const FloatSize& scaledTileSize,
+                                SkBlendMode op,
+                                const FloatSize& repeatSpacing) {
+  FloatSize intrinsicTileSize(size());
   if (hasRelativeSize()) {
     intrinsicTileSize.setWidth(scaledTileSize.width());
     intrinsicTileSize.setHeight(scaledTileSize.height());
   }
 
-  FloatSize scale(scaledTileSize.width() / intrinsicTileSize.width(),
-                  scaledTileSize.height() / intrinsicTileSize.height());
+  const FloatSize scale(scaledTileSize.width() / intrinsicTileSize.width(),
+                        scaledTileSize.height() / intrinsicTileSize.height());
 
   const FloatRect oneTileRect = computeTileContaining(
       destRect.location(), scaledTileSize, srcPoint, repeatSpacing);
@@ -123,14 +123,13 @@ void Image::drawTiled(GraphicsContext& ctxt,
   startAnimation();
 }
 
-// TODO(cavalcantii): see crbug.com/662504.
-void Image::drawTiled(GraphicsContext& ctxt,
-                      const FloatRect& dstRect,
-                      const FloatRect& srcRect,
-                      const FloatSize& providedTileScaleFactor,
-                      TileRule hRule,
-                      TileRule vRule,
-                      SkBlendMode op) {
+void Image::drawTiledBorder(GraphicsContext& ctxt,
+                            const FloatRect& dstRect,
+                            const FloatRect& srcRect,
+                            const FloatSize& providedTileScaleFactor,
+                            TileRule hRule,
+                            TileRule vRule,
+                            SkBlendMode op) {
   // TODO(cavalcantii): see crbug.com/662513.
   FloatSize tileScaleFactor = providedTileScaleFactor;
   if (vRule == RoundTile) {
@@ -226,10 +225,11 @@ namespace {
 sk_sp<SkShader> createPatternShader(const SkImage* image,
                                     const SkMatrix& shaderMatrix,
                                     const SkPaint& paint,
-                                    const FloatSize& spacing) {
+                                    const FloatSize& spacing,
+                                    SkShader::TileMode tmx,
+                                    SkShader::TileMode tmy) {
   if (spacing.isZero())
-    return image->makeShader(SkShader::kRepeat_TileMode,
-                             SkShader::kRepeat_TileMode, &shaderMatrix);
+    return image->makeShader(tmx, tmy, &shaderMatrix);
 
   // Arbitrary tiling is currently only supported for SkPictureShader, so we use
   // that instead of a plain bitmap shader to implement spacing.
@@ -240,9 +240,17 @@ sk_sp<SkShader> createPatternShader(const SkImage* image,
   SkCanvas* canvas = recorder.beginRecording(tileRect);
   canvas->drawImage(image, 0, 0, &paint);
 
-  return SkShader::MakePictureShader(
-      recorder.finishRecordingAsPicture(), SkShader::kRepeat_TileMode,
-      SkShader::kRepeat_TileMode, &shaderMatrix, nullptr);
+  return SkShader::MakePictureShader(recorder.finishRecordingAsPicture(), tmx,
+                                     tmy, &shaderMatrix, nullptr);
+}
+
+SkShader::TileMode computeTileMode(float left,
+                                   float right,
+                                   float min,
+                                   float max) {
+  DCHECK(left < right);
+  return left >= min && right <= max ? SkShader::kClamp_TileMode
+                                     : SkShader::kRepeat_TileMode;
 }
 
 }  // anonymous namespace
@@ -256,7 +264,7 @@ void Image::drawPattern(GraphicsContext& context,
                         const FloatSize& repeatSpacing) {
   TRACE_EVENT0("skia", "Image::drawPattern");
 
-  sk_sp<SkImage> image = imageForCurrentFrame();
+  sk_sp<SkImage> image = imageForCurrentFrame(context.getColorBehavior());
   if (!image)
     return;
 
@@ -287,6 +295,14 @@ void Image::drawPattern(GraphicsContext& context,
   if (!image)
     return;
 
+  const FloatSize tileSize(
+      image->width() * scale.width() + repeatSpacing.width(),
+      image->height() * scale.height() + repeatSpacing.height());
+  const auto tmx = computeTileMode(destRect.x(), destRect.maxX(), adjustedX,
+                                   adjustedX + tileSize.width());
+  const auto tmy = computeTileMode(destRect.y(), destRect.maxY(), adjustedY,
+                                   adjustedY + tileSize.height());
+
   {
     SkPaint paint = context.fillPaint();
     paint.setColor(SK_ColorBLACK);
@@ -294,10 +310,11 @@ void Image::drawPattern(GraphicsContext& context,
     paint.setFilterQuality(
         context.computeFilterQuality(this, destRect, normSrcRect));
     paint.setAntiAlias(context.shouldAntialias());
-    paint.setShader(createPatternShader(
-        image.get(), localMatrix, paint,
-        FloatSize(repeatSpacing.width() / scale.width(),
-                  repeatSpacing.height() / scale.height())));
+    paint.setShader(
+        createPatternShader(image.get(), localMatrix, paint,
+                            FloatSize(repeatSpacing.width() / scale.width(),
+                                      repeatSpacing.height() / scale.height()),
+                            tmx, tmy));
     context.drawRect(destRect, paint);
   }
 
@@ -311,15 +328,12 @@ PassRefPtr<Image> Image::imageForDefaultFrame() {
   return image.release();
 }
 
-bool Image::isTextureBacked() {
-  sk_sp<SkImage> image = imageForCurrentFrame();
-  return image ? image->isTextureBacked() : false;
-}
-
-bool Image::applyShader(SkPaint& paint, const SkMatrix& localMatrix) {
+bool Image::applyShader(SkPaint& paint,
+                        const SkMatrix& localMatrix,
+                        const ColorBehavior& colorBehavior) {
   // Default shader impl: attempt to build a shader based on the current frame
   // SkImage.
-  sk_sp<SkImage> image = imageForCurrentFrame();
+  sk_sp<SkImage> image = imageForCurrentFrame(colorBehavior);
   if (!image)
     return false;
 

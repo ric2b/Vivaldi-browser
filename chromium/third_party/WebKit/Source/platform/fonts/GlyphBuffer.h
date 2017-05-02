@@ -96,19 +96,19 @@ class GlyphBuffer {
     // cannot mix x-only/xy offsets
     ASSERT(!hasVerticalOffsets());
 
-    m_fontData.append(font);
-    m_glyphs.append(glyph);
-    m_offsets.append(x);
+    m_fontData.push_back(font);
+    m_glyphs.push_back(glyph);
+    m_offsets.push_back(x);
   }
 
   void add(Glyph glyph, const SimpleFontData* font, const FloatPoint& offset) {
     // cannot mix x-only/xy offsets
     ASSERT(isEmpty() || hasVerticalOffsets());
 
-    m_fontData.append(font);
-    m_glyphs.append(glyph);
-    m_offsets.append(offset.x());
-    m_offsets.append(offset.y());
+    m_fontData.push_back(font);
+    m_glyphs.push_back(glyph);
+    m_offsets.push_back(offset.x());
+    m_offsets.push_back(offset.y());
   }
 
   void reverseForSimpleRTL(float afterOffset, float totalWidth) {
@@ -136,9 +136,28 @@ class GlyphBuffer {
     SECURITY_DCHECK(!m_offsets.isEmpty());
     for (unsigned i = 0; i + 1 < m_offsets.size(); ++i)
       m_offsets[i] = totalWidth - m_offsets[i + 1];
-    m_offsets.last() = totalWidth - afterOffset;
+    m_offsets.back() = totalWidth - afterOffset;
 
     m_offsets.reverse();
+  }
+
+  void saveSkipInkExceptions() {
+    m_skipInkExceptions = WTF::makeUnique<Vector<bool, 2048>>();
+  }
+
+  bool hasSkipInkExceptions() const { return !!m_skipInkExceptions; }
+
+  bool isSkipInkException(unsigned index) const {
+    if (!m_skipInkExceptions)
+      return false;
+    DCHECK_EQ(m_skipInkExceptions->size(), m_offsets.size());
+    return (*m_skipInkExceptions)[index];
+  }
+
+  void addIsSkipInkException(bool value) {
+    DCHECK(hasSkipInkExceptions());
+    DCHECK_EQ(m_skipInkExceptions->size(), m_offsets.size() - 1);
+    m_skipInkExceptions->push_back(value);
   }
 
  protected:
@@ -149,6 +168,10 @@ class GlyphBuffer {
   // (depending on the buffer-wide positioning mode). This matches the
   // glyph positioning format used by Skia.
   Vector<float, 2048> m_offsets;
+
+  // Flag vector of identical size to m_offset, true when glyph is to be
+  // exempted from ink skipping, false otherwise.
+  std::unique_ptr<Vector<bool, 2048>> m_skipInkExceptions;
 };
 
 }  // namespace blink

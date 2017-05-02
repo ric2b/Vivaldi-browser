@@ -23,6 +23,7 @@ namespace media {
 
 namespace {
 const float kTestVolume = 0.25;
+const int kSampleRate = 48000;
 
 class WebAudioSourceProviderImplUnderTest : public WebAudioSourceProviderImpl {
  public:
@@ -64,10 +65,10 @@ class WebAudioSourceProviderImplTest
   WebAudioSourceProviderImplTest()
       : params_(AudioParameters::AUDIO_PCM_LINEAR,
                 CHANNEL_LAYOUT_STEREO,
-                48000,
+                kSampleRate,
                 16,
                 64),
-        fake_callback_(0.1),
+        fake_callback_(0.1, kSampleRate),
         mock_sink_(CreateWaspMockSink(GetParam())),
         wasp_impl_(new WebAudioSourceProviderImplUnderTest(mock_sink_)),
         expected_sink_(GetParam() == WaspSinkStatus::WASP_SINK_OK
@@ -259,7 +260,7 @@ TEST_P(WebAudioSourceProviderImplTest, ProvideInput) {
   bus2->Zero();
   wasp_impl_->provideInput(audio_data, params_.frames_per_buffer());
   ASSERT_TRUE(CompareBusses(bus1.get(), bus2.get()));
-  ASSERT_EQ(fake_callback_.last_frames_delayed(), -1);
+  ASSERT_EQ(fake_callback_.last_delay(), base::TimeDelta::Max());
 
   wasp_impl_->Start();
 
@@ -267,7 +268,7 @@ TEST_P(WebAudioSourceProviderImplTest, ProvideInput) {
   bus1->channel(0)[0] = 1;
   wasp_impl_->provideInput(audio_data, params_.frames_per_buffer());
   ASSERT_TRUE(CompareBusses(bus1.get(), bus2.get()));
-  ASSERT_EQ(fake_callback_.last_frames_delayed(), -1);
+  ASSERT_EQ(fake_callback_.last_delay(), base::TimeDelta::Max());
 
   wasp_impl_->Play();
 
@@ -277,7 +278,8 @@ TEST_P(WebAudioSourceProviderImplTest, ProvideInput) {
 
   // Ensure volume adjustment is working.
   fake_callback_.reset();
-  fake_callback_.Render(bus2.get(), 0, 0);
+  fake_callback_.Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                        bus2.get());
   bus2->Scale(kTestVolume);
 
   fake_callback_.reset();
@@ -296,9 +298,11 @@ TEST_P(WebAudioSourceProviderImplTest, ProvideInput) {
   // configuring the fake callback to return half the data.  After these calls
   // bus1 is full of junk data, and bus2 is partially filled.
   wasp_impl_->SetVolume(1);
-  fake_callback_.Render(bus1.get(), 0, 0);
+  fake_callback_.Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                        bus1.get());
   fake_callback_.reset();
-  fake_callback_.Render(bus2.get(), 0, 0);
+  fake_callback_.Render(base::TimeDelta(), base::TimeTicks::Now(), 0,
+                        bus2.get());
   bus2->ZeroFramesPartial(bus2->frames() / 2,
                           bus2->frames() - bus2->frames() / 2);
   fake_callback_.reset();

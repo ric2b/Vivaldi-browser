@@ -3,13 +3,19 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<merge xmlns:android="http://schemas.android.com/apk/res/android">
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:chrome="http://schemas.android.com/apk/res-auto" >
 
+    <!-- Widget style adapted from the UX spec:
+         https://bugs.chromium.org/p/chromium/issues/detail?id=658246&desc=2#c18
+    -->
     <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/drawer_margin_large"
             android:layout_marginEnd="@dimen/drawer_margin_large"
+            android:paddingTop="26dp"
+            android:paddingBottom="24dp"
             android:orientation="vertical" >
 
         <TextView
@@ -20,14 +26,16 @@
                 android:textColor="@color/light_active_color"
                 android:textSize="20sp" />
 
-        <!-- The widget ends up claiming 32dp of space, vertically. -->
-        <ProgressBar
+        <!-- The progress bar uses 32dp of space, vertically, including spacing. -->
+        <org.chromium.chrome.browser.widget.MaterialProgressBar
                 android:id="@+id/space_bar"
-                style="@style/MaterialProgressBar"
                 android:layout_width="match_parent"
                 android:layout_height="4dp"
                 android:layout_marginTop="14dp"
-                android:layout_marginBottom="14dp" />
+                android:layout_marginBottom="14dp"
+                chrome:colorBackground="@color/google_grey_400"
+                chrome:colorProgress="@color/light_active_color"
+                chrome:colorSecondaryProgress="@color/google_grey_600" />
 
         <TextView
                 android:id="@+id/size_other_apps"
@@ -35,16 +43,15 @@
                 android:layout_height="wrap_content"
                 android:singleLine="true"
                 android:textColor="@color/google_grey_600"
-                android:textSize="14sp" />
+                android:textSize="12sp" />
 
         <TextView
                 android:id="@+id/size_free"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="22dp"
                 android:singleLine="true"
-                android:textColor="@color/material_progressbar_bg"
-                android:textSize="14sp" />
+                android:textColor="@color/google_grey_400"
+                android:textSize="12sp" />
 
     </LinearLayout>
 

@@ -26,7 +26,6 @@ namespace chromeos {
 
 class LoginDisplayHost;
 class OobeUI;
-class UserManager;
 
 // Controller for the kiosk app launch process, responsible for
 // coordinating loading the kiosk profile, launching the app, and
@@ -102,6 +101,7 @@ class AppLaunchController
   // StartupAppLauncher::Delegate overrides:
   void InitializeNetwork() override;
   bool IsNetworkReady() override;
+  bool ShouldSkipAppInstallation() override;
   void OnLoadingOAuthFile() override;
   void OnInitializingTokenService() override;
   void OnInstallingApp() override;

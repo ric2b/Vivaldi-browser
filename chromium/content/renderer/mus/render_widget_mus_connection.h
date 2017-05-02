@@ -8,12 +8,12 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "cc/output/compositor_frame_sink.h"
+#include "cc/output/context_provider.h"
 #include "content/common/content_export.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
 
 namespace gpu {
-class GpuChannelHost;
 class GpuMemoryBufferManager;
 }
 
@@ -28,7 +28,8 @@ class CONTENT_EXPORT RenderWidgetMusConnection
 
   // Create a cc output surface.
   std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+      const cc::FrameSinkId& frame_sink_id,
+      scoped_refptr<cc::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
   static RenderWidgetMusConnection* Get(int routing_id);
@@ -54,16 +55,17 @@ class CONTENT_EXPORT RenderWidgetMusConnection
   void OnDidOverscroll(const ui::DidOverscrollParams& params) override;
   void OnInputEventAck(std::unique_ptr<InputEventAck> input_event_ack) override;
   void NotifyInputEventHandled(blink::WebInputEvent::Type handled_type,
+                               blink::WebInputEventResult result,
                                InputEventAckState ack_result) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
-  void UpdateTextInputState(ShowIme show_ime,
-                            ChangeSource change_source) override;
+  void ShowVirtualKeyboard() override;
+  void UpdateTextInputState() override;
   bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override;
   bool WillHandleMouseEvent(const blink::WebMouseEvent& event) override;
 
   void OnConnectionLost();
   void OnWindowInputEvent(
-      ui::ScopedWebInputEvent input_event,
+      blink::WebScopedInputEvent input_event,
       const base::Callback<void(ui::mojom::EventResult)>& ack);
 
   const int routing_id_;

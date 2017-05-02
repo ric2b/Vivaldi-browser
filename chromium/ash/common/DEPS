@@ -1,14 +1,14 @@
 include_rules = [
-  "-ash",
   "+ash/ash_export.h",
   "+ash/common",
   "+ash/public",
   "+ash/resources",
   "+ash/shared",
+  "+components/prefs",
   "+components/ui_devtools",
   "+mojo/public/cpp",
+  "+services/preferences/public",
   "+ui",
-  "-ui/aura",
 ]
 
 specific_include_rules = {

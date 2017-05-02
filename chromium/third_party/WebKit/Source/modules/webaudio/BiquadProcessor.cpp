@@ -25,6 +25,7 @@
 
 #include "modules/webaudio/BiquadDSPKernel.h"
 #include "modules/webaudio/BiquadProcessor.h"
+#include "platform/audio/AudioUtilities.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
@@ -51,7 +52,7 @@ BiquadProcessor::~BiquadProcessor() {
 }
 
 std::unique_ptr<AudioDSPKernel> BiquadProcessor::createKernel() {
-  return makeUnique<BiquadDSPKernel>(this);
+  return WTF::makeUnique<BiquadDSPKernel>(this);
 }
 
 void BiquadProcessor::checkForDirtyCoefficients() {
@@ -118,6 +119,17 @@ void BiquadProcessor::process(const AudioBus* source,
                           framesToProcess);
 }
 
+void BiquadProcessor::processOnlyAudioParams(size_t framesToProcess) {
+  DCHECK_LE(framesToProcess, AudioUtilities::kRenderQuantumFrames);
+
+  float values[AudioUtilities::kRenderQuantumFrames];
+
+  m_parameter1->calculateSampleAccurateValues(values, framesToProcess);
+  m_parameter2->calculateSampleAccurateValues(values, framesToProcess);
+  m_parameter3->calculateSampleAccurateValues(values, framesToProcess);
+  m_parameter4->calculateSampleAccurateValues(values, framesToProcess);
+}
+
 void BiquadProcessor::setType(FilterType type) {
   if (type != m_type) {
     m_type = type;
@@ -134,7 +146,7 @@ void BiquadProcessor::getFrequencyResponse(int nFrequencies,
   // thread on the main kernels.
 
   std::unique_ptr<BiquadDSPKernel> responseKernel =
-      makeUnique<BiquadDSPKernel>(this);
+      WTF::makeUnique<BiquadDSPKernel>(this);
   responseKernel->getFrequencyResponse(nFrequencies, frequencyHz, magResponse,
                                        phaseResponse);
 }

@@ -5,7 +5,7 @@
 #ifndef DOMMatrix_h
 #define DOMMatrix_h
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/DOMMatrixInit.h"
 #include "core/dom/DOMMatrixReadOnly.h"
 
@@ -19,6 +19,7 @@ class CORE_EXPORT DOMMatrix : public DOMMatrixReadOnly {
   static DOMMatrix* create(DOMMatrixReadOnly*,
                            ExceptionState& = ASSERT_NO_EXCEPTION);
   static DOMMatrix* create(const SkMatrix44&, ExceptionState&);
+  static DOMMatrix* create(const String&, ExceptionState&);
   static DOMMatrix* create(Vector<double>, ExceptionState&);
   static DOMMatrix* fromFloat32Array(DOMFloat32Array*, ExceptionState&);
   static DOMMatrix* fromFloat64Array(DOMFloat64Array*, ExceptionState&);

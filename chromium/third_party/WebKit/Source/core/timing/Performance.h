@@ -33,7 +33,7 @@
 #define Performance_h
 
 #include "core/CoreExport.h"
-#include "core/frame/DOMWindowProperty.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/frame/PerformanceMonitor.h"
 #include "core/timing/MemoryInfo.h"
 #include "core/timing/PerformanceBase.h"
@@ -46,7 +46,7 @@ class ScriptState;
 class ScriptValue;
 
 class CORE_EXPORT Performance final : public PerformanceBase,
-                                      public DOMWindowProperty,
+                                      public ContextLifecycleObserver,
                                       public PerformanceMonitor::Client {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Performance);
@@ -73,17 +73,19 @@ class CORE_EXPORT Performance final : public PerformanceBase,
  private:
   explicit Performance(LocalFrame*);
 
-  // DOMWindowProperty overrides.
-  void frameDestroyed() override;
+  // ContextLifecycleObserver overrides.
+  void contextDestroyed(ExecutionContext*) override;
 
   static std::pair<String, DOMWindow*> sanitizedAttribution(
-      const HeapHashSet<Member<Frame>>& frames,
+      ExecutionContext*,
+      bool hasMultipleContexts,
       Frame* observerFrame);
 
   // PerformanceMonitor::Client implementation.
   void reportLongTask(double startTime,
                       double endTime,
-                      const HeapHashSet<Member<Frame>>& contextFrames) override;
+                      ExecutionContext* taskContext,
+                      bool hasMultipleContexts) override;
 
   mutable Member<PerformanceNavigation> m_navigation;
   mutable Member<PerformanceTiming> m_timing;

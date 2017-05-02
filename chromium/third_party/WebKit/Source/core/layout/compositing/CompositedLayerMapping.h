@@ -117,9 +117,18 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
     return m_ancestorClippingLayer.get();
   }
 
+  GraphicsLayer* ancestorClippingMaskLayer() const {
+    return m_ancestorClippingMaskLayer.get();
+  }
+
   GraphicsLayer* foregroundLayer() const { return m_foregroundLayer.get(); }
 
   GraphicsLayer* backgroundLayer() const { return m_backgroundLayer.get(); }
+
+  GraphicsLayer* decorationOutlineLayer() const {
+    return m_decorationOutlineLayer.get();
+  }
+
   bool backgroundLayerPaintsFixedRootBackground() const {
     return m_backgroundLayerPaintsFixedRootBackground;
   }
@@ -182,7 +191,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   bool updateSquashingLayerAssignment(PaintLayer* squashedLayer,
                                       size_t nextSquashedLayerIndex);
   void removeLayerFromSquashingGraphicsLayer(const PaintLayer*);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool verifyLayerInSquashingVector(const PaintLayer*);
 #endif
 
@@ -195,10 +204,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   // GraphicsLayerClient interface
   void invalidateTargetElementForTesting() override;
-  void notifyPaint(bool isFirstPaint,
-                   bool textPainted,
-                   bool imagePainted) override;
-
   IntRect computeInterestRect(
       const GraphicsLayer*,
       const IntRect& previousInterestRect) const override;
@@ -211,7 +216,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   bool isTrackingRasterInvalidations() const override;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void verifyNotPainting() override;
 #endif
 
@@ -261,7 +266,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   GraphicsLayerUpdater::UpdateType updateTypeForChildren(
       GraphicsLayerUpdater::UpdateType) const;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void assertNeedsToUpdateGraphicsLayerBitsCleared() {
     ASSERT(m_pendingUpdateScope == GraphicsLayerUpdateNone);
   }
@@ -353,6 +358,8 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       const IntRect& clippingBox);
   void updateBackgroundLayerGeometry(
       const FloatSize& relativeCompositingBoundsSize);
+  void updateDecorationOutlineLayerGeometry(
+      const FloatSize& relativeCompositingBoundsSize);
   void updateScrollingLayerGeometry(const IntRect& localCompositingBounds);
   void updateChildClippingMaskLayerGeometry();
 
@@ -376,6 +383,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   void updateInternalHierarchy();
   void updatePaintingPhases();
   bool updateClippingLayers(bool needsAncestorClip, bool needsDescendantClip);
+  bool updateClippingLayers(bool needsAncestorClip,
+                            bool needsAncestorClippingMask,
+                            bool needsDescendantClip);
   bool updateChildTransformLayer(bool needsChildTransformLayer);
   bool updateOverflowControlsLayers(bool needsHorizontalScrollbarLayer,
                                     bool needsVerticalScrollbarLayer,
@@ -383,6 +393,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
                                     bool needsAncestorClip);
   bool updateForegroundLayer(bool needsForegroundLayer);
   bool updateBackgroundLayer(bool needsBackgroundLayer);
+  bool updateDecorationOutlineLayer(bool needsDecorationOutlineLayer);
   bool updateMaskLayer(bool needsMaskLayer);
   void updateChildClippingMaskLayer(bool needsChildClippingMaskLayer);
   bool requiresHorizontalScrollbarLayer() const {
@@ -469,10 +480,25 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       const GraphicsLayerPaintInfo&,
       const Vector<GraphicsLayerPaintInfo>& layers);
 
-  // Return true if |m_owningLayer|'s compositing ancestor is not a descendant
-  // (inclusive) of the clipping container for |m_owningLayer|.
-  bool owningLayerClippedByLayerNotAboveCompositedAncestor(
-      const PaintLayer* scrollParent);
+  // Conservatively check that a border-radius clip does not clip a child.
+  // This is a fast approximate test. Depending on the shape of the child and
+  // the size of the border radius, this method may return false when in fact
+  // the child is not clipped. We accept the approximation because most border
+  // radii are small and the outcome is used to reduce the number of layers,
+  // not influence correctness.
+  bool ancestorRoundedCornersWontClip(const LayoutObject* child,
+                                      const LayoutObject* clippingAncestor);
+
+  // Return true in |owningLayerIsClipped| iff |m_owningLayer|'s compositing
+  // ancestor is not a descendant (inclusive) of the clipping container for
+  // |m_owningLayer|. Return true in |owningLayerIsMasked| iff
+  // |owningLayerIsClipped| is true and |m_owningLayer|'s compositing ancestor
+  // is not a descendant (inclusive) of a container that applies a mask for
+  // |m_owningLayer|.
+  void owningLayerClippedOrMaskedByLayerNotAboveCompositedAncestor(
+      const PaintLayer* scrollParent,
+      bool& owningLayerIsClipped,
+      bool& owningLayerIsMasked);
 
   const PaintLayer* scrollParent();
 
@@ -492,10 +518,11 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   //      |   <-OR->
   //      |   (m_scrollingLayer + m_scrollingContentsLayer) [OPTIONAL]
   //      + m_overflowControlsAncestorClippingLayer [OPTIONAL]
-  //        + m_overflowControlsHostLayer [OPTIONAL]
-  //          + m_layerForVerticalScrollbar [OPTIONAL]
-  //          + m_layerForHorizontalScrollbar [OPTIONAL]
-  //          + m_layerForScrollCorner [OPTIONAL]
+  //      | + m_overflowControlsHostLayer [OPTIONAL]
+  //      |   + m_layerForVerticalScrollbar [OPTIONAL]
+  //      |   + m_layerForHorizontalScrollbar [OPTIONAL]
+  //      |   + m_layerForScrollCorner [OPTIONAL]
+  //      + m_decorationOutlineLayer [OPTIONAL]
   // The overflow controls may need to be repositioned in the graphics layer
   // tree by the RLC to ensure that they stack above scrolling content.
   //
@@ -520,9 +547,20 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // In this case B is clipped by another layer that doesn't happen to be its
   // ancestor: A.  So we create an ancestor clipping layer for B, [+], which
   // ensures that B is clipped as if it had been A's descendant.
+  // In addition, the m_ancestorClippingLayer will have an associated
+  // mask layer if the ancestor, A, has a border radius that requires a
+  // rounded corner clip rect. The mask is not part of the layer tree; rather
+  // it is attached to the m_ancestorClippingLayer itself.
+  //
+  // Layers that require a CSS mask also have a mask layer attached to them.
 
   // Only used if we are clipped by an ancestor which is not a stacking context.
   std::unique_ptr<GraphicsLayer> m_ancestorClippingLayer;
+
+  // Only used is there is an m_ancestorClippingLayer that also needs to apply
+  // a clipping mask (for CSS clips or border radius).
+  std::unique_ptr<GraphicsLayer> m_ancestorClippingMaskLayer;
+
   std::unique_ptr<GraphicsLayer> m_graphicsLayer;
 
   // Only used if we have clipping on a stacking context with compositing
@@ -600,6 +638,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // layer, the overflow controls can remain ignorant of ancestor clipping.
   std::unique_ptr<GraphicsLayer> m_overflowControlsAncestorClippingLayer;
 
+  // DecorationLayer which paints outline.
+  std::unique_ptr<GraphicsLayer> m_decorationOutlineLayer;
+
   // A squashing CLM has two possible squashing-related structures.
   //
   // If m_ancestorClippingLayer is present:
@@ -650,6 +691,11 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // Keep track of whether the background is painted onto the scrolling contents
   // layer for invalidations.
   unsigned m_backgroundPaintsOntoScrollingContentsLayer : 1;
+
+  // Solid color border boxes may be painted into both the scrolling contents
+  // layer and the graphics layer because the scrolling contents layer is
+  // clipped by the padding box.
+  unsigned m_backgroundPaintsOntoGraphicsLayer : 1;
 
   friend class CompositedLayerMappingTest;
 };

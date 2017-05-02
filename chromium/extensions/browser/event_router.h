@@ -30,7 +30,6 @@
 #include "url/gurl.h"
 
 class GURL;
-class PrefService;
 
 namespace content {
 class BrowserContext;
@@ -38,14 +37,12 @@ class RenderProcessHost;
 }
 
 namespace extensions {
-class ActivityLog;
 class Extension;
 class ExtensionHost;
 class ExtensionPrefs;
 class ExtensionRegistry;
 
 struct Event;
-struct EventDispatchInfo;
 struct EventListenerInfo;
 
 class EventRouter : public KeyedService,
@@ -201,6 +198,7 @@ class EventRouter : public KeyedService,
                    bool did_enqueue);
 
  private:
+  friend class EventRouterFilterTest;
   friend class EventRouterTest;
 
   // The extension and process that contains the event listener for a given

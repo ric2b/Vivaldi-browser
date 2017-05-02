@@ -26,7 +26,6 @@
 #include "core/html/HTMLTableElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
@@ -122,12 +121,12 @@ HTMLTableSectionElement* HTMLTableElement::createTHead() {
     return existingHead;
   HTMLTableSectionElement* head =
       HTMLTableSectionElement::create(theadTag, document());
-  setTHead(head, IGNORE_EXCEPTION);
+  setTHead(head, IGNORE_EXCEPTION_FOR_TESTING);
   return head;
 }
 
 void HTMLTableElement::deleteTHead() {
-  removeChild(tHead(), IGNORE_EXCEPTION);
+  removeChild(tHead(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 HTMLTableSectionElement* HTMLTableElement::createTFoot() {
@@ -135,12 +134,12 @@ HTMLTableSectionElement* HTMLTableElement::createTFoot() {
     return existingFoot;
   HTMLTableSectionElement* foot =
       HTMLTableSectionElement::create(tfootTag, document());
-  setTFoot(foot, IGNORE_EXCEPTION);
+  setTFoot(foot, IGNORE_EXCEPTION_FOR_TESTING);
   return foot;
 }
 
 void HTMLTableElement::deleteTFoot() {
-  removeChild(tFoot(), IGNORE_EXCEPTION);
+  removeChild(tFoot(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 HTMLTableSectionElement* HTMLTableElement::createTBody() {
@@ -157,12 +156,12 @@ HTMLTableCaptionElement* HTMLTableElement::createCaption() {
     return existingCaption;
   HTMLTableCaptionElement* caption =
       HTMLTableCaptionElement::create(document());
-  setCaption(caption, IGNORE_EXCEPTION);
+  setCaption(caption, IGNORE_EXCEPTION_FOR_TESTING);
   return caption;
 }
 
 void HTMLTableElement::deleteCaption() {
-  removeChild(caption(), IGNORE_EXCEPTION);
+  removeChild(caption(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 HTMLTableSectionElement* HTMLTableElement::lastBody() const {
@@ -328,8 +327,10 @@ void HTMLTableElement::collectStyleForPresentationAttribute(
       addPropertyToPresentationAttributeStyle(style, CSSPropertyVerticalAlign,
                                               value);
   } else if (name == cellspacingAttr) {
-    if (!value.isEmpty())
-      addHTMLLengthToStyle(style, CSSPropertyBorderSpacing, value);
+    if (!value.isEmpty()) {
+      addHTMLLengthToStyle(style, CSSPropertyBorderSpacing, value,
+                           DontAllowPercentageValues);
+    }
   } else if (name == alignAttr) {
     if (!value.isEmpty()) {
       if (equalIgnoringCase(value, "center")) {
@@ -385,17 +386,17 @@ bool HTMLTableElement::isPresentationAttribute(
   return HTMLElement::isPresentationAttribute(name);
 }
 
-void HTMLTableElement::parseAttribute(const QualifiedName& name,
-                                      const AtomicString& oldValue,
-                                      const AtomicString& value) {
+void HTMLTableElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
   CellBorders bordersBefore = getCellBorders();
   unsigned short oldPadding = m_padding;
 
   if (name == borderAttr) {
     // FIXME: This attribute is a mess.
-    m_borderAttr = parseBorderWidthAttribute(value);
+    m_borderAttr = parseBorderWidthAttribute(params.newValue);
   } else if (name == bordercolorAttr) {
-    m_borderColorAttr = !value.isEmpty();
+    m_borderColorAttr = !params.newValue.isEmpty();
   } else if (name == frameAttr) {
     // FIXME: This attribute is a mess.
     bool borderTop;
@@ -403,28 +404,28 @@ void HTMLTableElement::parseAttribute(const QualifiedName& name,
     bool borderBottom;
     bool borderLeft;
     m_frameAttr = getBordersFromFrameAttributeValue(
-        value, borderTop, borderRight, borderBottom, borderLeft);
+        params.newValue, borderTop, borderRight, borderBottom, borderLeft);
   } else if (name == rulesAttr) {
     m_rulesAttr = UnsetRules;
-    if (equalIgnoringCase(value, "none"))
+    if (equalIgnoringCase(params.newValue, "none"))
       m_rulesAttr = NoneRules;
-    else if (equalIgnoringCase(value, "groups"))
+    else if (equalIgnoringCase(params.newValue, "groups"))
       m_rulesAttr = GroupsRules;
-    else if (equalIgnoringCase(value, "rows"))
+    else if (equalIgnoringCase(params.newValue, "rows"))
       m_rulesAttr = RowsRules;
-    else if (equalIgnoringCase(value, "cols"))
+    else if (equalIgnoringCase(params.newValue, "cols"))
       m_rulesAttr = ColsRules;
-    else if (equalIgnoringCase(value, "all"))
+    else if (equalIgnoringCase(params.newValue, "all"))
       m_rulesAttr = AllRules;
-  } else if (name == cellpaddingAttr) {
-    if (!value.isEmpty())
-      m_padding = std::max(0, value.toInt());
+  } else if (params.name == cellpaddingAttr) {
+    if (!params.newValue.isEmpty())
+      m_padding = std::max(0, params.newValue.toInt());
     else
       m_padding = 1;
-  } else if (name == colsAttr) {
+  } else if (params.name == colsAttr) {
     // ###
   } else {
-    HTMLElement::parseAttribute(name, oldValue, value);
+    HTMLElement::parseAttribute(params);
   }
 
   if (bordersBefore != getCellBorders() || oldPadding != m_padding) {

@@ -6,7 +6,7 @@ package org.chromium.android_webview.test;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.permission.AwPermissionRequest;
@@ -53,7 +53,7 @@ public class AwPermissionManagerTest extends AwTestBase {
                 CommonResources.getTextHtmlHeaders(true));
 
         TestAwContentsClient contentsClient = new TestAwContentsClient() {
-            private boolean mCalled = false;
+            private boolean mCalled;
 
             @Override
             public void onPermissionRequest(final AwPermissionRequest awPermissionRequest) {

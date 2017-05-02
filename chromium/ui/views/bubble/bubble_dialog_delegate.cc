@@ -6,6 +6,7 @@
 
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/default_style.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
@@ -14,6 +15,8 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/focus/view_storage.h"
 #include "ui/views/layout/layout_constants.h"
+#include "ui/views/style/platform_style.h"
+#include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/dialog_client_view.h"
@@ -112,9 +115,7 @@ ClientView* BubbleDialogDelegateView::CreateClientView(Widget* widget) {
 
 NonClientFrameView* BubbleDialogDelegateView::CreateNonClientFrameView(
     Widget* widget) {
-  BubbleFrameView* frame = new BubbleFrameView(
-      gfx::Insets(kPanelVertMargin, kPanelHorizMargin, 0, kPanelHorizMargin),
-      margins());
+  BubbleFrameView* frame = new BubbleFrameView(title_margins_, margins_);
   // Note: In CreateBubble, the call to SizeToContents() will cause
   // the relayout that this call requires.
   frame->SetTitleFontList(GetTitleFontList());
@@ -219,17 +220,19 @@ BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
       anchor_view_storage_id_(ViewStorage::GetInstance()->CreateStorageID()),
       anchor_widget_(NULL),
       arrow_(arrow),
-      mirror_arrow_in_rtl_(true),
+      mirror_arrow_in_rtl_(PlatformStyle::kMirrorBubbleArrowInRTLByDefault),
       shadow_(BubbleBorder::SMALL_SHADOW),
       color_explicitly_set_(false),
-      margins_(kPanelVertMargin,
-               kPanelHorizMargin,
-               kPanelVertMargin,
-               kPanelHorizMargin),
       accept_events_(true),
-      border_accepts_events_(true),
       adjust_if_offscreen_(true),
       parent_window_(NULL) {
+  ViewsDelegate* views_delegate = ViewsDelegate::GetInstance();
+  margins_ = views_delegate ? views_delegate->GetBubbleDialogMargins()
+                            : gfx::Insets(kPanelVertMargin, kPanelHorizMargin);
+  title_margins_ = views_delegate
+                       ? views_delegate->GetDialogFrameViewInsets()
+                       : gfx::Insets(kPanelVertMargin, kPanelHorizMargin, 0,
+                                     kPanelHorizMargin);
   if (anchor_view)
     SetAnchorView(anchor_view);
   UpdateColorsFromTheme(GetNativeTheme());
@@ -246,6 +249,8 @@ gfx::Rect BubbleDialogDelegateView::GetBubbleBounds() {
 
 const gfx::FontList& BubbleDialogDelegateView::GetTitleFontList() const {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
+    return rb.GetFontListWithDelta(ui::kTitleFontSizeDelta);
   return rb.GetFontList(ui::ResourceBundle::MediumFont);
 }
 

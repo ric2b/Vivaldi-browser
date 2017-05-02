@@ -46,11 +46,19 @@ const char kSlowDownRasterScaleFactor[] = "slow-down-raster-scale-factor";
 // Compress tile textures for GPUs supporting it.
 const char kEnableTileCompression[] = "enable-tile-compression";
 
-// Enable color space aware rasterization and compositing.
+// Convert rasterization and compositing inputs to the output color space
+// before operating on them.
 const char kEnableColorCorrectRendering[] = "enable-color-correct-rendering";
 
 // Enables the GPU benchmarking extension
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
+
+// Force all rasterization and compositing to be done in linear color space,
+// with physically correct blending and interpolation.
+const char kEnableTrueColorRendering[] = "enable-true-color-rendering";
+
+// Enables CHECKs to ensure that tile priorities are not inverted.
+const char kCheckTilePriorityInversion[] = "check-tile-priority-inversion";
 
 // Renders a border around compositor layers to help debug and study
 // layer compositing.
@@ -89,6 +97,18 @@ const char kUIShowScreenSpaceRects[] = "ui-show-screenspace-rects";
 // Switches cc machinery to use layer lists instead of layer trees
 const char kEnableLayerLists[] = "enable-layer-lists";
 const char kUIEnableLayerLists[] = "ui-enable-layer-lists";
+
+// Visualize overdraw by color-coding elements based on if they have other
+// elements drawn underneath. This is good for showing where the UI might be
+// doing more rendering work than necessary. The colors are hinting at the
+// amount of overdraw on your screen for each pixel, as follows:
+//
+// True color: No overdraw.
+// Blue: Overdrawn once.
+// Green: Overdrawn twice.
+// Pink: Overdrawn three times.
+// Red: Overdrawn four or more times.
+const char kShowOverdrawFeedback[] = "show-overdraw-feedback";
 
 // Prevents the layer tree unit tests from timing out.
 const char kCCLayerTreeTestNoTimeout[] = "cc-layer-tree-test-no-timeout";

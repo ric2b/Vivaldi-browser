@@ -17,7 +17,6 @@
 #include "ui/views/bubble/tray_bubble_view.h"
 
 namespace ash {
-class ShelfLayoutManager;
 class TrayEventFilter;
 class TrayBackground;
 class WmShelf;
@@ -146,7 +145,6 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   bool PerformAction(const ui::Event& event) override;
   void HandlePerformActionResult(bool action_performed,
                                  const ui::Event& event) override;
-  gfx::Rect GetFocusBounds() override;
   void OnPaintFocus(gfx::Canvas* canvas) override;
 
  private:

@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.download;
 
 import android.os.Environment;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.view.View;
 
 import org.chromium.base.Log;
@@ -293,8 +293,7 @@ public class DownloadTest extends DownloadTestBase {
         });
     }
 
-    private void waitForNewTabToStabilize(final int numTabsAfterNewTab)
-            throws InterruptedException {
+    private void waitForNewTabToStabilize(final int numTabsAfterNewTab) {
         // Wait until we have a new tab first. This should be called before checking the active
         // layout because the active layout changes StaticLayout --> SimpleAnimationLayout
         // --> (tab added) --> StaticLayout.
@@ -388,7 +387,7 @@ public class DownloadTest extends DownloadTestBase {
      * is one more more.
      * @param size The size of info bars to poll for.
      */
-    private void assertPollForInfoBarSize(final int size) throws InterruptedException {
+    private void assertPollForInfoBarSize(final int size) {
         final InfoBarContainer container = getActivity().getActivityTab().getInfoBarContainer();
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override

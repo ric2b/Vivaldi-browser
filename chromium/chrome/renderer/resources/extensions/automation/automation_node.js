@@ -367,8 +367,18 @@ AutomationNodeImpl.prototype = {
     this.performAction_('focus');
   },
 
+  getImageData: function(maxWidth, maxHeight) {
+    this.performAction_('getImageData',
+                        { maxWidth: maxWidth,
+                          maxHeight: maxHeight });
+  },
+
   makeVisible: function() {
     this.performAction_('makeVisible');
+  },
+
+    resumeMedia: function() {
+    this.performAction_('resumeMedia');
   },
 
   setSelection: function(startIndex, endIndex) {
@@ -386,6 +396,18 @@ AutomationNodeImpl.prototype = {
 
   showContextMenu: function() {
     this.performAction_('showContextMenu');
+  },
+
+  startDuckingMedia: function() {
+    this.performAction_('startDuckingMedia');
+  },
+
+  stopDuckingMedia: function() {
+    this.performAction_('stopDuckingMedia');
+  },
+
+  suspendMedia: function() {
+    this.performAction_('suspendMedia');
   },
 
   domQuerySelector: function(selector, callback) {
@@ -657,6 +679,7 @@ var stringAttributes = [
     'dropeffect',
     'help',
     'htmlTag',
+    'imageDataUrl',
     'language',
     'liveRelevant',
     'liveStatus',
@@ -927,6 +950,10 @@ AutomationRootNodeImpl.prototype = {
     return result;
   },
 
+  get chromeChannel() {
+    return GetStringAttribute(this.treeID, this.id, 'chromeChannel');
+  },
+
   get docUrl() {
     return GetDocURL(this.treeID);
   },
@@ -1062,11 +1089,16 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'find',
     'findAll',
     'focus',
+    'getImageData',
     'makeVisible',
     'matches',
+    'resumeMedia',
     'setSelection',
     'setSequentialFocusNavigationStartingPoint',
     'showContextMenu',
+    'startDuckingMedia',
+    'stopDuckingMedia',
+    'suspendMedia',
     'addEventListener',
     'removeEventListener',
     'domQuerySelector',
@@ -1097,6 +1129,7 @@ function AutomationRootNode() {
 utils.expose(AutomationRootNode, AutomationRootNodeImpl, {
   superclass: AutomationNode,
   readonly: [
+    'chromeChannel',
     'docTitle',
     'docUrl',
     'docLoaded',

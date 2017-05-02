@@ -5,7 +5,9 @@
 #include "content/renderer/service_worker/embedded_worker_dispatcher.h"
 
 #include <memory>
+#include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,7 +23,6 @@
 #include "content/renderer/service_worker/service_worker_context_client.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebEmbeddedWorker.h"
 #include "third_party/WebKit/public/web/WebEmbeddedWorkerStartData.h"
 
@@ -31,7 +32,7 @@ EmbeddedWorkerDispatcher::WorkerWrapper::WorkerWrapper(
     blink::WebEmbeddedWorker* worker,
     int devtools_agent_route_id)
     : worker_(worker),
-      dev_tools_agent_(
+      devtools_agent_(
           new EmbeddedWorkerDevToolsAgent(worker, devtools_agent_route_id)) {}
 
 EmbeddedWorkerDispatcher::WorkerWrapper::~WorkerWrapper() {}
@@ -44,12 +45,7 @@ bool EmbeddedWorkerDispatcher::OnMessageReceived(
     const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(EmbeddedWorkerDispatcher, message)
-    IPC_MESSAGE_HANDLER(EmbeddedWorkerMsg_StartWorker, OnStartWorker)
     IPC_MESSAGE_HANDLER(EmbeddedWorkerMsg_StopWorker, OnStopWorker)
-    IPC_MESSAGE_HANDLER(EmbeddedWorkerMsg_ResumeAfterDownload,
-                        OnResumeAfterDownload)
-    IPC_MESSAGE_HANDLER(EmbeddedWorkerMsg_AddMessageToConsole,
-                        OnAddMessageToConsole)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -60,18 +56,6 @@ void EmbeddedWorkerDispatcher::WorkerContextDestroyed(
   RenderThreadImpl::current()->thread_safe_sender()->Send(
       new EmbeddedWorkerHostMsg_WorkerStopped(embedded_worker_id));
   UnregisterWorker(embedded_worker_id);
-}
-
-void EmbeddedWorkerDispatcher::OnStartWorker(
-    const EmbeddedWorkerStartParams& params) {
-  DCHECK(!workers_.Lookup(params.embedded_worker_id));
-  TRACE_EVENT0("ServiceWorker", "EmbeddedWorkerDispatcher::OnStartWorker");
-  std::unique_ptr<WorkerWrapper> wrapper = StartWorkerContext(
-      params, base::MakeUnique<ServiceWorkerContextClient>(
-                  params.embedded_worker_id, params.service_worker_version_id,
-                  params.scope, params.script_url,
-                  params.worker_devtools_agent_route_id, nullptr));
-  RegisterWorker(params.embedded_worker_id, std::move(wrapper));
 }
 
 void EmbeddedWorkerDispatcher::OnStopWorker(int embedded_worker_id) {
@@ -89,44 +73,6 @@ void EmbeddedWorkerDispatcher::OnStopWorker(int embedded_worker_id) {
   wrapper->worker()->terminateWorkerContext();
 }
 
-void EmbeddedWorkerDispatcher::OnResumeAfterDownload(int embedded_worker_id) {
-  TRACE_EVENT0("ServiceWorker",
-               "EmbeddedWorkerDispatcher::OnResumeAfterDownload");
-  WorkerWrapper* wrapper = workers_.Lookup(embedded_worker_id);
-  if (!wrapper) {
-    LOG(WARNING) << "Got OnResumeAfterDownload for nonexistent worker";
-    return;
-  }
-  wrapper->worker()->resumeAfterDownload();
-}
-
-void EmbeddedWorkerDispatcher::OnAddMessageToConsole(
-    int embedded_worker_id,
-    ConsoleMessageLevel level,
-    const std::string& message) {
-  WorkerWrapper* wrapper = workers_.Lookup(embedded_worker_id);
-  if (!wrapper)
-    return;
-  blink::WebConsoleMessage::Level target_level =
-      blink::WebConsoleMessage::LevelLog;
-  switch (level) {
-    case CONSOLE_MESSAGE_LEVEL_DEBUG:
-      target_level = blink::WebConsoleMessage::LevelDebug;
-      break;
-    case CONSOLE_MESSAGE_LEVEL_LOG:
-      target_level = blink::WebConsoleMessage::LevelLog;
-      break;
-    case CONSOLE_MESSAGE_LEVEL_WARNING:
-      target_level = blink::WebConsoleMessage::LevelWarning;
-      break;
-    case CONSOLE_MESSAGE_LEVEL_ERROR:
-      target_level = blink::WebConsoleMessage::LevelError;
-      break;
-  }
-  wrapper->worker()->addMessageToConsole(blink::WebConsoleMessage(
-      target_level, blink::WebString::fromUTF8(message)));
-}
-
 std::unique_ptr<EmbeddedWorkerDispatcher::WorkerWrapper>
 EmbeddedWorkerDispatcher::StartWorkerContext(
     const EmbeddedWorkerStartParams& params,
@@ -137,7 +83,8 @@ EmbeddedWorkerDispatcher::StartWorkerContext(
 
   blink::WebEmbeddedWorkerStartData start_data;
   start_data.scriptURL = params.script_url;
-  start_data.userAgent = base::UTF8ToUTF16(GetContentClient()->GetUserAgent());
+  start_data.userAgent =
+      blink::WebString::fromUTF8(GetContentClient()->GetUserAgent());
   start_data.waitForDebuggerMode =
       params.wait_for_debugger
           ? blink::WebEmbeddedWorkerStartData::WaitForDebugger
@@ -157,7 +104,7 @@ EmbeddedWorkerDispatcher::StartWorkerContext(
 void EmbeddedWorkerDispatcher::RegisterWorker(
     int embedded_worker_id,
     std::unique_ptr<WorkerWrapper> wrapper) {
-  workers_.AddWithID(wrapper.release(), embedded_worker_id);
+  workers_.AddWithID(std::move(wrapper), embedded_worker_id);
 }
 
 void EmbeddedWorkerDispatcher::UnregisterWorker(int embedded_worker_id) {

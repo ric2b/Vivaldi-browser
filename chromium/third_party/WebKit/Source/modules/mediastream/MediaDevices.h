@@ -7,7 +7,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventTarget.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -20,9 +20,10 @@ class MediaTrackSupportedConstraints;
 class ScriptState;
 class UserMediaController;
 
-class MODULES_EXPORT MediaDevices final : public EventTargetWithInlineData,
-                                          public ActiveScriptWrappable,
-                                          public ActiveDOMObject {
+class MODULES_EXPORT MediaDevices final
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<MediaDevices>,
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(MediaDevices);
   DEFINE_WRAPPERTYPEINFO();
   USING_PRE_FINALIZER(MediaDevices, dispose);
@@ -46,8 +47,8 @@ class MODULES_EXPORT MediaDevices final : public EventTargetWithInlineData,
   // ScriptWrappable
   bool hasPendingActivity() const override;
 
-  // ActiveDOMObject overrides.
-  void contextDestroyed() override;
+  // SuspendableObject overrides.
+  void contextDestroyed(ExecutionContext*) override;
   void suspend() override;
   void resume() override;
 

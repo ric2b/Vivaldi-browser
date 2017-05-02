@@ -30,10 +30,10 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_binders.h"
 
-#define LOGF(level) LOG(level) << __FUNCTION__ << "(): "
-#define DLOGF(level) DLOG(level) << __FUNCTION__ << "(): "
-#define DVLOGF(level) DVLOG(level) << __FUNCTION__ << "(): "
-#define PLOGF(level) PLOG(level) << __FUNCTION__ << "(): "
+#define LOGF(level) LOG(level) << __func__ << "(): "
+#define DLOGF(level) DLOG(level) << __func__ << "(): "
+#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
+#define PLOGF(level) PLOG(level) << __func__ << "(): "
 
 #define NOTIFY_ERROR(x)                         \
   do {                                          \
@@ -205,7 +205,7 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(decoder_state_, kUninitialized);
 
-  if (config.is_encrypted) {
+  if (config.is_encrypted()) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
     return false;
   }
@@ -274,20 +274,9 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   if (!SetupFormats())
     return false;
 
-  // Subscribe to the resolution change event.
-  struct v4l2_event_subscription sub;
-  memset(&sub, 0, sizeof(sub));
-  sub.type = V4L2_EVENT_SOURCE_CHANGE;
-  IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_SUBSCRIBE_EVENT, &sub);
-
   if (video_profile_ >= H264PROFILE_MIN && video_profile_ <= H264PROFILE_MAX) {
     decoder_h264_parser_.reset(new H264Parser());
   }
-
-  if (!CreateInputBuffers())
-    return false;
-
-  decoder_cmd_supported_ = IsDecoderCmdSupported();
 
   if (!decoder_thread_.Start()) {
     LOGF(ERROR) << "decoder thread failed to start";
@@ -297,13 +286,34 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   decoder_state_ = kInitialized;
   output_mode_ = config.output_mode;
 
-  // StartDevicePoll will NOTIFY_ERROR on failure, so IgnoreResult is fine here.
+  // InitializeTask will NOTIFY_ERROR on failure.
   decoder_thread_.task_runner()->PostTask(
-      FROM_HERE, base::Bind(base::IgnoreResult(
-                                &V4L2VideoDecodeAccelerator::StartDevicePoll),
+      FROM_HERE, base::Bind(&V4L2VideoDecodeAccelerator::InitializeTask,
                             base::Unretained(this)));
 
   return true;
+}
+
+void V4L2VideoDecodeAccelerator::InitializeTask() {
+  DVLOGF(3);
+  DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
+  DCHECK_EQ(decoder_state_, kInitialized);
+
+  // Subscribe to the resolution change event.
+  struct v4l2_event_subscription sub;
+  memset(&sub, 0, sizeof(sub));
+  sub.type = V4L2_EVENT_SOURCE_CHANGE;
+  IOCTL_OR_ERROR_RETURN(VIDIOC_SUBSCRIBE_EVENT, &sub);
+
+  if (!CreateInputBuffers()) {
+    NOTIFY_ERROR(PLATFORM_FAILURE);
+    return;
+  }
+
+  decoder_cmd_supported_ = IsDecoderCmdSupported();
+
+  if (!StartDevicePoll())
+    return;
 }
 
 void V4L2VideoDecodeAccelerator::Decode(
@@ -917,6 +927,7 @@ bool V4L2VideoDecodeAccelerator::AdvanceFrameFragment(const uint8_t* data,
       if (result == H264Parser::kEOStream) {
         // We've reached the end of the buffer before finding a frame boundary.
         decoder_partial_frame_pending_ = true;
+        *endpos = size;
         return true;
       }
       switch (nalu.nal_unit_type) {
@@ -2132,8 +2143,9 @@ gfx::Size V4L2VideoDecodeAccelerator::GetVisibleSize(
 
 bool V4L2VideoDecodeAccelerator::CreateInputBuffers() {
   DVLOGF(3);
+  DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   // We always run this as we prepare to initialize.
-  DCHECK_EQ(decoder_state_, kUninitialized);
+  DCHECK_EQ(decoder_state_, kInitialized);
   DCHECK(!input_streamon_);
   DCHECK(input_buffer_map_.empty());
 

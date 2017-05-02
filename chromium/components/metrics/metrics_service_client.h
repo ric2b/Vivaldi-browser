@@ -65,8 +65,8 @@ class MetricsServiceClient {
   // ownership.
   virtual void OnEnvironmentUpdate(std::string* serialized_environment) {}
 
-  // Called by the metrics service when a log has been uploaded.
-  virtual void OnLogUploadComplete() = 0;
+  // Called by the metrics service to record a clean shutdown.
+  virtual void OnLogCleanShutdown() {}
 
   // Gathers metrics that will be filled into the system profile protobuf,
   // calling |done_callback| when complete.
@@ -79,9 +79,14 @@ class MetricsServiceClient {
   virtual void CollectFinalMetricsForLog(
       const base::Closure& done_callback) = 0;
 
+  // Get the URL of the metrics server.
+  virtual std::string GetMetricsServerUrl();
+
   // Creates a MetricsLogUploader with the specified parameters (see comments on
   // MetricsLogUploader for details).
   virtual std::unique_ptr<MetricsLogUploader> CreateUploader(
+      const std::string& server_url,
+      const std::string& mime_type,
       const base::Callback<void(int)>& on_upload_complete) = 0;
 
   // Returns the standard interval between upload attempts.

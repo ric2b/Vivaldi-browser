@@ -105,19 +105,11 @@ size_t RegisterCastCrashKeys() {
     // Temporary for https://crbug.com/616149.
     { "existing_extension_pref_value_type", kSmallSize },
 
-    // Temporary for https://crbug.com/630495.
-    { "swdh_register_cannot_host_url", kLargeSize },
-    { "swdh_register_cannot_scope_url", kLargeSize },
-    { "swdh_register_cannot_script_url", kLargeSize },
-
-    // Temporary for https://crbug.com/619294.
-    { "swdh_unregister_cannot_host_url", kLargeSize },
-    { "swdh_unregister_cannot_scope_url", kLargeSize },
-
-    // Temporary for https://crbug.com/630496.
-    { "swdh_get_registration_cannot_host_url", kLargeSize },
-    { "swdh_get_registration_cannot_document_url", kLargeSize },
-
+    // Temporary for https://crbug.com/668633.
+    { "swdh_set_hosted_version_worker_pid", kSmallSize },
+    { "swdh_set_hosted_version_host_pid", kSmallSize },
+    { "swdh_set_hosted_version_is_new_process", kSmallSize },
+    { "swdh_set_hosted_version_restart_count", kSmallSize },
   };
 
   return base::debug::InitCrashKeys(fixed_keys, arraysize(fixed_keys),

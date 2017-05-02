@@ -19,7 +19,6 @@
 #include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/public/cpp/bindings/lib/router.h"
 #include "mojo/public/cpp/bindings/message_header_validator.h"
 #include "mojo/public/cpp/system/core.h"
 
@@ -32,7 +31,9 @@ template <typename Interface>
 using StrongBindingPtr = base::WeakPtr<StrongBinding<Interface>>;
 
 // This connects an interface implementation strongly to a pipe. When a
-// connection error is detected the implementation is deleted.
+// connection error is detected the implementation is deleted. If the task
+// runner that a StrongBinding is bound on is stopped, the connection error
+// handler will not be invoked and the implementation will not be deleted.
 //
 // To use, call StrongBinding<T>::Create() (see below) or the helper
 // MakeStrongBinding function:
@@ -75,9 +76,6 @@ class StrongBinding {
   void Close() { delete this; }
 
   Interface* impl() { return impl_.get(); }
-
-  // Exposed for testing, should not generally be used.
-  internal::Router* internal_router() { return binding_.internal_router(); }
 
   // Sends a message on the underlying message pipe and runs the current
   // message loop until its response is received. This can be used in tests to

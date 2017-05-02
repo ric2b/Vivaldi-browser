@@ -26,7 +26,6 @@
 #include "core/editing/commands/SplitTextNodeCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
@@ -52,7 +51,8 @@ void SplitTextNodeCommand::doApply(EditingState*) {
   if (!parent || !hasEditableStyle(*parent))
     return;
 
-  String prefixText = m_text2->substringData(0, m_offset, IGNORE_EXCEPTION);
+  String prefixText =
+      m_text2->substringData(0, m_offset, IGNORE_EXCEPTION_FOR_TESTING);
   if (prefixText.isEmpty())
     return;
 
@@ -92,7 +92,7 @@ void SplitTextNodeCommand::doReapply() {
 }
 
 void SplitTextNodeCommand::insertText1AndTrimText2() {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   m_text2->parentNode()->insertBefore(m_text1.get(), m_text2.get(),
                                       exceptionState);
   if (exceptionState.hadException())

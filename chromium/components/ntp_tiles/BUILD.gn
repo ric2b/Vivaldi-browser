@@ -14,22 +14,29 @@ static_library("ntp_tiles") {
     "country_code_ios.mm",
     "field_trial.cc",
     "field_trial.h",
-    "icon_cacher.cc",
     "icon_cacher.h",
+    "icon_cacher_impl.cc",
+    "icon_cacher_impl.h",
     "metrics.cc",
     "metrics.h",
     "most_visited_sites.cc",
     "most_visited_sites.h",
     "ntp_tile.cc",
     "ntp_tile.h",
-    "popular_sites.cc",
+    "ntp_tile_source.h",
     "popular_sites.h",
+    "popular_sites_impl.cc",
+    "popular_sites_impl.h",
     "pref_names.cc",
     "pref_names.h",
     "switches.cc",
     "switches.h",
+    "webui/ntp_tiles_internals_message_handler.cc",
+    "webui/ntp_tiles_internals_message_handler.h",
+    "webui/ntp_tiles_internals_message_handler_client.h",
     "webui/popular_sites_internals_message_handler.cc",
     "webui/popular_sites_internals_message_handler.h",
+    "webui/popular_sites_internals_message_handler_client.h",
   ]
 
   public_deps = [
@@ -45,6 +52,7 @@ static_library("ntp_tiles") {
     "//components/image_fetcher",
     "//components/pref_registry",
     "//components/prefs",
+    "//components/rappor/public",
     "//components/search_engines",
     "//components/url_formatter",
     "//components/variations",
@@ -56,21 +64,41 @@ static_library("ntp_tiles") {
   }
 }
 
+# If you want to use this, let us (ntp-dev@chromium.org) know. In that case, it
+# should be moved to a more common location as it has 2+ callers already.
+# Note that you probably shouldn't be using it outside of ios or tests.
+source_set("json_unsafe_parser") {
+  testonly = !is_ios
+
+  sources = [
+    "json_unsafe_parser.cc",
+    "json_unsafe_parser.h",
+  ]
+
+  public_deps = [
+    "//base",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "icon_cacher_unittest.cc",
+    "icon_cacher_impl_unittest.cc",
+    "metrics_unittest.cc",
     "most_visited_sites_unittest.cc",
-    "popular_sites_unittest.cc",
+    "popular_sites_impl_unittest.cc",
   ]
 
   deps = [
+    ":json_unsafe_parser",
     ":ntp_tiles",
     "//base/test:test_support",
     "//components/favicon/core",
     "//components/favicon_base",
     "//components/image_fetcher",
-    "//components/pref_registry:test_support",
+    "//components/pref_registry:pref_registry",
+    "//components/rappor:test_support",
+    "//components/sync_preferences:test_support",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -82,7 +110,7 @@ if (is_android) {
   java_cpp_enum("ntp_tiles_enums_java") {
     sources = [
       "metrics.h",
-      "ntp_tile.h",
+      "ntp_tile_source.h",
     ]
   }
 }

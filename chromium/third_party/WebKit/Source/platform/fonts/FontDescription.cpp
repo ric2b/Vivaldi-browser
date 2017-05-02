@@ -41,6 +41,7 @@ struct SameSizeAsFontDescription {
   DISALLOW_NEW();
   FontFamily familyList;
   RefPtr<FontFeatureSettings> m_featureSettings;
+  RefPtr<FontVariationSettings> m_variationSettings;
   AtomicString locale;
   float sizes[6];
   FieldsAsUnsignedType bitfields;
@@ -52,6 +53,61 @@ static_assert(sizeof(FontDescription) == sizeof(SameSizeAsFontDescription),
 TypesettingFeatures FontDescription::s_defaultTypesettingFeatures = 0;
 
 bool FontDescription::s_useSubpixelTextPositioning = false;
+
+FontDescription::FontDescription()
+    : m_specifiedSize(0),
+      m_computedSize(0),
+      m_adjustedSize(0),
+      m_sizeAdjust(FontSizeAdjustNone),
+      m_letterSpacing(0),
+      m_wordSpacing(0) {
+  m_fieldsAsUnsigned.parts[0] = 0;
+  m_fieldsAsUnsigned.parts[1] = 0;
+  m_fields.m_orientation = static_cast<unsigned>(FontOrientation::Horizontal);
+  m_fields.m_widthVariant = RegularWidth;
+  m_fields.m_style = FontStyleNormal;
+  m_fields.m_variantCaps = CapsNormal;
+  m_fields.m_isAbsoluteSize = false;
+  m_fields.m_weight = FontWeightNormal;
+  m_fields.m_stretch = FontStretchNormal;
+  m_fields.m_genericFamily = NoFamily;
+  m_fields.m_kerning = AutoKerning;
+  m_fields.m_commonLigaturesState = NormalLigaturesState;
+  m_fields.m_discretionaryLigaturesState = NormalLigaturesState;
+  m_fields.m_historicalLigaturesState = NormalLigaturesState;
+  m_fields.m_contextualLigaturesState = NormalLigaturesState;
+  m_fields.m_keywordSize = 0;
+  m_fields.m_fontSmoothing = AutoSmoothing;
+  m_fields.m_textRendering = AutoTextRendering;
+  m_fields.m_syntheticBold = false;
+  m_fields.m_syntheticItalic = false;
+  m_fields.m_subpixelTextPosition = s_useSubpixelTextPositioning;
+  m_fields.m_typesettingFeatures = s_defaultTypesettingFeatures;
+  m_fields.m_variantNumeric = FontVariantNumeric().m_fieldsAsUnsigned;
+  m_fields.m_subpixelAscentDescent = false;
+}
+
+FontDescription::FontDescription(const FontDescription&) = default;
+
+FontDescription& FontDescription::operator=(const FontDescription&) = default;
+
+bool FontDescription::operator==(const FontDescription& other) const {
+  return m_familyList == other.m_familyList && m_locale == other.m_locale &&
+         m_specifiedSize == other.m_specifiedSize &&
+         m_computedSize == other.m_computedSize &&
+         m_adjustedSize == other.m_adjustedSize &&
+         m_sizeAdjust == other.m_sizeAdjust &&
+         m_letterSpacing == other.m_letterSpacing &&
+         m_wordSpacing == other.m_wordSpacing &&
+         m_fieldsAsUnsigned.parts[0] == other.m_fieldsAsUnsigned.parts[0] &&
+         m_fieldsAsUnsigned.parts[1] == other.m_fieldsAsUnsigned.parts[1] &&
+         (m_featureSettings == other.m_featureSettings ||
+          (m_featureSettings && other.m_featureSettings &&
+           *m_featureSettings == *other.m_featureSettings)) &&
+         (m_variationSettings == other.m_variationSettings ||
+          (m_variationSettings && other.m_variationSettings &&
+           *m_variationSettings == *other.m_variationSettings));
+}
 
 FontWeight FontDescription::lighterWeight(FontWeight weight) {
   switch (weight) {
@@ -168,7 +224,8 @@ FontCacheKey FontDescription::cacheKey(
       static_cast<unsigned>(m_fields.m_subpixelTextPosition);   // bit 1
 
   return FontCacheKey(creationParams, effectiveFontSize(),
-                      options | fontTraits.bitfield() << 8);
+                      options | fontTraits.bitfield() << 8,
+                      m_variationSettings);
 }
 
 void FontDescription::setDefaultTypesettingFeatures(
@@ -255,6 +312,10 @@ unsigned FontDescription::styleHashWithoutFamilyList() const {
       addToHash(hash, settings->at(i).value());
     }
   }
+
+  if (variationSettings())
+    addToHash(hash, variationSettings()->hash());
+
   if (m_locale) {
     const AtomicString& locale = m_locale->localeString();
     for (unsigned i = 0; i < locale.length(); i++)

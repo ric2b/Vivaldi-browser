@@ -16,17 +16,10 @@
 
 namespace content {
 namespace {
+
 const uint32_t kFilteredMessageClasses[] = {
     ViewMsgStart, WorkerMsgStart,
 };
-
-// TODO(estark): For now, only URLMismatch errors actually stop the
-// worker from being created. Other errors are recorded in UMA in
-// Blink but do not stop the worker from being created
-// yet. https://crbug.com/573206
-bool CreateWorkerErrorIsFatal(blink::WebWorkerCreationError error) {
-  return (error == blink::WebWorkerCreationErrorURLMismatch);
-}
 
 }  // namespace
 
@@ -57,7 +50,7 @@ bool SharedWorkerMessageFilter::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(SharedWorkerMessageFilter, message)
     // Only sent from renderer for now, until we have nested workers.
     IPC_MESSAGE_HANDLER(ViewHostMsg_CreateWorker, OnCreateWorker)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ForwardToWorker, OnForwardToWorker)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_ConnectToWorker, OnConnectToWorker)
     // Only sent from renderer.
     IPC_MESSAGE_HANDLER(ViewHostMsg_DocumentDetached, OnDocumentDetached)
     // Only sent from SharedWorker in renderer.
@@ -93,12 +86,12 @@ void SharedWorkerMessageFilter::OnCreateWorker(
   reply->error = SharedWorkerServiceImpl::GetInstance()->CreateWorker(
       params, reply->route_id, this, resource_context_,
       WorkerStoragePartitionId(partition_));
-  if (CreateWorkerErrorIsFatal(reply->error))
-    reply->route_id = MSG_ROUTING_NONE;
 }
 
-void SharedWorkerMessageFilter::OnForwardToWorker(const IPC::Message& message) {
-  SharedWorkerServiceImpl::GetInstance()->ForwardToWorker(message, this);
+void SharedWorkerMessageFilter::OnConnectToWorker(int route_id,
+                                                  int sent_message_port_id) {
+  SharedWorkerServiceImpl::GetInstance()->ConnectToWorker(
+      route_id, sent_message_port_id, this);
 }
 
 void SharedWorkerMessageFilter::OnDocumentDetached(

@@ -26,12 +26,15 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/request_context_type.h"
+#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "url/gurl.h"
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 
 namespace content {
 
+class AppCacheNavigationHandle;
+class ChromeAppCacheService;
 class NavigationUIData;
 class NavigatorDelegate;
 class ResourceRequestBodyImpl;
@@ -82,7 +85,6 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       FrameTreeNode* frame_tree_node,
       bool is_renderer_initiated,
       bool is_same_page,
-      bool is_srcdoc,
       const base::TimeTicks& navigation_start,
       int pending_nav_entry_id,
       bool started_from_context_menu);
@@ -94,7 +96,6 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool IsInMainFrame() override;
   bool IsParentMainFrame() override;
   bool IsRendererInitiated() override;
-  bool IsSrcdoc() override;
   bool WasServerRedirect() override;
   int GetFrameTreeNodeId() override;
   int GetParentFrameTreeNodeId() override;
@@ -150,7 +151,15 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // expose the NavigationHandle when navigating to an InterstialPage.
   NavigatorDelegate* GetDelegate() const;
 
-  RequestContextType GetRequestContextType() const;
+  RequestContextType request_context_type() const {
+    DCHECK_GE(state_, WILL_SEND_REQUEST);
+    return request_context_type_;
+  }
+
+  blink::WebMixedContentContextType mixed_content_context_type() const {
+    DCHECK_GE(state_, WILL_SEND_REQUEST);
+    return mixed_content_context_type_;
+  }
 
   // Get the unique id from the NavigationEntry associated with this
   // NavigationHandle. Note that a synchronous, renderer-initiated navigation
@@ -198,6 +207,12 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     return service_worker_handle_.get();
   }
 
+  // PlzNavigate
+  void InitAppCacheHandle(ChromeAppCacheService* appcache_service);
+  AppCacheNavigationHandle* appcache_handle() const {
+    return appcache_handle_.get();
+  }
+
   typedef base::Callback<void(NavigationThrottle::ThrottleCheckResult)>
       ThrottleChecksFinishedCallback;
 
@@ -212,6 +227,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       ui::PageTransition transition,
       bool is_external_protocol,
       RequestContextType request_context_type,
+      blink::WebMixedContentContextType mixed_content_context_type,
       const ThrottleChecksFinishedCallback& callback);
 
   // Called when the URLRequest will be redirected in the network stack.
@@ -306,7 +322,6 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
                        FrameTreeNode* frame_tree_node,
                        bool is_renderer_initiated,
                        bool is_same_page,
-                       bool is_srcdoc,
                        const base::TimeTicks& navigation_start,
                        int pending_nav_entry_id,
                        bool started_from_context_menu);
@@ -349,7 +364,6 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   RenderFrameHostImpl* render_frame_host_;
   const bool is_renderer_initiated_;
   const bool is_same_page_;
-  const bool is_srcdoc_;
   bool was_redirected_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
   net::HttpResponseInfo::ConnectionInfo connection_info_;
@@ -377,7 +391,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   FrameTreeNode* frame_tree_node_;
 
   // A list of Throttles registered for this navigation.
-  ScopedVector<NavigationThrottle> throttles_;
+  std::vector<std::unique_ptr<NavigationThrottle>> throttles_;
 
   // The index of the next throttle to check.
   size_t next_index_;
@@ -391,6 +405,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // The fetch request context type.
   RequestContextType request_context_type_;
 
+  // The mixed content context type for potential mixed content checks.
+  blink::WebMixedContentContextType mixed_content_context_type_;
+
   // This callback will be run when all throttle checks have been performed.
   ThrottleChecksFinishedCallback complete_callback_;
 
@@ -398,6 +415,12 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Manages the lifetime of a pre-created ServiceWorkerProviderHost until a
   // corresponding ServiceWorkerNetworkProvider is created in the renderer.
   std::unique_ptr<ServiceWorkerNavigationHandle> service_worker_handle_;
+
+  // PlzNavigate
+  // Manages the lifetime of a pre-created AppCacheHost until a browser side
+  // navigation is ready to be committed, i.e we have a renderer process ready
+  // to service the navigation request.
+  std::unique_ptr<AppCacheNavigationHandle> appcache_handle_;
 
   // Embedder data from the IO thread tied to this navigation.
   std::unique_ptr<NavigationData> navigation_data_;

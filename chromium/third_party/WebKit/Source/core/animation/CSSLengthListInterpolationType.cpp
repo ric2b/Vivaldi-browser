@@ -26,7 +26,8 @@ InterpolationValue CSSLengthListInterpolationType::maybeConvertNeutral(
     ConversionCheckers& conversionCheckers) const {
   size_t underlyingLength =
       UnderlyingLengthChecker::getUnderlyingLength(underlying);
-  conversionCheckers.append(UnderlyingLengthChecker::create(underlyingLength));
+  conversionCheckers.push_back(
+      UnderlyingLengthChecker::create(underlyingLength));
 
   if (underlyingLength == 0)
     return nullptr;
@@ -67,7 +68,7 @@ class InheritedLengthListChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedLengthListChecker> create(
       CSSPropertyID property,
       const Vector<Length>& inheritedLengthList) {
-    return wrapUnique(
+    return WTF::wrapUnique(
         new InheritedLengthListChecker(property, inheritedLengthList));
   }
 
@@ -94,7 +95,7 @@ InterpolationValue CSSLengthListInterpolationType::maybeConvertInherit(
   Vector<Length> inheritedLengthList;
   bool success = LengthListPropertyFunctions::getLengthList(
       cssProperty(), *state.parentStyle(), inheritedLengthList);
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedLengthListChecker::create(cssProperty(), inheritedLengthList));
   if (!success)
     return nullptr;
@@ -125,14 +126,15 @@ PairwiseInterpolationValue CSSLengthListInterpolationType::maybeMergeSingles(
       LengthInterpolationFunctions::mergeSingles);
 }
 
-InterpolationValue CSSLengthListInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSLengthListInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
   Vector<Length> underlyingLengthList;
-  if (!LengthListPropertyFunctions::getLengthList(
-          cssProperty(), *environment.state().style(), underlyingLengthList))
+  if (!LengthListPropertyFunctions::getLengthList(cssProperty(), *state.style(),
+                                                  underlyingLengthList))
     return nullptr;
   return maybeConvertLengthList(underlyingLengthList,
-                                environment.state().style()->effectiveZoom());
+                                state.style()->effectiveZoom());
 }
 
 void CSSLengthListInterpolationType::composite(
@@ -146,10 +148,10 @@ void CSSLengthListInterpolationType::composite(
       LengthInterpolationFunctions::composite);
 }
 
-void CSSLengthListInterpolationType::apply(
+void CSSLengthListInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   const InterpolableList& interpolableList =
       toInterpolableList(interpolableValue);
   const size_t length = interpolableList.length();
@@ -161,10 +163,10 @@ void CSSLengthListInterpolationType::apply(
   for (size_t i = 0; i < length; i++) {
     result[i] = LengthInterpolationFunctions::createLength(
         *interpolableList.get(i), nonInterpolableList.get(i),
-        environment.state().cssToLengthConversionData(), m_valueRange);
+        state.cssToLengthConversionData(), m_valueRange);
   }
-  LengthListPropertyFunctions::setLengthList(
-      cssProperty(), *environment.state().style(), std::move(result));
+  LengthListPropertyFunctions::setLengthList(cssProperty(), *state.style(),
+                                             std::move(result));
 }
 
 }  // namespace blink

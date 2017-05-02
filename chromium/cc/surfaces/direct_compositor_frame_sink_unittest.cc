@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "cc/output/renderer_settings.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/scheduler/begin_frame_source.h"
@@ -42,17 +43,16 @@ class DirectCompositorFrameSinkTest : public testing::Test {
         FakeOutputSurface::Create3d();
     display_output_surface_ = display_output_surface.get();
 
-    std::unique_ptr<BeginFrameSource> begin_frame_source(
-        new BackToBackBeginFrameSource(
-            base::MakeUnique<DelayBasedTimeSource>(task_runner_.get())));
+    begin_frame_source_.reset(new BackToBackBeginFrameSource(
+        base::MakeUnique<DelayBasedTimeSource>(task_runner_.get())));
 
     int max_frames_pending = 2;
-    std::unique_ptr<DisplayScheduler> scheduler(new DisplayScheduler(
-        begin_frame_source.get(), task_runner_.get(), max_frames_pending));
+    std::unique_ptr<DisplayScheduler> scheduler(
+        new DisplayScheduler(task_runner_.get(), max_frames_pending));
 
     display_.reset(new Display(
         &bitmap_manager_, &gpu_memory_buffer_manager_, RendererSettings(),
-        kArbitraryFrameSinkId, std::move(begin_frame_source),
+        kArbitraryFrameSinkId, begin_frame_source_.get(),
         std::move(display_output_surface), std::move(scheduler),
         base::MakeUnique<TextureMailboxDeleter>(task_runner_.get())));
     compositor_frame_sink_.reset(new DirectCompositorFrameSink(
@@ -74,14 +74,10 @@ class DirectCompositorFrameSinkTest : public testing::Test {
 
   void SwapBuffersWithDamage(const gfx::Rect& damage_rect) {
     std::unique_ptr<RenderPass> render_pass(RenderPass::Create());
-    render_pass->SetNew(RenderPassId(1, 1), display_rect_, damage_rect,
-                        gfx::Transform());
-
-    auto frame_data = base::MakeUnique<DelegatedFrameData>();
-    frame_data->render_pass_list.push_back(std::move(render_pass));
+    render_pass->SetNew(1, display_rect_, damage_rect, gfx::Transform());
 
     CompositorFrame frame;
-    frame.delegated_frame_data = std::move(frame_data);
+    frame.render_pass_list.push_back(std::move(render_pass));
 
     compositor_frame_sink_->SubmitCompositorFrame(std::move(frame));
   }
@@ -107,6 +103,7 @@ class DirectCompositorFrameSinkTest : public testing::Test {
 
   scoped_refptr<TestContextProvider> context_provider_;
   FakeOutputSurface* display_output_surface_ = nullptr;
+  std::unique_ptr<BeginFrameSource> begin_frame_source_;
   std::unique_ptr<Display> display_;
   FakeCompositorFrameSinkClient compositor_frame_sink_client_;
   std::unique_ptr<DirectCompositorFrameSink> compositor_frame_sink_;

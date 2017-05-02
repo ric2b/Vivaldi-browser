@@ -10,8 +10,8 @@
 
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
-#include "components/rappor/rappor_service.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "net/http/http_response_headers.h"
 #include "ui/base/page_transition_types.h"
 
@@ -103,6 +103,12 @@ const char kBackgroundHistogramFirstContentfulPaint[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.Background";
 const char kHistogramFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint";
+const char kHistogramFirstMeaningfulPaintNoUserInput[] =
+    "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint."
+    "NoUserInput";
+const char kHistogramFirstMeaningfulPaintHadUserInput[] =
+    "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint."
+    "HadUserInput";
 const char kHistogramParseStartToFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.ParseStartToFirstMeaningfulPaint";
 const char kHistogramParseStartToFirstContentfulPaint[] =
@@ -189,17 +195,27 @@ const char kHistogramFirstContentfulPaintUserInitiated[] =
 
 const char kHistogramFirstMeaningfulPaintStatus[] =
     "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintStatus";
+const char kHistogramFirstMeaningfulPaintSignalStatus2[] =
+    "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintSignalStatus2";
 
 const char kHistogramFirstNonScrollInputAfterFirstPaint[] =
     "PageLoad.InputTiming.NavigationToFirstNonScroll.AfterPaint";
 const char kHistogramFirstScrollInputAfterFirstPaint[] =
     "PageLoad.InputTiming.NavigationToFirstScroll.AfterPaint";
 
+const char kHistogramTotalBytes[] = "PageLoad.Experimental.Bytes.Total";
+const char kHistogramNetworkBytes[] = "PageLoad.Experimental.Bytes.Network";
+const char kHistogramCacheBytes[] = "PageLoad.Experimental.Bytes.Cache";
+
 }  // namespace internal
 
 CorePageLoadMetricsObserver::CorePageLoadMetricsObserver()
     : transition_(ui::PAGE_TRANSITION_LINK),
-      was_no_store_main_resource_(false) {}
+      was_no_store_main_resource_(false),
+      num_cache_requests_(0),
+      num_network_requests_(0),
+      cache_bytes_(0),
+      network_bytes_(0) {}
 
 CorePageLoadMetricsObserver::~CorePageLoadMetricsObserver() {}
 
@@ -325,7 +341,10 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaint(
                           timing.first_contentful_paint.value());
     }
 
-    if (info.user_initiated) {
+    // TODO(bmcquade): consider adding a histogram that uses
+    // UserInputInfo.user_input_event.
+    if (info.user_initiated_info.browser_initiated ||
+        info.user_initiated_info.user_gesture) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstContentfulPaintUserInitiated,
                           timing.first_contentful_paint.value());
     }
@@ -337,13 +356,31 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaint(
           timing.style_sheet_timing.author_style_sheet_parse_duration_before_fcp
               .value());
     }
+    if (timing.style_sheet_timing.update_style_duration_before_fcp) {
+      PAGE_LOAD_HISTOGRAM(
+          "PageLoad.CSSTiming.Update.BeforeFirstContentfulPaint",
+          timing.style_sheet_timing.update_style_duration_before_fcp.value());
+    }
+    if (timing.style_sheet_timing
+            .author_style_sheet_parse_duration_before_fcp ||
+        timing.style_sheet_timing.update_style_duration_before_fcp) {
+      PAGE_LOAD_HISTOGRAM(
+          "PageLoad.CSSTiming.ParseAndUpdate.BeforeFirstContentfulPaint",
+          timing.style_sheet_timing.author_style_sheet_parse_duration_before_fcp
+                  .value_or(base::TimeDelta()) +
+              timing.style_sheet_timing.update_style_duration_before_fcp
+                  .value_or(base::TimeDelta()));
+    }
 
     switch (GetPageLoadType(transition_)) {
       case LOAD_TYPE_RELOAD:
         PAGE_LOAD_HISTOGRAM(
             internal::kHistogramLoadTypeFirstContentfulPaintReload,
             timing.first_contentful_paint.value());
-        if (info.user_initiated) {
+        // TODO(bmcquade): consider adding a histogram that uses
+        // UserInputInfo.user_input_event.
+        if (info.user_initiated_info.browser_initiated ||
+            info.user_initiated_info.user_gesture) {
           PAGE_LOAD_HISTOGRAM(
               internal::kHistogramLoadTypeFirstContentfulPaintReloadByGesture,
               timing.first_contentful_paint.value());
@@ -465,15 +502,15 @@ void CorePageLoadMetricsObserver::OnParseStop(
         timing.parse_blocked_on_script_execution_from_document_write_duration
             .value());
 
-    int total_requests = info.num_cache_requests + info.num_network_requests;
+    int total_requests = num_cache_requests_ + num_network_requests_;
     if (total_requests) {
-      int percent_cached = (100 * info.num_cache_requests) / total_requests;
+      int percent_cached = (100 * num_cache_requests_) / total_requests;
       UMA_HISTOGRAM_PERCENTAGE(internal::kHistogramCacheRequestPercentParseStop,
                                percent_cached);
       UMA_HISTOGRAM_COUNTS(internal::kHistogramCacheTotalRequestsParseStop,
-                           info.num_cache_requests);
+                           num_cache_requests_);
       UMA_HISTOGRAM_COUNTS(internal::kHistogramTotalRequestsParseStop,
-                           info.num_cache_requests + info.num_network_requests);
+                           num_cache_requests_ + num_network_requests_);
 
       // Separate out parse duration based on cache percent.
       if (percent_cached <= 50) {
@@ -503,6 +540,20 @@ void CorePageLoadMetricsObserver::OnComplete(
     const page_load_metrics::PageLoadExtraInfo& info) {
   RecordTimingHistograms(timing, info);
   RecordRappor(timing, info);
+
+  int64_t total_kb = (network_bytes_ + cache_bytes_) / 1024;
+  int64_t network_kb = network_bytes_ / 1024;
+  int64_t cache_kb = cache_bytes_ / 1024;
+  DCHECK_LE(network_kb, total_kb);
+  DCHECK_LE(cache_kb, total_kb);
+  DCHECK_LE(total_kb, std::numeric_limits<int>::max());
+
+  UMA_HISTOGRAM_CUSTOM_COUNTS(internal::kHistogramNetworkBytes,
+                              static_cast<int>(network_kb), 1, 500 * 1024, 50);
+  UMA_HISTOGRAM_CUSTOM_COUNTS(internal::kHistogramCacheBytes,
+                              static_cast<int>(cache_kb), 1, 500 * 1024, 50);
+  UMA_HISTOGRAM_CUSTOM_COUNTS(internal::kHistogramTotalBytes,
+                              static_cast<int>(total_kb), 1, 500 * 1024, 50);
 }
 
 void CorePageLoadMetricsObserver::OnFailedProvisionalLoad(
@@ -526,7 +577,7 @@ void CorePageLoadMetricsObserver::OnUserInput(
   base::TimeTicks now;
   if (!first_paint_.is_null() &&
       first_user_interaction_after_first_paint_.is_null() &&
-      event.type != blink::WebInputEvent::MouseMove) {
+      event.type() != blink::WebInputEvent::MouseMove) {
     if (now.is_null())
       now = base::TimeTicks::Now();
     first_user_interaction_after_first_paint_ = now;
@@ -536,8 +587,8 @@ void CorePageLoadMetricsObserver::OnUserInput(
     return;
 
   if (!received_non_scroll_input_after_first_paint_) {
-    if (event.type == blink::WebInputEvent::GestureTap ||
-        event.type == blink::WebInputEvent::MouseUp) {
+    if (event.type() == blink::WebInputEvent::GestureTap ||
+        event.type() == blink::WebInputEvent::MouseUp) {
       received_non_scroll_input_after_first_paint_ = true;
       if (now.is_null())
         now = base::TimeTicks::Now();
@@ -547,12 +598,23 @@ void CorePageLoadMetricsObserver::OnUserInput(
     }
   }
   if (!received_scroll_input_after_first_paint_ &&
-      event.type == blink::WebInputEvent::GestureScrollBegin) {
+      event.type() == blink::WebInputEvent::GestureScrollBegin) {
     received_scroll_input_after_first_paint_ = true;
     if (now.is_null())
       now = base::TimeTicks::Now();
     PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstScrollInputAfterFirstPaint,
                         now - first_paint_);
+  }
+}
+
+void CorePageLoadMetricsObserver::OnLoadedResource(
+    const page_load_metrics::ExtraRequestInfo& extra_request_info) {
+  if (extra_request_info.was_cached) {
+    ++num_cache_requests_;
+    cache_bytes_ += extra_request_info.raw_body_bytes;
+  } else {
+    ++num_network_requests_;
+    network_bytes_ += extra_request_info.raw_body_bytes;
   }
 }
 
@@ -573,6 +635,30 @@ void CorePageLoadMetricsObserver::RecordTimingHistograms(
         internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE :
         internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_FIRST_CONTENTFUL_PAINT);
   }
+
+  if (timing.first_paint) {
+    enum FirstMeaningfulPaintSignalStatus {
+      HAD_USER_INPUT = 1 << 0,
+      NETWORK_STABLE = 1 << 1,
+      FIRST_MEANINGFUL_PAINT_SIGNAL_STATUS_LAST_ENTRY = 1 << 2
+    };
+    int signal_status =
+        (first_user_interaction_after_first_paint_.is_null() ?
+         0 : HAD_USER_INPUT) +
+        (timing.first_meaningful_paint ? NETWORK_STABLE : 0);
+    UMA_HISTOGRAM_ENUMERATION(
+        internal::kHistogramFirstMeaningfulPaintSignalStatus2,
+        signal_status, FIRST_MEANINGFUL_PAINT_SIGNAL_STATUS_LAST_ENTRY);
+  }
+  if (timing.first_meaningful_paint) {
+    if (first_user_interaction_after_first_paint_.is_null()) {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstMeaningfulPaintNoUserInput,
+                          timing.first_meaningful_paint.value());
+    } else {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstMeaningfulPaintHadUserInput,
+                          timing.first_meaningful_paint.value());
+    }
+  }
 }
 
 void CorePageLoadMetricsObserver::RecordRappor(
@@ -584,7 +670,8 @@ void CorePageLoadMetricsObserver::RecordRappor(
   // IsShuttingDown() first.
   if (g_browser_process->IsShuttingDown())
     return;
-  rappor::RapporService* rappor_service = g_browser_process->rappor_service();
+  rappor::RapporServiceImpl* rappor_service =
+      g_browser_process->rappor_service();
   if (!rappor_service)
     return;
   if (info.committed_url.is_empty())
@@ -606,8 +693,8 @@ void CorePageLoadMetricsObserver::RecordRappor(
     // was > 10s.
     sample->SetFlagsField(
         "IsSlow", timing.first_contentful_paint.value().InSecondsF() >= 10, 1);
-    rappor_service->RecordSampleObj(internal::kRapporMetricsNameCoarseTiming,
-                                    std::move(sample));
+    rappor_service->RecordSample(internal::kRapporMetricsNameCoarseTiming,
+                                 std::move(sample));
   }
 
   // Log the eTLD+1 of sites that did not report first meaningful paint.

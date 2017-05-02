@@ -6,7 +6,7 @@
 #define WebGLQuery_h
 
 #include "modules/webgl/WebGLSharedPlatform3DObject.h"
-#include "platform/scheduler/CancellableTaskFactory.h"
+#include "platform/WebTaskRunner.h"
 
 namespace gpu {
 namespace gles2 {
@@ -54,8 +54,8 @@ class WebGLQuery : public WebGLSharedPlatform3DObject {
   bool m_queryResultAvailable;
   GLuint m_queryResult;
 
-  std::unique_ptr<WebTaskRunner> m_taskRunner;
-  std::unique_ptr<CancellableTaskFactory> m_cancellableTaskFactory;
+  RefPtr<WebTaskRunner> m_taskRunner;
+  TaskHandle m_taskHandle;
 };
 
 }  // namespace blink

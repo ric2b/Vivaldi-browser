@@ -6,12 +6,12 @@
 
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "net/base/ip_endpoint.h"
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_quic_spdy_client_stream.h"
 #include "net/quic/test_tools/quic_config_peer.h"
@@ -22,24 +22,8 @@
 #include "net/tools/quic/quic_spdy_client_stream.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::StringPrintf;
 using google::protobuf::implicit_cast;
-using net::test::ConstructEncryptedPacket;
-using net::test::ConstructMisFramedEncryptedPacket;
-using net::test::CryptoTestUtils;
-using net::test::DefaultQuicConfig;
-using net::test::MockQuicConnection;
-using net::test::MockQuicConnectionHelper;
-using net::test::MockQuicSpdyClientStream;
-using net::test::PacketSavingConnection;
-using net::test::QuicConnectionPeer;
-using net::test::QuicPacketCreatorPeer;
-using net::test::QuicSpdySessionPeer;
-using net::test::SupportedVersions;
-using net::test::TestPeerIPAddress;
-using net::test::kClientDataStreamId1;
-using net::test::kServerDataStreamId1;
-using net::test::kTestPort;
+using base::StringPrintf;
 using std::string;
 using testing::AnyNumber;
 using testing::Invoke;
@@ -67,14 +51,14 @@ class TestQuicClientSession : public QuicClientSession {
                           push_promise_index) {}
 
   std::unique_ptr<QuicSpdyClientStream> CreateClientStream() override {
-    return base::MakeUnique<MockQuicSpdyClientStream>(GetNextOutgoingStreamId(),
-                                                      this);
+    return QuicMakeUnique<MockQuicSpdyClientStream>(GetNextOutgoingStreamId(),
+                                                    this);
   }
 
   MockQuicSpdyClientStream* CreateIncomingDynamicStream(
       QuicStreamId id) override {
     MockQuicSpdyClientStream* stream = new MockQuicSpdyClientStream(id, this);
-    ActivateStream(base::WrapUnique(stream));
+    ActivateStream(QuicWrapUnique(stream));
     return stream;
   }
 };
@@ -259,8 +243,8 @@ static bool CheckForDecryptionError(QuicFramer* framer) {
 
 // Regression test for b/17206611.
 TEST_P(QuicClientSessionTest, InvalidPacketReceived) {
-  IPEndPoint server_address(TestPeerIPAddress(), kTestPort);
-  IPEndPoint client_address(TestPeerIPAddress(), kTestPort);
+  QuicSocketAddress server_address(TestPeerIPAddress(), kTestPort);
+  QuicSocketAddress client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
       .WillRepeatedly(Invoke(implicit_cast<MockQuicConnection*>(connection_),
@@ -298,8 +282,8 @@ TEST_P(QuicClientSessionTest, InvalidPacketReceived) {
 
 // A packet with invalid framing should cause a connection to be closed.
 TEST_P(QuicClientSessionTest, InvalidFramedPacketReceived) {
-  IPEndPoint server_address(TestPeerIPAddress(), kTestPort);
-  IPEndPoint client_address(TestPeerIPAddress(), kTestPort);
+  QuicSocketAddress server_address(TestPeerIPAddress(), kTestPort);
+  QuicSocketAddress client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
       .WillRepeatedly(Invoke(implicit_cast<MockQuicConnection*>(connection_),
@@ -308,9 +292,10 @@ TEST_P(QuicClientSessionTest, InvalidFramedPacketReceived) {
 
   // Verify that a decryptable packet with bad frames does close the connection.
   QuicConnectionId connection_id = session_->connection()->connection_id();
+  QuicVersionVector versions = {GetParam()};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
       connection_id, false, false, false, kDefaultPathId, 100, "data",
-      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, nullptr,
+      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, &versions,
       Perspective::IS_SERVER));
   std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));

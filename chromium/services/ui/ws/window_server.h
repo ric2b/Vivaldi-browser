@@ -15,13 +15,11 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "cc/ipc/display_compositor.mojom.h"
-#include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/display.h"
-#include "services/ui/ws/gpu_service_proxy_delegate.h"
+#include "services/ui/ws/gpu_host_delegate.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/operation.h"
 #include "services/ui/ws/server_window_delegate.h"
@@ -36,7 +34,7 @@ namespace ws {
 
 class AccessPolicy;
 class DisplayManager;
-class GpuServiceProxy;
+class GpuHost;
 class ServerWindow;
 class UserActivityMonitor;
 class WindowManagerState;
@@ -48,7 +46,7 @@ class WindowTreeBinding;
 // WindowTrees) as well as providing the root of the hierarchy.
 class WindowServer : public ServerWindowDelegate,
                      public ServerWindowObserver,
-                     public GpuServiceProxyDelegate,
+                     public GpuHostDelegate,
                      public UserDisplayManagerDelegate,
                      public UserIdTrackerObserver,
                      public cc::mojom::DisplayCompositorClient {
@@ -66,7 +64,7 @@ class WindowServer : public ServerWindowDelegate,
     return display_manager_.get();
   }
 
-  GpuServiceProxy* gpu_proxy() { return gpu_proxy_.get(); }
+  GpuHost* gpu_host() { return gpu_host_.get(); }
 
   // Creates a new ServerWindow. The return value is owned by the caller, but
   // must be destroyed before WindowServer.
@@ -224,11 +222,12 @@ class WindowServer : public ServerWindowDelegate,
   bool in_drag_loop() const { return !!current_drag_loop_; }
 
   void OnDisplayReady(Display* display, bool is_first);
+  void OnDisplayDestroyed(Display* display);
   void OnNoMoreDisplays();
   WindowManagerState* GetWindowManagerStateForUser(const UserId& user_id);
 
   // ServerWindowDelegate:
-  ui::DisplayCompositor* GetDisplayCompositor() override;
+  cc::mojom::DisplayCompositor* GetDisplayCompositor() override;
 
   // UserDisplayManagerDelegate:
   bool GetFrameDecorationsForUser(
@@ -324,14 +323,11 @@ class WindowServer : public ServerWindowDelegate,
   void OnTransientWindowRemoved(ServerWindow* window,
                                 ServerWindow* transient_child) override;
 
-  // GpuServiceProxyDelegate:
-  void OnGpuChannelEstablished(
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel) override;
+  // GpuHostDelegate:
+  void OnGpuServiceInitialized() override;
 
   // cc::mojom::DisplayCompositorClient:
-  void OnSurfaceCreated(const cc::SurfaceId& surface_id,
-                        const gfx::Size& frame_size,
-                        float device_scale_factor) override;
+  void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override;
 
   // UserIdTrackerObserver:
   void OnActiveUserIdChanged(const UserId& previously_active_id,
@@ -368,19 +364,19 @@ class WindowServer : public ServerWindowDelegate,
   // Next id supplied to the window manager.
   uint32_t next_wm_change_id_;
 
-  std::unique_ptr<GpuServiceProxy> gpu_proxy_;
-  // TODO(fsamuel): The window server should not have a GPU channel.
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
+  std::unique_ptr<GpuHost> gpu_host_;
   base::Callback<void(ServerWindow*)> window_paint_callback_;
 
   UserActivityMonitorMap activity_monitor_map_;
 
   WindowManagerWindowTreeFactorySet window_manager_window_tree_factory_set_;
 
+  cc::SurfaceId root_surface_id_;
+
   mojo::Binding<cc::mojom::DisplayCompositorClient>
       display_compositor_client_binding_;
   // State for rendering into a Surface.
-  scoped_refptr<ui::DisplayCompositor> display_compositor_;
+  cc::mojom::DisplayCompositorPtr display_compositor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServer);
 };

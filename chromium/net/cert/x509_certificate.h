@@ -42,8 +42,7 @@ class PickleIterator;
 
 namespace net {
 
-class CRLSet;
-class CertVerifyResult;
+class X509Certificate;
 
 typedef std::vector<scoped_refptr<X509Certificate> > CertificateList;
 
@@ -79,6 +78,14 @@ class NET_EXPORT X509Certificate
     kPublicKeyTypeECDSA,
     kPublicKeyTypeDH,
     kPublicKeyTypeECDH
+  };
+
+  enum SignatureHashAlgorithm {
+    kSignatureHashAlgorithmMd2,
+    kSignatureHashAlgorithmMd4,
+    kSignatureHashAlgorithmMd5,
+    kSignatureHashAlgorithmSha1,
+    kSignatureHashAlgorithmOther,
   };
 
   enum Format {
@@ -146,20 +153,8 @@ class NET_EXPORT X509Certificate
                                                         size_t length);
 
 #if defined(USE_NSS_CERTS)
-  // Create an X509Certificate from the DER-encoded representation.
-  // |nickname| can be NULL if an auto-generated nickname is desired.
-  // Returns NULL on failure.
-  //
-  // This function differs from CreateFromBytes in that it takes a
-  // nickname that will be used when the certificate is imported into PKCS#11.
-  static scoped_refptr<X509Certificate> CreateFromBytesWithNickname(
-      const char* data,
-      size_t length,
-      const char* nickname);
-
   // The default nickname of the certificate, based on the certificate type
-  // passed in.  If this object was created using CreateFromBytesWithNickname,
-  // then this will return the nickname specified upon creation.
+  // passed in.
   std::string GetDefaultNickname(CertType type) const;
 #endif
 
@@ -328,6 +323,15 @@ class NET_EXPORT X509Certificate
                                size_t* size_bits,
                                PublicKeyType* type);
 
+  // Returns the digest algorithm used in |cert_handle|'s signature.
+  // If the digest algorithm cannot be determined, or if it is not one
+  // of the explicitly enumerated values, kSignatureHashAlgorithmOther
+  // will be returned.
+  // NOTE: No validation of the signature is performed, and thus invalid
+  // signatures may result in seemingly meaningful values.
+  static SignatureHashAlgorithm GetSignatureHashAlgorithm(
+      OSCertHandle cert_handle);
+
   // Returns the OSCertHandle of this object. Because of caching, this may
   // differ from the OSCertHandle originally supplied during initialization.
   // Note: On Windows, CryptoAPI may return unexpected results if this handle
@@ -461,14 +465,6 @@ class NET_EXPORT X509Certificate
   // Untrusted intermediate certificates associated with this certificate
   // that may be needed for chain building.
   OSCertHandles intermediate_ca_certs_;
-
-#if defined(USE_NSS_CERTS)
-  // This stores any default nickname that has been set on the certificate
-  // at creation time with CreateFromBytesWithNickname.
-  // If this is empty, then GetDefaultNickname will return a generated name
-  // based on the type of the certificate.
-  std::string default_nickname_;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(X509Certificate);
 };

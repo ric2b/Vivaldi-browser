@@ -1,7 +1,9 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
-<translation id="2702801445560668637">Список читання</translation>
-<translation id="7791543448312431591">Додати</translation>
-<translation id="8820817407110198400">Закладки</translation>
+<translation id="1613742542373525524">Додатку APPLICATION_NAME не вдається обробити це посилання.</translation>
+<translation id="4743991241988563337">Читати пізніше</translation>
+<translation id="6930009216791986919">Додати в закладки</translation>
+<translation id="6965382102122355670">ТАК</translation>
+<translation id="8258999165172757081">Додано</translation>
 </translationbundle>

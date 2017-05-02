@@ -12,10 +12,10 @@
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -69,25 +69,7 @@ void StatusAreaWidgetDelegate::SetFocusCyclerForTesting(
 }
 
 views::View* StatusAreaWidgetDelegate::GetDefaultFocusableChild() {
-  return default_last_focusable_child_ ? GetLastFocusableChild()
-                                       : GetFirstFocusableChild();
-}
-
-views::FocusSearch* StatusAreaWidgetDelegate::GetFocusSearch() {
-  return custom_focus_traversable_ ? custom_focus_traversable_->GetFocusSearch()
-                                   : AccessiblePaneView::GetFocusSearch();
-}
-
-views::FocusTraversable* StatusAreaWidgetDelegate::GetFocusTraversableParent() {
-  return custom_focus_traversable_
-             ? custom_focus_traversable_->GetFocusTraversableParent()
-             : AccessiblePaneView::GetFocusTraversableParent();
-}
-
-views::View* StatusAreaWidgetDelegate::GetFocusTraversableParentView() {
-  return custom_focus_traversable_
-             ? custom_focus_traversable_->GetFocusTraversableParentView()
-             : AccessiblePaneView::GetFocusTraversableParentView();
+  return child_at(0);
 }
 
 views::Widget* StatusAreaWidgetDelegate::GetWidget() {

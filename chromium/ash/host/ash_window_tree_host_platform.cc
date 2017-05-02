@@ -44,7 +44,7 @@ void AshWindowTreeHostPlatform::ToggleFullScreen() {
 }
 
 bool AshWindowTreeHostPlatform::ConfineCursorToRootWindow() {
-  gfx::Rect confined_bounds(GetBounds().size());
+  gfx::Rect confined_bounds(GetBoundsInPixels().size());
   confined_bounds.Inset(transformer_helper_.GetHostInsets());
   platform_window()->ConfineCursorToBounds(confined_bounds);
   return true;
@@ -90,17 +90,17 @@ gfx::Transform AshWindowTreeHostPlatform::GetInverseRootTransform() const {
   return transformer_helper_.GetInverseTransform();
 }
 
-void AshWindowTreeHostPlatform::UpdateRootWindowSize(
-    const gfx::Size& host_size) {
-  transformer_helper_.UpdateWindowSize(host_size);
+void AshWindowTreeHostPlatform::UpdateRootWindowSizeInPixels(
+    const gfx::Size& host_size_in_pixels) {
+  transformer_helper_.UpdateWindowSize(host_size_in_pixels);
 }
 
 void AshWindowTreeHostPlatform::OnCursorVisibilityChangedNative(bool show) {
   SetTapToClickPaused(!show);
 }
 
-void AshWindowTreeHostPlatform::SetBounds(const gfx::Rect& bounds) {
-  WindowTreeHostPlatform::SetBounds(bounds);
+void AshWindowTreeHostPlatform::SetBoundsInPixels(const gfx::Rect& bounds) {
+  WindowTreeHostPlatform::SetBoundsInPixels(bounds);
   ConfineCursorToRootWindow();
 }
 

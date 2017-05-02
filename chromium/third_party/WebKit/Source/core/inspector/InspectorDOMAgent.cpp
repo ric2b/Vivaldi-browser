@@ -75,7 +75,6 @@
 #include "core/page/Page.h"
 #include "core/xml/DocumentXPathEvaluator.h"
 #include "core/xml/XPathResult.h"
-#include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/PlatformTouchEvent.h"
 #include "wtf/ListHashSet.h"
@@ -136,7 +135,7 @@ v8::Local<v8::Value> nodeV8Value(v8::Local<v8::Context> context, Node* node) {
           currentDOMWindow(isolate), node,
           BindingSecurity::ErrorReportOption::DoNotReport))
     return v8::Null(isolate);
-  return toV8(node, context->Global(), isolate);
+  return ToV8(node, context->Global(), isolate);
 }
 
 }  // namespace
@@ -173,7 +172,7 @@ void InspectorRevalidateDOMTask::onTimer(TimerBase*) {
   // be called after m_domAgent has been destroyed.
   HeapVector<Member<Element>> elements;
   for (auto& attribute : m_styleAttrInvalidatedElements)
-    elements.append(attribute.get());
+    elements.push_back(attribute.get());
   m_domAgent->styleAttributeInvalidated(elements);
   m_styleAttrInvalidatedElements.clear();
 }
@@ -272,7 +271,7 @@ HeapVector<Member<Document>> InspectorDOMAgent::documents() {
   if (m_document) {
     for (LocalFrame* frame : *m_inspectedFrames) {
       if (Document* document = frame->document())
-        result.append(document);
+        result.push_back(document);
     }
   }
   return result;
@@ -606,7 +605,7 @@ Response InspectorDOMAgent::querySelector(int nodeId,
   if (!node || !node->isContainerNode())
     return Response::Error("Not a container node");
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   Element* element = toContainerNode(node)->querySelector(
       AtomicString(selectors), exceptionState);
   if (exceptionState.hadException())
@@ -628,7 +627,7 @@ Response InspectorDOMAgent::querySelectorAll(
   if (!node || !node->isContainerNode())
     return Response::Error("Not a container node");
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   StaticElementList* elements = toContainerNode(node)->querySelectorAll(
       AtomicString(selectors), exceptionState);
   if (exceptionState.hadException())
@@ -662,7 +661,7 @@ int InspectorDOMAgent::pushNodePathToFrontend(Node* nodeToPush,
     Node* parent = innerParentNode(node);
     if (!parent)
       return 0;
-    path.append(parent);
+    path.push_back(parent);
     if (nodeMap->get(parent))
       break;
     node = parent;
@@ -691,7 +690,7 @@ int InspectorDOMAgent::pushNodePathToFrontend(Node* nodeToPush) {
   // Node being pushed is detached -> push subtree root.
   NodeToIdMap* newMap = new NodeToIdMap;
   NodeToIdMap* danglingMap = newMap;
-  m_danglingNodeToIdMaps.append(newMap);
+  m_danglingNodeToIdMaps.push_back(newMap);
   std::unique_ptr<protocol::Array<protocol::DOM::Node>> children =
       protocol::Array<protocol::DOM::Node>::create();
   children->addItem(buildObjectForNode(node, 0, false, danglingMap));
@@ -802,7 +801,7 @@ Response InspectorDOMAgent::setNodeName(int nodeId,
   if (!response.isSuccess())
     return response;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   Element* newElem = oldElement->document().createElement(AtomicString(tagName),
                                                           exceptionState);
   if (exceptionState.hadException())
@@ -994,9 +993,10 @@ Response InspectorDOMAgent::performSearch(
                equalIgnoringCase(node->nodeName(), tagNameQuery)) ||
               (startTagFound && !endTagFound &&
                node->nodeName().startsWith(tagNameQuery,
-                                           TextCaseInsensitive)) ||
+                                           TextCaseUnicodeInsensitive)) ||
               (!startTagFound && endTagFound &&
-               node->nodeName().endsWith(tagNameQuery, TextCaseInsensitive))) {
+               node->nodeName().endsWith(tagNameQuery,
+                                         TextCaseUnicodeInsensitive))) {
             resultCollector.add(node);
             break;
           }
@@ -1006,12 +1006,13 @@ Response InspectorDOMAgent::performSearch(
           for (auto& attribute : attributes) {
             // Add attribute pair
             if (attribute.localName().find(whitespaceTrimmedQuery, 0,
-                                           TextCaseInsensitive) != kNotFound) {
+                                           TextCaseUnicodeInsensitive) !=
+                kNotFound) {
               resultCollector.add(node);
               break;
             }
-            size_t foundPosition =
-                attribute.value().find(attributeQuery, 0, TextCaseInsensitive);
+            size_t foundPosition = attribute.value().find(
+                attributeQuery, 0, TextCaseUnicodeInsensitive);
             if (foundPosition != kNotFound) {
               if (!exactAttributeMatch ||
                   (!foundPosition &&
@@ -1031,7 +1032,7 @@ Response InspectorDOMAgent::performSearch(
     // XPath evaluation
     for (Document* document : docs) {
       ASSERT(document);
-      TrackExceptionState exceptionState;
+      DummyExceptionStateForTesting exceptionState;
       XPathResult* result = DocumentXPathEvaluator::evaluate(
           *document, whitespaceTrimmedQuery, document, nullptr,
           XPathResult::kOrderedNodeSnapshotType, ScriptValue(), exceptionState);
@@ -1053,7 +1054,7 @@ Response InspectorDOMAgent::performSearch(
 
     // Selector evaluation
     for (Document* document : docs) {
-      TrackExceptionState exceptionState;
+      DummyExceptionStateForTesting exceptionState;
       StaticElementList* elementList = document->querySelectorAll(
           AtomicString(whitespaceTrimmedQuery), exceptionState);
       if (exceptionState.hadException() || !elementList)
@@ -1071,7 +1072,7 @@ Response InspectorDOMAgent::performSearch(
            .storedValue->value;
 
   for (auto& result : resultCollector)
-    resultsIt->append(result);
+    resultsIt->push_back(result);
 
   *resultCount = resultsIt->size();
   return Response::OK();
@@ -1164,7 +1165,7 @@ Response InspectorDOMAgent::highlightConfigFromInspectorObject(
 
   protocol::DOM::HighlightConfig* config = highlightInspectorObject.fromJust();
   std::unique_ptr<InspectorHighlightConfig> highlightConfig =
-      makeUnique<InspectorHighlightConfig>();
+      WTF::makeUnique<InspectorHighlightConfig>();
   highlightConfig->showInfo = config->getShowInfo(false);
   highlightConfig->showRulers = config->getShowRulers(false);
   highlightConfig->showExtensionLines = config->getShowExtensionLines(false);
@@ -1194,8 +1195,6 @@ Response InspectorDOMAgent::setInspectMode(
     searchMode = SearchingForUAShadow;
   } else if (mode == protocol::DOM::InspectModeEnum::None) {
     searchMode = NotSearching;
-  } else if (mode == protocol::DOM::InspectModeEnum::ShowLayoutEditor) {
-    searchMode = ShowLayoutEditor;
   } else {
     return Response::Error(
         String("Unknown mode \"" + mode + "\" was provided."));
@@ -1218,7 +1217,7 @@ Response InspectorDOMAgent::highlightRect(
     Maybe<protocol::DOM::RGBA> color,
     Maybe<protocol::DOM::RGBA> outlineColor) {
   std::unique_ptr<FloatQuad> quad =
-      wrapUnique(new FloatQuad(FloatRect(x, y, width, height)));
+      WTF::wrapUnique(new FloatQuad(FloatRect(x, y, width, height)));
   innerHighlightQuad(std::move(quad), std::move(color),
                      std::move(outlineColor));
   return Response::OK();
@@ -1228,7 +1227,7 @@ Response InspectorDOMAgent::highlightQuad(
     std::unique_ptr<protocol::Array<double>> quadArray,
     Maybe<protocol::DOM::RGBA> color,
     Maybe<protocol::DOM::RGBA> outlineColor) {
-  std::unique_ptr<FloatQuad> quad = makeUnique<FloatQuad>();
+  std::unique_ptr<FloatQuad> quad = WTF::makeUnique<FloatQuad>();
   if (!parseQuad(std::move(quadArray), quad.get()))
     return Response::Error("Invalid Quad format");
   innerHighlightQuad(std::move(quad), std::move(color),
@@ -1241,7 +1240,7 @@ void InspectorDOMAgent::innerHighlightQuad(
     Maybe<protocol::DOM::RGBA> color,
     Maybe<protocol::DOM::RGBA> outlineColor) {
   std::unique_ptr<InspectorHighlightConfig> highlightConfig =
-      makeUnique<InspectorHighlightConfig>();
+      WTF::makeUnique<InspectorHighlightConfig>();
   highlightConfig->content = parseColor(color.fromMaybe(nullptr));
   highlightConfig->contentOutline = parseColor(outlineColor.fromMaybe(nullptr));
   if (m_client)
@@ -1308,7 +1307,7 @@ Response InspectorDOMAgent::highlightFrame(
   // FIXME: Inspector doesn't currently work cross process.
   if (frame && frame->deprecatedLocalOwner()) {
     std::unique_ptr<InspectorHighlightConfig> highlightConfig =
-        makeUnique<InspectorHighlightConfig>();
+        WTF::makeUnique<InspectorHighlightConfig>();
     highlightConfig->showInfo = true;  // Always show tooltips for frames.
     highlightConfig->content = parseColor(color.fromMaybe(nullptr));
     highlightConfig->contentOutline =
@@ -1398,13 +1397,13 @@ Response InspectorDOMAgent::moveTo(int nodeId,
 }
 
 Response InspectorDOMAgent::undo() {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   m_history->undo(exceptionState);
   return InspectorDOMAgent::toResponse(exceptionState);
 }
 
 Response InspectorDOMAgent::redo() {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   m_history->redo(exceptionState);
   return InspectorDOMAgent::toResponse(exceptionState);
 }
@@ -1440,7 +1439,7 @@ Response InspectorDOMAgent::setFileInputFiles(
 
   Vector<String> paths;
   for (size_t index = 0; index < files->length(); ++index)
-    paths.append(files->get(index));
+    paths.push_back(files->get(index));
   toHTMLInputElement(node)->setFilesFromPaths(paths);
   return Response::OK();
 }
@@ -1575,6 +1574,9 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
           .setLocalName(localName)
           .setNodeValue(nodeValue)
           .build();
+
+  if (node->isSVGElement())
+    value->setIsSVG(true);
 
   bool forcePushChildren = false;
   if (node->isElementNode()) {
@@ -2205,9 +2207,7 @@ Response InspectorDOMAgent::setInspectedNode(int nodeId) {
   Response response = assertNode(nodeId, node);
   if (!response.isSuccess())
     return response;
-  m_v8Session->addInspectedObject(makeUnique<InspectableNode>(node));
-  if (m_client)
-    m_client->setInspectedNode(node);
+  m_v8Session->addInspectedObject(WTF::makeUnique<InspectableNode>(node));
   return Response::OK();
 }
 

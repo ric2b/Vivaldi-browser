@@ -106,8 +106,6 @@ source_set("ipc_common_sources") {
     sources += [
       "android/scoped_surface_request_conduit.cc",
       "android/scoped_surface_request_conduit.h",
-      "android/surface_texture_manager.cc",
-      "android/surface_texture_manager.h",
       "android/surface_texture_peer.cc",
       "android/surface_texture_peer.h",
     ]
@@ -143,6 +141,7 @@ mojom("interfaces") {
     "capabilities.mojom",
     "dx_diag_node.mojom",
     "gpu_info.mojom",
+    "gpu_preferences.mojom",
     "mailbox.mojom",
     "mailbox_holder.mojom",
     "surface_handle.mojom",

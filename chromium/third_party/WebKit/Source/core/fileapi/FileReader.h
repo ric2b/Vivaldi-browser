@@ -33,7 +33,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReaderLoader.h"
@@ -50,8 +50,8 @@ class ExecutionContext;
 class StringOrArrayBuffer;
 
 class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
-                                     public ActiveScriptWrappable,
-                                     public ActiveDOMObject,
+                                     public ActiveScriptWrappable<FileReader>,
+                                     public ContextLifecycleObserver,
                                      public FileReaderLoaderClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(FileReader);
@@ -74,8 +74,8 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   DOMException* error() { return m_error; }
   void result(StringOrArrayBuffer& resultAttribute) const;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // ContextLifecycleObserver
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable
   bool hasPendingActivity() const final;
@@ -83,7 +83,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   // EventTarget
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override {
-    return ActiveDOMObject::getExecutionContext();
+    return ContextLifecycleObserver::getExecutionContext();
   }
 
   // FileReaderLoaderClient
@@ -102,9 +102,9 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit FileReader(ExecutionContext*);
-
   class ThrottlingController;
+
+  explicit FileReader(ExecutionContext*);
 
   void terminate();
   void readInternal(Blob*, FileReaderLoader::ReadType, ExceptionState&);

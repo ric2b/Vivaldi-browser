@@ -21,11 +21,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/task_runner.h"
 #include "base/task_scheduler/delayed_task_manager.h"
+#include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_tracker.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/time/time.h"
 
 namespace base {
 namespace internal {
@@ -39,7 +40,6 @@ constexpr char kNumTasksBeforeDetachHistogramPrefix[] =
     "TaskScheduler.NumTasksBeforeDetach.";
 constexpr char kNumTasksBetweenWaitsHistogramPrefix[] =
     "TaskScheduler.NumTasksBetweenWaits.";
-constexpr char kTaskLatencyHistogramPrefix[] = "TaskScheduler.TaskLatency.";
 
 // SchedulerWorkerPool that owns the current thread, if any.
 LazyInstance<ThreadLocalPointer<const SchedulerWorkerPool>>::Leaky
@@ -129,29 +129,6 @@ class SchedulerSequencedTaskRunner : public SequencedTaskRunner {
   DISALLOW_COPY_AND_ASSIGN(SchedulerSequencedTaskRunner);
 };
 
-HistogramBase* GetTaskLatencyHistogram(const std::string& pool_name,
-                                       TaskPriority task_priority) {
-  const char* task_priority_suffix = nullptr;
-  switch (task_priority) {
-    case TaskPriority::BACKGROUND:
-      task_priority_suffix = ".BackgroundTaskPriority";
-      break;
-    case TaskPriority::USER_VISIBLE:
-      task_priority_suffix = ".UserVisibleTaskPriority";
-      break;
-    case TaskPriority::USER_BLOCKING:
-      task_priority_suffix = ".UserBlockingTaskPriority";
-      break;
-  }
-
-  // Mimics the UMA_HISTOGRAM_TIMES macro.
-  return Histogram::FactoryTimeGet(kTaskLatencyHistogramPrefix + pool_name +
-                                       kPoolNameSuffix + task_priority_suffix,
-                                   TimeDelta::FromMilliseconds(1),
-                                   TimeDelta::FromSeconds(10), 50,
-                                   HistogramBase::kUmaTargetedHistogramFlag);
-}
-
 // Only used in DCHECKs.
 bool ContainsWorker(
     const std::vector<std::unique_ptr<SchedulerWorker>>& workers,
@@ -239,8 +216,7 @@ class SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl
   // SchedulerWorker::Delegate:
   void OnMainEntry(SchedulerWorker* worker) override;
   scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) override;
-  void DidRunTaskWithPriority(TaskPriority task_priority,
-                              const TimeDelta& task_latency) override;
+  void DidRunTask() override;
   void ReEnqueueSequence(scoped_refptr<Sequence> sequence) override;
   TimeDelta GetSleepTimeout() override;
   bool CanDetach(SchedulerWorker* worker) override;
@@ -308,16 +284,10 @@ std::unique_ptr<SchedulerWorkerPoolImpl> SchedulerWorkerPoolImpl::Create(
     const ReEnqueueSequenceCallback& re_enqueue_sequence_callback,
     TaskTracker* task_tracker,
     DelayedTaskManager* delayed_task_manager) {
-  std::unique_ptr<SchedulerWorkerPoolImpl> worker_pool(
-      new SchedulerWorkerPoolImpl(params.name(),
-                                  params.io_restriction(),
-                                  params.suggested_reclaim_time(),
-                                  task_tracker, delayed_task_manager));
-  if (worker_pool->Initialize(
-          params.priority_hint(), params.standby_thread_policy(),
-          params.max_threads(), re_enqueue_sequence_callback)) {
+  auto worker_pool = WrapUnique(
+      new SchedulerWorkerPoolImpl(params, task_tracker, delayed_task_manager));
+  if (worker_pool->Initialize(params, re_enqueue_sequence_callback))
     return worker_pool;
-  }
   return nullptr;
 }
 
@@ -519,10 +489,6 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::OnMainEntry(
 
   // New threads haven't run GetWork() yet, so reset the |idle_start_time_|.
   idle_start_time_ = TimeTicks();
-
-  ThreadRestrictions::SetIOAllowed(
-      outer_->io_restriction_ ==
-          SchedulerWorkerPoolParams::IORestriction::ALLOWED);
 }
 
 scoped_refptr<Sequence>
@@ -606,29 +572,9 @@ SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::GetWork(
   return sequence;
 }
 
-void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
-    DidRunTaskWithPriority(TaskPriority task_priority,
-                           const TimeDelta& task_latency) {
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::DidRunTask() {
   ++num_tasks_since_last_wait_;
   ++num_tasks_since_last_detach_;
-
-  const int priority_index = static_cast<int>(task_priority);
-
-  // As explained in the header file, histograms are allocated on demand. It
-  // doesn't matter if an element of |task_latency_histograms_| is set multiple
-  // times since GetTaskLatencyHistogram() is idempotent. As explained in the
-  // comment at the top of histogram_macros.h, barriers are required.
-  HistogramBase* task_latency_histogram = reinterpret_cast<HistogramBase*>(
-      subtle::Acquire_Load(&outer_->task_latency_histograms_[priority_index]));
-  if (!task_latency_histogram) {
-    task_latency_histogram =
-        GetTaskLatencyHistogram(outer_->name_, task_priority);
-    subtle::Release_Store(
-        &outer_->task_latency_histograms_[priority_index],
-        reinterpret_cast<subtle::AtomicWord>(task_latency_histogram));
-  }
-
-  task_latency_histogram->AddTime(task_latency);
 }
 
 void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
@@ -675,14 +621,11 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::OnDetach() {
 }
 
 SchedulerWorkerPoolImpl::SchedulerWorkerPoolImpl(
-    StringPiece name,
-    SchedulerWorkerPoolParams::IORestriction io_restriction,
-    const TimeDelta& suggested_reclaim_time,
+    const SchedulerWorkerPoolParams& params,
     TaskTracker* task_tracker,
     DelayedTaskManager* delayed_task_manager)
-    : name_(name.as_string()),
-      io_restriction_(io_restriction),
-      suggested_reclaim_time_(suggested_reclaim_time),
+    : name_(params.name()),
+      suggested_reclaim_time_(params.suggested_reclaim_time()),
       idle_workers_stack_lock_(shared_priority_queue_.container_lock()),
       idle_workers_stack_cv_for_testing_(
           idle_workers_stack_lock_.CreateConditionVariable()),
@@ -725,31 +668,29 @@ SchedulerWorkerPoolImpl::SchedulerWorkerPoolImpl(
 }
 
 bool SchedulerWorkerPoolImpl::Initialize(
-    ThreadPriority priority_hint,
-    SchedulerWorkerPoolParams::StandbyThreadPolicy standby_thread_policy,
-    size_t max_threads,
+    const SchedulerWorkerPoolParams& params,
     const ReEnqueueSequenceCallback& re_enqueue_sequence_callback) {
   AutoSchedulerLock auto_lock(idle_workers_stack_lock_);
 
   DCHECK(workers_.empty());
-  workers_.resize(max_threads);
+  workers_.resize(params.max_threads());
 
   // Create workers and push them to the idle stack in reverse order of index.
   // This ensures that they are woken up in order of index and that the ALIVE
   // worker is on top of the stack.
-  for (int index = max_threads - 1; index >= 0; --index) {
+  for (int index = params.max_threads() - 1; index >= 0; --index) {
     const bool is_standby_lazy =
-        standby_thread_policy ==
+        params.standby_thread_policy() ==
         SchedulerWorkerPoolParams::StandbyThreadPolicy::LAZY;
     const SchedulerWorker::InitialState initial_state =
         (index == 0 && !is_standby_lazy)
             ? SchedulerWorker::InitialState::ALIVE
             : SchedulerWorker::InitialState::DETACHED;
     std::unique_ptr<SchedulerWorker> worker = SchedulerWorker::Create(
-        priority_hint,
+        params.priority_hint(),
         MakeUnique<SchedulerWorkerDelegateImpl>(
             this, re_enqueue_sequence_callback, &shared_priority_queue_, index),
-        task_tracker_, initial_state);
+        task_tracker_, initial_state, params.backward_compatibility());
     if (!worker)
       break;
     idle_workers_stack_.Push(worker.get());
@@ -767,7 +708,7 @@ void SchedulerWorkerPoolImpl::WakeUpWorker(SchedulerWorker* worker) {
   DCHECK(worker);
   RemoveFromIdleWorkersStack(worker);
   worker->WakeUp();
-  // TOOD(robliao): Honor StandbyThreadPolicy::ONE here and consider adding
+  // TODO(robliao): Honor StandbyThreadPolicy::ONE here and consider adding
   // hysteresis to the CanDetach check. See https://crbug.com/666041.
 }
 

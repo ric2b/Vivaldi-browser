@@ -8,7 +8,6 @@
 #include <string.h>
 
 #include "mojo/public/cpp/bindings/array_traits_carray.h"
-#include "mojo/public/cpp/bindings/array_traits_standard.h"
 #include "mojo/public/cpp/bindings/array_traits_stl.h"
 #include "mojo/public/cpp/bindings/lib/array_serialization.h"
 #include "mojo/public/cpp/bindings/lib/buffer.h"
@@ -18,9 +17,7 @@
 #include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
 #include "mojo/public/cpp/bindings/lib/string_serialization.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
-#include "mojo/public/cpp/bindings/map_traits_standard.h"
 #include "mojo/public/cpp/bindings/map_traits_stl.h"
-#include "mojo/public/cpp/bindings/string_traits_standard.h"
 #include "mojo/public/cpp/bindings/string_traits_stl.h"
 #include "mojo/public/cpp/bindings/string_traits_string16.h"
 #include "mojo/public/cpp/bindings/string_traits_string_piece.h"
@@ -44,7 +41,7 @@ DataArrayType StructSerializeImpl(UserType* input) {
   void* result_buffer = &result.front();
   // The serialization logic requires that the buffer is 8-byte aligned. If the
   // result buffer is not properly aligned, we have to do an extra copy. In
-  // practice, this should never happen for mojo::Array (backed by std::vector).
+  // practice, this should never happen for std::vector.
   bool need_copy = !IsAligned(result_buffer);
 
   if (need_copy) {
@@ -72,11 +69,9 @@ bool StructDeserializeImpl(const DataArrayType& input, UserType* output) {
                 "Unexpected type.");
   using DataType = typename MojomTypeTraits<MojomType>::Data;
 
-  if (input.is_null())
-    return false;
-
+  // TODO(sammc): Use DataArrayType::empty() once WTF::Vector::empty() exists.
   void* input_buffer =
-      input.empty()
+      input.size() == 0
           ? nullptr
           : const_cast<void*>(reinterpret_cast<const void*>(&input.front()));
 

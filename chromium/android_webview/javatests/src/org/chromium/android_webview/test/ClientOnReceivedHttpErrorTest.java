@@ -4,7 +4,7 @@
 
 package org.chromium.android_webview.test;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.util.Pair;
 
 import org.chromium.android_webview.AwContents;
@@ -43,9 +43,9 @@ public class ClientOnReceivedHttpErrorTest extends AwTestBase {
     }
 
     private static class VerifyOnReceivedHttpErrorCallClient extends TestAwContentsClient {
-        private boolean mBypass = false;
-        private boolean mIsOnPageFinishedCalled = false;
-        private boolean mIsOnReceivedHttpErrorCalled = false;
+        private boolean mBypass;
+        private boolean mIsOnPageFinishedCalled;
+        private boolean mIsOnReceivedHttpErrorCalled;
 
         void enableBypass() {
             mBypass = true;

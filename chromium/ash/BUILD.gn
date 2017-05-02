@@ -7,6 +7,9 @@ import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
 
+# Historical note: Ash shipped on Windows for a couple years to support
+# Windows 8 Metro mode. Windows support was removed in 2016.
+assert(is_chromeos)
 assert(use_aura)
 assert(enable_hidpi)
 
@@ -39,14 +42,8 @@ component("ash") {
     "aura/pointer_watcher_adapter.h",
     "aura/wm_lookup_aura.cc",
     "aura/wm_lookup_aura.h",
-    "aura/wm_root_window_controller_aura.cc",
-    "aura/wm_root_window_controller_aura.h",
-    "aura/wm_shelf_aura.cc",
-    "aura/wm_shelf_aura.h",
     "aura/wm_shell_aura.cc",
     "aura/wm_shell_aura.h",
-    "aura/wm_window_aura.cc",
-    "aura/wm_window_aura.h",
     "autoclick/autoclick_controller.cc",
     "autoclick/autoclick_controller.h",
     "cancel_mode.cc",
@@ -74,8 +71,8 @@ component("ash") {
     "common/ash_layout_constants.h",
     "common/ash_switches.cc",
     "common/ash_switches.h",
-    "common/cast_config_delegate.cc",
-    "common/cast_config_delegate.h",
+    "common/cast_config_controller.cc",
+    "common/cast_config_controller.h",
     "common/default_accessibility_delegate.cc",
     "common/default_accessibility_delegate.h",
     "common/devtools/ash_devtools_css_agent.cc",
@@ -116,6 +113,8 @@ component("ash") {
     "common/login_status.h",
     "common/material_design/material_design_controller.cc",
     "common/material_design/material_design_controller.h",
+    "common/media_controller.cc",
+    "common/media_controller.h",
     "common/metrics/gesture_action_type.h",
     "common/metrics/pointer_metrics_recorder.cc",
     "common/metrics/pointer_metrics_recorder.h",
@@ -124,18 +123,19 @@ component("ash") {
     "common/mojo_interface_factory.h",
     "common/multi_profile_uma.cc",
     "common/multi_profile_uma.h",
-    "common/new_window_client_proxy.cc",
-    "common/new_window_client_proxy.h",
+    "common/new_window_controller.cc",
+    "common/new_window_controller.h",
     "common/palette_delegate.h",
     "common/popup_message.cc",
     "common/popup_message.h",
     "common/scoped_root_window_for_new_windows.cc",
     "common/scoped_root_window_for_new_windows.h",
+    "common/session/session_controller.cc",
+    "common/session/session_controller.h",
     "common/session/session_state_delegate.cc",
     "common/session/session_state_delegate.h",
     "common/session/session_state_observer.cc",
     "common/session/session_state_observer.h",
-    "common/session/session_types.h",
     "common/shelf/app_list_button.cc",
     "common/shelf/app_list_button.h",
     "common/shelf/app_list_shelf_item_delegate.cc",
@@ -224,7 +224,6 @@ component("ash") {
     "common/system/chromeos/ime_menu/ime_menu_tray.h",
     "common/system/chromeos/keyboard_brightness_controller.cc",
     "common/system/chromeos/keyboard_brightness_controller.h",
-    "common/system/chromeos/media_security/media_capture_observer.h",
     "common/system/chromeos/media_security/multi_profile_media_tray_item.cc",
     "common/system/chromeos/media_security/multi_profile_media_tray_item.h",
     "common/system/chromeos/network/network_detailed_view.h",
@@ -254,8 +253,8 @@ component("ash") {
     "common/system/chromeos/network/tray_sms.h",
     "common/system/chromeos/network/tray_vpn.cc",
     "common/system/chromeos/network/tray_vpn.h",
-    "common/system/chromeos/network/vpn_delegate.cc",
-    "common/system/chromeos/network/vpn_delegate.h",
+    "common/system/chromeos/network/vpn_list.cc",
+    "common/system/chromeos/network/vpn_list.h",
     "common/system/chromeos/network/vpn_list_view.cc",
     "common/system/chromeos/network/vpn_list_view.h",
     "common/system/chromeos/palette/common_palette_tool.cc",
@@ -436,7 +435,6 @@ component("ash") {
     "common/system/tray_accessibility.h",
     "common/system/update/tray_update.cc",
     "common/system/update/tray_update.h",
-    "common/system/update/update_observer.h",
     "common/system/user/button_from_view.cc",
     "common/system/user/button_from_view.h",
     "common/system/user/login_status.cc",
@@ -595,11 +593,10 @@ component("ash") {
     "common/wm_layout_manager.h",
     "common/wm_lookup.cc",
     "common/wm_lookup.h",
-    "common/wm_root_window_controller.cc",
-    "common/wm_root_window_controller.h",
     "common/wm_shell.cc",
     "common/wm_shell.h",
     "common/wm_transient_window_observer.h",
+    "common/wm_window.cc",
     "common/wm_window.h",
     "common/wm_window_observer.h",
     "common/wm_window_property.h",
@@ -614,8 +611,6 @@ component("ash") {
     "display/display_animator.h",
     "display/display_animator_chromeos.cc",
     "display/display_animator_chromeos.h",
-    "display/display_change_observer_chromeos.cc",
-    "display/display_change_observer_chromeos.h",
     "display/display_color_manager_chromeos.cc",
     "display/display_color_manager_chromeos.h",
     "display/display_configuration_controller.cc",
@@ -652,6 +647,8 @@ component("ash") {
     "display/screen_position_controller.h",
     "display/shared_display_edge_indicator.cc",
     "display/shared_display_edge_indicator.h",
+    "display/shutdown_observer_chromeos.cc",
+    "display/shutdown_observer_chromeos.h",
     "display/unified_mouse_warp_controller.cc",
     "display/unified_mouse_warp_controller.h",
     "display/window_tree_host_manager.cc",
@@ -675,8 +672,6 @@ component("ash") {
     "host/ash_window_tree_host_platform.h",
     "host/ash_window_tree_host_unified.cc",
     "host/ash_window_tree_host_unified.h",
-    "host/ash_window_tree_host_win.cc",
-    "host/ash_window_tree_host_win.h",
     "host/ash_window_tree_host_x11.cc",
     "host/ash_window_tree_host_x11.h",
     "host/root_window_transformer.h",
@@ -684,12 +679,22 @@ component("ash") {
     "host/transformer_helper.h",
     "ime/input_method_event_handler.cc",
     "ime/input_method_event_handler.h",
+    "laser/laser_pointer_controller.cc",
+    "laser/laser_pointer_controller.h",
+    "laser/laser_pointer_points.cc",
+    "laser/laser_pointer_points.h",
+    "laser/laser_pointer_view.cc",
+    "laser/laser_pointer_view.h",
+    "laser/laser_segment_utils.cc",
+    "laser/laser_segment_utils.h",
     "link_handler_model.cc",
     "link_handler_model.h",
     "link_handler_model_factory.cc",
     "link_handler_model_factory.h",
     "magnifier/magnification_controller.cc",
     "magnifier/magnification_controller.h",
+    "magnifier/partial_magnification_controller.cc",
+    "magnifier/partial_magnification_controller.h",
     "metrics/desktop_task_switch_metric_recorder.cc",
     "metrics/desktop_task_switch_metric_recorder.h",
     "metrics/task_switch_metrics_recorder.cc",
@@ -722,8 +727,6 @@ component("ash") {
     "shared/immersive_handler_factory.h",
     "shared/immersive_revealed_lock.cc",
     "shared/immersive_revealed_lock.h",
-    "shelf/dimmer_view.cc",
-    "shelf/dimmer_view.h",
     "shelf/shelf_bezel_event_handler.cc",
     "shelf/shelf_bezel_event_handler.h",
     "shelf/shelf_window_targeter.cc",
@@ -746,18 +749,16 @@ component("ash") {
     "system/chromeos/rotation/tray_rotation_lock.h",
     "system/chromeos/screen_layout_observer.cc",
     "system/chromeos/screen_layout_observer.h",
+    "touch/ash_touch_transform_controller.cc",
+    "touch/ash_touch_transform_controller.h",
     "touch/touch_hud_debug.cc",
     "touch/touch_hud_debug.h",
     "touch/touch_hud_projection.cc",
     "touch/touch_hud_projection.h",
     "touch/touch_observer_hud.cc",
     "touch/touch_observer_hud.h",
-    "touch/touch_transformer_controller.cc",
-    "touch/touch_transformer_controller.h",
     "touch/touch_uma.cc",
     "touch/touch_uma.h",
-    "touch/touchscreen_util.cc",
-    "touch/touchscreen_util.h",
     "utility/screenshot_controller.cc",
     "utility/screenshot_controller.h",
     "virtual_keyboard_controller.cc",
@@ -853,6 +854,10 @@ component("ash") {
     "//ash/resources",
     "//ash/resources/vector_icons",
     "//ash/shared:app_types",
+
+    # This is a tiny dependency that just defines some service name strings & is
+    # not equivalent to depending on content in a more substantial manner.
+    "//content/public/common:service_names",
   ]
   deps = [
     "//ash/autoclick/common:autoclick",
@@ -863,27 +868,42 @@ component("ash") {
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
     "//cc",
+    "//chromeos",
+    "//chromeos:power_manager_proto",
     "//components/device_event_log",
     "//components/onc",
+    "//components/quirks",
     "//components/session_manager:base",
     "//components/signin/core/account_id",
     "//components/ui_devtools",
     "//components/user_manager",
     "//components/wallpaper",
+    "//device/bluetooth",
     "//media",
     "//net",
+    "//services/preferences/public/cpp",
     "//services/service_manager/public/cpp",
+    "//services/ui/public/interfaces",
     "//skia",
+
+    # TODO(msw): Remove this; only ash_with_content should depend on webkit.
+    "//third_party/WebKit/public:blink_headers",
     "//third_party/icu",
+    "//third_party/qcms",
     "//ui/accessibility",
     "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/base",
     "//ui/base:ui_data_pack",
     "//ui/base/ime",
+    "//ui/chromeos",
+    "//ui/chromeos/resources",
+    "//ui/chromeos/strings",
     "//ui/compositor",
     "//ui/display",
+    "//ui/display/manager",
     "//ui/display/types",
+    "//ui/display/util",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events:gesture_detection",
@@ -902,15 +922,10 @@ component("ash") {
     "//url",
   ]
 
-  if (is_win) {
-    sources -= [
-      "sticky_keys/sticky_keys_controller.cc",
-      "sticky_keys/sticky_keys_controller.h",
-    ]
-
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
-  }
+  # TODO(jamescook): Move to ash_unittests?
+  data = [
+    "display/test_data/",
+  ]
 
   if (use_x11) {
     configs += [
@@ -944,57 +959,11 @@ component("ash") {
     ]
   }
 
-  if (is_chromeos) {
-    deps += [
-      "//chromeos",
-      "//chromeos:power_manager_proto",
-      "//components/quirks",
-      "//device/bluetooth",
-
-      # TODO(msw): Remove this; only ash_with_content should depend on webkit.
-      "//third_party/WebKit/public:blink_headers",
-      "//third_party/qcms",
-      "//ui/chromeos",
-      "//ui/chromeos/resources",
-      "//ui/chromeos/strings",
-      "//ui/display/util",
-    ]
-
-    data = [
-      "display/test_data/",
-    ]
-
-    sources += [
-      "laser/laser_pointer_controller.cc",
-      "laser/laser_pointer_controller.h",
-      "laser/laser_pointer_points.cc",
-      "laser/laser_pointer_points.h",
-      "laser/laser_pointer_view.cc",
-      "laser/laser_pointer_view.h",
-      "magnifier/partial_magnification_controller.cc",
-      "magnifier/partial_magnification_controller.h",
-    ]
-  } else {
-    sources -= [
-      "accelerators/key_hold_detector.cc",
-      "accelerators/key_hold_detector.h",
-      "accelerators/magnifier_key_scroller.cc",
-      "accelerators/magnifier_key_scroller.h",
-      "accelerators/spoken_feedback_toggler.cc",
-      "accelerators/spoken_feedback_toggler.h",
-      "display/resolution_notification_controller.cc",
-      "display/resolution_notification_controller.h",
-      "touch/touch_transformer_controller.cc",
-      "touch/touch_transformer_controller.h",
-      "touch/touchscreen_util.cc",
-      "touch/touchscreen_util.h",
-      "virtual_keyboard_controller.cc",
-      "virtual_keyboard_controller.h",
-    ]
-  }
-
   # Usage of content should be in ash_content_unittests.
-  assert_no_deps = [ "//content/*" ]
+  assert_no_deps = [
+    "//content/public/browser",
+    "//content/public/common",
+  ]
 }
 
 component("ash_with_content") {
@@ -1018,6 +987,7 @@ component("ash_with_content") {
     ":ash",
   ]
   deps = [
+    "//ash/public/cpp",
     "//base",
     "//base/third_party/dynamic_annotations",
     "//content/public/browser",
@@ -1048,6 +1018,8 @@ static_library("ash_shell_lib") {
     "shell/bubble.cc",
     "shell/context_menu.cc",
     "shell/context_menu.h",
+    "shell/example_app_list_presenter.cc",
+    "shell/example_app_list_presenter.h",
     "shell/example_factory.h",
     "shell/lock_view.cc",
     "shell/panel_window.cc",
@@ -1064,7 +1036,10 @@ static_library("ash_shell_lib") {
   ]
 
   # Usage of content should be in ash_shell_lib_with_content.
-  assert_no_deps = [ "//content/*" ]
+  assert_no_deps = [
+    "//content/public/browser",
+    "//content/public/common",
+  ]
 
   deps = [
     ":ash",
@@ -1076,6 +1051,7 @@ static_library("ash_shell_lib") {
     "//components/user_manager",
     "//skia",
     "//ui/app_list/presenter",
+    "//ui/app_list/presenter:test_support",
     "//ui/aura",
     "//ui/base",
     "//ui/gfx",
@@ -1108,11 +1084,13 @@ static_library("ash_shell_lib_with_content") {
     "//ash/test:test_support_without_content",
     "//base:i18n",
     "//chrome:packed_resources",
+    "//chromeos",
     "//content",
     "//content/shell:content_shell_lib",
     "//device/bluetooth",
     "//net",
     "//skia",
+    "//ui/app_list/presenter:test_support",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
@@ -1124,10 +1102,6 @@ static_library("ash_shell_lib_with_content") {
     "//ui/views/examples:views_examples_with_content_lib",
     "//ui/wm",
   ]
-
-  if (is_chromeos) {
-    deps += [ "//chromeos" ]
-  }
 }
 
 # This target is intended for tests that use content. In general very few tests
@@ -1153,15 +1127,24 @@ test("ash_content_unittests") {
     "//ash/test:test_support_with_content",
     "//base",
     "//base/test:test_support",
+    "//chromeos",
+    "//chromeos:power_manager_proto",
+    "//chromeos:test_support_without_gmock",
+    "//components/quirks",
     "//components/signin/core/account_id",
     "//components/user_manager",
     "//content/public/browser",
     "//content/test:test_support",
+    "//device/bluetooth",
     "//mojo/edk/system",
+    "//net",
     "//skia",
     "//testing/gtest",
     "//ui/aura",
     "//ui/aura:test_support",
+    "//ui/chromeos",
+    "//ui/display",
+    "//ui/display:test_support",
     "//ui/message_center",
     "//ui/message_center:test_support",
     "//ui/views",
@@ -1175,20 +1158,6 @@ test("ash_content_unittests") {
     "//ash/resources:ash_test_resources_with_content_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
   ]
-
-  if (is_chromeos) {
-    deps += [
-      "//chromeos",
-      "//chromeos:power_manager_proto",
-      "//chromeos:test_support_without_gmock",
-      "//components/quirks",
-      "//device/bluetooth",
-      "//net:net",
-      "//ui/chromeos",
-      "//ui/display",
-      "//ui/display:test_support",
-    ]
-  }
 }
 
 test("ash_unittests") {
@@ -1203,6 +1172,7 @@ test("ash_unittests") {
     "aura/pointer_watcher_adapter_unittest.cc",
     "autoclick/autoclick_unittest.cc",
     "common/devtools/ash_devtools_unittest.cc",
+    "common/session/session_controller_unittest.cc",
 
     # TODO: convert to use AshTest http://crbug.com/654489.
     "common/frame/caption_buttons/frame_caption_button_container_view_unittest.cc",
@@ -1255,7 +1225,6 @@ test("ash_unittests") {
     "common/wm/overview/cleanup_animation_observer_unittest.cc",
     "dip_unittest.cc",
     "display/cursor_window_controller_unittest.cc",
-    "display/display_change_observer_chromeos_unittest.cc",
     "display/display_color_manager_chromeos_unittest.cc",
     "display/display_error_observer_chromeos_unittest.cc",
     "display/display_manager_unittest.cc",
@@ -1274,10 +1243,15 @@ test("ash_unittests") {
     "drag_drop/drag_drop_controller_unittest.cc",
     "drag_drop/drag_drop_tracker_unittest.cc",
     "extended_desktop_unittest.cc",
+    "first_run/first_run_helper_unittest.cc",
     "focus_cycler_unittest.cc",
     "frame/caption_buttons/frame_size_button_unittest.cc",
     "host/ash_window_tree_host_x11_unittest.cc",
+    "laser/laser_pointer_controller_unittest.cc",
+    "laser/laser_pointer_points_unittest.cc",
+    "laser/laser_segment_utils_unittest.cc",
     "magnifier/magnification_controller_unittest.cc",
+    "magnifier/partial_magnification_controller_unittest.cc",
     "metrics/desktop_task_switch_metric_recorder_unittest.cc",
     "metrics/task_switch_metrics_recorder_unittest.cc",
     "metrics/task_switch_time_tracker_unittest.cc",
@@ -1306,8 +1280,6 @@ test("ash_unittests") {
     "test/ash_unittests.cc",
     "tooltips/tooltip_controller_unittest.cc",
     "touch/touch_observer_hud_unittest.cc",
-    "touch/touch_transformer_controller_unittest.cc",
-    "touch/touchscreen_util_unittest.cc",
     "utility/screenshot_controller_unittest.cc",
     "virtual_keyboard_controller_unittest.cc",
     "wm/always_on_top_controller_unittest.cc",
@@ -1365,28 +1337,42 @@ test("ash_unittests") {
     "//ash/common/strings",
     "//ash/common/test:test_support",
     "//ash/public/cpp",
+    "//ash/public/interfaces",
     "//ash/resources",
+    "//ash/resources/vector_icons",
     "//ash/test:ash_with_aura_test_support",
     "//ash/test:test_support_without_content",
     "//ash/touch_hud",
     "//base",
     "//base/test:test_support",
+    "//chromeos",
+    "//chromeos:power_manager_proto",
+    "//chromeos:test_support_without_gmock",
+    "//components/quirks",
     "//components/signin/core/account_id",
     "//components/user_manager",
+    "//device/bluetooth",
     "//mojo/edk/system",
+    "//net:net",
+    "//services/ui/public/interfaces",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/icu",
     "//ui/accessibility",
+    "//ui/app_list:test_support",
     "//ui/app_list/presenter",
+    "//ui/app_list/presenter:test_support",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base",
     "//ui/base:test_support",
     "//ui/base/ime",
+    "//ui/chromeos",
     "//ui/compositor",
     "//ui/compositor:test_support",
+    "//ui/display",
+    "//ui/display:test_support",
     "//ui/display/types",
     "//ui/events",
     "//ui/events:gesture_detection",
@@ -1416,59 +1402,11 @@ test("ash_unittests") {
     sources -= [ "host/ash_window_tree_host_x11_unittest.cc" ]
   }
 
-  if (is_chromeos) {
-    sources += [
-      "first_run/first_run_helper_unittest.cc",
-      "laser/laser_pointer_controller_unittest.cc",
-      "magnifier/partial_magnification_controller_unittest.cc",
-    ]
-    deps += [
-      "//chromeos",
-      "//chromeos:power_manager_proto",
-      "//chromeos:test_support_without_gmock",
-      "//components/quirks",
-      "//device/bluetooth",
-      "//net:net",
-      "//ui/chromeos",
-      "//ui/display",
-      "//ui/display:test_support",
-    ]
-  } else {
-    sources -= [
-      "accelerators/magnifier_key_scroller_unittest.cc",
-      "accelerators/spoken_feedback_toggler_unittest.cc",
-
-      # Can't resize on Windows Ash. http://crbug.com/165962
-      "autoclick/autoclick_unittest.cc",
-      "display/resolution_notification_controller_unittest.cc",
-
-      # TODO(zork): fix this test to build on Windows. See: crosbug.com/26906
-      "focus_cycler_unittest.cc",
-      "magnifier/magnification_controller_unittest.cc",
-      "sticky_keys/sticky_keys_overlay_unittest.cc",
-      "sticky_keys/sticky_keys_unittest.cc",
-      "touch/touchscreen_util_unittest.cc",
-      "virtual_keyboard_controller_unittest.cc",
-
-      # All tests for multiple displays: not supported on Windows Ash.
-      "wm/drag_window_resizer_unittest.cc",
-
-      # Talks to ChromeOS system services.
-      "wm/lock_state_controller_unittest.cc",
-
-      # Maximize mode is only available on Chrome OS.
-      "wm/maximize_mode/maximize_mode_controller_unittest.cc",
-      "wm/maximize_mode/maximize_mode_window_manager_unittest.cc",
-      "wm/workspace/workspace_window_resizer_unittest.cc",
-    ]
-  }
-
-  if (!use_x11 || !is_chromeos) {
-    sources -= [ "touch/touch_transformer_controller_unittest.cc" ]
-  }
-
   # Usage of content should be in ash_with_content.
-  assert_no_deps = [ "//content/*" ]
+  assert_no_deps = [
+    "//content/public/browser",
+    "//content/public/common",
+  ]
 }
 
 executable("ash_shell_with_content") {
@@ -1485,6 +1423,7 @@ executable("ash_shell_with_content") {
     "//components/user_manager",
     "//content",
     "//content/public/app:both",
+    "//device/bluetooth",
   ]
 
   data_deps = [
@@ -1492,14 +1431,4 @@ executable("ash_shell_with_content") {
     "//ash/resources:ash_test_resources_with_content_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
   ]
-
-  if (is_win) {
-    configs -= [ "//build/config/win:console" ]
-    configs += [ "//build/config/win:windowed" ]
-    deps += [ "//sandbox" ]
-  }
-
-  if (is_chromeos) {
-    deps += [ "//device/bluetooth" ]
-  }
 }

@@ -18,6 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/event_client.h"
@@ -58,7 +59,6 @@ Window::Window(WindowDelegate* delegate, std::unique_ptr<WindowPort> port)
       visible_(false),
       id_(kInitialId),
       transparent_(false),
-      user_data_(nullptr),
       ignore_events_(false),
       // Don't notify newly added observers during notification. This causes
       // problems for code that adds an observer as part of an observer
@@ -158,16 +158,28 @@ void Window::SetType(ui::wm::WindowType type) {
   type_ = type;
 }
 
+const std::string& Window::GetName() const {
+  std::string* name = GetProperty(client::kNameKey);
+  return name ? *name : base::EmptyString();
+}
+
 void Window::SetName(const std::string& name) {
-  name_ = name;
+  if (name == GetName())
+    return;
+  SetProperty(client::kNameKey, new std::string(name));
   if (layer())
     UpdateLayerName();
 }
 
+const base::string16& Window::GetTitle() const {
+  base::string16* title = GetProperty(client::kTitleKey);
+  return title ? *title : base::EmptyString16();
+}
+
 void Window::SetTitle(const base::string16& title) {
-  if (title == title_)
+  if (title == GetTitle())
     return;
-  title_ = title;
+  SetProperty(client::kTitleKey, new base::string16(title));
   for (WindowObserver& observer : observers_)
     observer.OnWindowTitleChanged(this);
 }
@@ -451,7 +463,7 @@ void Window::MoveCursorTo(const gfx::Point& point_in_window) {
   DCHECK(root_window);
   gfx::Point point_in_root(point_in_window);
   ConvertPointToTarget(this, root_window, &point_in_root);
-  root_window->GetHost()->MoveCursorTo(point_in_root);
+  root_window->GetHost()->MoveCursorToLocationInDIP(point_in_root);
 }
 
 gfx::NativeCursor Window::GetCursor(const gfx::Point& point) const {
@@ -609,12 +621,12 @@ void Window::OnDeviceScaleFactorChanged(float device_scale_factor) {
 std::string Window::GetDebugInfo() const {
   return base::StringPrintf(
       "%s<%d> bounds(%d, %d, %d, %d) %s %s opacity=%.1f",
-      name().empty() ? "Unknown" : name().c_str(), id(),
-      bounds().x(), bounds().y(), bounds().width(), bounds().height(),
+      GetName().empty() ? "Unknown" : GetName().c_str(), id(), bounds().x(),
+      bounds().y(), bounds().width(), bounds().height(),
       visible_ ? "WindowVisible" : "WindowHidden",
-      layer() ?
-          (layer()->GetTargetVisibility() ? "LayerVisible" : "LayerHidden") :
-          "NoLayer",
+      layer()
+          ? (layer()->GetTargetVisibility() ? "LayerVisible" : "LayerHidden")
+          : "NoLayer",
       layer() ? layer()->opacity() : 1.0f);
 }
 
@@ -1081,7 +1093,7 @@ ui::EventTarget* Window::GetParentTarget() {
 }
 
 std::unique_ptr<ui::EventTargetIterator> Window::GetChildIterator() const {
-  return base::MakeUnique<ui::EventTargetIteratorImpl<Window>>(children());
+  return base::MakeUnique<ui::EventTargetIteratorPtrImpl<Window>>(children());
 }
 
 ui::EventTargeter* Window::GetEventTargeter() {
@@ -1098,7 +1110,7 @@ void Window::UpdateLayerName() {
 #if !defined(NDEBUG)
   DCHECK(layer());
 
-  std::string layer_name(name_);
+  std::string layer_name(GetName());
   if (layer_name.empty())
     layer_name = "Unnamed Window";
 

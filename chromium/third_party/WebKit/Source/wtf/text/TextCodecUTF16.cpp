@@ -53,13 +53,13 @@ void TextCodecUTF16::registerEncodingNames(EncodingNameRegistrar registrar) {
 static std::unique_ptr<TextCodec> newStreamingTextDecoderUTF16LE(
     const TextEncoding&,
     const void*) {
-  return makeUnique<TextCodecUTF16>(true);
+  return WTF::makeUnique<TextCodecUTF16>(true);
 }
 
 static std::unique_ptr<TextCodec> newStreamingTextDecoderUTF16BE(
     const TextEncoding&,
     const void*) {
-  return makeUnique<TextCodecUTF16>(false);
+  return WTF::makeUnique<TextCodecUTF16>(false);
 }
 
 void TextCodecUTF16::registerCodecs(TextCodecRegistrar registrar) {
@@ -160,7 +160,7 @@ CString TextCodecUTF16::encode(const UChar* characters,
   // the buffer doesn't occupy the entire address space, we can
   // assert here that doubling the length does not overflow size_t
   // and there's no need for a runtime check.
-  ASSERT(length <= numeric_limits<size_t>::max() / 2);
+  DCHECK_LE(length, numeric_limits<size_t>::max() / 2);
 
   char* bytes;
   CString result = CString::createUninitialized(length * 2, bytes);

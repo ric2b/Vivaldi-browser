@@ -140,7 +140,7 @@ bool ChromeVirtualKeyboardDelegate::LockKeyboard(bool state) {
   if (!controller)
     return false;
 
-  keyboard::KeyboardController::GetInstance()->set_lock_keyboard(state);
+  keyboard::KeyboardController::GetInstance()->set_keyboard_locked(state);
   return true;
 }
 
@@ -151,12 +151,8 @@ bool ChromeVirtualKeyboardDelegate::SendKeyEvent(const std::string& type,
                                                  int modifiers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   aura::Window* window = GetKeyboardContainer();
-  return window && keyboard::SendKeyEvent(type,
-                                          char_value,
-                                          key_code,
-                                          key_name,
-                                          modifiers | ui::EF_IS_SYNTHESIZED,
-                                          window->GetHost());
+  return window && keyboard::SendKeyEvent(type, char_value, key_code, key_name,
+                                          modifiers, window->GetHost());
 }
 
 bool ChromeVirtualKeyboardDelegate::ShowLanguageSettings() {

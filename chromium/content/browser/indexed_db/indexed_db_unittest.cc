@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
@@ -128,7 +129,7 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
  public:
   ForceCloseDBCallbacks(scoped_refptr<IndexedDBContextImpl> idb_context,
                         const Origin& origin)
-      : IndexedDBCallbacks(nullptr, 0, 0),
+      : IndexedDBCallbacks(nullptr, origin, nullptr),
         idb_context_(idb_context),
         origin_(origin) {}
 
@@ -139,7 +140,6 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
     connection_ = std::move(connection);
     idb_context_->ConnectionOpened(origin_, connection_.get());
   }
-  bool IsValid() const override { return true; }
 
   IndexedDBConnection* connection() { return connection_.get(); }
 
@@ -280,7 +280,7 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
 
   // Simulate the write failure.
   leveldb::Status status = leveldb::Status::IOError("Simulated failure");
-  callbacks->connection()->database()->TransactionCommitFailed(status);
+  context->GetIDBFactory()->HandleBackingStoreFailure(kTestOrigin);
 
   EXPECT_TRUE(db_callbacks->forced_close_called());
   EXPECT_FALSE(factory->IsBackingStoreOpen(kTestOrigin));

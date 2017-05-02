@@ -25,6 +25,7 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
@@ -62,6 +63,7 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_state/core/security_state.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/browser/signin_header_helper.h"
@@ -87,6 +89,7 @@
 #include "extensions/features/features.h"
 #include "net/base/escape.h"
 #include "printing/features/features.h"
+#include "rlz/features/features.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -110,7 +113,7 @@
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #endif  // BUILDFLAG(ENABLE_PRINTING)
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"  // nogncheck
 #endif
 
@@ -119,6 +122,7 @@
 #endif
 
 #include "app/vivaldi_constants.h"
+#include "chrome/browser/memory/tab_manager.h"
 
 namespace {
 
@@ -266,10 +270,10 @@ void ReloadInternal(Browser* browser,
   if (devtools && devtools->ReloadInspectedWebContents(bypass_cache))
     return;
 
-  if (bypass_cache)
-    new_tab->GetController().ReloadBypassingCache(true);
-  else
-    new_tab->GetController().Reload(true);
+  new_tab->GetController().Reload(bypass_cache
+                                      ? content::ReloadType::BYPASSING_CACHE
+                                      : content::ReloadType::NORMAL,
+                                  true);
 }
 
 bool IsShowingWebContentsModalDialog(Browser* browser) {
@@ -483,7 +487,7 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
   content::RecordAction(UserMetricsAction("Home"));
 
   std::string extra_headers;
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
   // If the home page is a Google home page, add the RLZ header to the request.
   PrefService* pref_service = browser->profile()->GetPrefs();
   if (pref_service) {
@@ -493,7 +497,7 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
           rlz::RLZTracker::ChromeHomePage());
     }
   }
-#endif  // defined(ENABLE_RLZ)
+#endif  // BUILDFLAG(ENABLE_RLZ)
 
   GURL url = browser->profile()->GetHomePage();
 
@@ -736,6 +740,11 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
         TabStripModel::ADD_ACTIVE);
   }
 
+  // Vivaldi: Clone the discarded state as well, since this can be used in UI.
+  if (g_browser_process->GetTabManager()->IsTabDiscarded(contents)) {
+    g_browser_process->GetTabManager()->SetIsDiscarded(contents_dupe);
+  }
+
   SessionService* session_service =
       SessionServiceFactory::GetForProfileIfExisting(browser->profile());
   if (session_service)
@@ -905,13 +914,21 @@ void ShowFindBar(Browser* browser) {
   browser->GetFindBarController()->Show();
 }
 
-void ShowWebsiteSettings(Browser* browser,
-                         content::WebContents* web_contents,
-                         const GURL& url,
-                         const security_state::SecurityInfo& security_info) {
+bool ShowWebsiteSettings(Browser* browser, content::WebContents* web_contents) {
+  content::NavigationEntry* entry =
+      web_contents->GetController().GetVisibleEntry();
+  if (!entry)
+    return false;
+
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(web_contents);
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+
   browser->window()->ShowWebsiteSettings(
       Profile::FromBrowserContext(web_contents->GetBrowserContext()),
-      web_contents, url, security_info);
+      web_contents, entry->GetVirtualURL(), security_info);
+  return true;
 }
 
 void Print(Browser* browser) {
@@ -1084,7 +1101,7 @@ void FocusPreviousPane(Browser* browser) {
 }
 
 void ToggleDevToolsWindow(Browser* browser, DevToolsToggleAction action) {
-  if (action.type() == DevToolsToggleAction::kShowConsole)
+  if (action.type() == DevToolsToggleAction::kShowConsolePanel)
     content::RecordAction(UserMetricsAction("DevTools_ToggleConsole"));
   else
     content::RecordAction(UserMetricsAction("DevTools_ToggleWindow"));
@@ -1092,7 +1109,7 @@ void ToggleDevToolsWindow(Browser* browser, DevToolsToggleAction action) {
 }
 
 bool CanOpenTaskManager() {
-#if defined(ENABLE_TASK_MANAGER)
+#if !defined(OS_ANDROID)
   return true;
 #else
   return false;
@@ -1100,7 +1117,7 @@ bool CanOpenTaskManager() {
 }
 
 void OpenTaskManager(Browser* browser) {
-#if defined(ENABLE_TASK_MANAGER)
+#if !defined(OS_ANDROID)
   content::RecordAction(UserMetricsAction("TaskManager"));
   chrome::ShowTaskManager(browser);
 #else
@@ -1189,7 +1206,7 @@ void ToggleRequestTabletSite(Browser* browser) {
     current_tab->SetUserAgentOverride(content::BuildUserAgentFromOSAndProduct(
         kOsOverrideForTabletSite, product));
   }
-  controller.ReloadOriginalRequestURL(true);
+  controller.Reload(content::ReloadType::ORIGINAL_REQUEST_URL, true);
 }
 
 void ToggleFullscreenMode(Browser* browser) {
@@ -1202,7 +1219,7 @@ void ToggleFullscreenMode(Browser* browser) {
 void ClearCache(Browser* browser) {
   BrowsingDataRemover* remover =
       BrowsingDataRemoverFactory::GetForBrowserContext(browser->profile());
-  remover->Remove(BrowsingDataRemover::Unbounded(),
+  remover->Remove(base::Time(), base::Time::Max(),
                   BrowsingDataRemover::REMOVE_CACHE,
                   BrowsingDataHelper::UNPROTECTED_WEB);
   // BrowsingDataRemover takes care of deleting itself when done.

@@ -4,14 +4,16 @@
 
 #include "net/quic/test_tools/simulator/quic_endpoint.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/sha1.h"
 #include "base/strings/stringprintf.h"
 #include "net/quic/core/crypto/crypto_handshake_message.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/test_tools/quic_test_utils.h"
 #include "net/quic/test_tools/simulator/simulator.h"
 
 using base::StringPrintf;
+using std::string;
 
 namespace net {
 namespace simulator {
@@ -21,8 +23,8 @@ const QuicByteCount kWriteChunkSize = 128 * 1024;
 const char kStreamDataContents = 'Q';
 
 // Takes a SHA-1 hash of the name and converts it into five 32-bit integers.
-static std::vector<uint32_t> HashNameIntoFive32BitIntegers(std::string name) {
-  const std::string hash = base::SHA1HashString(name);
+static std::vector<uint32_t> HashNameIntoFive32BitIntegers(string name) {
+  const string hash = test::Sha1Hash(name);
 
   std::vector<uint32_t> output;
   uint32_t current_number = 0;
@@ -37,25 +39,25 @@ static std::vector<uint32_t> HashNameIntoFive32BitIntegers(std::string name) {
   return output;
 }
 
-IPEndPoint GetAddressFromName(std::string name) {
+QuicSocketAddress GetAddressFromName(string name) {
   const std::vector<uint32_t> hash = HashNameIntoFive32BitIntegers(name);
 
   // Generate a random port between 1025 and 65535.
   const uint16_t port = 1025 + hash[0] % (65535 - 1025 + 1);
 
   // Generate a random 10.x.x.x address, where x is between 1 and 254.
-  std::vector<uint8_t> ip_address;
-  ip_address.push_back(10);
-  for (size_t i = 1; i <= 4; i++) {
-    ip_address.push_back(1 + hash[i] % 254);
+  string ip_address{"\xa\0\0\0", 4};
+  for (size_t i = 1; i < 4; i++) {
+    ip_address[i] = 1 + hash[i] % 254;
   }
-
-  return IPEndPoint(IPAddress(ip_address), port);
+  QuicIpAddress host;
+  host.FromPackedString(ip_address.c_str(), ip_address.length());
+  return QuicSocketAddress(host, port);
 }
 
 QuicEndpoint::QuicEndpoint(Simulator* simulator,
-                           std::string name,
-                           std::string peer_name,
+                           string name,
+                           string peer_name,
                            Perspective perspective,
                            QuicConnectionId connection_id)
     : Endpoint(simulator, name),
@@ -81,8 +83,10 @@ QuicEndpoint::QuicEndpoint(Simulator* simulator,
 
   connection_.SetSelfAddress(GetAddressFromName(name));
   connection_.set_visitor(this);
-  connection_.SetEncrypter(ENCRYPTION_FORWARD_SECURE, new NullEncrypter());
-  connection_.SetDecrypter(ENCRYPTION_FORWARD_SECURE, new NullDecrypter());
+  connection_.SetEncrypter(ENCRYPTION_FORWARD_SECURE,
+                           new NullEncrypter(perspective));
+  connection_.SetDecrypter(ENCRYPTION_FORWARD_SECURE,
+                           new NullDecrypter(perspective));
   connection_.SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
 
   // Configure the connection as if it received a handshake.  This is important
@@ -168,11 +172,12 @@ QuicEndpoint::Writer::Writer(QuicEndpoint* endpoint)
 
 QuicEndpoint::Writer::~Writer() {}
 
-WriteResult QuicEndpoint::Writer::WritePacket(const char* buffer,
-                                              size_t buf_len,
-                                              const IPAddress& self_address,
-                                              const IPEndPoint& peer_address,
-                                              PerPacketOptions* options) {
+WriteResult QuicEndpoint::Writer::WritePacket(
+    const char* buffer,
+    size_t buf_len,
+    const QuicIpAddress& self_address,
+    const QuicSocketAddress& peer_address,
+    PerPacketOptions* options) {
   DCHECK(!IsWriteBlocked());
   DCHECK(options == nullptr);
   DCHECK(buf_len <= kMaxPacketSize);
@@ -185,12 +190,12 @@ WriteResult QuicEndpoint::Writer::WritePacket(const char* buffer,
     return WriteResult(WRITE_STATUS_BLOCKED, 0);
   }
 
-  auto packet = base::MakeUnique<Packet>();
+  auto packet = QuicMakeUnique<Packet>();
   packet->source = endpoint_->name();
   packet->destination = endpoint_->peer_name_;
   packet->tx_timestamp = endpoint_->clock_->Now();
 
-  packet->contents = std::string(buffer, buf_len);
+  packet->contents = string(buffer, buf_len);
   packet->size = buf_len;
 
   endpoint_->nic_tx_queue_.AcceptPacket(std::move(packet));
@@ -208,7 +213,7 @@ void QuicEndpoint::Writer::SetWritable() {
   is_blocked_ = false;
 }
 QuicByteCount QuicEndpoint::Writer::GetMaxPacketSize(
-    const IPEndPoint& /*peer_address*/) const {
+    const QuicSocketAddress& /*peer_address*/) const {
   return kMaxPacketSize;
 }
 
@@ -241,7 +246,7 @@ void QuicEndpoint::WriteStreamData() {
 }
 
 QuicEndpointMultiplexer::QuicEndpointMultiplexer(
-    std::string name,
+    string name,
     std::initializer_list<QuicEndpoint*> endpoints)
     : Endpoint((*endpoints.begin())->simulator(), name) {
   for (QuicEndpoint* endpoint : endpoints) {

@@ -75,6 +75,7 @@ class ModelNeutralMutableEntry : public Entry {
   bool PutUniqueServerTag(const std::string& value);
   bool PutUniqueClientTag(const std::string& value);
   void PutUniqueBookmarkTag(const std::string& tag);
+  void PutUniqueNotesTag(const std::string& tag);
   void PutServerSpecifics(const sync_pb::EntitySpecifics& value);
   void PutBaseServerSpecifics(const sync_pb::EntitySpecifics& value);
   void PutServerUniquePosition(const UniquePosition& value);

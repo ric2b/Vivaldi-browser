@@ -68,8 +68,9 @@ static float resolveHeightForRatio(float width,
 }
 
 FloatSize LayoutSVGImage::calculateObjectSize() const {
-  ImageResource* cachedImage = m_imageResource->cachedImage();
-  if (!cachedImage || cachedImage->errorOccurred())
+  ImageResourceContent* cachedImage = m_imageResource->cachedImage();
+  if (!cachedImage || cachedImage->errorOccurred() ||
+      !cachedImage->isSizeAvailable())
     return m_objectBoundingBox.size();
 
   FloatSize intrinsicSize = FloatSize(cachedImage->getImage()->size());
@@ -127,8 +128,8 @@ void LayoutSVGImage::layout() {
 
   bool updateParentBoundaries = false;
   if (m_needsTransformUpdate) {
-    m_localTransform =
-        toSVGImageElement(element())->calculateAnimatedLocalTransform();
+    m_localTransform = toSVGImageElement(element())->calculateTransform(
+        SVGElement::IncludeMotionTransform);
     m_needsTransformUpdate = false;
     updateParentBoundaries = true;
   }
@@ -164,7 +165,7 @@ bool LayoutSVGImage::nodeAtFloatPoint(HitTestResult& result,
   PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_IMAGE_HITTESTING,
                                  result.hitTestRequest(),
                                  style()->pointerEvents());
-  bool isVisible = (style()->visibility() == EVisibility::Visible);
+  bool isVisible = (style()->visibility() == EVisibility::kVisible);
   if (isVisible || !hitRules.requireVisible) {
     FloatPoint localPoint;
     if (!SVGLayoutSupport::transformToUserSpaceAndCheckClipping(
@@ -205,7 +206,7 @@ void LayoutSVGImage::addOutlineRects(Vector<LayoutRect>& rects,
                                      IncludeBlockVisualOverflowOrNot) const {
   // this is called from paint() after the localTransform has already been
   // applied
-  rects.append(LayoutRect(visualRectInLocalSVGCoordinates()));
+  rects.push_back(LayoutRect(visualRectInLocalSVGCoordinates()));
 }
 
 }  // namespace blink

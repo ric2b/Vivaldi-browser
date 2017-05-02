@@ -8,52 +8,48 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/CoreExport.h"
 #include "core/dom/MessagePort.h"
+#include "core/workers/ThreadedObjectProxyBase.h"
 #include "core/workers/WorkerReportingProxy.h"
 
 namespace blink {
 
-class ConsoleMessage;
-class ExecutionContext;
-class ExecutionContextTask;
 class ThreadedWorkletMessagingProxy;
+class WorkerThread;
 
-// A proxy to talk to the parent worklet object. This object is created on the
-// main thread, passed on to the worklet thread, and used just to proxy
-// messages to the ThreadedWorkletMessagingProxy on the main thread.
-class CORE_EXPORT ThreadedWorkletObjectProxy : public WorkerReportingProxy {
+// A proxy to talk to the parent worker object. See class comments on
+// ThreadedObjectProxyBase.h for lifetime of this class etc.
+class CORE_EXPORT ThreadedWorkletObjectProxy : public ThreadedObjectProxyBase {
   USING_FAST_MALLOC(ThreadedWorkletObjectProxy);
   WTF_MAKE_NONCOPYABLE(ThreadedWorkletObjectProxy);
 
  public:
   static std::unique_ptr<ThreadedWorkletObjectProxy> create(
-      ThreadedWorkletMessagingProxy*);
-  ~ThreadedWorkletObjectProxy() override {}
+      const WeakPtr<ThreadedWorkletMessagingProxy>&,
+      ParentFrameTaskRunners*);
+  ~ThreadedWorkletObjectProxy() override;
 
-  void postTaskToMainExecutionContext(std::unique_ptr<ExecutionContextTask>);
-  void reportPendingActivity(bool hasPendingActivity);
+  void evaluateScript(const String& source,
+                      const KURL& scriptURL,
+                      WorkerThread*);
 
-  // WorkerReportingProxy overrides.
+  // ThreadedObjectProxyBase overrides.
   void reportException(const String& errorMessage,
                        std::unique_ptr<SourceLocation>,
-                       int exceptionId) override {}
-  void reportConsoleMessage(MessageSource,
-                            MessageLevel,
-                            const String& message,
-                            SourceLocation*) override;
-  void postMessageToPageInspector(const String&) override;
-  void didEvaluateWorkerScript(bool success) override {}
-  void didCloseWorkerGlobalScope() override;
-  void willDestroyWorkerGlobalScope() override {}
-  void didTerminateWorkerThread() override;
+                       int exceptionId) final {}
+  void didEvaluateWorkerScript(bool success) final {}
+  void willDestroyWorkerGlobalScope() final {}
 
  protected:
-  ThreadedWorkletObjectProxy(ThreadedWorkletMessagingProxy*);
+  ThreadedWorkletObjectProxy(const WeakPtr<ThreadedWorkletMessagingProxy>&,
+                             ParentFrameTaskRunners*);
+
+  WeakPtr<ThreadedMessagingProxyBase> messagingProxyWeakPtr() final;
 
  private:
-  ExecutionContext* getExecutionContext() const;
-
-  // This object always outlives this proxy.
-  ThreadedWorkletMessagingProxy* m_messagingProxy;
+  // No guarantees about the lifetimes of tasks posted by this proxy wrt the
+  // ThreadedWorkletMessagingProxy so a weak pointer must be used when posting
+  // the tasks.
+  WeakPtr<ThreadedWorkletMessagingProxy> m_messagingProxyWeakPtr;
 };
 
 }  // namespace blink

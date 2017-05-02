@@ -44,7 +44,6 @@
 #endif
 
 namespace gfx {
-class Rect;
 class RectF;
 }
 
@@ -96,6 +95,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Whether the |field| should show an entry to scan a credit card.
   virtual bool ShouldShowScanCreditCard(const FormData& form,
                                         const FormFieldData& field);
+
+  // Whether the |field| belongs to CREDIT_CARD |FieldTypeGroup|.
+  virtual bool IsCreditCardPopup(const FormData& form,
+                                 const FormFieldData& field);
 
   // Whether we should show the signin promo, based on the triggered |field|
   // inside the |form|.

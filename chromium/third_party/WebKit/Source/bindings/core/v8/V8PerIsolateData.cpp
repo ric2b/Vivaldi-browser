@@ -46,18 +46,17 @@ namespace blink {
 static V8PerIsolateData* mainThreadPerIsolateData = 0;
 
 static void beforeCallEnteredCallback(v8::Isolate* isolate) {
-  RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden() ||
-                 isolate->GetCurrentContext() ==
-                     v8::Debug::GetDebugContext(isolate));
+  RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden());
 }
 
 static void microtasksCompletedCallback(v8::Isolate* isolate) {
   V8PerIsolateData::from(isolate)->runEndOfScopeTasks();
 }
 
-V8PerIsolateData::V8PerIsolateData()
-    : m_isolateHolder(makeUnique<gin::IsolateHolder>()),
-      m_stringCache(wrapUnique(new StringCache(isolate()))),
+V8PerIsolateData::V8PerIsolateData(WebTaskRunner* taskRunner)
+    : m_isolateHolder(WTF::makeUnique<gin::IsolateHolder>(
+          taskRunner ? taskRunner->toSingleThreadTaskRunner() : nullptr)),
+      m_stringCache(WTF::wrapUnique(new StringCache(isolate()))),
       m_hiddenValue(V8HiddenValue::create()),
       m_privateProperty(V8PrivateProperty::create()),
       m_constructorMode(ConstructorMode::CreateNewObject),
@@ -80,8 +79,8 @@ v8::Isolate* V8PerIsolateData::mainThreadIsolate() {
   return mainThreadPerIsolateData->isolate();
 }
 
-v8::Isolate* V8PerIsolateData::initialize() {
-  V8PerIsolateData* data = new V8PerIsolateData();
+v8::Isolate* V8PerIsolateData::initialize(WebTaskRunner* taskRunner) {
+  V8PerIsolateData* data = new V8PerIsolateData(taskRunner);
   v8::Isolate* isolate = data->isolate();
   isolate->SetData(gin::kEmbedderBlink, data);
   return isolate;
@@ -195,6 +194,15 @@ void V8PerIsolateData::useCounterCallback(
       break;
     case v8::Isolate::kFunctionConstructorReturnedUndefined:
       blinkFeature = UseCounter::V8FunctionConstructorReturnedUndefined;
+      break;
+    case v8::Isolate::kAssigmentExpressionLHSIsCallInSloppy:
+      blinkFeature = UseCounter::V8AssigmentExpressionLHSIsCallInSloppy;
+      break;
+    case v8::Isolate::kAssigmentExpressionLHSIsCallInStrict:
+      blinkFeature = UseCounter::V8AssigmentExpressionLHSIsCallInStrict;
+      break;
+    case v8::Isolate::kPromiseConstructorReturnedUndefined:
+      blinkFeature = UseCounter::V8PromiseConstructorReturnedUndefined;
       break;
     default:
       // This can happen if V8 has added counters that this version of Blink
@@ -365,7 +373,7 @@ v8::Local<v8::Object> V8PerIsolateData::findInstanceInPrototypeChain(
 }
 
 void V8PerIsolateData::addEndOfScopeTask(std::unique_ptr<EndOfScopeTask> task) {
-  m_endOfScopeTasks.append(std::move(task));
+  m_endOfScopeTasks.push_back(std::move(task));
 }
 
 void V8PerIsolateData::runEndOfScopeTasks() {
@@ -391,7 +399,7 @@ ThreadDebugger* V8PerIsolateData::threadDebugger() {
 }
 
 void V8PerIsolateData::addActiveScriptWrappable(
-    ActiveScriptWrappable* wrappable) {
+    ActiveScriptWrappableBase* wrappable) {
   if (!m_activeScriptWrappables)
     m_activeScriptWrappables = new ActiveScriptWrappableSet();
 

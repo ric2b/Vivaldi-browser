@@ -7,6 +7,7 @@
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
@@ -37,7 +38,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/browser/web_contents.h"
@@ -94,7 +94,7 @@ class TestNavigationListener
     WeakThrottleList::const_iterator it;
     for (it = throttles_.begin(); it != throttles_.end(); ++it) {
       if (it->get())
-        (*it)->Resume();
+        (*it)->ResumeHandler();
     }
     throttles_.clear();
   }
@@ -110,7 +110,7 @@ class TestNavigationListener
     WeakThrottleList::iterator it;
     for (it = throttles_.begin(); it != throttles_.end(); ++it) {
       if (it->get() && it->get()->url() == url) {
-        (*it)->Resume();
+        (*it)->ResumeHandler();
         throttles_.erase(it);
         break;
       }
@@ -120,13 +120,13 @@ class TestNavigationListener
   // Constructs a ResourceThrottle if the request for |url| should be held.
   //
   // Needs to be invoked on the IO thread.
-  content::ResourceThrottle* CreateResourceThrottle(
+  std::unique_ptr<content::ResourceThrottle> CreateResourceThrottle(
       const GURL& url) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
     if (urls_to_delay_.find(url) == urls_to_delay_.end())
       return NULL;
 
-    Throttle* throttle = new Throttle();
+    auto throttle = base::MakeUnique<Throttle>();
     throttle->set_url(url);
     throttles_.push_back(throttle->AsWeakPtr());
     return throttle;
@@ -141,9 +141,7 @@ class TestNavigationListener
   class Throttle : public content::ResourceThrottle,
                    public base::SupportsWeakPtr<Throttle> {
    public:
-    void Resume() {
-      controller()->Resume();
-    }
+    void ResumeHandler() { Resume(); }
 
     // content::ResourceThrottle implementation.
     void WillStartRequest(bool* defer) override { *defer = true; }
@@ -271,8 +269,7 @@ class StartProvisionalLoadObserver : public content::WebContentsObserver {
   void DidStartProvisionalLoadForFrame(
       content::RenderFrameHost* render_frame_host,
       const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override {
+      bool is_error_page) override {
     if (validated_url == url_) {
       url_seen_ = true;
       message_loop_runner_->Quit();
@@ -307,22 +304,22 @@ class TestResourceDispatcherHostDelegate
   }
   ~TestResourceDispatcherHostDelegate() override {}
 
-  void RequestBeginning(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      content::AppCacheService* appcache_service,
-      ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) override {
+  void RequestBeginning(net::URLRequest* request,
+                        content::ResourceContext* resource_context,
+                        content::AppCacheService* appcache_service,
+                        ResourceType resource_type,
+                        std::vector<std::unique_ptr<content::ResourceThrottle>>*
+                            throttles) override {
     ChromeResourceDispatcherHostDelegate::RequestBeginning(
         request,
         resource_context,
         appcache_service,
         resource_type,
         throttles);
-    content::ResourceThrottle* throttle =
+    std::unique_ptr<content::ResourceThrottle> throttle =
         test_navigation_listener_->CreateResourceThrottle(request->url());
     if (throttle)
-      throttles->push_back(throttle);
+      throttles->push_back(std::move(throttle));
   }
 
  private:
@@ -576,14 +573,15 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, RequestOpenTab) {
   ui_test_utils::NavigateToURL(browser(), url);
 
   // There's a link on a.html. Middle-click on it to open it in a new tab.
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   mouse_event.button = blink::WebMouseEvent::Button::Middle;
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.setType(blink::WebInputEvent::MouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
@@ -608,14 +606,15 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlank) {
 
   // There's a link with target=_blank on a.html. Click on it to open it in a
   // new tab.
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   mouse_event.button = blink::WebMouseEvent::Button::Left;
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.setType(blink::WebInputEvent::MouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
@@ -638,14 +637,15 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
 
   // There's a link with target=_blank on a.html. Click on it to open it in a
   // new tab.
-  blink::WebMouseEvent mouse_event;
-  mouse_event.type = blink::WebInputEvent::MouseDown;
+  blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                   blink::WebInputEvent::NoModifiers,
+                                   blink::WebInputEvent::TimeStampForTesting);
   mouse_event.button = blink::WebMouseEvent::Button::Left;
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.setType(blink::WebInputEvent::MouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();

@@ -37,8 +37,9 @@
 #include "ui/gfx/geometry/rect.h"
 
 using media::CdmPromise;
+using media::CdmSessionType;
+using media::ContentDecryptionModule;
 using media::Decryptor;
-using media::MediaKeys;
 using media::NewSessionCdmPromise;
 using media::SimpleCdmPromise;
 using ppapi::ArrayBufferVar;
@@ -272,14 +273,13 @@ media::SampleFormat PpDecryptedSampleFormatToMediaSampleFormat(
   }
 }
 
-PP_SessionType MediaSessionTypeToPpSessionType(
-    MediaKeys::SessionType session_type) {
+PP_SessionType MediaSessionTypeToPpSessionType(CdmSessionType session_type) {
   switch (session_type) {
-    case MediaKeys::TEMPORARY_SESSION:
+    case CdmSessionType::TEMPORARY_SESSION:
       return PP_SESSIONTYPE_TEMPORARY;
-    case MediaKeys::PERSISTENT_LICENSE_SESSION:
+    case CdmSessionType::PERSISTENT_LICENSE_SESSION:
       return PP_SESSIONTYPE_PERSISTENT_LICENSE;
-    case MediaKeys::PERSISTENT_RELEASE_MESSAGE_SESSION:
+    case CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION:
       return PP_SESSIONTYPE_PERSISTENT_RELEASE;
     default:
       NOTREACHED();
@@ -349,18 +349,18 @@ media::CdmKeyInformation::KeyStatus PpCdmKeyStatusToCdmKeyInformationKeyStatus(
   }
 }
 
-MediaKeys::MessageType PpCdmMessageTypeToMediaMessageType(
+ContentDecryptionModule::MessageType PpCdmMessageTypeToMediaMessageType(
     PP_CdmMessageType message_type) {
   switch (message_type) {
     case PP_CDMMESSAGETYPE_LICENSE_REQUEST:
-      return MediaKeys::LICENSE_REQUEST;
+      return ContentDecryptionModule::LICENSE_REQUEST;
     case PP_CDMMESSAGETYPE_LICENSE_RENEWAL:
-      return MediaKeys::LICENSE_RENEWAL;
+      return ContentDecryptionModule::LICENSE_RENEWAL;
     case PP_CDMMESSAGETYPE_LICENSE_RELEASE:
-      return MediaKeys::LICENSE_RELEASE;
+      return ContentDecryptionModule::LICENSE_RELEASE;
     default:
       NOTREACHED();
-      return MediaKeys::LICENSE_REQUEST;
+      return ContentDecryptionModule::LICENSE_REQUEST;
   }
 }
 
@@ -444,7 +444,7 @@ void ContentDecryptorDelegate::SetServerCertificate(
 }
 
 void ContentDecryptorDelegate::CreateSessionAndGenerateRequest(
-    MediaKeys::SessionType session_type,
+    CdmSessionType session_type,
     media::EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     std::unique_ptr<NewSessionCdmPromise> promise) {
@@ -458,7 +458,7 @@ void ContentDecryptorDelegate::CreateSessionAndGenerateRequest(
 }
 
 void ContentDecryptorDelegate::LoadSession(
-    media::MediaKeys::SessionType session_type,
+    CdmSessionType session_type,
     const std::string& session_id,
     std::unique_ptr<NewSessionCdmPromise> promise) {
   uint32_t promise_id = cdm_promise_adapter_.SavePromise(std::move(promise));

@@ -42,11 +42,13 @@ class LayoutSVGText final : public LayoutSVGBlock {
   void setNeedsTransformUpdate() override { m_needsTransformUpdate = true; }
   void setNeedsTextMetricsUpdate() { m_needsTextMetricsUpdate = true; }
   FloatRect visualRectInLocalSVGCoordinates() const override;
-  FloatRect objectBoundingBox() const override {
-    return FloatRect(frameRect());
-  }
+  FloatRect objectBoundingBox() const override;
   FloatRect strokeBoundingBox() const override;
   bool isObjectBoundingBoxValid() const;
+
+  void addOutlineRects(Vector<LayoutRect>&,
+                       const LayoutPoint& additionalOffset,
+                       IncludeBlockVisualOverflowOrNot) const override;
 
   static LayoutSVGText* locateLayoutSVGTextAncestor(LayoutObject*);
   static const LayoutSVGText* locateLayoutSVGTextAncestor(const LayoutObject*);
@@ -59,10 +61,6 @@ class LayoutSVGText final : public LayoutSVGBlock {
   void subtreeChildWasAdded();
   void subtreeChildWillBeRemoved();
   void subtreeTextDidChange();
-
-  const AffineTransform& localToSVGParentTransform() const override {
-    return m_localTransform;
-  }
 
   const char* name() const override { return "LayoutSVGText"; }
 
@@ -79,7 +77,8 @@ class LayoutSVGText final : public LayoutSVGBlock {
 
   void layout() override;
 
-  void absoluteQuads(Vector<FloatQuad>&) const override;
+  void absoluteQuads(Vector<FloatQuad>&,
+                     MapCoordinatesFlags mode = 0) const override;
 
   void addChild(LayoutObject* child,
                 LayoutObject* beforeChild = nullptr) override;

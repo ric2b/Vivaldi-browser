@@ -23,6 +23,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/supports_user_data.h"
+#include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -117,7 +118,7 @@ class DownloadProtectionService {
   // delivered asynchronously via the given callback.  This method must be
   // called on the UI thread, and the callback will also be invoked on the UI
   // thread.  Pre-condition: !info.download_url_chain.empty().
-  virtual void CheckDownloadUrl(const content::DownloadItem& item,
+  virtual void CheckDownloadUrl(content::DownloadItem* item,
                                 const CheckDownloadCallback& callback);
 
   // Returns true iff the download specified by |info| should be scanned by
@@ -128,6 +129,8 @@ class DownloadProtectionService {
 
   virtual void CheckPPAPIDownloadRequest(
       const GURL& requestor_url,
+      const GURL& initiating_frame_url,
+      content::WebContents* web_contents,
       const base::FilePath& default_file_path,
       const std::vector<base::FilePath::StringType>& alternate_extensions,
       Profile* profile,
@@ -170,6 +173,11 @@ class DownloadProtectionService {
 
   double whitelist_sample_rate() const {
     return whitelist_sample_rate_;
+  }
+
+  scoped_refptr<SafeBrowsingNavigationObserverManager>
+  navigation_observer_manager() {
+    return navigation_observer_manager_;
   }
 
   static void SetDownloadPingToken(content::DownloadItem* item,
@@ -215,6 +223,7 @@ class DownloadProtectionService {
  private:
   class CheckClientDownloadRequest;
   class PPAPIDownloadRequest;
+  friend class DownloadUrlSBClient;
   friend class DownloadProtectionServiceTest;
   friend class DownloadDangerPromptTest;
 
@@ -287,9 +296,29 @@ class DownloadProtectionService {
   // Returns the URL that will be used for download requests.
   static GURL GetDownloadRequestUrl();
 
+  // If kDownloadAttribution feature is enabled, identify referrer chain info of
+  // a download. This function also records UMA stats of download attribution
+  // result.
+  std::unique_ptr<ReferrerChain> IdentifyReferrerChain(
+    const GURL& download_url,
+    content::WebContents* web_contents);
+
+  // If kDownloadAttribution feature is enabled, identify referrer chain of the
+  // PPAPI download based on the frame URL where the download is initiated.
+  // Then add referrer chain info to ClientDownloadRequest proto. This function
+  // also records UMA stats of download attribution result.
+  void AddReferrerChainToPPAPIClientDownloadRequest(
+      const GURL& initiating_frame_url,
+      const GURL& initiating_main_frame_url,
+      int tab_id,
+      bool has_user_gesture,
+      ClientDownloadRequest* out_request);
+
   // These pointers may be NULL if SafeBrowsing is disabled.
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
+  scoped_refptr<SafeBrowsingNavigationObserverManager>
+  navigation_observer_manager_;
 
   // The context we use to issue network requests.
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;

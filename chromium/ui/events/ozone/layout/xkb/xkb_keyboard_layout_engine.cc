@@ -16,8 +16,8 @@
 #include "base/memory/free_deleter.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "build/build_config.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -685,11 +685,13 @@ bool XkbKeyboardLayoutEngine::SetCurrentLayoutByName(
   }
   LoadKeymapCallback reply_callback = base::Bind(
       &XkbKeyboardLayoutEngine::OnKeymapLoaded, weak_ptr_factory_.GetWeakPtr());
-  base::WorkerPool::PostTask(
-      FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                     .MayBlock(),
       base::Bind(&LoadKeymap, layout_name, base::ThreadTaskRunnerHandle::Get(),
-                 reply_callback),
-      true);
+                 reply_callback));
   return true;
 #else
   // Required by ozone-wayland (at least) for non ChromeOS builds. See
@@ -752,19 +754,20 @@ bool XkbKeyboardLayoutEngine::Lookup(DomCode dom_code,
     return false;
 
   // Classify the keysym and convert to DOM and VKEY representations.
-  if ((character == 0) &&
-      ((xkb_keysym != XKB_KEY_at) || (flags & EF_CONTROL_DOWN) == 0)) {
+  if (xkb_keysym != XKB_KEY_at || (flags & EF_CONTROL_DOWN) == 0) {
     // Non-character key. (We only support NUL as ^@.)
     *dom_key = NonPrintableXKeySymToDomKey(xkb_keysym);
-    if (*dom_key == DomKey::NONE) {
-      *dom_key = DomKey::UNIDENTIFIED;
-      *key_code = VKEY_UNKNOWN;
-    } else {
+    if (*dom_key != DomKey::NONE) {
       *key_code = NonPrintableDomKeyToKeyboardCode(*dom_key);
+      if (*key_code == VKEY_UNKNOWN)
+        *key_code = DomCodeToUsLayoutNonLocatedKeyboardCode(dom_code);
+      return true;
     }
-    if (*key_code == VKEY_UNKNOWN)
+    if (character == 0) {
+      *dom_key = DomKey::UNIDENTIFIED;
       *key_code = DomCodeToUsLayoutNonLocatedKeyboardCode(dom_code);
-    return true;
+      return true;
+    }
   }
 
   // Per UI Events rules for determining |key|, if the character is

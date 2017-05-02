@@ -7,12 +7,16 @@
 #import <UIKit/UIKit.h>
 
 #import "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
+#import "ios/chrome/test/scoped_key_window.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 #pragma mark - Fixture.
 
@@ -20,11 +24,8 @@
 class AlertCoordinatorTest : public PlatformTest {
  protected:
   AlertCoordinatorTest() {
-    window_.reset(
-        [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]]);
-    [window_ makeKeyAndVisible];
-    view_controller_.reset([[UIViewController alloc] init]);
-    [window_ setRootViewController:view_controller_];
+    view_controller_ = [[UIViewController alloc] init];
+    [scoped_key_window_.Get() setRootViewController:view_controller_];
   }
 
   void startAlertCoordinator() { [alert_coordinator_ start]; }
@@ -38,17 +39,17 @@ class AlertCoordinatorTest : public PlatformTest {
   AlertCoordinator* getAlertCoordinator(UIViewController* viewController,
                                         NSString* title,
                                         NSString* message) {
-    alert_coordinator_.reset([[AlertCoordinator alloc]
-        initWithBaseViewController:viewController
-                             title:title
-                           message:message]);
+    alert_coordinator_ =
+        [[AlertCoordinator alloc] initWithBaseViewController:viewController
+                                                       title:title
+                                                     message:message];
     return alert_coordinator_;
   }
 
  private:
-  base::scoped_nsobject<AlertCoordinator> alert_coordinator_;
-  base::scoped_nsobject<UIWindow> window_;
-  base::scoped_nsobject<UIViewController> view_controller_;
+  AlertCoordinator* alert_coordinator_;
+  ScopedKeyWindow scoped_key_window_;
+  UIViewController* view_controller_;
 };
 
 #pragma mark - Tests.
@@ -80,10 +81,9 @@ TEST_F(AlertCoordinatorTest, ValidateIsVisible) {
 // visible view.
 TEST_F(AlertCoordinatorTest, ValidateIsNotVisible) {
   // Setup.
-  base::scoped_nsobject<UIWindow> window(
-      [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]]);
-  base::scoped_nsobject<UIViewController> viewController(
-      [[UIViewController alloc] init]);
+  UIWindow* window =
+      [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+  UIViewController* viewController = [[UIViewController alloc] init];
   [window setRootViewController:viewController];
 
   AlertCoordinator* alertCoordinator = getAlertCoordinator(viewController);
@@ -161,8 +161,7 @@ TEST_F(AlertCoordinatorTest, ValidateActions) {
     @"testCancel" : @(UIAlertActionStyleCancel),
   };
 
-  base::scoped_nsobject<NSMutableDictionary> remainingActions(
-      [actions mutableCopy]);
+  NSMutableDictionary* remainingActions = [actions mutableCopy];
 
   // Action.
   for (id key in actions) {

@@ -36,11 +36,11 @@
 #include "media/base/media_switches.h"
 #include "media/base/mime_util.h"
 #include "net/cookies/cookie_monster.h"
+#include "ppapi/features/features.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
-#include "ui/events/event_switches.h"
 #include "ui/gl/gl_switches.h"
 
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
@@ -156,7 +156,7 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
   if (command_line.HasSwitch(switches::kRunLayoutTest)) {
     EnableBrowserLayoutTestMode();
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     if (!ppapi::RegisterBlinkTestPlugin(&command_line)) {
       *exit_code = 1;
       return true;
@@ -173,8 +173,9 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
                                      gl::kGLImplementationOSMesaName);
     }
     command_line.AppendSwitch(switches::kSkipGpuDataLoading);
-    command_line.AppendSwitchASCII(switches::kTouchEvents,
-                                   switches::kTouchEventsEnabled);
+    command_line.AppendSwitchASCII(
+        switches::kTouchEventFeatureDetection,
+        switches::kTouchEventFeatureDetectionEnabled);
     if (!command_line.HasSwitch(switches::kForceDeviceScaleFactor))
       command_line.AppendSwitchASCII(switches::kForceDeviceScaleFactor, "1.0");
     command_line.AppendSwitch(

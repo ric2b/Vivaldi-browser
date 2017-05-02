@@ -53,9 +53,7 @@ class CORE_EXPORT HTMLIFrameElement final
  private:
   explicit HTMLIFrameElement(Document&);
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,
@@ -75,11 +73,10 @@ class CORE_EXPORT HTMLIFrameElement final
 
   ReferrerPolicy referrerPolicyAttribute() override;
 
+  // FrameOwner overrides:
   bool allowFullscreen() const override { return m_allowFullscreen; }
   bool allowPaymentRequest() const override { return m_allowPaymentRequest; }
-
   AtomicString csp() const override { return m_csp; }
-
   const WebVector<WebPermissionType>& delegatedPermissions() const override {
     return m_delegatedPermissions;
   }

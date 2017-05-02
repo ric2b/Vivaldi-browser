@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
@@ -37,7 +37,7 @@ public class PaymentRequestCanMakePaymentQueryTest extends PaymentRequestTestBas
     @Feature({"Payments"})
     public void testNoBobPayInstalled() throws InterruptedException, ExecutionException,
             TimeoutException {
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"true"});
     }
 
@@ -46,7 +46,7 @@ public class PaymentRequestCanMakePaymentQueryTest extends PaymentRequestTestBas
     public void testNoInstrumentsInFastBobPay() throws InterruptedException, ExecutionException,
             TimeoutException {
         installPaymentApp(NO_INSTRUMENTS, IMMEDIATE_RESPONSE);
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"true"});
     }
 
@@ -55,7 +55,7 @@ public class PaymentRequestCanMakePaymentQueryTest extends PaymentRequestTestBas
     public void testNoInstrumentsInSlowBobPay() throws InterruptedException, ExecutionException,
             TimeoutException {
         installPaymentApp(NO_INSTRUMENTS, DELAYED_RESPONSE);
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"true"});
     }
 
@@ -64,7 +64,7 @@ public class PaymentRequestCanMakePaymentQueryTest extends PaymentRequestTestBas
     public void testPayViaFastBobPay() throws InterruptedException, ExecutionException,
             TimeoutException {
         installPaymentApp(HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE);
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"true"});
     }
 
@@ -73,7 +73,7 @@ public class PaymentRequestCanMakePaymentQueryTest extends PaymentRequestTestBas
     public void testPayViaSlowBobPay() throws InterruptedException, ExecutionException,
             TimeoutException {
         installPaymentApp(HAVE_INSTRUMENTS, DELAYED_RESPONSE);
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"true"});
     }
 }

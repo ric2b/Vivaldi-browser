@@ -3,21 +3,24 @@
 // found in the LICENSE file.
 
 #include "base/trace_event/trace_event_argument.h"
+#include "cc/layers/layer.h"
 #include "cc/proto/gfx_conversions.h"
 #include "cc/proto/skia_conversions.h"
 #include "cc/trees/effect_node.h"
+#include "cc/trees/property_tree.h"
 
 namespace cc {
 
 EffectNode::EffectNode()
-    : id(-1),
-      parent_id(-1),
-      owner_id(-1),
+    : id(EffectTree::kInvalidNodeId),
+      parent_id(EffectTree::kInvalidNodeId),
+      owning_layer_id(Layer::INVALID_ID),
       opacity(1.f),
       screen_space_opacity(1.f),
-      blend_mode(SkXfermode::kSrcOver_Mode),
+      blend_mode(SkBlendMode::kSrcOver),
       has_render_surface(false),
       render_surface(nullptr),
+      surface_is_clipped(false),
       has_copy_request(false),
       hidden_by_backface_visibility(false),
       double_sided(false),
@@ -39,9 +42,10 @@ EffectNode::EffectNode(const EffectNode& other) = default;
 
 bool EffectNode::operator==(const EffectNode& other) const {
   return id == other.id && parent_id == other.parent_id &&
-         owner_id == other.owner_id && opacity == other.opacity &&
+         owning_layer_id == other.owning_layer_id && opacity == other.opacity &&
          screen_space_opacity == other.screen_space_opacity &&
          has_render_surface == other.has_render_surface &&
+         surface_is_clipped == other.surface_is_clipped &&
          has_copy_request == other.has_copy_request &&
          filters == other.filters &&
          background_filters == other.background_filters &&
@@ -68,9 +72,10 @@ bool EffectNode::operator==(const EffectNode& other) const {
 void EffectNode::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetInteger("id", id);
   value->SetInteger("parent_id", parent_id);
-  value->SetInteger("owner_id", owner_id);
+  value->SetInteger("owning_layer_id", owning_layer_id);
   value->SetDouble("opacity", opacity);
   value->SetBoolean("has_render_surface", has_render_surface);
+  value->SetBoolean("surface_is_clipped", surface_is_clipped);
   value->SetBoolean("has_copy_request", has_copy_request);
   value->SetBoolean("double_sided", double_sided);
   value->SetBoolean("is_drawn", is_drawn);

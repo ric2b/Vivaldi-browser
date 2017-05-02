@@ -9,9 +9,10 @@
 #include "core/CoreExport.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindowBase64.h"
+#include "core/frame/Frame.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollableArea.h"
-
+#include "wtf/Assertions.h"
 #include "wtf/Forward.h"
 
 namespace blink {
@@ -26,11 +27,11 @@ class DOMVisualViewport;
 class Document;
 class Element;
 class External;
-class Frame;
 class FrameRequestCallback;
 class History;
 class IdleRequestCallback;
 class IdleRequestOptions;
+class InputDeviceCapabilitiesConstants;
 class Location;
 class LocalDOMWindow;
 class MessageEvent;
@@ -49,13 +50,19 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
  public:
   ~DOMWindow() override;
 
+  Frame* frame() const {
+    // If the DOMWindow still has a frame reference, that frame must point
+    // back to this DOMWindow: otherwise, it's easy to get into a situation
+    // where script execution leaks between different DOMWindows.
+    SECURITY_DCHECK(!m_frame || m_frame->domWindow() == this);
+    return m_frame;
+  }
+
   // GarbageCollectedFinalized overrides:
   DECLARE_VIRTUAL_TRACE();
 
   virtual bool isLocalDOMWindow() const = 0;
   virtual bool isRemoteDOMWindow() const = 0;
-
-  virtual Frame* frame() const = 0;
 
   // ScriptWrappable overrides:
   v8::Local<v8::Object> wrap(v8::Isolate*,
@@ -101,8 +108,6 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
 
   bool closed() const;
 
-  // FIXME: This is not listed as a cross-origin accessible attribute, but in
-  // Blink, it's currently marked as DoNotCheckSecurity.
   unsigned length() const;
 
   virtual const AtomicString& name() const = 0;
@@ -203,7 +208,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   // Obsolete APIs
   void captureEvents() {}
   void releaseEvents() {}
-  External* external() const;
+  External* external();
 
   // FIXME: This handles both window[index] and window.frames[index]. However,
   // the spec exposes window.frames[index] across origins but not
@@ -252,12 +257,22 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(orientationchange);
 
+  InputDeviceCapabilitiesConstants* getInputDeviceCapabilities();
+
  protected:
-  DOMWindow();
+  explicit DOMWindow(Frame&);
 
   virtual void schedulePostMessage(MessageEvent*,
                                    PassRefPtr<SecurityOrigin> target,
                                    Document* source) = 0;
+
+  void disconnectFromFrame() { m_frame = nullptr; }
+
+ private:
+  Member<Frame> m_frame;
+  Member<InputDeviceCapabilitiesConstants> m_inputCapabilities;
+  mutable Member<Location> m_location;
+  Member<External> m_external;
 
   // Set to true when close() has been called. Needed for
   // |window.closed| determinism; having it return 'true'
@@ -266,8 +281,6 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   // implementation details to scripts.
   bool m_windowIsClosing;
 
- private:
-  mutable Member<Location> m_location;
 };
 
 }  // namespace blink

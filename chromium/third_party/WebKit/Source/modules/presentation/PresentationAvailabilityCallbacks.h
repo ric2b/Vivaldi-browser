@@ -5,31 +5,34 @@
 #ifndef PresentationAvailabilityCallbacks_h
 #define PresentationAvailabilityCallbacks_h
 
+#include "modules/presentation/PresentationPromiseProperty.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebCallbacks.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
-class ScriptPromiseResolver;
 struct WebPresentationError;
 
 // PresentationAvailabilityCallback extends WebCallbacks to resolve the
 // underlying promise depending on the result passed to the callback. It takes a
-// KURL in its constructor and will pass it to the WebAvailabilityObserver.
+// WTF::Vector<KURL> in its constructor and will pass it to the
+// WebAvailabilityObserver.
 class PresentationAvailabilityCallbacks final
     : public WebCallbacks<bool, const WebPresentationError&> {
  public:
-  PresentationAvailabilityCallbacks(ScriptPromiseResolver*, const KURL&);
+  PresentationAvailabilityCallbacks(PresentationAvailabilityProperty*,
+                                    const WTF::Vector<KURL>&);
   ~PresentationAvailabilityCallbacks() override;
 
   void onSuccess(bool value) override;
   void onError(const WebPresentationError&) override;
 
  private:
-  Persistent<ScriptPromiseResolver> m_resolver;
-  const KURL m_url;
+  Persistent<PresentationAvailabilityProperty> m_resolver;
+  const WTF::Vector<KURL> m_urls;
 
   WTF_MAKE_NONCOPYABLE(PresentationAvailabilityCallbacks);
 };

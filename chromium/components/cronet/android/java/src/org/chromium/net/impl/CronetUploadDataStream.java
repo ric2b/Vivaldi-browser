@@ -5,8 +5,8 @@
 package org.chromium.net.impl;
 
 import android.annotation.SuppressLint;
-import android.util.Log;
 
+import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -33,10 +33,10 @@ import javax.annotation.concurrent.GuardedBy;
 @JNINamespace("cronet")
 @VisibleForTesting
 public final class CronetUploadDataStream extends UploadDataSink {
-    private static final String TAG = "CronetUploadDataStream";
+    private static final String TAG = CronetUploadDataStream.class.getSimpleName();
     // These are never changed, once a request starts.
     private final Executor mExecutor;
-    private final UploadDataProvider mDataProvider;
+    private final VersionSafeCallbacks.UploadDataProviderWrapper mDataProvider;
     private long mLength;
     private long mRemainingLength;
     private CronetUrlRequest mRequest;
@@ -98,7 +98,7 @@ public final class CronetUploadDataStream extends UploadDataSink {
      */
     public CronetUploadDataStream(UploadDataProvider dataProvider, Executor executor) {
         mExecutor = executor;
-        mDataProvider = dataProvider;
+        mDataProvider = new VersionSafeCallbacks.UploadDataProviderWrapper(dataProvider);
     }
 
     /**

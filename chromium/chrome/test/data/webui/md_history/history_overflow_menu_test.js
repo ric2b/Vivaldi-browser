@@ -2,82 +2,45 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('md_history.history_overflow_menu_test', function() {
-  // Menu button event.
-  var MENU_EVENT = {
-    detail: {
-      target: null
-    }
-  };
+suite('#overflow-menu', function() {
+  var listContainer;
+  var sharedMenu;
 
-  var ADDITIONAL_MENU_EVENT = {
-    detail: {
-      target: null
-    }
-  };
+  var target1;
+  var target2;
 
-  function registerTests() {
-    suite('#overflow-menu', function() {
-      var app;
-      var listContainer;
-      var sharedMenu;
+  suiteSetup(function() {
+    var app = $('history-app');
+    listContainer = app.$['history'];
+    var element1 = document.createElement('div');
+    var element2 = document.createElement('div');
+    document.body.appendChild(element1);
+    document.body.appendChild(element2);
 
-      suiteSetup(function() {
-        app = $('history-app');
-        listContainer = app.$['history'];
-        var element1 = document.createElement('div');
-        var element2 = document.createElement('div');
-        document.body.appendChild(element1);
-        document.body.appendChild(element2);
+    target1 = element1;
+    target2 = element2;
+    sharedMenu = listContainer.$.sharedMenu.get();
+  });
 
-        MENU_EVENT.detail.target = element1;
-        ADDITIONAL_MENU_EVENT.detail.target = element2;
-        sharedMenu = listContainer.$.sharedMenu.get();
-      });
+  test('opening and closing menu', function() {
+    var detail1 = {target: target1};
+    listContainer.fire('open-menu', detail1);
+    assertTrue(sharedMenu.open);
+    assertEquals(detail1, listContainer.actionMenuModel_);
 
-      test('opening and closing menu', function() {
-        listContainer.toggleMenu_(MENU_EVENT);
-        assertTrue(sharedMenu.menuOpen);
-        assertEquals(MENU_EVENT.detail.target, sharedMenu.lastAnchor_);
+    sharedMenu.close();
+    assertFalse(sharedMenu.open);
 
-        // Test having the same menu event (pressing the same button) closes
-        // the overflow menu.
-        listContainer.toggleMenu_(MENU_EVENT);
-        assertFalse(sharedMenu.menuOpen);
+    var detail2 = {target: target2};
+    listContainer.fire('open-menu', detail2);
+    assertEquals(detail2, listContainer.actionMenuModel_);
+    assertTrue(sharedMenu.open);
 
-        // Test having consecutive distinct menu events moves the menu to the
-        // new button.
-        listContainer.toggleMenu_(MENU_EVENT);
-        listContainer.toggleMenu_(ADDITIONAL_MENU_EVENT);
-        assertEquals(
-            ADDITIONAL_MENU_EVENT.detail.target, sharedMenu.lastAnchor_);
-        assertTrue(sharedMenu.menuOpen);
+    sharedMenu.close();
+    assertFalse(sharedMenu.open);
+  });
 
-        listContainer.toggleMenu_(MENU_EVENT);
-        assertTrue(sharedMenu.menuOpen);
-        assertEquals(MENU_EVENT.detail.target, sharedMenu.lastAnchor_);
-
-        sharedMenu.closeMenu();
-        assertFalse(sharedMenu.menuOpen);
-      });
-
-      test('menu closes when search changes', function() {
-        var entry =
-            [createHistoryEntry('2016-07-19', 'https://www.nianticlabs.com')];
-
-        app.historyResult(createHistoryInfo(), entry);
-        listContainer.toggleMenu_(MENU_EVENT);
-        // Menu closes when search changes.
-        app.historyResult(createHistoryInfo('niantic'), entry);
-        assertFalse(sharedMenu.menuOpen);
-      });
-
-      teardown(function() {
-        sharedMenu.lastAnchor_ = null;
-      });
-    });
-  }
-  return {
-    registerTests: registerTests
-  };
+  teardown(function() {
+    sharedMenu.actionMenuModel_ = null;
+  });
 });

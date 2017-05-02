@@ -26,7 +26,6 @@
 #include "core/editing/commands/MergeIdenticalElementsCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Element.h"
 #include "core/editing/EditingUtilities.h"
 
@@ -52,11 +51,12 @@ void MergeIdenticalElementsCommand::doApply(EditingState*) {
   NodeVector children;
   getChildNodes(*m_element1, children);
 
-  for (auto& child : children)
+  for (auto& child : children) {
     m_element2->insertBefore(child.release(), m_atChild.get(),
-                             IGNORE_EXCEPTION);
+                             IGNORE_EXCEPTION_FOR_TESTING);
+  }
 
-  m_element1->remove(IGNORE_EXCEPTION);
+  m_element1->remove(IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void MergeIdenticalElementsCommand::doUnapply() {
@@ -69,7 +69,7 @@ void MergeIdenticalElementsCommand::doUnapply() {
   if (!parent || !hasEditableStyle(*parent))
     return;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
 
   parent->insertBefore(m_element1.get(), m_element2.get(), exceptionState);
   if (exceptionState.hadException())
@@ -78,7 +78,7 @@ void MergeIdenticalElementsCommand::doUnapply() {
   HeapVector<Member<Node>> children;
   for (Node* child = m_element2->firstChild(); child && child != atChild;
        child = child->nextSibling())
-    children.append(child);
+    children.push_back(child);
 
   for (auto& child : children)
     m_element1->appendChild(child.release(), exceptionState);

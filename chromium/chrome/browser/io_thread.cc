@@ -95,6 +95,7 @@
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
+#include "net/quic/chromium/quic_utils_chromium.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/ssl/channel_id_service.h"
@@ -118,12 +119,12 @@
 #include "net/cert_net/nss_ocsp.h"
 #endif
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "base/android/build_info.h"
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
 #include "chrome/browser/android/net/external_estimate_provider_android.h"
 #include "components/data_usage/android/traffic_stats_amortizer.h"
-#endif
+#endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/net/cert_verify_proc_chromeos.h"
@@ -251,6 +252,32 @@ int GetSwitchValueAsInt(const base::CommandLine& command_line,
   return value;
 }
 
+// This function is for forwarding metrics usage pref changes to the metrics
+// service on the appropriate thread.
+// TODO(gayane): Reduce the frequency of posting tasks from IO to UI thread.
+void UpdateMetricsUsagePrefsOnUIThread(const std::string& service_name,
+                                       int message_size,
+                                       bool is_cellular) {
+  BrowserThread::PostTask(
+      BrowserThread::UI,
+      FROM_HERE,
+      base::Bind([](const std::string& service_name,
+                    int message_size,
+                    bool is_cellular) {
+                   // Some unit tests use IOThread but do not initialize
+                   // MetricsService. In that case it's fine to skip the update.
+                   auto metrics_service = g_browser_process->metrics_service();
+                   if (metrics_service) {
+                     metrics_service->UpdateMetricsUsagePrefs(service_name,
+                                                              message_size,
+                                                              is_cellular);
+                   }
+                 },
+                 service_name,
+                 message_size,
+                 is_cellular));
+}
+
 }  // namespace
 
 class SystemURLRequestContextGetter : public net::URLRequestContextGetter {
@@ -323,7 +350,7 @@ IOThread::IOThread(
 #endif
       globals_(nullptr),
       is_quic_allowed_by_policy_(true),
-      http_09_on_non_default_ports_enabled_(true),
+      http_09_on_non_default_ports_enabled_(false),
       creation_time_(base::TimeTicks::Now()),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
@@ -405,24 +432,16 @@ IOThread::IOThread(
   if (value)
     value->GetAsBoolean(&http_09_on_non_default_ports_enabled_);
 
-  // Some unit tests use IOThread but do not initialize MetricsService. In that
-  // case it is fine not to have |metrics_data_use_forwarder_|.
-  if (g_browser_process->metrics_service()) {
-    // Callback for updating data use prefs should be obtained on UI thread.
-    metrics_data_use_forwarder_ =
-        g_browser_process->metrics_service()->GetDataUseForwardingCallback();
-  }
-
   chrome_browser_net::SetGlobalSTHDistributor(
       std::unique_ptr<net::ct::STHDistributor>(new net::ct::STHDistributor()));
 
-  BrowserThread::SetDelegate(BrowserThread::IO, this);
+  BrowserThread::SetIOThreadDelegate(this);
 }
 
 IOThread::~IOThread() {
   // This isn't needed for production code, but in tests, IOThread may
   // be multiply constructed.
-  BrowserThread::SetDelegate(BrowserThread::IO, NULL);
+  BrowserThread::SetIOThreadDelegate(nullptr);
 
   pref_proxy_config_tracker_->DetachFromPrefService();
   DCHECK(!globals_);
@@ -501,9 +520,9 @@ void IOThread::Init() {
 #endif
 
   std::unique_ptr<data_usage::DataUseAmortizer> data_use_amortizer;
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   data_use_amortizer.reset(new data_usage::android::TrafficStatsAmortizer());
-#endif
+#endif  // defined(OS_ANDROID)
 
   globals_->data_use_ascriber =
       base::MakeUnique<data_use_measurement::ChromeDataUseAscriber>();
@@ -521,17 +540,17 @@ void IOThread::Init() {
       globals_->data_use_aggregator.get(),
       true /* is_data_usage_off_the_record */);
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   globals_->external_data_use_observer.reset(
       new chrome::android::ExternalDataUseObserver(
           globals_->data_use_aggregator.get(),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
-#endif
+#endif  // defined(OS_ANDROID)
 
   globals_->system_network_delegate =
       globals_->data_use_ascriber->CreateNetworkDelegate(
-          std::move(chrome_network_delegate), metrics_data_use_forwarder_);
+          std::move(chrome_network_delegate), GetMetricsDataUseForwarder());
 
   globals_->host_resolver = CreateGlobalHostResolver(net_log_);
 
@@ -540,10 +559,10 @@ void IOThread::Init() {
                                  &network_quality_estimator_params);
 
   std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider;
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   external_estimate_provider.reset(
       new chrome::android::ExternalEstimateProviderAndroid());
-#endif
+#endif  // defined(OS_ANDROID)
   // Pass ownership.
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
       std::move(external_estimate_provider), network_quality_estimator_params));
@@ -778,6 +797,16 @@ const net::HttpNetworkSession::Params& IOThread::NetworkSessionParams() const {
   return params_;
 }
 
+void IOThread::DisableQuic() {
+  params_.enable_quic = false;
+
+  if (globals_->system_http_network_session)
+    globals_->system_http_network_session->DisableQuic();
+
+  if (globals_->proxy_script_fetcher_http_network_session)
+    globals_->proxy_script_fetcher_http_network_session->DisableQuic();
+}
+
 base::TimeTicks IOThread::creation_time() const {
   return creation_time_;
 }
@@ -894,6 +923,7 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
       new net::HttpNetworkSession(system_params));
   globals->system_http_transaction_factory.reset(
       new net::HttpNetworkLayer(globals->system_http_network_session.get()));
+  context->set_name("system");
   context->set_http_transaction_factory(
       globals->system_http_transaction_factory.get());
 
@@ -929,16 +959,10 @@ void IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
   if (command_line.HasSwitch(switches::kDisableHttp2))
     params->enable_http2 = false;
 
-  if (command_line.HasSwitch(switches::kDisableQuicPortSelection)) {
-    params->enable_quic_port_selection = false;
-  } else if (command_line.HasSwitch(switches::kEnableQuicPortSelection)) {
-    params->enable_quic_port_selection = true;
-  }
-
   if (params->enable_quic) {
     if (command_line.HasSwitch(switches::kQuicConnectionOptions)) {
       params->quic_connection_options =
-          net::QuicUtils::ParseQuicConnectionOptions(
+          net::ParseQuicConnectionOptions(
               command_line.GetSwitchValueASCII(
                   switches::kQuicConnectionOptions));
     }
@@ -991,8 +1015,12 @@ void IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
   if (command_line.HasSwitch(switches::kEnableUserAlternateProtocolPorts)) {
     params->enable_user_alternate_protocol_ports = true;
   }
-  if (command_line.HasSwitch(switches::kIgnoreCertificateErrors))
+  if (command_line.HasSwitch(switches::kIgnoreCertificateErrors)) {
     params->ignore_certificate_errors = true;
+  }
+  UMA_HISTOGRAM_BOOLEAN(
+      "Net.Certificate.IgnoreErrors",
+      command_line.HasSwitch(switches::kIgnoreCertificateErrors));
   if (command_line.HasSwitch(switches::kTestingFixedHttpPort)) {
     params->testing_fixed_http_port =
         GetSwitchValueAsInt(command_line, switches::kTestingFixedHttpPort);
@@ -1047,6 +1075,7 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
   globals->proxy_script_fetcher_http_transaction_factory.reset(
       new net::HttpNetworkLayer(
           globals->proxy_script_fetcher_http_network_session.get()));
+  context->set_name("proxy");
   context->set_http_transaction_factory(
       globals->proxy_script_fetcher_http_transaction_factory.get());
 
@@ -1078,7 +1107,6 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
   return context;
 }
 
-const metrics::UpdateUsagePrefCallbackType&
-IOThread::GetMetricsDataUseForwarder() {
-  return metrics_data_use_forwarder_;
+metrics::UpdateUsagePrefCallbackType IOThread::GetMetricsDataUseForwarder() {
+  return base::Bind(&UpdateMetricsUsagePrefsOnUIThread);
 }

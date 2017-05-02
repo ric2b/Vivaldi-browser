@@ -54,14 +54,14 @@ UI.SearchableView = class extends UI.VBox {
     if (this._searchProvider.supportsCaseSensitiveSearch()) {
       this._caseSensitiveButton = new UI.ToolbarToggle(Common.UIString('Case sensitive'), '');
       this._caseSensitiveButton.setText('Aa');
-      this._caseSensitiveButton.addEventListener('click', this._toggleCaseSensitiveSearch, this);
+      this._caseSensitiveButton.addEventListener(UI.ToolbarButton.Events.Click, this._toggleCaseSensitiveSearch, this);
       toolbar.appendToolbarItem(this._caseSensitiveButton);
     }
 
     if (this._searchProvider.supportsRegexSearch()) {
       this._regexButton = new UI.ToolbarToggle(Common.UIString('Regex'), '');
       this._regexButton.setText('.*');
-      this._regexButton.addEventListener('click', this._toggleRegexSearch, this);
+      this._regexButton.addEventListener(UI.ToolbarButton.Events.Click, this._toggleRegexSearch, this);
       toolbar.appendToolbarItem(this._regexButton);
     }
 
@@ -133,7 +133,7 @@ UI.SearchableView = class extends UI.VBox {
     // Column 4
     this._replaceElement = this._firstRowElement.createChild('td').createChild('span');
 
-    this._replaceLabelElement = createCheckboxLabel(Common.UIString('Replace'));
+    this._replaceLabelElement = UI.createCheckboxLabel(Common.UIString('Replace'));
     this._replaceCheckboxElement = this._replaceLabelElement.checkboxElement;
     this._uniqueId = ++UI.SearchableView._lastUniqueId;
     var replaceCheckboxId = 'search-replace-trigger' + this._uniqueId;
@@ -531,28 +531,28 @@ UI.SearchableView._symbol = Symbol('searchableView');
 UI.Searchable = function() {};
 
 UI.Searchable.prototype = {
-  searchCanceled: function() {},
+  searchCanceled() {},
 
   /**
    * @param {!UI.SearchableView.SearchConfig} searchConfig
    * @param {boolean} shouldJump
    * @param {boolean=} jumpBackwards
    */
-  performSearch: function(searchConfig, shouldJump, jumpBackwards) {},
+  performSearch(searchConfig, shouldJump, jumpBackwards) {},
 
-  jumpToNextSearchResult: function() {},
+  jumpToNextSearchResult() {},
 
-  jumpToPreviousSearchResult: function() {},
-
-  /**
-   * @return {boolean}
-   */
-  supportsCaseSensitiveSearch: function() {},
+  jumpToPreviousSearchResult() {},
 
   /**
    * @return {boolean}
    */
-  supportsRegexSearch: function() {}
+  supportsCaseSensitiveSearch() {},
+
+  /**
+   * @return {boolean}
+   */
+  supportsRegexSearch() {}
 };
 
 /**
@@ -565,13 +565,13 @@ UI.Replaceable.prototype = {
    * @param {!UI.SearchableView.SearchConfig} searchConfig
    * @param {string} replacement
    */
-  replaceSelectionWith: function(searchConfig, replacement) {},
+  replaceSelectionWith(searchConfig, replacement) {},
 
   /**
    * @param {!UI.SearchableView.SearchConfig} searchConfig
    * @param {string} replacement
    */
-  replaceAllWith: function(searchConfig, replacement) {}
+  replaceAllWith(searchConfig, replacement) {}
 };
 
 /**

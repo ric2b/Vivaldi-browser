@@ -27,10 +27,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from webkitpy.common.config.builders import BUILDERS
-from webkitpy.common.checkout.scm.scm_mock import MockSCM
+from webkitpy.common.checkout.scm.git_mock import MockGit
 from webkitpy.common.net.buildbot_mock import MockBuildBot
 from webkitpy.common.net.web_mock import MockWeb
-from webkitpy.common.system.systemhost_mock import MockSystemHost
+from webkitpy.common.system.system_host_mock import MockSystemHost
 
 # New-style ports need to move down into webkitpy.common.
 from webkitpy.layout_tests.builder_list import BuilderList
@@ -40,12 +40,19 @@ from webkitpy.layout_tests.port.test import add_unit_tests_to_mock_filesystem
 
 class MockHost(MockSystemHost):
 
-    def __init__(self, log_executive=False, executive_throws_when_run=None,
-                 initialize_scm_by_default=True, web=None, scm=None, os_name=None, os_version=None,
+    def __init__(self,
+                 log_executive=False,
+                 initialize_scm_by_default=True,
+                 web=None,
+                 scm=None,
+                 os_name=None,
+                 os_version=None,
                  time_return_val=123):
-
-        MockSystemHost.__init__(self, log_executive, executive_throws_when_run, os_name=os_name,
-                                os_version=os_version, time_return_val=time_return_val)
+        super(MockHost, self).__init__(
+            log_executive=log_executive,
+            os_name=os_name,
+            os_version=os_version,
+            time_return_val=time_return_val)
 
         add_unit_tests_to_mock_filesystem(self.filesystem)
         self.web = web or MockWeb()
@@ -65,7 +72,7 @@ class MockHost(MockSystemHost):
 
     def initialize_scm(self, patch_directories=None):
         if not self._scm:
-            self._scm = MockSCM(filesystem=self.filesystem, executive=self.executive)
+            self._scm = MockGit(filesystem=self.filesystem, executive=self.executive)
         # Various pieces of code (wrongly) call filesystem.chdir(checkout_root).
         # Making the checkout_root exist in the mock filesystem makes that chdir not raise.
         self.filesystem.maybe_make_directory(self._scm.checkout_root)

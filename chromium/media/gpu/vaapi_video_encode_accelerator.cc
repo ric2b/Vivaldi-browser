@@ -15,12 +15,13 @@
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/gpu/h264_dpb.h"
 #include "media/gpu/shared_memory_region.h"
 #include "third_party/libva/va/va_enc_h264.h"
 
-#define DVLOGF(level) DVLOG(level) << __FUNCTION__ << "(): "
+#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
 
 #define NOTIFY_ERROR(error, msg)                          \
   do {                                                    \
@@ -166,7 +167,7 @@ bool VaapiVideoEncodeAccelerator::Initialize(
   DVLOGF(1) << "Initializing VAVEA, input_format: "
             << VideoPixelFormatToString(format)
             << ", input_visible_size: " << input_visible_size.ToString()
-            << ", output_profile: " << output_profile
+            << ", output_profile: " << GetProfileName(output_profile)
             << ", initial_bitrate: " << initial_bitrate;
 
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
@@ -178,7 +179,8 @@ bool VaapiVideoEncodeAccelerator::Initialize(
                            return profile.profile == output_profile;
                          });
   if (profile == profiles.end()) {
-    DVLOGF(1) << "Unsupported output profile " << output_profile;
+    DVLOGF(1) << "Unsupported output profile "
+              << GetProfileName(output_profile);
     return false;
   }
   if (input_visible_size.width() > profile->max_resolution.width() ||
@@ -211,7 +213,8 @@ bool VaapiVideoEncodeAccelerator::Initialize(
       VaapiWrapper::CreateForVideoCodec(VaapiWrapper::kEncode, output_profile,
                                         base::Bind(&ReportToUMA, VAAPI_ERROR));
   if (!vaapi_wrapper_.get()) {
-    DVLOGF(1) << "Failed initializing VAAPI for profile " << output_profile;
+    DVLOGF(1) << "Failed initializing VAAPI for profile "
+              << GetProfileName(output_profile);
     return false;
   }
 

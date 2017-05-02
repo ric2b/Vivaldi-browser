@@ -5,6 +5,7 @@
 #include "content/public/test/mock_render_thread.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -72,6 +73,15 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
   void CreateFullscreenWidget(
       int opener_id,
       const CreateFullscreenWidgetCallback& callback) override {
+    NOTREACHED();
+  }
+
+  void AllocatedSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
+                             const cc::SharedBitmapId& id) override {
+    NOTREACHED();
+  }
+
+  void DeletedSharedBitmap(const cc::SharedBitmapId& id) override {
     NOTREACHED();
   }
 
@@ -239,6 +249,16 @@ int32_t MockRenderThread::GetClientId() {
   return 1;
 }
 
+scoped_refptr<base::SingleThreadTaskRunner>
+MockRenderThread::GetTimerTaskRunner() {
+  return base::ThreadTaskRunnerHandle::Get();
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+MockRenderThread::GetLoadingTaskRunner() {
+  return base::ThreadTaskRunnerHandle::Get();
+}
+
 #if defined(OS_WIN)
 void MockRenderThread::PreCacheFont(const LOGFONT& log_font) {
 }
@@ -264,7 +284,7 @@ service_manager::InterfaceProvider* MockRenderThread::GetRemoteInterfaces() {
   if (!remote_interfaces_) {
     service_manager::mojom::InterfaceProviderPtr remote_interface_provider;
     pending_remote_interface_provider_request_ =
-        GetProxy(&remote_interface_provider);
+        MakeRequest(&remote_interface_provider);
     remote_interfaces_.reset(new service_manager::InterfaceProvider);
     remote_interfaces_->Bind(std::move(remote_interface_provider));
   }

@@ -21,7 +21,7 @@ WebDatabaseBackend::WebDatabaseBackend(
     const FilePath& path,
     Delegate* delegate,
     const scoped_refptr<base::SingleThreadTaskRunner>& db_thread)
-    : base::RefCountedDeleteOnMessageLoop<WebDatabaseBackend>(db_thread),
+    : base::RefCountedDeleteOnSequence<WebDatabaseBackend>(db_thread),
       db_path_(path),
       request_manager_(new WebDataRequestManager()),
       init_status_(sql::INIT_FAILURE),
@@ -52,11 +52,11 @@ void WebDatabaseBackend::ShutdownDatabase() {
 void WebDatabaseBackend::DBWriteTaskWrapper(
     const WebDatabaseService::WriteTask& task,
     std::unique_ptr<WebDataRequest> request) {
-  if (request->IsCancelled())
+  if (!request->IsActive())
     return;
 
   ExecuteWriteTask(task);
-  request_manager_->RequestCompleted(std::move(request));
+  request_manager_->RequestCompleted(std::move(request), nullptr);
 }
 
 void WebDatabaseBackend::ExecuteWriteTask(
@@ -72,11 +72,11 @@ void WebDatabaseBackend::ExecuteWriteTask(
 void WebDatabaseBackend::DBReadTaskWrapper(
     const WebDatabaseService::ReadTask& task,
     std::unique_ptr<WebDataRequest> request) {
-  if (request->IsCancelled())
+  if (!request->IsActive())
     return;
 
-  request->SetResult(ExecuteReadTask(task));
-  request_manager_->RequestCompleted(std::move(request));
+  std::unique_ptr<WDTypedResult> result = ExecuteReadTask(task);
+  request_manager_->RequestCompleted(std::move(request), std::move(result));
 }
 
 std::unique_ptr<WDTypedResult> WebDatabaseBackend::ExecuteReadTask(

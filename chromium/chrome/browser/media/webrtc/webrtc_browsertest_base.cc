@@ -6,10 +6,13 @@
 
 #include <stddef.h>
 
+#include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/webrtc_browsertest_common.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
@@ -56,6 +59,7 @@ const char WebRtcTestBase::kAudioVideoCallConstraints720p[] =
    "{audio: true, video: {mandatory: {minWidth: 1280, maxWidth: 1280, "
    " minHeight: 720, maxHeight: 720}}}";
 const char WebRtcTestBase::kUseDefaultCertKeygen[] = "null";
+const char WebRtcTestBase::kUseDefaultAudioCodec[] = "";
 const char WebRtcTestBase::kUseDefaultVideoCodec[] = "";
 
 namespace {
@@ -119,6 +123,26 @@ class PermissionRequestObserver : public PermissionRequestManager::Observer {
 
   DISALLOW_COPY_AND_ASSIGN(PermissionRequestObserver);
 };
+
+std::vector<std::string> JsonArrayToVectorOfStrings(
+    const std::string& json_array) {
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(json_array);
+  EXPECT_TRUE(value);
+  EXPECT_TRUE(value->IsType(base::Value::Type::LIST));
+  std::unique_ptr<base::ListValue> list =
+      base::ListValue::From(std::move(value));
+  std::vector<std::string> vector;
+  vector.reserve(list->GetSize());
+  for (size_t i = 0; i < list->GetSize(); ++i) {
+    base::Value* item;
+    EXPECT_TRUE(list->Get(i, &item));
+    EXPECT_TRUE(item->IsType(base::Value::Type::STRING));
+    std::string item_str;
+    EXPECT_TRUE(item->GetAsString(&item_str));
+    vector.push_back(std::move(item_str));
+  }
+  return vector;
+}
 
 }  // namespace
 
@@ -356,7 +380,7 @@ std::string WebRtcTestBase::CreateAnswer(std::string local_offer,
 
   std::string answer = response.substr(3);
   response = ExecuteJavascript(
-      base::StringPrintf("verifyDefaultVideoCodec('%s')", answer.c_str()),
+      base::StringPrintf("verifyDefaultCodecs('%s')", answer.c_str()),
       to_tab);
   EXPECT_EQ("ok-", response.substr(0, 3))
       << "Receiving peer failed to verify default codec: " << response;
@@ -381,6 +405,12 @@ void WebRtcTestBase::GatherAndSendIceCandidates(
   EXPECT_EQ("ok-received-candidates", ExecuteJavascript(
       base::StringPrintf("receiveIceCandidates('%s')", ice_candidates.c_str()),
       to_tab));
+}
+
+void WebRtcTestBase::CreateDataChannel(content::WebContents* tab,
+                                       const std::string& label) {
+  EXPECT_EQ("ok-created",
+            ExecuteJavascript("createDataChannel('" + label + "')", tab));
 }
 
 void WebRtcTestBase::NegotiateCall(content::WebContents* from_tab,
@@ -460,17 +490,46 @@ void WebRtcTestBase::VerifyStatsGeneratedCallback(
   EXPECT_EQ("ok-got-stats", ExecuteJavascript("verifyStatsGenerated()", tab));
 }
 
-void WebRtcTestBase::VerifyStatsGeneratedPromise(
+std::vector<std::string> WebRtcTestBase::VerifyStatsGeneratedPromise(
     content::WebContents* tab) const {
-  EXPECT_EQ("ok-got-stats",
-            ExecuteJavascript("verifyStatsGeneratedPromise()", tab));
+  std::string result = ExecuteJavascript("verifyStatsGeneratedPromise()", tab);
+  EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
+  return JsonArrayToVectorOfStrings(result.substr(3));
+}
+
+scoped_refptr<content::TestStatsReportDictionary>
+WebRtcTestBase::GetStatsReportDictionary(content::WebContents* tab) const {
+  std::string result = ExecuteJavascript("getStatsReportDictionary()", tab);
+  EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
+  std::unique_ptr<base::Value> parsed_json = base::JSONReader::Read(
+      result.substr(3));
+  base::DictionaryValue* dictionary;
+  CHECK(parsed_json);
+  CHECK(parsed_json->GetAsDictionary(&dictionary));
+  ignore_result(parsed_json.release());
+  return scoped_refptr<content::TestStatsReportDictionary>(
+      new content::TestStatsReportDictionary(
+          std::unique_ptr<base::DictionaryValue>(dictionary)));
+}
+
+std::vector<std::string> WebRtcTestBase::GetWhitelistedStatsTypes(
+    content::WebContents* tab) const {
+  return JsonArrayToVectorOfStrings(
+      ExecuteJavascript("getWhitelistedStatsTypes()", tab));
+}
+
+void WebRtcTestBase::SetDefaultAudioCodec(
+    content::WebContents* tab,
+    const std::string& audio_codec) const {
+  EXPECT_EQ("ok", ExecuteJavascript(
+      "setDefaultAudioCodec('" + audio_codec + "')", tab));
 }
 
 void WebRtcTestBase::SetDefaultVideoCodec(
     content::WebContents* tab,
     const std::string& video_codec) const {
-  EXPECT_EQ("ok-forced",
-            ExecuteJavascript("forceVideoCodec('" + video_codec + "')", tab));
+  EXPECT_EQ("ok", ExecuteJavascript(
+      "setDefaultVideoCodec('" + video_codec + "')", tab));
 }
 
 void WebRtcTestBase::EnableOpusDtx(content::WebContents* tab) const {

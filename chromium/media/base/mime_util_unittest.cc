@@ -154,6 +154,8 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("Application/X-MPEGURL"));
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType(
       "application/vnd.apple.mpegurl"));
+  EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/mpegurl"));
+  EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/x-mpegurl"));
 
 #if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(USE_PROPRIETARY_CODECS)
@@ -470,6 +472,10 @@ TEST(IsCodecSupportedOnPlatformTest, HLSDoesNotSupportMPEG2AAC) {
             MimeUtil::MPEG2_AAC, "application/x-mpegurl", false, info));
         EXPECT_FALSE(MimeUtil::IsCodecSupportedOnPlatform(
             MimeUtil::MPEG2_AAC, "application/vnd.apple.mpegurl", false, info));
+        EXPECT_FALSE(MimeUtil::IsCodecSupportedOnPlatform(
+            MimeUtil::MPEG2_AAC, "audio/mpegurl", false, info));
+        EXPECT_FALSE(MimeUtil::IsCodecSupportedOnPlatform(
+            MimeUtil::MPEG2_AAC, "audio/x-mpegurl", false, info));
       });
 }
 

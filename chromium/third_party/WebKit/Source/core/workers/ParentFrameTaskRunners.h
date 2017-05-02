@@ -38,19 +38,21 @@ class CORE_EXPORT ParentFrameTaskRunners final
   }
 
   // Might return nullptr for unsupported task types.
-  WebTaskRunner* get(TaskType);
+  RefPtr<WebTaskRunner> get(TaskType);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  using TaskRunnerHashMap =
-      HashMap<TaskType, WebTaskRunner*, WTF::IntHash<TaskType>, TaskTypeTraits>;
+  using TaskRunnerHashMap = HashMap<TaskType,
+                                    RefPtr<WebTaskRunner>,
+                                    WTF::IntHash<TaskType>,
+                                    TaskTypeTraits>;
 
   // LocalFrame could be nullptr if the worker is not associated with a
   // particular local frame.
   explicit ParentFrameTaskRunners(LocalFrame*);
 
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   Mutex m_taskRunnersMutex;
   TaskRunnerHashMap m_taskRunners;

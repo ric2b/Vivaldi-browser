@@ -52,7 +52,6 @@ ColorChooserPopupUIController::ColorChooserPopupUIController(
       m_chromeClient(chromeClient),
       m_popup(nullptr),
       m_locale(Locale::defaultLocale()) {
-  ThreadState::current()->registerPreFinalizer(this);
 }
 
 ColorChooserPopupUIController::~ColorChooserPopupUIController() {}
@@ -90,7 +89,7 @@ void ColorChooserPopupUIController::writeDocument(SharedBuffer* data) {
   Vector<ColorSuggestion> suggestions = m_client->suggestions();
   Vector<String> suggestionValues;
   for (unsigned i = 0; i < suggestions.size(); i++)
-    suggestionValues.append(suggestions[i].color.serialized());
+    suggestionValues.push_back(suggestions[i].color.serialized());
   IntRect anchorRectInScreen = m_chromeClient->viewportToScreen(
       m_client->elementRectRelativeToViewport(), m_frame->view());
 

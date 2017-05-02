@@ -43,6 +43,7 @@ CHROMEOS_EXPORT extern const char kAccountsPrefLoginScreenDomainAutoComplete[];
 CHROMEOS_EXPORT extern const char kSignedDataRoamingEnabled[];
 
 CHROMEOS_EXPORT extern const char kUpdateDisabled[];
+CHROMEOS_EXPORT extern const char kTargetVersionPrefix[];
 CHROMEOS_EXPORT extern const char kAllowedConnectionTypesForUpdate[];
 
 CHROMEOS_EXPORT extern const char kSystemTimezonePolicy[];
@@ -110,6 +111,8 @@ CHROMEOS_EXPORT extern const char kDeviceQuirksDownloadEnabled[];
 CHROMEOS_EXPORT extern const char kLoginVideoCaptureAllowedUrls[];
 
 CHROMEOS_EXPORT extern const char kLoginApps[];
+
+CHROMEOS_EXPORT extern const char kDeviceWallpaperImage[];
 
 }  // namespace chromeos
 

@@ -10,32 +10,32 @@ UI.View.prototype = {
   /**
    * @return {string}
    */
-  viewId: function() {},
+  viewId() {},
 
   /**
    * @return {string}
    */
-  title: function() {},
+  title() {},
 
   /**
    * @return {boolean}
    */
-  isCloseable: function() {},
+  isCloseable() {},
 
   /**
    * @return {boolean}
    */
-  isTransient: function() {},
+  isTransient() {},
 
   /**
    * @return {!Promise<!Array<!UI.ToolbarItem>>}
    */
-  toolbarItems: function() {},
+  toolbarItems() {},
 
   /**
    * @return {!Promise<!UI.Widget>}
    */
-  widget: function() {}
+  widget() {}
 };
 
 UI.View._symbol = Symbol('view');
@@ -177,14 +177,9 @@ UI.ProvidedView = class {
    * @return {!Promise<!Array<!UI.ToolbarItem>>}
    */
   toolbarItems() {
-    var actionIds = this._extension.descriptor()['actionIds'];
+    const actionIds = this._extension.descriptor()['actionIds'];
     if (actionIds) {
-      var result = [];
-      for (var id of actionIds.split(',')) {
-        var item = UI.Toolbar.createActionButtonForId(id.trim());
-        if (item)
-          result.push(item);
-      }
+      const result = actionIds.split(',').map(id => UI.Toolbar.createActionButtonForId(id.trim()));
       return Promise.resolve(result);
     }
 
@@ -216,30 +211,30 @@ UI.ViewLocation.prototype = {
   /**
    * @param {string} locationName
    */
-  appendApplicableItems: function(locationName) {},
+  appendApplicableItems(locationName) {},
 
   /**
    * @param {!UI.View} view
    * @param {?UI.View=} insertBefore
    */
-  appendView: function(view, insertBefore) {},
+  appendView(view, insertBefore) {},
 
   /**
    * @param {!UI.View} view
    * @param {?UI.View=} insertBefore
    * @return {!Promise}
    */
-  showView: function(view, insertBefore) {},
+  showView(view, insertBefore) {},
 
   /**
    * @param {!UI.View} view
    */
-  removeView: function(view) {},
+  removeView(view) {},
 
   /**
    * @return {!UI.Widget}
    */
-  widget: function() {}
+  widget() {}
 };
 
 /**
@@ -252,9 +247,9 @@ UI.TabbedViewLocation.prototype = {
   /**
    * @return {!UI.TabbedPane}
    */
-  tabbedPane: function() {},
+  tabbedPane() {},
 
-  enableMoreTabsButton: function() {}
+  enableMoreTabsButton() {}
 };
 
 /**
@@ -267,7 +262,7 @@ UI.ViewLocationResolver.prototype = {
    * @param {string} location
    * @return {?UI.ViewLocation}
    */
-  resolveLocation: function(location) {}
+  resolveLocation(location) {}
 };
 
 /**
@@ -380,10 +375,12 @@ UI.ViewManager = class {
    * @param {string=} location
    * @param {boolean=} restoreSelection
    * @param {boolean=} allowReorder
+   * @param {?string=} defaultTab
    * @return {!UI.TabbedViewLocation}
    */
-  createTabbedLocation(revealCallback, location, restoreSelection, allowReorder) {
-    return new UI.ViewManager._TabbedLocation(this, revealCallback, location, restoreSelection, allowReorder);
+  createTabbedLocation(revealCallback, location, restoreSelection, allowReorder, defaultTab) {
+    return new UI.ViewManager._TabbedLocation(
+        this, revealCallback, location, restoreSelection, allowReorder, defaultTab);
   }
 
   /**
@@ -444,6 +441,13 @@ UI.ViewManager._ContainerWidget = class extends UI.VBox {
     }));
     this._materializePromise = Promise.all(promises);
     return this._materializePromise;
+  }
+
+  /**
+   * @override
+   */
+  wasShown() {
+    this._materialize();
   }
 };
 
@@ -565,8 +569,9 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
    * @param {string=} location
    * @param {boolean=} restoreSelection
    * @param {boolean=} allowReorder
+   * @param {?string=} defaultTab
    */
-  constructor(manager, revealCallback, location, restoreSelection, allowReorder) {
+  constructor(manager, revealCallback, location, restoreSelection, allowReorder, defaultTab) {
     var tabbedPane = new UI.TabbedPane();
     if (allowReorder)
       tabbedPane.setAllowTabReorder(true);
@@ -582,6 +587,7 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
     this._tabbedPane.addEventListener(UI.TabbedPane.Events.TabOrderChanged, this._persistTabOrder, this);
     if (restoreSelection)
       this._lastSelectedTabSetting = Common.settings.createSetting(location + '-selectedTab', '');
+    this._defaultTab = defaultTab;
 
     /** @type {!Map.<string, !UI.View>} */
     this._views = new Map();
@@ -640,7 +646,9 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
       else if (this._closeableTabSetting.get()[id])
         this._appendTab(view);
     }
-    if (this._lastSelectedTabSetting && this._tabbedPane.hasTab(this._lastSelectedTabSetting.get()))
+    if (this._defaultTab && this._tabbedPane.hasTab(this._defaultTab))
+      this._tabbedPane.selectTab(this._defaultTab);
+    else if (this._lastSelectedTabSetting && this._tabbedPane.hasTab(this._lastSelectedTabSetting.get()))
       this._tabbedPane.selectTab(this._lastSelectedTabSetting.get());
   }
 
@@ -708,7 +716,8 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
     this.appendView(view, insertBefore);
     this._tabbedPane.selectTab(view.viewId());
     this._tabbedPane.focus();
-    return this._materializeWidget(view);
+    var widget = /** @type {!UI.ViewManager._ContainerWidget} */ (this._tabbedPane.tabView(view.viewId()));
+    return widget._materialize();
   }
 
   /**
@@ -736,8 +745,6 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
     if (!view)
       return;
 
-    this._materializeWidget(view);
-
     if (view.isCloseable()) {
       var tabs = this._closeableTabSetting.get();
       if (!tabs[tabId]) {
@@ -757,15 +764,6 @@ UI.ViewManager._TabbedLocation = class extends UI.ViewManager._Location {
       delete tabs[id];
       this._closeableTabSetting.set(tabs);
     }
-  }
-
-  /**
-   * @param {!UI.View} view
-   * @return {!Promise}
-   */
-  _materializeWidget(view) {
-    var widget = /** @type {!UI.ViewManager._ContainerWidget} */ (this._tabbedPane.tabView(view.viewId()));
-    return widget._materialize();
   }
 
   /**

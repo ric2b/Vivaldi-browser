@@ -19,6 +19,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/http/http_network_session.h"
@@ -100,10 +101,10 @@ class DataReductionProxyIODataTest : public testing::Test {
 
 TEST_F(DataReductionProxyIODataTest, TestConstruction) {
   std::unique_ptr<DataReductionProxyIOData> io_data(
-      new DataReductionProxyIOData(
-          Client::UNKNOWN, DataReductionProxyParams::kAllowed, net_log(),
-          task_runner(), task_runner(), false /* enabled */,
-          std::string() /* user_agent */, std::string() /* channel */));
+      new DataReductionProxyIOData(Client::UNKNOWN, 0, net_log(), task_runner(),
+                                   task_runner(), false /* enabled */,
+                                   std::string() /* user_agent */,
+                                   std::string() /* channel */));
 
   // Check that the SimpleURLRequestContextGetter uses vanilla HTTP.
   net::URLRequestContext* request_context =
@@ -149,9 +150,7 @@ TEST_F(DataReductionProxyIODataTest, TestResetBadProxyListOnDisableDataSaver) {
   net::TestURLRequestContext context(false);
   std::unique_ptr<DataReductionProxyTestContext> drp_test_context =
       DataReductionProxyTestContext::Builder()
-          .WithParamsFlags(DataReductionProxyParams::kAllowed |
-                           DataReductionProxyParams::kFallbackAllowed |
-                           DataReductionProxyParams::kPromoAllowed)
+          .WithParamsFlags(DataReductionProxyParams::kPromoAllowed)
           .WithURLRequestContext(&context)
           .SkipSettingsInitialization()
           .Build();
@@ -191,17 +190,18 @@ TEST_F(DataReductionProxyIODataTest, HoldbackConfiguresProxies) {
   net::TestURLRequestContext context(false);
   std::unique_ptr<DataReductionProxyTestContext> drp_test_context =
       DataReductionProxyTestContext::Builder()
-          .WithParamsFlags(DataReductionProxyParams::kAllowed |
-                           DataReductionProxyParams::kFallbackAllowed |
-                           DataReductionProxyParams::kPromoAllowed |
+          .WithParamsFlags(DataReductionProxyParams::kPromoAllowed |
                            DataReductionProxyParams::kHoldback)
           .WithURLRequestContext(&context)
           .SkipSettingsInitialization()
           .Build();
 
   EXPECT_TRUE(drp_test_context->test_params()->proxies_for_http().size() > 0);
-  EXPECT_FALSE(
-      drp_test_context->test_params()->proxies_for_http().front().is_direct());
+  EXPECT_FALSE(drp_test_context->test_params()
+                   ->proxies_for_http()
+                   .front()
+                   .proxy_server()
+                   .is_direct());
 }
 
 }  // namespace data_reduction_proxy

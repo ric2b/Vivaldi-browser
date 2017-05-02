@@ -16,13 +16,12 @@ class CORE_EXPORT ThreadedWorkletGlobalScope : public WorkletGlobalScope {
  public:
   ~ThreadedWorkletGlobalScope() override;
   void dispose() final;
+  void countFeature(UseCounter::Feature) final;
+  void countDeprecation(UseCounter::Feature) final;
 
   // ExecutionContext
   bool isThreadedWorkletGlobalScope() const final { return true; }
   bool isContextThread() const final;
-  void postTask(const WebTraceLocation&,
-                std::unique_ptr<ExecutionContextTask>,
-                const String& taskNameForInstrumentation) final;
   void addConsoleMessage(ConsoleMessage*) final;
   void exceptionThrown(ErrorEvent*) final;
 
@@ -36,6 +35,8 @@ class CORE_EXPORT ThreadedWorkletGlobalScope : public WorkletGlobalScope {
                              WorkerThread*);
 
  private:
+  friend class ThreadedWorkletThreadForTest;
+
   WorkerThread* m_thread;
 };
 

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import logging
 import os
 
 from gpu_tests import gpu_integration_test
@@ -89,6 +90,7 @@ def _CompareVersion(version1, version2):
 class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   _webgl_version = None
+  _is_asan = False
 
   @classmethod
   def Name(cls):
@@ -102,6 +104,9 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     parser.add_option('--webgl2-only',
         help='Whether we include webgl 1 tests if version is 2.0.0 or above.',
         default='false')
+    parser.add_option('--is-asan',
+        help='Indicates whether currently running an ASAN build',
+        action='store_true')
 
   @classmethod
   def GenerateGpuTests(cls, options):
@@ -115,6 +120,7 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         None)
     cls._webgl_version = [
         int(x) for x in options.webgl_conformance_version.split('.')][0]
+    cls._is_asan = options.is_asan
     for test_path in test_paths:
       # generated test name cannot contain '.'
       name = _GenerateTestNameFromTestPath(test_path).replace(
@@ -250,7 +256,6 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         '--disable-gesture-requirement-for-media-playback',
         '--disable-domain-blocking-for-3d-apis',
         '--disable-gpu-process-crash-limit',
-        '--js-flags=--expose-gc',
         '--test-type=gpu',
         '--enable-experimental-canvas-features',
         # Try disabling the GPU watchdog to see if this affects the
@@ -258,6 +263,23 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         # waterfall. crbug.com/596622 crbug.com/609252
         '--disable-gpu-watchdog'
     ])
+
+    builtin_js_flags = '--js-flags=--expose-gc'
+    found_js_flags = False
+    user_js_flags = ''
+    if browser_options.extra_browser_args:
+      for o in browser_options.extra_browser_args:
+        if o.startswith('--js-flags'):
+          found_js_flags = True
+          user_js_flags = o
+          break
+    if found_js_flags:
+      logging.warning('Overriding built-in JavaScript flags:')
+      logging.warning(' Original flags: ' + builtin_js_flags)
+      logging.warning(' New flags: ' + user_js_flags)
+    else:
+      browser_options.AppendExtraBrowserArgs([builtin_js_flags])
+
     if cls._webgl_version == 2:
       browser_options.AppendExtraBrowserArgs([
         '--enable-es3-apis',
@@ -281,14 +303,16 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     assert cls._webgl_version == 1 or cls._webgl_version == 2
     if cls._webgl_version == 1:
       return webgl_conformance_expectations.WebGLConformanceExpectations(
-          conformance_path, url_prefixes=url_prefixes_to_trim)
+        conformance_path, url_prefixes=url_prefixes_to_trim,
+        is_asan=cls._is_asan)
     else:
       return webgl2_conformance_expectations.WebGL2ConformanceExpectations(
-          conformance_path, url_prefixes=url_prefixes_to_trim)
+        conformance_path, url_prefixes=url_prefixes_to_trim,
+        is_asan=cls._is_asan)
 
   @classmethod
   def setUpClass(cls):
-    super(cls, WebGLConformanceIntegrationTest).setUpClass()
+    super(WebGLConformanceIntegrationTest, cls).setUpClass()
     cls.CustomizeOptions()
     cls.SetBrowserOptions(cls._finder_options)
     cls.StartBrowser()

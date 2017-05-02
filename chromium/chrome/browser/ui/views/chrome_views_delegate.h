@@ -54,12 +54,19 @@ class ChromeViewsDelegate : public views::ViewsDelegate {
   bool WindowManagerProvidesTitleBar(bool maximized) override;
 #endif
   ui::ContextFactory* GetContextFactory() override;
+  ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
   std::string GetApplicationName() override;
 #if defined(OS_WIN)
   int GetAppbarAutohideEdges(HMONITOR monitor,
                              const base::Closure& callback) override;
 #endif
   scoped_refptr<base::TaskRunner> GetBlockingPoolTaskRunner() override;
+
+  gfx::Insets GetDialogButtonInsets() override;
+  int GetDialogRelatedButtonHorizontalSpacing() override;
+  int GetDialogRelatedControlVerticalSpacing() override;
+  gfx::Insets GetDialogFrameViewInsets() override;
+  gfx::Insets GetBubbleDialogMargins() override;
 
  private:
 #if defined(OS_WIN)

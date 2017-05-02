@@ -11,10 +11,10 @@ import android.os.Build;
 
 import android.util.Log;
 
+import org.chromium.net.CronetException;
 import org.chromium.net.InlineExecutionProhibitedException;
 import org.chromium.net.UploadDataProvider;
 import org.chromium.net.UploadDataSink;
-import org.chromium.net.UrlRequestException;
 import org.chromium.net.UrlResponseInfo;
 
 import java.io.Closeable;
@@ -28,6 +28,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,6 +39,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.annotation.concurrent.GuardedBy;
+
 /**
  * Pure java UrlRequest, backed by {@link HttpURLConnection}.
  */
@@ -45,7 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
 final class JavaUrlRequest extends UrlRequestBase {
     private static final String X_ANDROID = "X-Android";
     private static final String X_ANDROID_SELECTED_TRANSPORT = "X-Android-Selected-Transport";
-    private static final String TAG = "JavaUrlConnection";
+    private static final String TAG = JavaUrlRequest.class.getSimpleName();
     private static final int DEFAULT_UPLOAD_BUFFER_SIZE = 8192;
     private static final int DEFAULT_CHUNK_LENGTH = DEFAULT_UPLOAD_BUFFER_SIZE;
     private static final String USER_AGENT = "User-Agent";
@@ -77,7 +80,7 @@ final class JavaUrlRequest extends UrlRequestBase {
 
     /* These don't change with redirects */
     private String mInitialMethod;
-    private UploadDataProvider mUploadDataProvider;
+    private VersionSafeCallbacks.UploadDataProviderWrapper mUploadDataProvider;
     private Executor mUploadExecutor;
 
     /**
@@ -96,7 +99,7 @@ final class JavaUrlRequest extends UrlRequestBase {
     /* These change with redirects. */
     private String mCurrentUrl;
     private ReadableByteChannel mResponseChannel;
-    private UrlResponseInfo mUrlResponseInfo;
+    private UrlResponseInfoImpl mUrlResponseInfo;
     private String mPendingRedirectUrl;
     /**
      * The happens-before edges created by the executor submission and AtomicReference setting are
@@ -126,6 +129,56 @@ final class JavaUrlRequest extends UrlRequestBase {
         CANCELLED,
     }
 
+    // Executor that runs one task at a time on an underlying Executor.
+    private final class SeriaizingExecutor implements Executor {
+        private final Executor mUnderlyingExecutor;
+        // Queue of tasks to run.  First element is the task currently executing.
+        // Task processing loop is running if queue is not empty.  Synchronized on itself.
+        @GuardedBy("mTaskQueue")
+        private final ArrayDeque<Runnable> mTaskQueue = new ArrayDeque<>();
+
+        SeriaizingExecutor(Executor underlyingExecutor) {
+            mUnderlyingExecutor = underlyingExecutor;
+        }
+
+        private void runTask(final Runnable task) {
+            try {
+                mUnderlyingExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            task.run();
+                        } finally {
+                            Runnable nextTask;
+                            synchronized (mTaskQueue) {
+                                mTaskQueue.removeFirst();
+                                nextTask = mTaskQueue.peekFirst();
+                            }
+                            if (nextTask != null) {
+                                runTask(nextTask);
+                            }
+                        }
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                // This can happen if JavaCronetEngine.shutdown() was called.
+                // Ignore and cease processing this request.
+            }
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            synchronized (mTaskQueue) {
+                mTaskQueue.addLast(command);
+                // Task processing loop is already running if there are other items in mTaskQueue.
+                if (mTaskQueue.size() > 1) {
+                    return;
+                }
+            }
+            runTask(command);
+        };
+    }
+
     /**
      * @param executor The executor used for reading and writing from sockets
      * @param userExecutor The executor used to dispatch to {@code callback}
@@ -148,7 +201,7 @@ final class JavaUrlRequest extends UrlRequestBase {
         this.mAllowDirectExecutor = allowDirectExecutor;
         this.mCallbackAsync = new AsyncUrlRequestCallback(callback, userExecutor);
         this.mTrafficStatsTag = TrafficStats.getThreadStatsTag();
-        this.mExecutor = new Executor() {
+        this.mExecutor = new SeriaizingExecutor(new Executor() {
             @Override
             public void execute(final Runnable command) {
                 executor.execute(new Runnable() {
@@ -164,7 +217,7 @@ final class JavaUrlRequest extends UrlRequestBase {
                     }
                 });
             }
-        };
+        });
         this.mCurrentUrl = url;
         this.mUserAgent = userAgent;
     }
@@ -249,7 +302,8 @@ final class JavaUrlRequest extends UrlRequestBase {
         if (mInitialMethod == null) {
             mInitialMethod = "POST";
         }
-        this.mUploadDataProvider = uploadDataProvider;
+        this.mUploadDataProvider =
+                new VersionSafeCallbacks.UploadDataProviderWrapper(uploadDataProvider);
         if (mAllowDirectExecutor) {
             this.mUploadExecutor = executor;
         } else {
@@ -271,7 +325,7 @@ final class JavaUrlRequest extends UrlRequestBase {
         final HttpURLConnection mUrlConnection;
         WritableByteChannel mOutputChannel;
         OutputStream mUrlConnectionOutputStream;
-        final UploadDataProvider mUploadProvider;
+        final VersionSafeCallbacks.UploadDataProviderWrapper mUploadProvider;
         ByteBuffer mBuffer;
         /** This holds the total bytes to send (the content-length). -1 if unknown. */
         long mTotalBytes;
@@ -279,7 +333,8 @@ final class JavaUrlRequest extends UrlRequestBase {
         long mWrittenBytes = 0;
 
         OutputStreamDataSink(final Executor userExecutor, Executor executor,
-                HttpURLConnection urlConnection, UploadDataProvider provider) {
+                HttpURLConnection urlConnection,
+                VersionSafeCallbacks.UploadDataProviderWrapper provider) {
             this.mUserUploadExecutor = new Executor() {
                 @Override
                 public void execute(Runnable runnable) {
@@ -450,7 +505,7 @@ final class JavaUrlRequest extends UrlRequestBase {
         });
     }
 
-    private void enterErrorState(final UrlRequestException error) {
+    private void enterErrorState(final CronetException error) {
         if (setTerminalState(State.ERROR)) {
             fireDisconnect();
             fireCloseUploadDataProvider();
@@ -480,19 +535,19 @@ final class JavaUrlRequest extends UrlRequestBase {
     /** Ends the request with an error, caused by an exception thrown from user code. */
     private void enterUserErrorState(final Throwable error) {
         enterErrorState(
-                new UrlRequestException("Exception received from UrlRequest.Callback", error));
+                new CallbackExceptionImpl("Exception received from UrlRequest.Callback", error));
     }
 
     /** Ends the request with an error, caused by an exception thrown from user code. */
     private void enterUploadErrorState(final Throwable error) {
         enterErrorState(
-                new UrlRequestException("Exception received from UploadDataProvider", error));
+                new CallbackExceptionImpl("Exception received from UploadDataProvider", error));
     }
 
     private void enterCronetErrorState(final Throwable error) {
         // TODO(clm) mapping from Java exception (UnknownHostException, for example) to net error
         // code goes here.
-        enterErrorState(new UrlRequestException("System error", error));
+        enterErrorState(new CronetExceptionImpl("System error", error));
     }
 
     /**
@@ -790,17 +845,18 @@ final class JavaUrlRequest extends UrlRequestBase {
                 throw new IllegalStateException("Switch is exhaustive: " + state);
         }
 
-        mCallbackAsync.sendStatus(listener, status);
+        mCallbackAsync.sendStatus(
+                new VersionSafeCallbacks.UrlRequestStatusListener(listener), status);
     }
 
     /** This wrapper ensures that callbacks are always called on the correct executor */
     private final class AsyncUrlRequestCallback {
-        final Callback mCallback;
+        final VersionSafeCallbacks.UrlRequestCallback mCallback;
         final Executor mUserExecutor;
         final Executor mFallbackExecutor;
 
         AsyncUrlRequestCallback(Callback callback, final Executor userExecutor) {
-            this.mCallback = callback;
+            this.mCallback = new VersionSafeCallbacks.UrlRequestCallback(callback);
             if (mAllowDirectExecutor) {
                 this.mUserExecutor = userExecutor;
                 this.mFallbackExecutor = null;
@@ -810,7 +866,8 @@ final class JavaUrlRequest extends UrlRequestBase {
             }
         }
 
-        void sendStatus(final StatusListener listener, final int status) {
+        void sendStatus(
+                final VersionSafeCallbacks.UrlRequestStatusListener listener, final int status) {
             mUserExecutor.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -823,7 +880,7 @@ final class JavaUrlRequest extends UrlRequestBase {
             try {
                 mUserExecutor.execute(userErrorSetting(runnable));
             } catch (RejectedExecutionException e) {
-                enterErrorState(new UrlRequestException("Exception posting task to executor", e));
+                enterErrorState(new CronetExceptionImpl("Exception posting task to executor", e));
             }
         }
 
@@ -885,7 +942,7 @@ final class JavaUrlRequest extends UrlRequestBase {
             });
         }
 
-        void onFailed(final UrlResponseInfo urlResponseInfo, final UrlRequestException e) {
+        void onFailed(final UrlResponseInfo urlResponseInfo, final CronetException e) {
             closeResponseChannel();
             Runnable runnable = new Runnable() {
                 @Override

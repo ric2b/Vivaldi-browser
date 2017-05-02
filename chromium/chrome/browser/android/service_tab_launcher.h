@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_ANDROID_CHROME_SERVICE_TAB_LAUNCHER_H_
-#define CHROME_BROWSER_ANDROID_CHROME_SERVICE_TAB_LAUNCHER_H_
+#ifndef CHROME_BROWSER_ANDROID_SERVICE_TAB_LAUNCHER_H_
+#define CHROME_BROWSER_ANDROID_SERVICE_TAB_LAUNCHER_H_
 
 #include "base/android/jni_android.h"
 #include "base/callback_forward.h"
@@ -48,9 +48,9 @@ class ServiceTabLauncher {
   ServiceTabLauncher();
   ~ServiceTabLauncher();
 
-  IDMap<TabLaunchedCallback, IDMapOwnPointer> tab_launched_callbacks_;
+  IDMap<std::unique_ptr<TabLaunchedCallback>> tab_launched_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceTabLauncher);
 };
 
-#endif  // CHROME_BROWSER_ANDROID_CHROME_SERVICE_TAB_LAUNCHER_H_
+#endif  // CHROME_BROWSER_ANDROID_SERVICE_TAB_LAUNCHER_H_

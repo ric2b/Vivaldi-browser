@@ -762,7 +762,7 @@ void SessionService::OnBrowserSetLastActive(Browser* browser) {
 
 void SessionService::OnGotSessionCommands(
     const sessions::GetLastSessionCallback& callback,
-    ScopedVector<sessions::SessionCommand> commands) {
+    std::vector<std::unique_ptr<sessions::SessionCommand>> commands) {
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID::id_type active_window_id = 0;
 
@@ -1183,7 +1183,7 @@ bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
   if (json && json->GetAsDictionary(&dict)) {
     dict->GetString("windowType", &window_type);
     // Don't track popup windows (like settings) in the session.
-    return window_type != "popup";
+    return window_type != "settings";
   }
   return true;
 }

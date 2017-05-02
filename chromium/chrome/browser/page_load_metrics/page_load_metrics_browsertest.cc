@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,6 +49,7 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
 
   base::HistogramTester histogram_tester_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(PageLoadMetricsBrowserTest);
 };
 
@@ -85,6 +86,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPage) {
       internal::kHistogramParseBlockedOnScriptLoad, 1);
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramParseBlockedOnScriptExecution, 1);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramTotalBytes, 1);
 
   // Verify that NoPageLoadMetricsRecorded returns false when PageLoad metrics
   // have been recorded.
@@ -227,6 +229,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWrite) {
       internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 0);
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteBlock) {
@@ -239,6 +242,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteBlock) {
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 1);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteReload) {
@@ -267,6 +271,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteReload) {
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockReloadCount, 2);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteAsync) {
@@ -279,6 +284,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteAsync) {
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteSameDomain) {
@@ -291,6 +297,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DocumentWriteSameDomain) {
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWriteScript) {
@@ -303,6 +310,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWriteScript) {
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, BadXhtml) {
@@ -510,13 +518,9 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
-      prerender::PrerenderHistograms::GetFirstContentfulPaintHistogramName(
-          prerender::ORIGIN_NONE, false, true, base::TimeDelta()),
-      0);
+      "Prerender.none_PrefetchTTFCP.Reference.NoStore.Visible", 0);
   histogram_tester_.ExpectTotalCount(
-      prerender::PrerenderHistograms::GetFirstContentfulPaintHistogramName(
-          prerender::ORIGIN_NONE, false, false, base::TimeDelta()),
-      1);
+      "Prerender.none_PrefetchTTFCP.Reference.Cacheable.Visible", 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
@@ -528,13 +532,9 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
-      prerender::PrerenderHistograms::GetFirstContentfulPaintHistogramName(
-          prerender::ORIGIN_NONE, false, true, base::TimeDelta()),
-      1);
+      "Prerender.none_PrefetchTTFCP.Reference.NoStore.Visible", 1);
   histogram_tester_.ExpectTotalCount(
-      prerender::PrerenderHistograms::GetFirstContentfulPaintHistogramName(
-          prerender::ORIGIN_NONE, false, false, base::TimeDelta()),
-      0);
+      "Prerender.none_PrefetchTTFCP.Reference.Cacheable.Visible", 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, CSSTiming) {
@@ -552,4 +552,22 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, CSSTiming) {
                                      1);
   histogram_tester_.ExpectTotalCount(
       "PageLoad.CSSTiming.Parse.BeforeFirstContentfulPaint", 1);
+  histogram_tester_.ExpectTotalCount(
+      "PageLoad.CSSTiming.Update.BeforeFirstContentfulPaint", 1);
+  histogram_tester_.ExpectTotalCount(
+      "PageLoad.CSSTiming.ParseAndUpdate.BeforeFirstContentfulPaint", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PayloadSize) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL(
+                                              "/page_load_metrics/large.html"));
+  NavigateToUntrackedUrl();
+
+  histogram_tester_.ExpectTotalCount(internal::kHistogramTotalBytes, 1);
+
+  // Verify that there is a single sample recorded in the 10kB bucket (the size
+  // of the main HTML response).
+  histogram_tester_.ExpectBucketCount(internal::kHistogramTotalBytes, 10, 1);
 }

@@ -75,12 +75,10 @@ void AutomaticTrackSelection::performAutomaticTextTrackSelection(
   TextTrack* fallbackTrack = nullptr;
   int highestTrackScore = 0;
 
-  for (size_t i = 0; i < group.tracks.size(); ++i) {
-    TextTrack* textTrack = group.tracks[i];
-
+  for (const auto& textTrack : group.tracks) {
     if (m_configuration.disableCurrentlyEnabledTracks &&
         textTrack->mode() == TextTrack::showingKeyword())
-      currentlyEnabledTracks.append(textTrack);
+      currentlyEnabledTracks.push_back(textTrack);
 
     int trackScore = textTrackSelectionScore(*textTrack);
 
@@ -127,8 +125,7 @@ void AutomaticTrackSelection::performAutomaticTextTrackSelection(
   }
 
   if (currentlyEnabledTracks.size()) {
-    for (size_t i = 0; i < currentlyEnabledTracks.size(); ++i) {
-      TextTrack* textTrack = currentlyEnabledTracks[i];
+    for (const auto& textTrack : currentlyEnabledTracks) {
       if (textTrack != trackToEnable)
         textTrack->setMode(TextTrack::disabledKeyword());
     }
@@ -200,7 +197,7 @@ void AutomaticTrackSelection::perform(TextTrackList& textTracks) {
 
     if (textTrack->language().length())
       currentGroup->hasSrcLang = true;
-    currentGroup->tracks.append(textTrack);
+    currentGroup->tracks.push_back(textTrack);
   }
 
   if (captionAndSubtitleTracks.tracks.size())

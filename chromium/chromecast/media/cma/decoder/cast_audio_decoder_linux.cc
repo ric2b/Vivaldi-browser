@@ -18,6 +18,7 @@
 #include "chromecast/media/cma/base/decoder_buffer_adapter.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
 #include "chromecast/media/cma/base/decoder_config_adapter.h"
+#include "chromecast/media/cma/base/decoder_config_logging.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_bus.h"
 #include "media/base/cdm_context.h"
@@ -26,26 +27,11 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/sample_format.h"
 #include "media/filters/ffmpeg_audio_decoder.h"
-#include "media/filters/opus_audio_decoder.h"
 
 namespace chromecast {
 namespace media {
 
 namespace {
-
-const int kOpusSamplingRate = 48000;
-const uint8_t kFakeOpusExtraData[19] = {
-  'O', 'p', 'u', 's', 'H', 'e', 'a', 'd',  // offset 0, OpusHead
-  0,  // offset 8, version
-  2,  // offset 9, channels
-  0, 0,  // offset 10, skip
-  static_cast<uint8_t>(kOpusSamplingRate & 0xFF),  // offset 12, LE
-  static_cast<uint8_t>((kOpusSamplingRate >> 8) & 0xFF),
-  static_cast<uint8_t>((kOpusSamplingRate >> 16) & 0xFF),
-  static_cast<uint8_t>((kOpusSamplingRate >> 24) & 0xFF),
-  0, 0,  // offset 16, gain
-  0,  // offset 18, stereo mapping
-};
 
 const int kOutputChannelCount = 2;  // Always output stereo audio.
 const int kMaxChannelInput = 2;
@@ -82,19 +68,8 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
                                              ::media::CHANNEL_LAYOUT_STEREO));
     }
     base::WeakPtr<CastAudioDecoderImpl> self = weak_factory_.GetWeakPtr();
-    if (config.codec == media::kCodecOpus) {
-      // Insert fake extradata to make OpusAudioDecoder work with v2mirroring.
-      if (config_.extra_data.empty() &&
-          config_.samples_per_second == kOpusSamplingRate &&
-          config_.channel_number == 2)
-        config_.extra_data.assign(
-            kFakeOpusExtraData,
-            kFakeOpusExtraData + sizeof(kFakeOpusExtraData));
-      decoder_.reset(new ::media::OpusAudioDecoder(task_runner_));
-    } else {
-      decoder_.reset(new ::media::FFmpegAudioDecoder(
-          task_runner_, make_scoped_refptr(new ::media::MediaLog())));
-    }
+    decoder_.reset(new ::media::FFmpegAudioDecoder(
+        task_runner_, make_scoped_refptr(new ::media::MediaLog())));
     decoder_->Initialize(
         media::DecoderConfigAdapter::ToMediaAudioDecoderConfig(config_),
         nullptr, base::Bind(&CastAudioDecoderImpl::OnInitialized, self),
@@ -111,7 +86,10 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
 
     if (data->decrypt_context() != nullptr) {
       LOG(ERROR) << "Audio decoder doesn't support encrypted stream";
-      decode_callback.Run(kDecodeError, data);
+      // Post the task to ensure that |decode_callback| is not called from
+      // within a call to Decode().
+      task_runner_->PostTask(FROM_HERE,
+                             base::Bind(decode_callback, kDecodeError, data));
     } else if (!initialized_ || decode_pending_) {
       decode_queue_.push(std::make_pair(data, decode_callback));
     } else {
@@ -149,14 +127,22 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
 
   void OnInitialized(bool success) {
     DCHECK(!initialized_);
-    LOG_IF(ERROR, !success) << "Failed to initialize FFmpegAudioDecoder";
-    if (success)
+    if (success) {
       initialized_ = true;
-
-    if (success && !decode_queue_.empty()) {
-      const auto& d = decode_queue_.front();
-      DecodeNow(d.first, d.second);
-      decode_queue_.pop();
+      if (!decode_queue_.empty()) {
+        const auto& d = decode_queue_.front();
+        DecodeNow(d.first, d.second);
+        decode_queue_.pop();
+      }
+    } else {
+      LOG(ERROR) << "Failed to initialize FFmpegAudioDecoder";
+      LOG(INFO) << "Config:";
+      LOG(INFO) << "\tEncrypted: "
+                << (config_.is_encrypted() ? "true" : "false");
+      LOG(INFO) << "\tCodec: " << config_.codec;
+      LOG(INFO) << "\tSample format: " << config_.sample_format;
+      LOG(INFO) << "\tChannels: " << config_.channel_number;
+      LOG(INFO) << "\tSample rate: " << config_.samples_per_second;
     }
 
     if (!initialized_callback_.is_null())

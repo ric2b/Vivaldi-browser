@@ -53,6 +53,7 @@
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/PaintLayer.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/plugins/PluginData.h"
 #include "public/platform/Platform.h"
@@ -81,7 +82,7 @@ void Page::networkStateChanged(bool online) {
       // FIXME: There is currently no way to dispatch events to out-of-process
       // frames.
       if (frame->isLocalFrame())
-        frames.append(toLocalFrame(frame));
+        frames.push_back(toLocalFrame(frame));
     }
   }
 
@@ -134,9 +135,6 @@ Page::Page(PageClients& pageClients)
       m_deviceScaleFactor(1),
       m_visibilityState(PageVisibilityStateVisible),
       m_isCursorVisible(true),
-#if ENABLE(ASSERT)
-      m_isPainting(false),
-#endif
       m_frameHost(FrameHost::create(*this)) {
   ASSERT(m_editorClient);
 
@@ -168,17 +166,10 @@ ViewportDescription Page::viewportDescription() const {
 }
 
 ScrollingCoordinator* Page::scrollingCoordinator() {
-  if (!m_scrollingCoordinator && m_settings->acceleratedCompositingEnabled())
+  if (!m_scrollingCoordinator && m_settings->getAcceleratedCompositingEnabled())
     m_scrollingCoordinator = ScrollingCoordinator::create(this);
 
   return m_scrollingCoordinator.get();
-}
-
-String Page::mainThreadScrollingReasonsAsText() {
-  if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
-    return scrollingCoordinator->mainThreadScrollingReasonsAsText();
-
-  return String();
 }
 
 ClientRectList* Page::nonFastScrollableRects(const LocalFrame* frame) {
@@ -264,15 +255,18 @@ void Page::setValidationMessageClient(ValidationMessageClient* client) {
   m_validationMessageClient = client;
 }
 
-void Page::setSuspended(bool suspend) {
-  if (suspend == m_suspended)
+void Page::setSuspended(bool suspended) {
+  if (suspended == m_suspended)
     return;
 
-  m_suspended = suspend;
+  m_suspended = suspended;
   for (Frame* frame = mainFrame(); frame;
        frame = frame->tree().traverseNext()) {
-    if (frame->isLocalFrame())
-      toLocalFrame(frame)->loader().setDefersLoading(suspend);
+    if (!frame->isLocalFrame())
+      continue;
+    LocalFrame* localFrame = toLocalFrame(frame);
+    localFrame->loader().setDefersLoading(suspended);
+    localFrame->frameScheduler()->setSuspended(suspended);
   }
 }
 
@@ -342,7 +336,7 @@ bool Page::isPageVisible() const {
 }
 
 bool Page::isCursorVisible() const {
-  return m_isCursorVisible && settings().deviceSupportsMouse();
+  return m_isCursorVisible;
 }
 
 void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
@@ -371,12 +365,12 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
            frame = frame->tree().traverseNext()) {
         if (frame->isLocalFrame()) {
           toLocalFrame(frame)->document()->fetcher()->setImagesEnabled(
-              settings().imagesEnabled());
+              settings().getImagesEnabled());
           toLocalFrame(frame)->document()->fetcher()->setAutoLoadImages(
-              settings().loadsImagesAutomatically());
+              settings().getLoadsImagesAutomatically());
           toLocalFrame(frame)->document()->fetcher()->
               setServeOnlyCachedResources(
-                  settings().serveResourceFromCacheOnly());
+                  settings().getServeResourceFromCacheOnly());
         }
       }
       break;
@@ -433,7 +427,7 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
       }
       break;
     case SettingsDelegate::DOMWorldsChange: {
-      if (!settings().forceMainWorldInitialization())
+      if (!settings().getForceMainWorldInitialization())
         break;
       for (Frame* frame = mainFrame(); frame;
            frame = frame->tree().traverseNext()) {
@@ -443,7 +437,8 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
         if (localFrame->loader()
                 .stateMachine()
                 ->committedFirstRealDocumentLoad()) {
-          localFrame->script().initializeMainWorld();
+          // Forcibly instantiate WindowProxy.
+          localFrame->script().windowProxy(DOMWrapperWorld::mainWorld());
         }
       }
     } break;
@@ -462,10 +457,14 @@ void Page::updateAcceleratedCompositingSettings() {
 
 void Page::didCommitLoad(LocalFrame* frame) {
   if (m_mainFrame == frame) {
+    KURL url;
+    if (frame->document())
+      url = frame->document()->url();
+
     // TODO(rbyers): Most of this doesn't appear to take into account that each
     // SVGImage gets it's own Page instance.
     frameHost().consoleMessageStorage().clear();
-    useCounter().didCommitLoad();
+    useCounter().didCommitLoad(url);
     deprecation().clearSuppression();
     frameHost().visualViewport().sendUMAMetrics();
 
@@ -487,11 +486,11 @@ void Page::acceptLanguagesChanged() {
   for (Frame* frame = mainFrame(); frame;
        frame = frame->tree().traverseNext()) {
     if (frame->isLocalFrame())
-      frames.append(toLocalFrame(frame));
+      frames.push_back(toLocalFrame(frame));
   }
 
   for (unsigned i = 0; i < frames.size(); ++i)
-    frames[i]->localDOMWindow()->acceptLanguagesChanged();
+    frames[i]->domWindow()->acceptLanguagesChanged();
 }
 
 DEFINE_TRACE(Page) {
@@ -511,14 +510,16 @@ DEFINE_TRACE(Page) {
   PageVisibilityNotifier::trace(visitor);
 }
 
-void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView) {
+void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView,
+                                    FrameView* view) {
   if (scrollingCoordinator())
-    scrollingCoordinator()->layerTreeViewInitialized(layerTreeView);
+    scrollingCoordinator()->layerTreeViewInitialized(layerTreeView, view);
 }
 
-void Page::willCloseLayerTreeView(WebLayerTreeView& layerTreeView) {
+void Page::willCloseLayerTreeView(WebLayerTreeView& layerTreeView,
+                                  FrameView* view) {
   if (m_scrollingCoordinator)
-    m_scrollingCoordinator->willCloseLayerTreeView(layerTreeView);
+    m_scrollingCoordinator->willCloseLayerTreeView(layerTreeView, view);
 }
 
 void Page::willBeDestroyed() {

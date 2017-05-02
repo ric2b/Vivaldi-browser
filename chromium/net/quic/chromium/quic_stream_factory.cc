@@ -25,6 +25,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_delegate.h"
+#include "net/base/trace_constants.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_verifier.h"
 #include "net/dns/host_resolver.h"
@@ -35,20 +36,19 @@
 #include "net/quic/chromium/bidirectional_stream_quic_impl.h"
 #include "net/quic/chromium/crypto/channel_id_chromium.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
-#include "net/quic/chromium/port_suggester.h"
+#include "net/quic/chromium/properties_based_quic_server_info.h"
 #include "net/quic/chromium/quic_chromium_alarm_factory.h"
 #include "net/quic/chromium/quic_chromium_connection_helper.h"
 #include "net/quic/chromium/quic_chromium_packet_reader.h"
 #include "net/quic/chromium/quic_chromium_packet_writer.h"
+#include "net/quic/chromium/quic_crypto_client_stream_factory.h"
+#include "net/quic/chromium/quic_server_info.h"
 #include "net/quic/core/crypto/proof_verifier.h"
-#include "net/quic/core/crypto/properties_based_quic_server_info.h"
 #include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/crypto/quic_server_info.h"
 #include "net/quic/core/quic_client_promised_info.h"
-#include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_connection.h"
-#include "net/quic/core/quic_crypto_client_stream_factory.h"
 #include "net/quic/core/quic_flags.h"
+#include "net/quic/platform/api/quic_clock.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket_performance_watcher.h"
@@ -59,7 +59,6 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
-using std::min;
 using NetworkHandle = net::NetworkChangeNotifier::NetworkHandle;
 
 namespace net {
@@ -402,7 +401,7 @@ int QuicStreamFactory::Job::Run(const CompletionCallback& callback) {
 }
 
 int QuicStreamFactory::Job::DoLoop(int rv) {
-  TRACE_EVENT0("net", "QuicStreamFactory::Job::DoLoop");
+  TRACE_EVENT0(kNetTracingCategory, "QuicStreamFactory::Job::DoLoop");
   do {
     IoState state = io_state_;
     io_state_ = STATE_NONE;
@@ -624,7 +623,8 @@ int QuicStreamFactory::Job::DoConnectComplete(int rv) {
   DCHECK(!factory_->HasActiveSession(key_.server_id()));
   // There may well now be an active session for this IP.  If so, use the
   // existing session instead.
-  AddressList address(session_->connection()->peer_address());
+  AddressList address(
+      session_->connection()->peer_address().impl().socket_address());
   if (factory_->OnResolution(key_, address)) {
     session_->connection()->CloseConnection(
         QUIC_CONNECTION_IP_POOLED, "An active session exists for the given IP.",
@@ -718,7 +718,6 @@ QuicStreamFactory::QuicStreamFactory(
     size_t max_packet_length,
     const std::string& user_agent_id,
     const QuicVersionVector& supported_versions,
-    bool enable_port_selection,
     bool always_require_handshake_confirmation,
     bool disable_connection_pooling,
     float load_server_info_timeout_srtt_multiplier,
@@ -747,6 +746,7 @@ QuicStreamFactory::QuicStreamFactory(
       host_resolver_(host_resolver),
       client_socket_factory_(client_socket_factory),
       http_server_properties_(http_server_properties),
+      push_delegate_(nullptr),
       proxy_delegate_(proxy_delegate),
       transport_security_state_(transport_security_state),
       cert_transparency_verifier_(cert_transparency_verifier),
@@ -764,7 +764,6 @@ QuicStreamFactory::QuicStreamFactory(
                                     transport_security_state,
                                     cert_transparency_verifier))),
       supported_versions_(supported_versions),
-      enable_port_selection_(enable_port_selection),
       always_require_handshake_confirmation_(
           always_require_handshake_confirmation),
       disable_connection_pooling_(disable_connection_pooling),
@@ -796,7 +795,6 @@ QuicStreamFactory::QuicStreamFactory(
       force_hol_blocking_(force_hol_blocking),
       race_cert_verification_(race_cert_verification),
       quic_do_not_fragment_(quic_do_not_fragment),
-      port_seed_(random_generator_->RandUint64()),
       check_persisted_supports_quic_(true),
       has_initialized_data_(false),
       num_push_streams_created_(0),
@@ -1453,8 +1451,9 @@ MigrationResult QuicStreamFactory::MigrateSessionToNewNetwork(
     NetworkHandle network,
     bool close_session_on_error,
     const NetLogWithSource& net_log) {
-  return MigrateSessionInner(session, session->connection()->peer_address(),
-                             network, close_session_on_error, net_log);
+  return MigrateSessionInner(
+      session, session->connection()->peer_address().impl().socket_address(),
+      network, close_session_on_error, net_log);
 }
 
 MigrationResult QuicStreamFactory::MigrateSessionInner(
@@ -1615,39 +1614,19 @@ int QuicStreamFactory::CreateSession(
 
     need_to_evaluate_consecutive_disabled_count_ = false;
   }
-  TRACE_EVENT0("net", "QuicStreamFactory::CreateSession");
+  TRACE_EVENT0(kNetTracingCategory, "QuicStreamFactory::CreateSession");
   IPEndPoint addr = *address_list.begin();
-  bool enable_port_selection = enable_port_selection_;
-  if (enable_port_selection && base::ContainsKey(gone_away_aliases_, key)) {
-    // Disable port selection when the server is going away.
-    // There is no point in trying to return to the same server, if
-    // that server is no longer handling requests.
-    enable_port_selection = false;
-    gone_away_aliases_.erase(key);
-  }
   const QuicServerId& server_id = key.server_id();
-  scoped_refptr<PortSuggester> port_suggester =
-      new PortSuggester(server_id.host_port_pair(), port_seed_);
-  DatagramSocket::BindType bind_type =
-      enable_port_selection ? DatagramSocket::RANDOM_BIND
-                            :            // Use our callback.
-          DatagramSocket::DEFAULT_BIND;  // Use OS to randomize.
-
+  DatagramSocket::BindType bind_type = DatagramSocket::DEFAULT_BIND;
   std::unique_ptr<DatagramClientSocket> socket(
       client_socket_factory_->CreateDatagramClientSocket(
-          bind_type, base::Bind(&PortSuggester::SuggestPort, port_suggester),
-          net_log.net_log(), net_log.source()));
+          bind_type, RandIntCallback(), net_log.net_log(), net_log.source()));
 
   // Passing in kInvalidNetworkHandle binds socket to default network.
   int rv = ConfigureSocket(socket.get(), addr,
                            NetworkChangeNotifier::kInvalidNetworkHandle);
   if (rv != OK)
     return rv;
-
-  if (enable_port_selection)
-    DCHECK_LE(1u, port_suggester->call_count());
-  else
-    DCHECK_EQ(0u, port_suggester->call_count());
 
   if (!helper_.get()) {
     helper_.reset(
@@ -1663,8 +1642,9 @@ int QuicStreamFactory::CreateSession(
 
   QuicChromiumPacketWriter* writer = new QuicChromiumPacketWriter(socket.get());
   QuicConnection* connection = new QuicConnection(
-      connection_id, addr, helper_.get(), alarm_factory_.get(), writer,
-      true /* owns_writer */, Perspective::IS_CLIENT, supported_versions_);
+      connection_id, QuicSocketAddress(QuicSocketAddressImpl(addr)),
+      helper_.get(), alarm_factory_.get(), writer, true /* owns_writer */,
+      Perspective::IS_CLIENT, supported_versions_);
   connection->set_ping_timeout(ping_timeout_);
   connection->SetMaxPacketLength(max_packet_length_);
 
@@ -1705,7 +1685,8 @@ int QuicStreamFactory::CreateSession(
       server_id, yield_after_packets_, yield_after_duration_, cert_verify_flags,
       config, &crypto_config_, network_connection_.GetDescription(),
       dns_resolution_start_time, dns_resolution_end_time, &push_promise_index_,
-      task_runner_, std::move(socket_performance_watcher), net_log.net_log());
+      push_delegate_, task_runner_, std::move(socket_performance_watcher),
+      net_log.net_log());
 
   all_sessions_[*session] = key;  // owning pointer
   writer->set_delegate(*session);
@@ -1730,7 +1711,8 @@ void QuicStreamFactory::ActivateSession(const QuicSessionKey& key,
   UMA_HISTOGRAM_COUNTS("Net.QuicActiveSessions", active_sessions_.size());
   active_sessions_[server_id] = session;
   session_aliases_[session].insert(key);
-  const IPEndPoint peer_address = session->connection()->peer_address();
+  const IPEndPoint peer_address =
+      session->connection()->peer_address().impl().socket_address();
   DCHECK(!base::ContainsKey(ip_aliases_[peer_address], session));
   ip_aliases_[peer_address].insert(session);
   DCHECK(!base::ContainsKey(session_peer_ip_, session));

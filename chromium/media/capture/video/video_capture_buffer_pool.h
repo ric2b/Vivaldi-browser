@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_H_
-#define MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_H_
+#ifndef MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_POOL_H_
+#define MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_POOL_H_
 
 #include "base/memory/ref_counted.h"
 #include "media/capture/capture_export.h"
@@ -42,10 +42,14 @@ class CAPTURE_EXPORT VideoCaptureBufferPool
   static constexpr int kInvalidId = -1;
 
   // One-time (per client/per-buffer) call to allow sharing |buffer_id|.
-  virtual mojo::ScopedSharedBufferHandle GetHandleForTransit(int buffer_id) = 0;
+  virtual mojo::ScopedSharedBufferHandle GetHandleForInterProcessTransit(
+      int buffer_id) = 0;
 
-  // Try and obtain a BufferHandle for |buffer_id|.
-  virtual std::unique_ptr<VideoCaptureBufferHandle> GetBufferHandle(
+  virtual base::SharedMemoryHandle GetNonOwnedSharedMemoryHandleForLegacyIPC(
+      int buffer_id) = 0;
+
+  // Try and obtain a read/write access to the buffer.
+  virtual std::unique_ptr<VideoCaptureBufferHandle> GetHandleForInProcessAccess(
       int buffer_id) = 0;
 
   // Reserve or allocate a buffer to support a packed frame of |dimensions| of
@@ -64,6 +68,7 @@ class CAPTURE_EXPORT VideoCaptureBufferPool
   virtual int ReserveForProducer(const gfx::Size& dimensions,
                                  media::VideoPixelFormat format,
                                  media::VideoPixelStorage storage,
+                                 int frame_feedback_id,
                                  int* buffer_id_to_drop) = 0;
 
   // Indicate that a buffer held for the producer should be returned back to the
@@ -106,4 +111,4 @@ class CAPTURE_EXPORT VideoCaptureBufferPool
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_H_
+#endif  // MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_POOL_H_

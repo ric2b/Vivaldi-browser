@@ -6,10 +6,11 @@
 #define CHROME_BROWSER_UI_ASH_APP_LIST_APP_LIST_PRESENTER_SERVICE_H_
 
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/app_list/presenter/app_list_presenter.mojom.h"
 
 namespace app_list {
-class AppListPresenter;
+class AppListPresenterImpl;
 }
 
 // A service providing the Mojo interface to manipulate the App List.
@@ -24,7 +25,9 @@ class AppListPresenterService : public app_list::mojom::AppListPresenter {
   void ToggleAppList(int64_t display_id) override;
 
  private:
-  app_list::AppListPresenter* GetPresenter();
+  app_list::AppListPresenterImpl* GetPresenter();
+
+  mojo::Binding<app_list::mojom::AppListPresenter> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListPresenterService);
 };

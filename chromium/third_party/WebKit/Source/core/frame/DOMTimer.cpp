@@ -31,7 +31,7 @@
 #include "core/frame/PerformanceMonitor.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
@@ -48,7 +48,7 @@ static const double oneMillisecond = 0.001;
 static const double minimumInterval = 0.004;
 
 static inline bool shouldForwardUserGesture(int interval, int nestingLevel) {
-  return UserGestureIndicator::processingUserGesture() &&
+  return UserGestureIndicator::processingUserGestureThreadSafe() &&
          interval <= maxIntervalForUserGestureForwarding &&
          nestingLevel ==
              1;  // Gestures should not be forwarded to nested timers.
@@ -91,8 +91,11 @@ DOMTimer::DOMTimer(ExecutionContext* context,
       m_nestingLevel(context->timers()->timerNestingLevel() + 1),
       m_action(action) {
   ASSERT(timeoutID > 0);
-  if (shouldForwardUserGesture(interval, m_nestingLevel))
+  if (shouldForwardUserGesture(interval, m_nestingLevel)) {
+    // Thread safe because shouldForwardUserGesture will only return true if
+    // execution is on the the main thread.
     m_userGestureToken = UserGestureIndicator::currentToken();
+  }
 
   InspectorInstrumentation::asyncTaskScheduled(
       context, singleShot ? "setTimeout" : "setInterval", this, !singleShot);
@@ -108,7 +111,10 @@ DOMTimer::DOMTimer(ExecutionContext* context,
     startRepeating(intervalMilliseconds, BLINK_FROM_HERE);
 }
 
-DOMTimer::~DOMTimer() {}
+DOMTimer::~DOMTimer() {
+  if (m_action)
+    m_action->dispose();
+}
 
 void DOMTimer::stop() {
   InspectorInstrumentation::asyncTaskCanceled(getExecutionContext(), this);
@@ -116,11 +122,13 @@ void DOMTimer::stop() {
   // Need to release JS objects potentially protected by ScheduledAction
   // because they can form circular references back to the ExecutionContext
   // which will cause a memory leak.
+  if (m_action)
+    m_action->dispose();
   m_action = nullptr;
   SuspendableTimer::stop();
 }
 
-void DOMTimer::contextDestroyed() {
+void DOMTimer::contextDestroyed(ExecutionContext*) {
   stop();
 }
 
@@ -128,14 +136,15 @@ void DOMTimer::fired() {
   ExecutionContext* context = getExecutionContext();
   ASSERT(context);
   context->timers()->setTimerNestingLevel(m_nestingLevel);
-  ASSERT(!context->activeDOMObjectsAreSuspended());
+  DCHECK(!context->isContextSuspended());
   // Only the first execution of a multi-shot timer should get an affirmative
   // user gesture indicator.
-  UserGestureIndicator gestureIndicator(m_userGestureToken.release());
+  UserGestureIndicator gestureIndicator(std::move(m_userGestureToken));
 
   TRACE_EVENT1("devtools.timeline", "TimerFire", "data",
                InspectorTimerFireEvent::data(context, m_timeoutID));
-  PerformanceMonitor::HandlerCall handlerCall(context, m_action);
+  PerformanceMonitor::HandlerCall handlerCall(
+      context, repeatInterval() ? "setInterval" : "setTimeout", true);
   InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(
       context, "timerFired", false);
   InspectorInstrumentation::AsyncTask asyncTask(context, this);
@@ -172,9 +181,11 @@ void DOMTimer::fired() {
   executionContext->timers()->setTimerNestingLevel(0);
   // Eagerly unregister as ExecutionContext observer.
   clearContext();
+  // Eagerly clear out |action|'s resources.
+  action->dispose();
 }
 
-WebTaskRunner* DOMTimer::timerTaskRunner() const {
+RefPtr<WebTaskRunner> DOMTimer::timerTaskRunner() const {
   return getExecutionContext()->timers()->timerTaskRunner();
 }
 

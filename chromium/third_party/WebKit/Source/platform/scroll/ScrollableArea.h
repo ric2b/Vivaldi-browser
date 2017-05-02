@@ -41,10 +41,13 @@
 
 namespace blink {
 
+class CompositorAnimationHost;
+class CompositorAnimationTimeline;
 class GraphicsLayer;
 class HostWindow;
 class LayoutBox;
 class LayoutObject;
+class PaintLayer;
 class ProgrammaticScrollAnimator;
 struct ScrollAlignment;
 class ScrollAnchor;
@@ -149,6 +152,9 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return m_programmaticScrollAnimator;
   }
 
+  virtual CompositorAnimationHost* compositorAnimationHost() const {
+    return nullptr;
+  }
   virtual CompositorAnimationTimeline* compositorAnimationTimeline() const {
     return nullptr;
   }
@@ -204,6 +210,8 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual Scrollbar* horizontalScrollbar() const { return nullptr; }
   virtual Scrollbar* verticalScrollbar() const { return nullptr; }
 
+  virtual PaintLayer* layer() const { return nullptr; }
+
   // scrollPosition is the location of the top/left of the scroll viewport in
   // the coordinate system defined by the top/left of the overflow rect.
   // scrollOffset is the offset of the scroll viewport from its position when
@@ -211,10 +219,10 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   // For a more detailed explanation of scrollPosition, scrollOffset, and
   // scrollOrigin, see core/layout/README.md.
   FloatPoint scrollPosition() const {
-    return FloatPoint(scrollOrigin()) + scrollOffset();
+    return FloatPoint(scrollOrigin()) + getScrollOffset();
   }
   virtual IntSize scrollOffsetInt() const = 0;
-  virtual ScrollOffset scrollOffset() const {
+  virtual ScrollOffset getScrollOffset() const {
     return ScrollOffset(scrollOffsetInt());
   }
   virtual IntSize minimumScrollOffsetInt() const = 0;
@@ -271,10 +279,6 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual bool shouldPlaceVerticalScrollbarOnLeft() const = 0;
 
   // Convenience functions
-  float scrollOffset(ScrollbarOrientation orientation) {
-    return orientation == HorizontalScrollbar ? scrollOffsetInt().width()
-                                              : scrollOffsetInt().height();
-  }
   float minimumScrollOffset(ScrollbarOrientation orientation) {
     return orientation == HorizontalScrollbar ? minimumScrollOffset().width()
                                               : minimumScrollOffset().height();
@@ -314,12 +318,6 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual ScrollBehavior scrollBehaviorStyle() const {
     return ScrollBehaviorInstant;
   }
-
-  // TODO(bokan): This is only used in FrameView to check scrollability but is
-  // needed here to allow RootFrameViewport to preserve wheelHandler
-  // semantics. Not sure why it's FrameView specific, it could probably be
-  // generalized to other types of ScrollableAreas.
-  virtual bool isScrollable() { return true; }
 
   // TODO(bokan): FrameView::setScrollOffset uses updateScrollbars to scroll
   // which bails out early if its already in updateScrollbars, the effect being
@@ -365,6 +363,8 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual void clearScrollableArea();
 
   virtual ScrollAnchor* scrollAnchor() { return nullptr; }
+
+  virtual void didScrollWithScrollbar(ScrollbarPart, ScrollbarOrientation) {}
 
  protected:
   ScrollableArea();
@@ -431,6 +431,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
   unsigned m_scrollCornerNeedsPaintInvalidation : 1;
   unsigned m_scrollbarsHidden : 1;
   unsigned m_scrollbarCaptured : 1;
+  unsigned m_mouseOverScrollbar : 1;
 
   // There are 6 possible combinations of writing mode and direction. Scroll
   // origin will be non-zero in the x or y axis if there is any reversed

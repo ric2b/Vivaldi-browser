@@ -26,17 +26,17 @@ namespace base {
 class CommandLine;
 class FilePath;
 class HighResolutionTimerManager;
+class MemoryPressureMonitor;
 class MessageLoop;
 class PowerMonitor;
 class SystemMonitor;
-class MemoryPressureMonitor;
 namespace trace_event {
 class TraceEventSystemStatsMonitor;
 }  // namespace trace_event
 }  // namespace base
 
-namespace device {
-class TimeZoneMonitor;
+namespace discardable_memory {
+class DiscardableSharedMemoryManager;
 }
 
 namespace media {
@@ -52,7 +52,7 @@ class DeviceMonitorMac;
 }  // namespace media
 
 namespace midi {
-class MidiManager;
+class MidiService;
 }  // namespace midi
 
 namespace mojo {
@@ -72,6 +72,7 @@ class ClientNativePixmapFactory;
 #endif
 
 namespace content {
+class AudioManagerThread;
 class BrowserMainParts;
 class BrowserOnlineStateObserver;
 class BrowserThreadImpl;
@@ -118,6 +119,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   void PreMainMessageLoopStart();
   void MainMessageLoopStart();
   void PostMainMessageLoopStart();
+  void PreShutdown();
 
   // Create and start running the tasks we need to complete startup. Note that
   // this can be called more than once (currently only on Android) if we get a
@@ -141,10 +143,11 @@ class CONTENT_EXPORT BrowserMainLoop {
   media::UserInputMonitor* user_input_monitor() const {
     return user_input_monitor_.get();
   }
-  device::TimeZoneMonitor* time_zone_monitor() const {
-    return time_zone_monitor_.get();
+  discardable_memory::DiscardableSharedMemoryManager*
+  discardable_shared_memory_manager() const {
+    return discardable_shared_memory_manager_.get();
   }
-  midi::MidiManager* midi_manager() const { return midi_manager_.get(); }
+  midi::MidiService* midi_service() const { return midi_service_.get(); }
   base::Thread* indexed_db_thread() const { return indexed_db_thread_.get(); }
 
   bool is_tracing_startup_for_duration() const {
@@ -272,6 +275,9 @@ class CONTENT_EXPORT BrowserMainLoop {
 #endif
 
   // Members initialized in |CreateThreads()| ----------------------------------
+  // Note: some |*_thread_| members below may never be initialized when
+  // redirection to TaskScheduler is enabled. (ref.
+  // ContentBrowserClient::RedirectNonUINonIOBrowserThreadsToTaskScheduler()).
   std::unique_ptr<BrowserProcessSubThread> db_thread_;
   std::unique_ptr<BrowserProcessSubThread> file_user_blocking_thread_;
   std::unique_ptr<BrowserProcessSubThread> file_thread_;
@@ -287,10 +293,10 @@ class CONTENT_EXPORT BrowserMainLoop {
   // |user_input_monitor_| has to outlive |audio_manager_|, so declared first.
   std::unique_ptr<media::UserInputMonitor> user_input_monitor_;
   // AudioThread needs to outlive |audio_manager_|.
-  std::unique_ptr<base::Thread> audio_thread_;
+  std::unique_ptr<AudioManagerThread> audio_thread_;
   media::ScopedAudioManagerPtr audio_manager_;
 
-  std::unique_ptr<midi::MidiManager> midi_manager_;
+  std::unique_ptr<midi::MidiService> midi_service_;
 
 #if defined(OS_WIN)
   std::unique_ptr<media::SystemMessageWindowWin> system_message_window_;
@@ -307,7 +313,8 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<ResourceDispatcherHostImpl> resource_dispatcher_host_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   std::unique_ptr<SpeechRecognitionManagerImpl> speech_recognition_manager_;
-  std::unique_ptr<device::TimeZoneMonitor> time_zone_monitor_;
+  std::unique_ptr<discardable_memory::DiscardableSharedMemoryManager>
+      discardable_shared_memory_manager_;
   scoped_refptr<SaveFileManager> save_file_manager_;
 
   // DO NOT add members here. Add them to the right categories above.

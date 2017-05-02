@@ -27,7 +27,7 @@
 /**
  * @unrestricted
  */
-Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
+Components.ObjectPropertiesSection = class extends UI.TreeOutlineInShadow {
   /**
    * @param {!SDK.RemoteObject} object
    * @param {?string|!Element=} title
@@ -51,15 +51,6 @@ Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
     } else {
       this.titleElement = title;
       this.element.appendChild(title);
-    }
-
-    if (object.description && Components.ObjectPropertiesSection._needsAlternateTitle(object)) {
-      this.expandedTitleElement = createElement('span');
-      this.expandedTitleElement.createTextChild(object.description);
-
-      var note = this.expandedTitleElement.createChild('span', 'object-state-note');
-      note.classList.add('info-note');
-      note.title = Common.UIString('Value below was evaluated just now.');
     }
 
     this.element._section = this;
@@ -101,6 +92,14 @@ Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
       return 1;
     if (b === '__proto__')
       return -1;
+    if (!propertyA.enumerable && propertyB.enumerable)
+      return 1;
+    if (!propertyB.enumerable && propertyA.enumerable)
+      return -1;
+    if (a.startsWith('_') && !b.startsWith('_'))
+      return 1;
+    if (b.startsWith('_') && !a.startsWith('_'))
+      return -1;
     if (propertyA.symbol && !propertyB.symbol)
       return 1;
     if (propertyB.symbol && !propertyA.symbol)
@@ -123,19 +122,88 @@ Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
 
   /**
    * @param {?string=} description
-   * @return {string} valueText
+   * @param {boolean=} includePreview
+   * @param {string=} defaultName
+   * @return {!Element} valueElement
    */
-  static valueTextForFunctionDescription(description) {
-    var text = description.replace(/^function [gs]et /, 'function ');
-    var functionPrefixWithArguments =
-        new RegExp(Components.ObjectPropertiesSection._functionPrefixSource.source + '([^)]*)');
-    var matches = functionPrefixWithArguments.exec(text);
-    if (!matches) {
-      // process shorthand methods
-      matches = /[^(]*(\([^)]*)/.exec(text);
+  static valueElementForFunctionDescription(description, includePreview, defaultName) {
+    var valueElement = createElementWithClass('span', 'object-value-function');
+    var text = description ? description.replace(/^function [gs]et /, 'function ') : '';
+    defaultName = defaultName || '';
+
+    // This set of best-effort regular expressions captures common function descriptions.
+    // Ideally, some parser would provide prefix, arguments, function body text separately.
+    var isAsync = text.startsWith('async function ');
+    var isGenerator = text.startsWith('function* ');
+    var isGeneratorShorthand = text.startsWith('*');
+    var isBasic = !isGenerator && text.startsWith('function ');
+    var isClass = text.startsWith('class ') || text.startsWith('class{');
+    var firstArrowIndex = text.indexOf('=>');
+    var isArrow = !isAsync && !isGenerator && !isBasic && !isClass && firstArrowIndex > 0;
+
+    var textAfterPrefix;
+    if (isClass) {
+      textAfterPrefix = text.substring('class'.length);
+      var classNameMatch = /^[^{\s]+/.exec(textAfterPrefix.trim());
+      var className = defaultName;
+      if (classNameMatch)
+        className = classNameMatch[0].trim() || defaultName;
+      addElements('class', textAfterPrefix, className);
+    } else if (isAsync) {
+      textAfterPrefix = text.substring('async function'.length);
+      addElements('async function', textAfterPrefix, nameAndArguments(textAfterPrefix));
+    } else if (isGenerator) {
+      textAfterPrefix = text.substring('function*'.length);
+      addElements('function*', textAfterPrefix, nameAndArguments(textAfterPrefix));
+    } else if (isGeneratorShorthand) {
+      textAfterPrefix = text.substring('*'.length);
+      addElements('function*', textAfterPrefix, nameAndArguments(textAfterPrefix));
+    } else if (isBasic) {
+      textAfterPrefix = text.substring('function'.length);
+      addElements('function', textAfterPrefix, nameAndArguments(textAfterPrefix));
+    } else if (isArrow) {
+      const maxArrowFunctionCharacterLength = 60;
+      var abbreviation = text;
+      if (defaultName)
+        abbreviation = defaultName + '()';
+      else if (text.length > maxArrowFunctionCharacterLength)
+        abbreviation = text.substring(0, firstArrowIndex + 2) + ' {\u2026}';
+      addElements('', text, abbreviation);
+    } else {
+      addElements('function', text, nameAndArguments(text));
     }
-    var match = matches ? matches[1] : null;
-    return match ? match.replace(/\n/g, ' ') + ')' : (text || '');
+    valueElement.title = description || '';
+    return valueElement;
+
+    /**
+     * @param {string} contents
+     * @return {string}
+     */
+    function nameAndArguments(contents) {
+      var startOfArgumentsIndex = contents.indexOf('(');
+      var endOfArgumentsMatch = contents.match(/\)\s*{/);
+      if (startOfArgumentsIndex !== -1 && endOfArgumentsMatch && endOfArgumentsMatch.index > startOfArgumentsIndex) {
+        var name = contents.substring(0, startOfArgumentsIndex).trim() || defaultName;
+        var args = contents.substring(startOfArgumentsIndex, endOfArgumentsMatch.index + 1);
+        return name + args;
+      }
+      return defaultName + '()';
+    }
+
+    /**
+     * @param {string} prefix
+     * @param {string} body
+     * @param {string} abbreviation
+     */
+    function addElements(prefix, body, abbreviation) {
+      const maxFunctionBodyLength = 200;
+      if (prefix.length)
+        valueElement.createChild('span', 'object-value-function-prefix').textContent = prefix + ' ';
+      if (includePreview)
+        valueElement.createTextChild(body.trim().trimEnd(maxFunctionBodyLength));
+      else
+        valueElement.createTextChild(abbreviation.replace(/\n/g, ' '));
+    }
   }
 
   /**
@@ -162,92 +230,91 @@ Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
    * @return {!Element}
    */
   static createValueElement(value, wasThrown, parentElement, linkifier) {
-    var valueElement = createElementWithClass('span', 'value');
+    var valueElement;
     var type = value.type;
     var subtype = value.subtype;
     var description = value.description;
-    var prefix;
-    var valueText;
-    var suffix;
-    if (wasThrown) {
-      prefix = '[Exception: ';
-      valueText = description;
-      suffix = ']';
-    } else if (type === 'string' && typeof description === 'string') {
-      // Render \n as a nice unicode cr symbol.
-      prefix = '"';
-      valueText = description.replace(/\n/g, '\u21B5');
-      suffix = '"';
-    } else if (type === 'function') {
-      valueText = Components.ObjectPropertiesSection.valueTextForFunctionDescription(description);
-    } else if (type !== 'object' || subtype !== 'node') {
-      valueText = description;
-    }
-    if (type !== 'number' || valueText.indexOf('e') === -1) {
-      valueElement.setTextContentTruncatedIfNeeded(valueText || '');
-      if (prefix)
-        valueElement.insertBefore(createTextNode(prefix), valueElement.firstChild);
-      if (suffix)
-        valueElement.createTextChild(suffix);
-    } else {
-      var numberParts = valueText.split('e');
-      var mantissa = valueElement.createChild('span', 'object-value-scientific-notation-mantissa');
-      mantissa.textContent = numberParts[0];
-      var exponent = valueElement.createChild('span', 'object-value-scientific-notation-exponent');
-      exponent.textContent = 'e' + numberParts[1];
-      valueElement.classList.add('object-value-scientific-notation-number');
-      if (parentElement)  // FIXME: do it in the caller.
-        parentElement.classList.add('hbox');
-    }
-
-    if (wasThrown)
-      valueElement.classList.add('error');
-    if (subtype || type)
-      valueElement.classList.add('object-value-' + (subtype || type));
-
-    if (type === 'object' && subtype === 'node' && description) {
-      Components.DOMPresentationUtils.createSpansForNodeTitle(valueElement, description);
-      valueElement.addEventListener('click', mouseClick, false);
-      valueElement.addEventListener('mousemove', mouseMove, false);
-      valueElement.addEventListener('mouseleave', mouseLeave, false);
-    } else {
-      valueElement.title = description || '';
-    }
-
     if (type === 'object' && subtype === 'internal#location') {
       var rawLocation = value.debuggerModel().createRawLocationByScriptId(
           value.value.scriptId, value.value.lineNumber, value.value.columnNumber);
       if (rawLocation && linkifier)
         return linkifier.linkifyRawLocation(rawLocation, '');
-      valueElement.textContent = '<unknown>';
+      valueElement = createUnknownInternalLocationElement();
+    } else if (type === 'string' && typeof description === 'string') {
+      valueElement = createStringElement();
+    } else if (type === 'function') {
+      valueElement = Components.ObjectPropertiesSection.valueElementForFunctionDescription(description);
+    } else if (type === 'object' && subtype === 'node' && description) {
+      valueElement = createNodeElement();
+    } else if (type === 'number' && description && description.indexOf('e') !== -1) {
+      valueElement = createNumberWithExponentElement();
+      if (parentElement)  // FIXME: do it in the caller.
+        parentElement.classList.add('hbox');
+    } else {
+      valueElement = createElementWithClass('span', 'object-value-' + (subtype || type));
+      valueElement.setTextContentTruncatedIfNeeded(description);
+      valueElement.title = description || '';
     }
 
-    function mouseMove() {
-      SDK.DOMModel.highlightObjectAsDOMNode(value);
+    if (wasThrown) {
+      var wrapperElement = createElementWithClass('span', 'error value');
+      wrapperElement.createTextChild('[' + Common.UIString('Exception') + ': ');
+      wrapperElement.appendChild(valueElement);
+      wrapperElement.createTextChild(']');
+      return wrapperElement;
     }
+    valueElement.classList.add('value');
+    return valueElement;
 
-    function mouseLeave() {
-      SDK.DOMModel.hideDOMNodeHighlight();
+    /**
+     * @return {!Element}
+     */
+    function createUnknownInternalLocationElement() {
+      var valueElement = createElementWithClass('span');
+      valueElement.textContent = '<' + Common.UIString('unknown') + '>';
+      valueElement.title = description || '';
+      return valueElement;
     }
 
     /**
-     * @param {!Event} event
+     * @return {!Element}
      */
-    function mouseClick(event) {
-      Common.Revealer.reveal(value);
-      event.consume(true);
+    function createStringElement() {
+      var valueElement = createElementWithClass('span', 'object-value-string');
+      valueElement.createChild('span', 'object-value-string-quote').textContent = '"';
+      valueElement.createTextChild('').setTextContentTruncatedIfNeeded(description.replace(/\n/g, '\u21B5'));
+      valueElement.createChild('span', 'object-value-string-quote').textContent = '"';
+      valueElement.title = description || '';
+      return valueElement;
     }
 
-    return valueElement;
-  }
+    /**
+     * @return {!Element}
+     */
+    function createNodeElement() {
+      var valueElement = createElementWithClass('span', 'object-value-node');
+      Components.DOMPresentationUtils.createSpansForNodeTitle(valueElement, /** @type {string} */ (description));
+      valueElement.addEventListener('click', event => {
+        Common.Revealer.reveal(value);
+        event.consume(true);
+      }, false);
+      valueElement.addEventListener('mousemove', () => SDK.DOMModel.highlightObjectAsDOMNode(value), false);
+      valueElement.addEventListener('mouseleave', () => SDK.DOMModel.hideDOMNodeHighlight(), false);
+      return valueElement;
+    }
 
-  /**
-   * @param {!SDK.RemoteObject} object
-   * @return {boolean}
-   */
-  static _needsAlternateTitle(object) {
-    return object && object.hasChildren && !object.customPreview() && object.subtype !== 'node' &&
-        object.type !== 'function' && (object.type !== 'object' || object.preview);
+    /**
+     * @return {!Element}
+     */
+    function createNumberWithExponentElement() {
+      var valueElement = createElementWithClass('span', 'object-value-number');
+      var numberParts = description.split('e');
+      valueElement.createChild('span', 'object-value-scientific-notation-mantissa').textContent = numberParts[0];
+      valueElement.createChild('span', 'object-value-scientific-notation-exponent').textContent = 'e' + numberParts[1];
+      valueElement.classList.add('object-value-scientific-notation-number');
+      valueElement.title = description || '';
+      return valueElement;
+    }
   }
 
   /**
@@ -263,71 +330,18 @@ Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
      * @param {?SDK.DebuggerModel.FunctionDetails} response
      */
     function didGetDetails(response) {
-      if (!response) {
-        var valueText = Components.ObjectPropertiesSection.valueTextForFunctionDescription(func.description);
-        element.createTextChild(valueText);
-        return;
-      }
-
-      var matched = func.description.match(Components.ObjectPropertiesSection._functionPrefixSource);
-      if (matched) {
-        var prefix = createElementWithClass('span', 'object-value-function-prefix');
-        prefix.textContent = matched[0];
-        element.appendChild(prefix);
-      }
-
       if (linkify && response && response.location) {
-        var anchor = createElement('span');
         element.classList.add('linkified');
-        element.appendChild(anchor);
-        element.addEventListener('click', Common.Revealer.reveal.bind(Common.Revealer, response.location, undefined));
-        element = anchor;
+        element.addEventListener('click', () => Common.Revealer.reveal(response.location));
       }
 
-      var text = func.description.substring(0, 200);
-      if (includePreview) {
-        element.createTextChild(
-            text.replace(Components.ObjectPropertiesSection._functionPrefixSource, '') +
-            (func.description.length > 200 ? '\u2026' : ''));
-        return;
-      }
-
-      // Now parse description and get the real params and title.
-      self.runtime.extension(Common.TokenizerFactory).instance().then(processTokens);
-
-      var params = null;
-      var functionName = response ? response.functionName : '';
-
-      /**
-       * @param {!Common.TokenizerFactory} tokenizerFactory
-       */
-      function processTokens(tokenizerFactory) {
-        var tokenize = tokenizerFactory.createTokenizer('text/javascript');
-        tokenize(text, processToken);
-        element.createTextChild((functionName || 'anonymous') + '(' + (params || []).join(', ') + ')');
-      }
-
-      var doneProcessing = false;
-
-      /**
-       * @param {string} token
-       * @param {?string} tokenType
-       * @param {number} column
-       * @param {number} newColumn
-       */
-      function processToken(token, tokenType, column, newColumn) {
-        if (!params && tokenType === 'js-def' && !functionName)
-          functionName = token;
-        doneProcessing = doneProcessing || token === ')';
-        if (doneProcessing)
-          return;
-        if (token === '(') {
-          params = [];
-          return;
-        }
-        if (params && tokenType === 'js-def')
-          params.push(token);
-      }
+      // The includePreview flag is false for formats such as console.dir().
+      var defaultName = includePreview ? '' : 'anonymous';
+      if (response && response.functionName)
+        defaultName = response.functionName;
+      var valueElement = Components.ObjectPropertiesSection.valueElementForFunctionDescription(
+          func.description, includePreview, defaultName);
+      element.appendChild(valueElement);
     }
   }
 
@@ -347,7 +361,7 @@ Components.ObjectPropertiesSection = class extends TreeOutlineInShadow {
   }
 
   /**
-   * @return {!TreeElement}
+   * @return {!UI.TreeElement}
    */
   objectTreeElement() {
     return this._objectTreeElement;
@@ -377,7 +391,7 @@ Components.ObjectPropertiesSection._arrayLoadThreshold = 100;
 /**
  * @unrestricted
  */
-Components.ObjectPropertiesSection.RootElement = class extends TreeElement {
+Components.ObjectPropertiesSection.RootElement = class extends UI.TreeElement {
   /**
    * @param {!SDK.RemoteObject} object
    * @param {!Components.Linkifier=} linkifier
@@ -405,32 +419,16 @@ Components.ObjectPropertiesSection.RootElement = class extends TreeElement {
    * @override
    */
   onexpand() {
-    if (this.treeOutline) {
+    if (this.treeOutline)
       this.treeOutline.element.classList.add('expanded');
-      this._showExpandedTitleElement(true);
-    }
   }
 
   /**
    * @override
    */
   oncollapse() {
-    if (this.treeOutline) {
+    if (this.treeOutline)
       this.treeOutline.element.classList.remove('expanded');
-      this._showExpandedTitleElement(false);
-    }
-  }
-
-  /**
-   * @param {boolean} value
-   */
-  _showExpandedTitleElement(value) {
-    if (!this.treeOutline.expandedTitleElement)
-      return;
-    if (value)
-      this.treeOutline.element.replaceChild(this.treeOutline.expandedTitleElement, this.treeOutline.titleElement);
-    else
-      this.treeOutline.element.replaceChild(this.treeOutline.titleElement, this.treeOutline.expandedTitleElement);
   }
 
   /**
@@ -455,7 +453,7 @@ Components.ObjectPropertiesSection.RootElement = class extends TreeElement {
 /**
  * @unrestricted
  */
-Components.ObjectPropertyTreeElement = class extends TreeElement {
+Components.ObjectPropertyTreeElement = class extends UI.TreeElement {
   /**
    * @param {!SDK.RemoteObjectProperty} property
    * @param {!Components.Linkifier=} linkifier
@@ -473,7 +471,7 @@ Components.ObjectPropertyTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeElement
+   * @param {!UI.TreeElement} treeElement
    * @param {!SDK.RemoteObject} value
    * @param {boolean} skipProto
    * @param {!Components.Linkifier=} linkifier
@@ -521,7 +519,7 @@ Components.ObjectPropertyTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeNode
+   * @param {!UI.TreeElement} treeNode
    * @param {!Array.<!SDK.RemoteObjectProperty>} properties
    * @param {?Array.<!SDK.RemoteObjectProperty>} internalProperties
    * @param {boolean} skipProto
@@ -584,7 +582,7 @@ Components.ObjectPropertyTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeNode
+   * @param {!UI.TreeElement} treeNode
    * @param {?string=} emptyPlaceholder
    */
   static _appendEmptyPlaceholderIfNeeded(treeNode, emptyPlaceholder) {
@@ -592,7 +590,7 @@ Components.ObjectPropertyTreeElement = class extends TreeElement {
       return;
     var title = createElementWithClass('div', 'gray-info-message');
     title.textContent = emptyPlaceholder || Common.UIString('No Properties');
-    var infoElement = new TreeElement(title);
+    var infoElement = new UI.TreeElement(title);
     treeNode.appendChild(infoElement);
   }
 
@@ -725,7 +723,9 @@ Components.ObjectPropertyTreeElement = class extends TreeElement {
    * @return {?Element}
    */
   _createExpandedValueElement(value) {
-    if (!Components.ObjectPropertiesSection._needsAlternateTitle(value))
+    var needsAlternateValue = value.hasChildren && !value.customPreview() && value.subtype !== 'node' &&
+        value.type !== 'function' && (value.type !== 'object' || value.preview);
+    if (!needsAlternateValue)
       return null;
 
     var valueElement = createElementWithClass('span', 'value');
@@ -935,7 +935,7 @@ Components.ObjectPropertyTreeElement = class extends TreeElement {
 /**
  * @unrestricted
  */
-Components.ArrayGroupingTreeElement = class extends TreeElement {
+Components.ArrayGroupingTreeElement = class extends UI.TreeElement {
   /**
    * @param {!SDK.RemoteObject} object
    * @param {number} fromIndex
@@ -956,7 +956,7 @@ Components.ArrayGroupingTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeNode
+   * @param {!UI.TreeElement} treeNode
    * @param {!SDK.RemoteObject} object
    * @param {number} fromIndex
    * @param {number} toIndex
@@ -967,7 +967,7 @@ Components.ArrayGroupingTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeNode
+   * @param {!UI.TreeElement} treeNode
    * @param {!SDK.RemoteObject} object
    * @param {number} fromIndex
    * @param {number} toIndex
@@ -1087,7 +1087,7 @@ Components.ArrayGroupingTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeNode
+   * @param {!UI.TreeElement} treeNode
    * @param {!SDK.RemoteObject} object
    * @param {number} fromIndex
    * @param {number} toIndex
@@ -1153,7 +1153,7 @@ Components.ArrayGroupingTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} treeNode
+   * @param {!UI.TreeElement} treeNode
    * @param {!SDK.RemoteObject} object
    * @param {boolean} skipGetOwnPropertyNames
    * @param {!Components.Linkifier=} linkifier
@@ -1249,10 +1249,6 @@ Components.ObjectPropertyPrompt = class extends UI.TextPrompt {
   }
 };
 
-
-Components.ObjectPropertiesSection._functionPrefixSource = /^(?:async\s)?function\*?\s/;
-
-
 /**
  * @unrestricted
  */
@@ -1267,9 +1263,9 @@ Components.ObjectPropertiesSectionExpandController = class {
    * @param {!Components.ObjectPropertiesSection} section
    */
   watchSection(id, section) {
-    section.addEventListener(TreeOutline.Events.ElementAttached, this._elementAttached, this);
-    section.addEventListener(TreeOutline.Events.ElementExpanded, this._elementExpanded, this);
-    section.addEventListener(TreeOutline.Events.ElementCollapsed, this._elementCollapsed, this);
+    section.addEventListener(UI.TreeOutline.Events.ElementAttached, this._elementAttached, this);
+    section.addEventListener(UI.TreeOutline.Events.ElementExpanded, this._elementExpanded, this);
+    section.addEventListener(UI.TreeOutline.Events.ElementCollapsed, this._elementCollapsed, this);
     section[Components.ObjectPropertiesSectionExpandController._treeOutlineId] = id;
 
     if (this._expandedProperties.has(id))
@@ -1290,7 +1286,7 @@ Components.ObjectPropertiesSectionExpandController = class {
    * @param {!Common.Event} event
    */
   _elementAttached(event) {
-    var element = /** @type {!TreeElement} */ (event.data);
+    var element = /** @type {!UI.TreeElement} */ (event.data);
     if (element.isExpandable() && this._expandedProperties.has(this._propertyPath(element)))
       element.expand();
   }
@@ -1299,7 +1295,7 @@ Components.ObjectPropertiesSectionExpandController = class {
    * @param {!Common.Event} event
    */
   _elementExpanded(event) {
-    var element = /** @type {!TreeElement} */ (event.data);
+    var element = /** @type {!UI.TreeElement} */ (event.data);
     this._expandedProperties.add(this._propertyPath(element));
   }
 
@@ -1307,12 +1303,12 @@ Components.ObjectPropertiesSectionExpandController = class {
    * @param {!Common.Event} event
    */
   _elementCollapsed(event) {
-    var element = /** @type {!TreeElement} */ (event.data);
+    var element = /** @type {!UI.TreeElement} */ (event.data);
     this._expandedProperties.delete(this._propertyPath(element));
   }
 
   /**
-   * @param {!TreeElement} treeElement
+   * @param {!UI.TreeElement} treeElement
    * @return {string}
    */
   _propertyPath(treeElement) {

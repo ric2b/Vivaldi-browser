@@ -433,15 +433,6 @@ void ShelfView::OnShelfAlignmentChanged() {
     app_list_button->SchedulePaint();
 }
 
-void ShelfView::SchedulePaintForAllButtons() {
-  for (int i = 0; i < view_model_->view_size(); ++i) {
-    if (i >= first_visible_index_ && i <= last_visible_index_)
-      view_model_->view_at(i)->SchedulePaint();
-  }
-  if (overflow_button_ && overflow_button_->visible())
-    overflow_button_->SchedulePaint();
-}
-
 gfx::Rect ShelfView::GetIdealBoundsOfItemIcon(ShelfID id) {
   int index = model_->ItemIndexByID(id);
   if (index == -1)
@@ -527,21 +518,16 @@ bool ShelfView::ShouldHideTooltip(const gfx::Point& cursor_location) const {
 }
 
 bool ShelfView::ShouldShowTooltipForView(const views::View* view) const {
-  if (view == GetAppListButton() &&
-      WmShell::Get()->GetAppListTargetVisibility()) {
+  // TODO(msw): Push this app list state into ShelfItem::shows_tooltip.
+  if (view == GetAppListButton() && GetAppListButton()->is_showing_app_list())
     return false;
-  }
   const ShelfItem* item = ShelfItemForView(view);
-  if (!item)
-    return false;
-  return model_->GetShelfItemDelegate(item->id)->ShouldShowTooltip();
+  return item && item->shows_tooltip;
 }
 
 base::string16 ShelfView::GetTitleForView(const views::View* view) const {
   const ShelfItem* item = ShelfItemForView(view);
-  if (!item || !model_->GetShelfItemDelegate(item->id))
-    return base::string16();
-  return model_->GetShelfItemDelegate(item->id)->GetTitle();
+  return item ? item->title : base::string16();
 }
 
 gfx::Rect ShelfView::GetVisibleItemsBoundsInScreen() {
@@ -585,9 +571,8 @@ void ShelfView::ButtonPressed(views::Button* sender,
   // Collect usage statistics before we decide what to do with the click.
   switch (model_->items()[last_pressed_index_].type) {
     case TYPE_APP_SHORTCUT:
-    case TYPE_WINDOWED_APP:
-    case TYPE_PLATFORM_APP:
     case TYPE_BROWSER_SHORTCUT:
+    case TYPE_APP:
       WmShell::Get()->RecordUserMetricsAction(UMA_LAUNCHER_CLICK_ON_APP);
       break;
 
@@ -598,7 +583,6 @@ void ShelfView::ButtonPressed(views::Button* sender,
 
     case TYPE_APP_PANEL:
     case TYPE_DIALOG:
-    case TYPE_IME_MENU:
       break;
 
     case TYPE_UNDEFINED:
@@ -812,9 +796,7 @@ void ShelfView::PointerPressedOnButton(views::View* view,
   if (index == -1 || view_model_->view_size() <= 1)
     return;  // View is being deleted, ignore request.
 
-  ShelfItemDelegate* item_delegate =
-      model_->GetShelfItemDelegate(model_->items()[index].id);
-  if (!item_delegate->IsDraggable())
+  if (view == GetAppListButton())
     return;  // View is not draggable, ignore request.
 
   // Only when the repost event occurs on the same shelf item, we should ignore
@@ -931,7 +913,7 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
   }
 
   // Right aligned icons.
-  int end_position = available_size - button_spacing;
+  int end_position = available_size;
   x = wm_shelf_->PrimaryAxisValue(end_position, 0);
   y = wm_shelf_->PrimaryAxisValue(0, end_position);
   for (int i = view_model_->view_size() - 1; i >= first_panel_index; --i) {
@@ -947,7 +929,7 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
       wm_shelf_->PrimaryAxisValue(
           view_model_->ideal_bounds(last_button_index).right(),
           view_model_->ideal_bounds(last_button_index).bottom()) +
-      button_size;
+      button_spacing;
   int reserved_icon_space = available_size * kReservedNonPanelIconProportion;
   if (last_icon_position < reserved_icon_space)
     end_position = last_icon_position;
@@ -958,7 +940,8 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
       gfx::Size(wm_shelf_->PrimaryAxisValue(w, width()),
                 wm_shelf_->PrimaryAxisValue(height(), h)));
 
-  last_visible_index_ = DetermineLastVisibleIndex(end_position - button_size);
+  last_visible_index_ =
+      DetermineLastVisibleIndex(end_position - button_spacing);
   last_hidden_index_ = DetermineFirstVisiblePanelIndex(end_position) - 1;
   bool show_overflow = last_visible_index_ < last_button_index ||
                        last_hidden_index_ >= first_panel_index;
@@ -1010,14 +993,17 @@ void ShelfView::CalculateIdealBounds(IdealBounds* bounds) const {
           view_model_->ideal_bounds(last_visible_index_).y(),
           view_model_->ideal_bounds(last_visible_index_).bottom());
     }
+
+    if (last_visible_index_ >= 0) {
+      // Add more space between last visible item and overflow button.
+      // Without this, two buttons look too close compared with other items.
+      x = wm_shelf_->PrimaryAxisValue(x + button_spacing, x);
+      y = wm_shelf_->PrimaryAxisValue(y, y + button_spacing);
+    }
+
     // Set all hidden panel icon positions to be on the overflow button.
     for (int i = first_panel_index; i <= last_hidden_index_; ++i)
       view_model_->set_ideal_bounds(i, gfx::Rect(x, y, w, h));
-
-    // Add more space between last visible item and overflow button.
-    // Without this, two buttons look too close compared with other items.
-    x = wm_shelf_->PrimaryAxisValue(x + button_spacing, x);
-    y = wm_shelf_->PrimaryAxisValue(y, y + button_spacing);
 
     bounds->overflow_bounds.set_x(x);
     bounds->overflow_bounds.set_y(y);
@@ -1043,9 +1029,9 @@ int ShelfView::DetermineLastVisibleIndex(int max_value) const {
 int ShelfView::DetermineFirstVisiblePanelIndex(int min_value) const {
   int index = model_->FirstPanelIndex();
   while (index < view_model_->view_size() &&
-         wm_shelf_->PrimaryAxisValue(
-             view_model_->ideal_bounds(index).right(),
-             view_model_->ideal_bounds(index).bottom()) < min_value) {
+         wm_shelf_->PrimaryAxisValue(view_model_->ideal_bounds(index).x(),
+                                     view_model_->ideal_bounds(index).y()) <
+             min_value) {
     ++index;
   }
   return index;
@@ -1068,13 +1054,11 @@ void ShelfView::AnimateToIdealBounds() {
 views::View* ShelfView::CreateViewForItem(const ShelfItem& item) {
   views::View* view = nullptr;
   switch (item.type) {
-    case TYPE_BROWSER_SHORTCUT:
-    case TYPE_APP_SHORTCUT:
-    case TYPE_WINDOWED_APP:
-    case TYPE_PLATFORM_APP:
-    case TYPE_DIALOG:
     case TYPE_APP_PANEL:
-    case TYPE_IME_MENU: {
+    case TYPE_APP_SHORTCUT:
+    case TYPE_BROWSER_SHORTCUT:
+    case TYPE_APP:
+    case TYPE_DIALOG: {
       ShelfButton* button = new ShelfButton(this, this);
       button->SetImage(item.image);
       ReflectItemStatus(item, button);
@@ -1116,14 +1100,6 @@ void ShelfView::PrepareForDrag(Pointer pointer, const ui::LocatedEvent& event) {
     return;
   }
 
-  // If the item is no longer draggable, bail out.
-  ShelfItemDelegate* item_delegate =
-      model_->GetShelfItemDelegate(model_->items()[start_drag_index_].id);
-  if (!item_delegate->IsDraggable()) {
-    CancelDrag(-1);
-    return;
-  }
-
   // Move the view to the front so that it appears on top of other views.
   ReorderChildView(drag_view_, -1);
   bounds_animator_->StopAnimatingView(drag_view_);
@@ -1132,17 +1108,12 @@ void ShelfView::PrepareForDrag(Pointer pointer, const ui::LocatedEvent& event) {
 }
 
 void ShelfView::ContinueDrag(const ui::LocatedEvent& event) {
+  DCHECK(dragging());
+  DCHECK(drag_view_);
   // Due to a syncing operation the application might have been removed.
   // Bail if it is gone.
   int current_index = view_model_->GetIndexOfView(drag_view_);
   DCHECK_NE(-1, current_index);
-
-  ShelfItemDelegate* item_delegate =
-      model_->GetShelfItemDelegate(model_->items()[current_index].id);
-  if (!item_delegate->IsDraggable()) {
-    CancelDrag(-1);
-    return;
-  }
 
   // If this is not a drag and drop host operation and not the app list item,
   // check if the item got ripped off the shelf - if it did we are done.
@@ -1196,14 +1167,11 @@ void ShelfView::ContinueDrag(const ui::LocatedEvent& event) {
   target_index =
       std::min(indices.second, std::max(target_index, indices.first));
 
-  int first_draggable_item = 0;
-  while (first_draggable_item < static_cast<int>(model_->items().size()) &&
-         !model_->GetShelfItemDelegate(model_->items()[first_draggable_item].id)
-              ->IsDraggable()) {
-    first_draggable_item++;
-  }
-
+  // The app list button is always first, and it is the only non-draggable item.
+  int first_draggable_item = model_->GetItemIndexForType(TYPE_APP_LIST) + 1;
+  DCHECK_EQ(1, first_draggable_item);
   target_index = std::max(target_index, first_draggable_item);
+  DCHECK_LT(target_index, model_->item_count());
 
   if (target_index == current_index)
     return;
@@ -1381,12 +1349,11 @@ ShelfView::RemovableState ShelfView::RemovableByRipOff(int index) const {
   if (type == TYPE_APP_LIST || type == TYPE_DIALOG)
     return NOT_REMOVABLE;
 
-  std::string app_id = delegate_->GetAppIDForShelfID(model_->items()[index].id);
-  ShelfItemDelegate* item_delegate =
-      model_->GetShelfItemDelegate(model_->items()[index].id);
-  if (!item_delegate->CanPin())
+  if (model_->items()[index].pinned_by_policy)
     return NOT_REMOVABLE;
+
   // Note: Only pinned app shortcuts can be removed!
+  std::string app_id = delegate_->GetAppIDForShelfID(model_->items()[index].id);
   return (type == TYPE_APP_SHORTCUT && delegate_->IsAppPinned(app_id))
              ? REMOVABLE
              : DRAGGABLE;
@@ -1397,12 +1364,10 @@ bool ShelfView::SameDragType(ShelfItemType typea, ShelfItemType typeb) const {
     case TYPE_APP_SHORTCUT:
     case TYPE_BROWSER_SHORTCUT:
       return (typeb == TYPE_APP_SHORTCUT || typeb == TYPE_BROWSER_SHORTCUT);
-    case TYPE_APP_LIST:
-    case TYPE_PLATFORM_APP:
-    case TYPE_WINDOWED_APP:
     case TYPE_APP_PANEL:
+    case TYPE_APP_LIST:
+    case TYPE_APP:
     case TYPE_DIALOG:
-    case TYPE_IME_MENU:
       return typeb == typea;
     case TYPE_UNDEFINED:
       NOTREACHED() << "ShelfItemType must be set.";
@@ -1556,8 +1521,13 @@ gfx::Size ShelfView::GetPreferredSize() const {
   CalculateIdealBounds(&ideal_bounds);
   const int shelf_size = GetShelfConstant(SHELF_SIZE);
 
-  int last_button_index =
-      is_overflow_mode() ? last_visible_index_ : view_model_->view_size() - 1;
+  int last_button_index = last_visible_index_;
+  if (!is_overflow_mode()) {
+    if (last_hidden_index_ < view_model_->view_size() - 1)
+      last_button_index = view_model_->view_size() - 1;
+    else if (overflow_button_ && overflow_button_->visible())
+      last_button_index++;
+  }
 
   // When an item is dragged off from the overflow bubble, it is moved to last
   // position and and changed to invisible. Overflow bubble size should be
@@ -1716,15 +1686,11 @@ void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
 
   views::View* view = view_model_->view_at(model_index);
   switch (item.type) {
-    case TYPE_BROWSER_SHORTCUT:
-    // Fallthrough for the new Shelf since it needs to show the activation
-    // change as well.
-    case TYPE_APP_SHORTCUT:
-    case TYPE_WINDOWED_APP:
-    case TYPE_PLATFORM_APP:
-    case TYPE_DIALOG:
     case TYPE_APP_PANEL:
-    case TYPE_IME_MENU: {
+    case TYPE_APP_SHORTCUT:
+    case TYPE_BROWSER_SHORTCUT:
+    case TYPE_APP:
+    case TYPE_DIALOG: {
       CHECK_EQ(ShelfButton::kViewClassName, view->GetClassName());
       ShelfButton* button = static_cast<ShelfButton*>(view);
       ReflectItemStatus(item, button);
@@ -1844,7 +1810,6 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
     }
   }
 
-  shelf_widget_->ForceUndimming(true);
   // NOTE: if you convert to HAS_MNEMONICS be sure to update menu building code.
   launcher_menu_runner_->RunMenuAt(source->GetWidget(), nullptr, anchor,
                                    menu_alignment, source_type);
@@ -1852,7 +1817,6 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
 
 void ShelfView::OnMenuClosed(views::InkDrop* ink_drop) {
   context_menu_id_ = 0;
-  shelf_widget_->ForceUndimming(false);
 
   // Hide the hide overflow bubble after showing a context menu for its items.
   if (owner_overflow_bubble_)

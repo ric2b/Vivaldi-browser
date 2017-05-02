@@ -18,10 +18,10 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/windows_version.h"
-#include "ui/base/touch/touch_enabled.h"
 #include "ui/base/view_prop.h"
 #include "ui/base/win/internal_constants.h"
 #include "ui/base/win/lock_state.h"
@@ -330,6 +330,7 @@ HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate)
       current_cursor_(NULL),
       previous_cursor_(NULL),
       dpi_(0),
+      called_enable_non_client_dpi_scaling_(false),
       active_mouse_tracking_flags_(0),
       is_right_mouse_pressed_on_caption_(false),
       lock_updates_count_(0),
@@ -363,7 +364,9 @@ void HWNDMessageHandler::Init(HWND parent, const gfx::Rect& bounds) {
   // Create the window.
   WindowImpl::Init(parent, bounds);
 
-  if (delegate_->HasFrame() && base::win::IsProcessPerMonitorDpiAware()) {
+  if (!called_enable_non_client_dpi_scaling_ &&
+      delegate_->HasFrame() &&
+      base::win::IsProcessPerMonitorDpiAware()) {
     static auto enable_child_window_dpi_message_func = []() {
       // Derived signature; not available in headers.
       // This call gets Windows to scale the non-client area when WM_DPICHANGED
@@ -825,10 +828,6 @@ void HWNDMessageHandler::SetWindowIcons(const gfx::ImageSkia& window_icon,
 void HWNDMessageHandler::SetFullscreen(bool fullscreen) {
   background_fullscreen_hack_ = false;
   fullscreen_handler()->SetFullscreen(fullscreen);
-  // If we are out of fullscreen and there was a pending DWM transition for the
-  // window, then go ahead and do it now.
-  if (!fullscreen && dwm_transition_desired_)
-    PerformDwmTransition();
 
   // Add the fullscreen window to the fullscreen window map which is used to
   // handle window activations.
@@ -841,6 +840,10 @@ void HWNDMessageHandler::SetFullscreen(bool fullscreen) {
     if (iter != fullscreen_monitor_map_.Get().end())
       fullscreen_monitor_map_.Get().erase(iter);
   }
+  // If we are out of fullscreen and there was a pending DWM transition for the
+  // window, then go ahead and do it now.
+  if (!fullscreen && dwm_transition_desired_)
+    PerformDwmTransition();
 }
 
 void HWNDMessageHandler::SizeConstraintsChanged() {
@@ -1356,8 +1359,7 @@ LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
   // Get access to a modifiable copy of the system menu.
   GetSystemMenu(hwnd(), false);
 
-  if (ui::AreTouchEventsEnabled())
-    RegisterTouchWindow(hwnd(), TWF_WANTPALM);
+  RegisterTouchWindow(hwnd(), TWF_WANTPALM);
 
   // We need to allow the delegate to size its contents since the window may not
   // receive a size notification when its initial bounds are specified at window
@@ -1801,6 +1803,21 @@ LRESULT HWNDMessageHandler::OnNCCalcSize(BOOL mode, LPARAM l_param) {
   return mode ? WVR_REDRAW : 0;
 }
 
+LRESULT HWNDMessageHandler::OnNCCreate(LPCREATESTRUCT lpCreateStruct) {
+  SetMsgHandled(FALSE);
+  if (delegate_->HasFrame() && base::win::IsProcessPerMonitorDpiAware()) {
+    static auto enable_non_client_dpi_scaling_func = []() {
+      return reinterpret_cast<decltype(::EnableNonClientDpiScaling)*>(
+                 GetProcAddress(GetModuleHandle(L"user32.dll"),
+                                "EnableNonClientDpiScaling"));
+    }();
+    called_enable_non_client_dpi_scaling_ =
+        !!(enable_non_client_dpi_scaling_func &&
+           enable_non_client_dpi_scaling_func(hwnd()));
+  }
+  return FALSE;
+}
+
 LRESULT HWNDMessageHandler::OnNCHitTest(const gfx::Point& point) {
   if (!delegate_->HasNonClientView()) {
     SetMsgHandled(FALSE);
@@ -2152,7 +2169,14 @@ void HWNDMessageHandler::OnSysCommand(UINT notification_code,
 }
 
 void HWNDMessageHandler::OnThemeChanged() {
-  ui::NativeThemeWin::instance()->CloseHandles();
+  ui::NativeThemeWin::CloseHandles();
+}
+
+void HWNDMessageHandler::OnTimeChange() {
+  // Call NowFromSystemTime() to force base::Time to re-initialize the clock
+  // from system time. Otherwise base::Time::Now() might continue to reflect the
+  // old system clock for some amount of time. See https://crbug.com/672906#c5
+  base::Time::NowFromSystemTime();
 }
 
 LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,

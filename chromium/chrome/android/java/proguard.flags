@@ -14,21 +14,11 @@
 -keep class org.chromium.content.app.SandboxedProcessService
 -keep class org.chromium.content.app.PrivilegedProcessService
 
-# TODO(ianwen): remove this config once proguard file inclusion from AAR is supported.
-# CoordinatorLayout resolves the behaviors of its child components with reflection.
--keep public class * extends android.support.design.widget.CoordinatorLayout$Behavior {
-    public <init>(android.content.Context, android.util.AttributeSet);
-    public <init>();
-}
-
 # SearchView is used in website_preferences_menu.xml and is constructed by
 # Android using reflection.
 -keep class android.support.v7.widget.SearchView {
   public <init>(...);
 }
-
-# Google Play Services warnings are about its resources.
--dontwarn com.google.android.gms.R**
 
 # The Google Play services library depends on the legacy Apache HTTP library,
 # and just adding it as proguard time dependency causes the following warnings:

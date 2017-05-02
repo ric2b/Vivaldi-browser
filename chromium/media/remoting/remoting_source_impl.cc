@@ -29,15 +29,23 @@ RemotingSourceImpl::~RemotingSourceImpl() {
   }
 }
 
-void RemotingSourceImpl::OnSinkAvailable() {
+void RemotingSourceImpl::OnSinkAvailable(
+    mojom::RemotingSinkCapabilities capabilities) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  if (capabilities == mojom::RemotingSinkCapabilities::NONE) {
+    OnSinkGone();
+    return;
+  }
+  sink_capabilities_ = capabilities;
   if (state_ == RemotingSessionState::SESSION_UNAVAILABLE)
     UpdateAndNotifyState(RemotingSessionState::SESSION_CAN_START);
 }
 
 void RemotingSourceImpl::OnSinkGone() {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  sink_capabilities_ = mojom::RemotingSinkCapabilities::NONE;
 
   if (state_ == RemotingSessionState::SESSION_PERMANENTLY_STOPPED)
     return;
@@ -152,7 +160,6 @@ void RemotingSourceImpl::AddClient(Client* client) {
   DCHECK(std::find(clients_.begin(), clients_.end(), client) == clients_.end());
 
   clients_.push_back(client);
-  client->OnSessionStateChanged();
 }
 
 void RemotingSourceImpl::RemoveClient(Client* client) {
@@ -202,9 +209,9 @@ void RemotingSourceImpl::StartDataPipe(
             : mojo::ScopedDataPipeConsumerHandle(),
       video ? std::move(video_data_pipe->consumer_handle)
             : mojo::ScopedDataPipeConsumerHandle(),
-      audio ? mojo::GetProxy(&audio_stream_sender)
+      audio ? mojo::MakeRequest(&audio_stream_sender)
             : media::mojom::RemotingDataStreamSenderRequest(),
-      video ? mojo::GetProxy(&video_stream_sender)
+      video ? mojo::MakeRequest(&video_stream_sender)
             : media::mojom::RemotingDataStreamSenderRequest());
   done_callback.Run(audio_stream_sender.PassInterface(),
                     video_stream_sender.PassInterface(),

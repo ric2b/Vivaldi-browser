@@ -97,11 +97,13 @@
     attribute EventHandler onwaiting;
 
     // auxclick
-    // https://navidz.github.io/auxclick/
+    // https://wicg.github.io/auxclick/
     [RuntimeEnabled=Auxclick] attribute EventHandler onauxclick;
 
     // Pointer Events
     // https://w3c.github.io/pointerevents/#extensions-to-the-globaleventhandlers-interface
+    [RuntimeEnabled=PointerEvent] attribute EventHandler ongotpointercapture;
+    [RuntimeEnabled=PointerEvent] attribute EventHandler onlostpointercapture;
     [RuntimeEnabled=PointerEvent] attribute EventHandler onpointerdown;
     [RuntimeEnabled=PointerEvent] attribute EventHandler onpointermove;
     [RuntimeEnabled=PointerEvent] attribute EventHandler onpointerup;
@@ -113,8 +115,8 @@
 
     // Touch Events
     // https://w3c.github.io/touch-events/#extensions-to-the-globaleventhandlers-interface
-    [RuntimeEnabled=Touch] attribute EventHandler ontouchcancel;
-    [RuntimeEnabled=Touch] attribute EventHandler ontouchend;
-    [RuntimeEnabled=Touch] attribute EventHandler ontouchmove;
-    [RuntimeEnabled=Touch] attribute EventHandler ontouchstart;
+    [RuntimeEnabled=TouchEventFeatureDetection] attribute EventHandler ontouchcancel;
+    [RuntimeEnabled=TouchEventFeatureDetection] attribute EventHandler ontouchend;
+    [RuntimeEnabled=TouchEventFeatureDetection] attribute EventHandler ontouchmove;
+    [RuntimeEnabled=TouchEventFeatureDetection] attribute EventHandler ontouchstart;
 };

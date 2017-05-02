@@ -280,7 +280,9 @@ void SquareInkDropRipple::AnimateStateChange(
       }
       break;
     case InkDropState::ACTION_PENDING:
-      DCHECK(old_ink_drop_state == InkDropState::HIDDEN);
+      DCHECK_EQ(InkDropState::HIDDEN, old_ink_drop_state)
+          << " old_ink_drop_state=" << ToString(old_ink_drop_state);
+      ;
       AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ACTION_PENDING_FADE_IN),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
@@ -301,7 +303,8 @@ void SquareInkDropRipple::AnimateStateChange(
       break;
     case InkDropState::ACTION_TRIGGERED: {
       DCHECK(old_ink_drop_state == InkDropState::HIDDEN ||
-             old_ink_drop_state == InkDropState::ACTION_PENDING);
+             old_ink_drop_state == InkDropState::ACTION_PENDING)
+          << " old_ink_drop_state=" << ToString(old_ink_drop_state);
       if (old_ink_drop_state == InkDropState::HIDDEN) {
         AnimateStateChange(old_ink_drop_state, InkDropState::ACTION_PENDING,
                            animation_observer);
@@ -323,7 +326,8 @@ void SquareInkDropRipple::AnimateStateChange(
       break;
     }
     case InkDropState::ALTERNATE_ACTION_PENDING:
-      DCHECK(old_ink_drop_state == InkDropState::ACTION_PENDING);
+      DCHECK_EQ(InkDropState::ACTION_PENDING, old_ink_drop_state)
+          << " old_ink_drop_state=" << ToString(old_ink_drop_state);
       AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ALTERNATE_ACTION_PENDING),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
@@ -339,7 +343,8 @@ void SquareInkDropRipple::AnimateStateChange(
                          gfx::Tween::EASE_IN, animation_observer);
       break;
     case InkDropState::ALTERNATE_ACTION_TRIGGERED: {
-      DCHECK(old_ink_drop_state == InkDropState::ALTERNATE_ACTION_PENDING);
+      DCHECK_EQ(InkDropState::ALTERNATE_ACTION_PENDING, old_ink_drop_state)
+          << " old_ink_drop_state=" << ToString(old_ink_drop_state);
       base::TimeDelta visible_duration =
           GetAnimationDuration(ALTERNATE_ACTION_TRIGGERED_TRANSFORM) -
           GetAnimationDuration(ALTERNATE_ACTION_TRIGGERED_FADE_OUT);
@@ -451,10 +456,10 @@ void SquareInkDropRipple::AnimateCenterPoint(
   animation.SetTweenType(tween);
   gfx::Transform transform;
   transform.Translate(target_center_point_.x(), target_center_point_.y());
-  ui::LayerAnimationElement* element =
+  std::unique_ptr<ui::LayerAnimationElement> element =
       ui::LayerAnimationElement::CreateTransformElement(transform, duration);
   ui::LayerAnimationSequence* sequence =
-      new ui::LayerAnimationSequence(element);
+      new ui::LayerAnimationSequence(std::move(element));
 
   if (observer)
     sequence->AddObserver(observer);
@@ -473,11 +478,11 @@ void SquareInkDropRipple::AnimateToTransforms(
     ui::ScopedLayerAnimationSettings animation(animator);
     animation.SetPreemptionStrategy(preemption_strategy);
     animation.SetTweenType(tween);
-    ui::LayerAnimationElement* element =
+    std::unique_ptr<ui::LayerAnimationElement> element =
         ui::LayerAnimationElement::CreateTransformElement(transforms[i],
                                                           duration);
     ui::LayerAnimationSequence* sequence =
-        new ui::LayerAnimationSequence(element);
+        new ui::LayerAnimationSequence(std::move(element));
 
     if (animation_observer)
       sequence->AddObserver(animation_observer);
@@ -505,10 +510,10 @@ void SquareInkDropRipple::AnimateToOpacity(
   ui::ScopedLayerAnimationSettings animation_settings(animator);
   animation_settings.SetPreemptionStrategy(preemption_strategy);
   animation_settings.SetTweenType(tween);
-  ui::LayerAnimationElement* animation_element =
+  std::unique_ptr<ui::LayerAnimationElement> animation_element =
       ui::LayerAnimationElement::CreateOpacityElement(opacity, duration);
   ui::LayerAnimationSequence* animation_sequence =
-      new ui::LayerAnimationSequence(animation_element);
+      new ui::LayerAnimationSequence(std::move(animation_element));
 
   if (animation_observer)
     animation_sequence->AddObserver(animation_observer);

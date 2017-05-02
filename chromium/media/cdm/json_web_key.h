@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "media/base/media_export.h"
-#include "media/base/media_keys.h"
 
 namespace media {
 
@@ -49,6 +48,8 @@ namespace media {
 // Ref: http://tools.ietf.org/html/draft-ietf-jose-json-web-key and:
 // http://tools.ietf.org/html/draft-jones-jose-json-private-and-symmetric-key
 
+enum class CdmSessionType;
+
 // Vector of key IDs.
 typedef std::vector<std::vector<uint8_t>> KeyIdList;
 
@@ -65,14 +66,14 @@ MEDIA_EXPORT std::string GenerateJWKSet(const uint8_t* key,
 
 // Converts a set of |key|, |key_id| pairs to a JSON Web Key Set.
 MEDIA_EXPORT std::string GenerateJWKSet(const KeyIdAndKeyPairs& keys,
-                                        MediaKeys::SessionType session_type);
+                                        CdmSessionType session_type);
 
 // Extracts the JSON Web Keys from a JSON Web Key Set. If |input| looks like
 // a valid JWK Set, then true is returned and |keys| and |session_type| are
 // updated to contain the values found. Otherwise return false.
 MEDIA_EXPORT bool ExtractKeysFromJWKSet(const std::string& jwk_set,
                                         KeyIdAndKeyPairs* keys,
-                                        MediaKeys::SessionType* session_type);
+                                        CdmSessionType* session_type);
 
 // Extracts the Key Ids from a Key IDs Initialization Data
 // (https://w3c.github.io/encrypted-media/keyids-format.html). If |input| looks
@@ -85,7 +86,7 @@ MEDIA_EXPORT bool ExtractKeyIdsFromKeyIdsInitData(const std::string& input,
 // Creates a license request message for the |key_ids| and |session_type|
 // specified. |license| is updated to contain the resulting JSON string.
 MEDIA_EXPORT void CreateLicenseRequest(const KeyIdList& key_ids,
-                                       MediaKeys::SessionType session_type,
+                                       CdmSessionType session_type,
                                        std::vector<uint8_t>* license);
 
 // Creates a keyIDs init_data message for the |key_ids| specified.

@@ -12,7 +12,7 @@ def _GetCurrentLocation(action_runner):
 
 def _WaitForLocationChange(action_runner, old_href):
   action_runner.WaitForJavaScriptCondition(
-      'document.location.href != "%s"' % old_href)
+      'document.location.href != {{ old_href }}', old_href=old_href)
 
 
 class Top7StressPage(page_module.Page):

@@ -175,7 +175,7 @@ Animation.AnimationUI = class {
       line.style.stroke = strokeColor;
     }
 
-    var bezier = Common.Geometry.CubicBezier.parse(easing);
+    var bezier = UI.Geometry.CubicBezier.parse(easing);
     var cache = this._cachedElements[iteration].keyframeRender;
     if (!cache[keyframeIndex]) {
       cache[keyframeIndex] = bezier ? parentElement.createSVGChild('path', 'animation-keyframe') :
@@ -186,12 +186,12 @@ Animation.AnimationUI = class {
 
     if (easing === 'linear') {
       group.style.fill = this._color;
-      var height = UI.BezierUI.Height;
+      var height = InlineEditor.BezierUI.Height;
       group.setAttribute(
           'd', ['M', 0, height, 'L', 0, 5, 'L', width.toFixed(2), 5, 'L', width.toFixed(2), height, 'Z'].join(' '));
     } else if (bezier) {
       group.style.fill = this._color;
-      UI.BezierUI.drawVelocityChart(bezier, group, width);
+      InlineEditor.BezierUI.drawVelocityChart(bezier, group, width);
     } else {
       var stepFunction = Animation.AnimationTimeline.StepTimingFunction.parse(easing);
       group.removeChildren();
@@ -203,8 +203,6 @@ Animation.AnimationUI = class {
   }
 
   redraw() {
-    var durationWithDelay =
-        this._delay() + this._duration() * this._animation.source().iterations() + this._animation.source().endDelay();
     var maxWidth = this._timeline.width() - Animation.AnimationUI.Options.AnimationMargin;
 
     this._svg.setAttribute('width', (maxWidth + 2 * Animation.AnimationUI.Options.AnimationMargin).toFixed(2));

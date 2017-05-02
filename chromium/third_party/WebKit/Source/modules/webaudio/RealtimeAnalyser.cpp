@@ -57,21 +57,19 @@ RealtimeAnalyser::RealtimeAnalyser()
       m_minDecibels(DefaultMinDecibels),
       m_maxDecibels(DefaultMaxDecibels),
       m_lastAnalysisTime(-1) {
-  m_analysisFrame = makeUnique<FFTFrame>(DefaultFFTSize);
+  m_analysisFrame = WTF::makeUnique<FFTFrame>(DefaultFFTSize);
 }
 
 bool RealtimeAnalyser::setFftSize(size_t size) {
   DCHECK(isMainThread());
 
-  // Only allow powers of two.
-  unsigned log2size = static_cast<unsigned>(log2(size));
-  bool isPOT(1UL << log2size == size);
-
-  if (!isPOT || size > MaxFFTSize || size < MinFFTSize)
+  // Only allow powers of two within the allowed range.
+  if (size > MaxFFTSize || size < MinFFTSize ||
+      !AudioUtilities::isPowerOfTwo(size))
     return false;
 
   if (m_fftSize != size) {
-    m_analysisFrame = makeUnique<FFTFrame>(size);
+    m_analysisFrame = WTF::makeUnique<FFTFrame>(size);
     // m_magnitudeBuffer has size = fftSize / 2 because it contains floats
     // reduced from complex values in m_analysisFrame.
     m_magnitudeBuffer.allocate(size / 2);

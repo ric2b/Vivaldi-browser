@@ -209,6 +209,7 @@ class DefaultBindingsDelegate : public DevToolsUIBindings::Delegate {
   void SetIsDocked(bool is_docked) override {}
   void OpenInNewTab(const std::string& url) override;
   void SetWhitelistedShortcuts(const std::string& message) override {}
+  void OpenNodeFrontend() override {}
   using DispatchCallback =
       DevToolsEmbedderMessageDispatcher::Delegate::DispatchCallback;
 
@@ -380,7 +381,8 @@ std::string SanitizeFrontendQueryParam(
     const std::string& value) {
   // Convert boolean flags to true.
   if (key == "can_dock" || key == "debugFrontend" || key == "experiments" ||
-      key == "isSharedWorker" || key == "v8only" || key == "remoteFrontend")
+      key == "isSharedWorker" || key == "v8only" || key == "remoteFrontend" ||
+      key == "nodeFrontend")
     return "true";
 
   // Pass connection endpoints as is.
@@ -472,6 +474,12 @@ GURL DevToolsUIBindings::SanitizeFrontendURL(const GURL& url) {
 }
 
 bool DevToolsUIBindings::IsValidFrontendURL(const GURL& url) {
+  if (url.SchemeIs(content::kChromeUIScheme) &&
+      url.host() == content::kChromeUITracingHost &&
+      !url.has_query() && !url.has_ref()) {
+    return true;
+  }
+
   return SanitizeFrontendURL(url).spec() == url.spec();
 }
 
@@ -582,6 +590,8 @@ DevToolsUIBindings::~DevToolsUIBindings() {
 // content::DevToolsFrontendHost::Delegate implementation ---------------------
 void DevToolsUIBindings::HandleMessageFromDevToolsFrontend(
     const std::string& message) {
+  if (!frontend_host_)
+    return;
   std::string method;
   base::ListValue empty_params;
   base::ListValue* params = &empty_params;
@@ -610,6 +620,8 @@ void DevToolsUIBindings::HandleMessageFromDevToolsFrontend(
 void DevToolsUIBindings::DispatchProtocolMessage(
     content::DevToolsAgentHost* agent_host, const std::string& message) {
   DCHECK(agent_host == agent_host_.get());
+  if (!frontend_host_)
+    return;
 
   if (message.length() < kMaxMessageChunkSize) {
     std::string param;
@@ -724,7 +736,7 @@ void DevToolsUIBindings::AppendToFile(const std::string& url,
 }
 
 void DevToolsUIBindings::RequestFileSystems() {
-  CHECK(web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme));
+  CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   std::vector<DevToolsFileHelper::FileSystem> file_systems =
       file_helper_->GetFileSystems();
   base::ListValue file_systems_value;
@@ -735,7 +747,7 @@ void DevToolsUIBindings::RequestFileSystems() {
 }
 
 void DevToolsUIBindings::AddFileSystem(const std::string& file_system_path) {
-  CHECK(web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme));
+  CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   file_helper_->AddFileSystem(
       file_system_path,
       base::Bind(&DevToolsUIBindings::ShowDevToolsConfirmInfoBar,
@@ -743,13 +755,13 @@ void DevToolsUIBindings::AddFileSystem(const std::string& file_system_path) {
 }
 
 void DevToolsUIBindings::RemoveFileSystem(const std::string& file_system_path) {
-  CHECK(web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme));
+  CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   file_helper_->RemoveFileSystem(file_system_path);
 }
 
 void DevToolsUIBindings::UpgradeDraggedFileSystemPermissions(
     const std::string& file_system_url) {
-  CHECK(web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme));
+  CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   file_helper_->UpgradeDraggedFileSystemPermissions(
       file_system_url,
       base::Bind(&DevToolsUIBindings::ShowDevToolsConfirmInfoBar,
@@ -759,7 +771,7 @@ void DevToolsUIBindings::UpgradeDraggedFileSystemPermissions(
 void DevToolsUIBindings::IndexPath(int index_request_id,
                                    const std::string& file_system_path) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  CHECK(web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme));
+  CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   if (!file_helper_->IsFileSystemAdded(file_system_path)) {
     IndexingDone(index_request_id, file_system_path);
     return;
@@ -797,7 +809,7 @@ void DevToolsUIBindings::SearchInPath(int search_request_id,
                                       const std::string& file_system_path,
                                       const std::string& query) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  CHECK(web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme));
+  CHECK(IsValidFrontendURL(web_contents_->GetURL()) && frontend_host_);
   if (!file_helper_->IsFileSystemAdded(file_system_path)) {
     SearchCompleted(search_request_id,
                     file_system_path,
@@ -819,7 +831,7 @@ void DevToolsUIBindings::SetWhitelistedShortcuts(const std::string& message) {
 void DevToolsUIBindings::ShowCertificateViewer(const std::string& cert_chain) {
   std::unique_ptr<base::Value> value =
       base::JSONReader::Read(cert_chain);
-  if (!value || value->GetType() != base::Value::TYPE_LIST) {
+  if (!value || value->GetType() != base::Value::Type::LIST) {
     NOTREACHED();
     return;
   }
@@ -829,7 +841,7 @@ void DevToolsUIBindings::ShowCertificateViewer(const std::string& cert_chain) {
   std::vector<std::string> decoded;
   for (size_t i = 0; i < list->GetSize(); ++i) {
     base::Value* item;
-    if (!list->Get(i, &item) || item->GetType() != base::Value::TYPE_STRING) {
+    if (!list->Get(i, &item) || item->GetType() != base::Value::Type::STRING) {
       NOTREACHED();
       return;
     }
@@ -963,6 +975,10 @@ void DevToolsUIBindings::OpenRemotePage(const std::string& browser_id,
   if (!remote_targets_handler_)
     return;
   remote_targets_handler_->Open(browser_id, url);
+}
+
+void DevToolsUIBindings::OpenNodeFrontend() {
+  delegate_->OpenNodeFrontend();
 }
 
 void DevToolsUIBindings::GetPreferences(const DispatchCallback& callback) {
@@ -1266,7 +1282,7 @@ void DevToolsUIBindings::AttachTo(
 
 void DevToolsUIBindings::Reload() {
   reloading_ = true;
-  web_contents_->GetController().Reload(false);
+  web_contents_->GetController().Reload(content::ReloadType::NORMAL, false);
 }
 
 void DevToolsUIBindings::Detach() {
@@ -1283,8 +1299,6 @@ void DevToolsUIBindings::CallClientFunction(const std::string& function_name,
                                             const base::Value* arg1,
                                             const base::Value* arg2,
                                             const base::Value* arg3) {
-  if (!web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme))
-    return;
   // If we're not exposing bindings, we shouldn't call functions either.
   if (!frontend_host_)
     return;

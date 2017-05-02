@@ -389,7 +389,6 @@ InlineBox* RootInlineBox::lastSelectedBox() const {
 
 LayoutUnit RootInlineBox::selectionTop() const {
   LayoutUnit selectionTop = m_lineTop;
-
   if (m_hasAnnotationsBefore)
     selectionTop -= !getLineLayoutItem().style()->isFlippedLinesWritingMode()
                         ? computeOverAnnotationAdjustment(m_lineTop)
@@ -399,25 +398,7 @@ LayoutUnit RootInlineBox::selectionTop() const {
       !prevRootBox())
     return selectionTop;
 
-  LayoutUnit prevBottom = prevRootBox()->selectionBottom();
-  if (prevBottom < selectionTop && block().containsFloats()) {
-    // This line has actually been moved further down, probably from a large
-    // line-height, but possibly because the line was forced to clear floats.
-    // If so, let's check the offsets, and only be willing to use the previous
-    // line's bottom if the offsets are greater on both sides.
-    LayoutUnit prevLeft =
-        block().logicalLeftOffsetForLine(prevBottom, DoNotIndentText);
-    LayoutUnit prevRight =
-        block().logicalRightOffsetForLine(prevBottom, DoNotIndentText);
-    LayoutUnit newLeft =
-        block().logicalLeftOffsetForLine(selectionTop, DoNotIndentText);
-    LayoutUnit newRight =
-        block().logicalRightOffsetForLine(selectionTop, DoNotIndentText);
-    if (prevLeft > newLeft || prevRight < newRight)
-      return selectionTop;
-  }
-
-  return prevBottom;
+  return std::min(selectionTop, prevRootBox()->selectionBottom());
 }
 
 LayoutUnit RootInlineBox::selectionBottom() const {
@@ -434,25 +415,7 @@ LayoutUnit RootInlineBox::selectionBottom() const {
       !nextRootBox())
     return selectionBottom;
 
-  LayoutUnit nextTop = nextRootBox()->selectionTop();
-  if (nextTop > selectionBottom && block().containsFloats()) {
-    // The next line has actually been moved further over, probably from a large
-    // line-height, but possibly because the line was forced to clear floats.
-    // If so, let's check the offsets, and only be willing to use the next
-    // line's top if the offsets are greater on both sides.
-    LayoutUnit nextLeft =
-        block().logicalLeftOffsetForLine(nextTop, DoNotIndentText);
-    LayoutUnit nextRight =
-        block().logicalRightOffsetForLine(nextTop, DoNotIndentText);
-    LayoutUnit newLeft =
-        block().logicalLeftOffsetForLine(selectionBottom, DoNotIndentText);
-    LayoutUnit newRight =
-        block().logicalRightOffsetForLine(selectionBottom, DoNotIndentText);
-    if (nextLeft > newLeft || nextRight < newRight)
-      return selectionBottom;
-  }
-
-  return nextTop;
+  return std::max(selectionBottom, nextRootBox()->selectionTop());
 }
 
 LayoutUnit RootInlineBox::blockDirectionPointInLine() const {
@@ -650,10 +613,10 @@ void RootInlineBox::ascentAndDescentForBox(
                                                  ->lineHeight()
                                                  .isNegative() &&
                                              includeLeading)) {
-    usedFonts->append(box->getLineLayoutItem()
-                          .style(isFirstLineStyle())
-                          ->font()
-                          .primaryFont());
+    usedFonts->push_back(box->getLineLayoutItem()
+                             .style(isFirstLineStyle())
+                             ->font()
+                             .primaryFont());
     for (size_t i = 0; i < usedFonts->size(); ++i) {
       const FontMetrics& fontMetrics = usedFonts->at(i)->getFontMetrics();
       int usedFontAscent = fontMetrics.ascent(baselineType());
@@ -719,16 +682,17 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
 
   LayoutUnit verticalPosition;
   EVerticalAlign verticalAlign = boxModel.style()->verticalAlign();
-  if (verticalAlign == VerticalAlignTop || verticalAlign == VerticalAlignBottom)
+  if (verticalAlign == EVerticalAlign::Top ||
+      verticalAlign == EVerticalAlign::Bottom)
     return LayoutUnit();
 
   LineLayoutItem parent = boxModel.parent();
   if (parent.isLayoutInline() &&
-      parent.style()->verticalAlign() != VerticalAlignTop &&
-      parent.style()->verticalAlign() != VerticalAlignBottom)
+      parent.style()->verticalAlign() != EVerticalAlign::Top &&
+      parent.style()->verticalAlign() != EVerticalAlign::Bottom)
     verticalPosition = box->parent()->logicalTop();
 
-  if (verticalAlign != VerticalAlignBaseline) {
+  if (verticalAlign != EVerticalAlign::Baseline) {
     const Font& font = parent.style(firstLine)->font();
     const SimpleFontData* fontData = font.primaryFont();
     DCHECK(fontData);
@@ -741,21 +705,21 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
     LineDirectionMode lineDirection =
         parent.isHorizontalWritingMode() ? HorizontalLine : VerticalLine;
 
-    if (verticalAlign == VerticalAlignSub) {
+    if (verticalAlign == EVerticalAlign::Sub) {
       verticalPosition += fontSize / 5 + 1;
-    } else if (verticalAlign == VerticalAlignSuper) {
+    } else if (verticalAlign == EVerticalAlign::Super) {
       verticalPosition -= fontSize / 3 + 1;
-    } else if (verticalAlign == VerticalAlignTextTop) {
+    } else if (verticalAlign == EVerticalAlign::TextTop) {
       verticalPosition +=
           boxModel.baselinePosition(baselineType(), firstLine, lineDirection) -
           fontMetrics.ascent(baselineType());
-    } else if (verticalAlign == VerticalAlignMiddle) {
+    } else if (verticalAlign == EVerticalAlign::Middle) {
       verticalPosition = LayoutUnit(
           (verticalPosition - LayoutUnit(fontMetrics.xHeight() / 2) -
            boxModel.lineHeight(firstLine, lineDirection) / 2 +
            boxModel.baselinePosition(baselineType(), firstLine, lineDirection))
               .round());
-    } else if (verticalAlign == VerticalAlignTextBottom) {
+    } else if (verticalAlign == EVerticalAlign::TextBottom) {
       verticalPosition += fontMetrics.descent(baselineType());
       // lineHeight - baselinePosition is always 0 for replaced elements (except
       // inline blocks), so don't bother wasting time in that case.
@@ -764,11 +728,11 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
         verticalPosition -= (boxModel.lineHeight(firstLine, lineDirection) -
                              boxModel.baselinePosition(
                                  baselineType(), firstLine, lineDirection));
-    } else if (verticalAlign == VerticalAlignBaselineMiddle) {
+    } else if (verticalAlign == EVerticalAlign::BaselineMiddle) {
       verticalPosition +=
           -boxModel.lineHeight(firstLine, lineDirection) / 2 +
           boxModel.baselinePosition(baselineType(), firstLine, lineDirection);
-    } else if (verticalAlign == VerticalAlignLength) {
+    } else if (verticalAlign == EVerticalAlign::Length) {
       LayoutUnit lineHeight;
       // Per http://www.w3.org/TR/CSS21/visudet.html#propdef-vertical-align:
       // 'Percentages: refer to the 'line-height' of the element itself'.

@@ -395,7 +395,9 @@ void BufferFeeder::OnPushBufferComplete(BufferStatus status) {
   EXPECT_TRUE(expecting_buffer_complete_)
       << "OnPushBufferComplete() called unexpectedly";
   expecting_buffer_complete_ = false;
-  ASSERT_NE(status, MediaPipelineBackend::kBufferFailed);
+  if (!feed_continuous_pcm_ || !feeding_completed_) {
+    ASSERT_NE(status, MediaPipelineBackend::kBufferFailed);
+  }
   EXPECT_FALSE(eos_) << "Got OnPushBufferComplete() after OnEndOfStream()";
 
   if (test_config_after_next_push_) {
@@ -954,7 +956,7 @@ TEST_F(AudioVideoPipelineDeviceTest, FlacPlayback_Optional) {
 TEST_F(AudioVideoPipelineDeviceTest, H264Playback) {
   std::unique_ptr<base::MessageLoop> message_loop(new base::MessageLoop());
 
-  set_sync_type(MediaPipelineDeviceParams::kModeIgnorePtsAndVSync);
+  set_sync_type(MediaPipelineDeviceParams::kModeSyncPts);
   ConfigureForVideoOnly("bear.h264", true /* raw_h264 */);
   PauseBeforeEos();
   Start();
@@ -986,7 +988,7 @@ TEST_F(AudioVideoPipelineDeviceTest, Vp8Playback) {
 TEST_F(AudioVideoPipelineDeviceTest, WebmPlayback) {
   std::unique_ptr<base::MessageLoop> message_loop(new base::MessageLoop());
 
-  set_sync_type(MediaPipelineDeviceParams::kModeIgnorePtsAndVSync);
+  set_sync_type(MediaPipelineDeviceParams::kModeSyncPts);
   ConfigureForFile("bear-640x360.webm");
   PauseBeforeEos();
   Start();
@@ -1138,7 +1140,7 @@ TEST_F(AudioVideoPipelineDeviceTest, FlacPlayback_WithEffectsStreams_Optional) {
 TEST_F(AudioVideoPipelineDeviceTest, H264Playback_WithEffectsStreams) {
   std::unique_ptr<base::MessageLoop> message_loop(new base::MessageLoop());
 
-  set_sync_type(MediaPipelineDeviceParams::kModeIgnorePtsAndVSync);
+  set_sync_type(MediaPipelineDeviceParams::kModeSyncPts);
   ConfigureForVideoOnly("bear.h264", true /* raw_h264 */);
   PauseBeforeEos();
   AddEffectsStreams();
@@ -1173,7 +1175,7 @@ TEST_F(AudioVideoPipelineDeviceTest, Vp8Playback_WithEffectsStreams) {
 TEST_F(AudioVideoPipelineDeviceTest, WebmPlayback_WithEffectsStreams) {
   std::unique_ptr<base::MessageLoop> message_loop(new base::MessageLoop());
 
-  set_sync_type(MediaPipelineDeviceParams::kModeIgnorePtsAndVSync);
+  set_sync_type(MediaPipelineDeviceParams::kModeSyncPts);
   ConfigureForFile("bear-640x360.webm");
   PauseBeforeEos();
   AddEffectsStreams();

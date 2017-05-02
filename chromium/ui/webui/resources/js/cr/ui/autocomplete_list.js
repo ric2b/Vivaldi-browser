@@ -126,8 +126,7 @@ cr.define('cr.ui', function() {
      * Requests new suggestions. Called when new suggestions are needed.
      * @param {string} query the text to autocomplete from.
      */
-    requestSuggestions: function(query) {
-    },
+    requestSuggestions: function(query) {},
 
     /**
      * Handles the Enter keydown event.
@@ -265,7 +264,5 @@ cr.define('cr.ui', function() {
     },
   };
 
-  return {
-    AutocompleteList: AutocompleteList
-  };
+  return {AutocompleteList: AutocompleteList};
 });

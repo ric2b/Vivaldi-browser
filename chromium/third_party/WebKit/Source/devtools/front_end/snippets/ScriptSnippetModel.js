@@ -119,7 +119,7 @@ Snippets.ScriptSnippetModel = class extends Common.Object {
    * @param {!Common.Event} event
    */
   _workingCopyChanged(event) {
-    var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (event.target);
+    var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (event.data);
     this._scriptSnippetEdited(uiSourceCode);
   }
 
@@ -199,6 +199,7 @@ Snippets.ScriptSnippetModel = class extends Common.Object {
    * @param {!Workspace.UISourceCode} uiSourceCode
    */
   evaluateScriptSnippet(executionContext, uiSourceCode) {
+    console.assert(uiSourceCode.project().type() === Workspace.projectTypes.Snippets);
     var breakpointLocations = this._removeBreakpoints(uiSourceCode);
     this._releaseSnippetScript(uiSourceCode);
     this._restoreBreakpoints(uiSourceCode, breakpointLocations);
@@ -551,7 +552,7 @@ Snippets.SnippetsProject = class extends Bindings.ContentProviderBasedProject {
    * @param {!Snippets.ScriptSnippetModel} model
    */
   constructor(workspace, model) {
-    super(workspace, 'snippets:', Workspace.projectTypes.Snippets, '');
+    super(workspace, 'snippets:', Workspace.projectTypes.Snippets, '', false /* isServiceProject */);
     this._model = model;
   }
 

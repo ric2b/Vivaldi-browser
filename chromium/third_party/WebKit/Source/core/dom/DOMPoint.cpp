@@ -8,12 +8,12 @@
 
 namespace blink {
 
-DOMPoint* DOMPoint::create(const DOMPointInit& point) {
-  return new DOMPoint(point.x(), point.y(), point.z(), point.w());
-}
-
 DOMPoint* DOMPoint::create(double x, double y, double z, double w) {
   return new DOMPoint(x, y, z, w);
+}
+
+DOMPoint* DOMPoint::fromPoint(const DOMPointInit& other) {
+  return new DOMPoint(other.x(), other.y(), other.z(), other.w());
 }
 
 DOMPoint::DOMPoint(double x, double y, double z, double w)

@@ -15,6 +15,7 @@
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tri_view.h"
 #include "base/containers/adapters.h"
+#include "base/memory/ptr_util.h"
 #include "base/timer/timer.h"
 #include "grit/ash_strings.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
@@ -48,8 +49,7 @@ const int kTitleRowSeparatorIndex = 1;
 // above the top of the visible viewport until the next one "pushes" it up and
 // are painted above other children. To indicate that a child is a sticky header
 // row use set_id(VIEW_ID_STICKY_HEADER).
-class ScrollContentsView : public views::View,
-                           public views::ViewTargeterDelegate {
+class ScrollContentsView : public views::View {
  public:
   ScrollContentsView()
       : box_layout_(new views::BoxLayout(
@@ -57,7 +57,6 @@ class ScrollContentsView : public views::View,
             0,
             0,
             UseMd() ? 0 : kContentsBetweenChildSpacingNonMd)) {
-    SetEventTargeter(base::MakeUnique<views::ViewTargeter>(this));
     SetLayoutManager(box_layout_);
   }
   ~ScrollContentsView() override {}
@@ -69,17 +68,11 @@ class ScrollContentsView : public views::View,
   }
 
   void PaintChildren(const ui::PaintContext& context) override {
-    for (int i = 0; i < child_count(); ++i) {
-      if (child_at(i)->id() != VIEW_ID_STICKY_HEADER && !child_at(i)->layer())
-        child_at(i)->Paint(context);
-    }
+    views::View::PaintChildren(context);
     bool did_draw_shadow = false;
-    // Paint header rows above other children in Z-order.
-    for (auto& header : headers_) {
-      if (!header.view->layer())
-        header.view->Paint(context);
+    // Paint header row separators.
+    for (auto& header : headers_)
       did_draw_shadow = PaintDelineation(header, context) || did_draw_shadow;
-    }
 
     // Draw a shadow at the top of the viewport when scrolled, but only if a
     // header didn't already draw one. Overlap the shadow with the separator
@@ -100,24 +93,20 @@ class ScrollContentsView : public views::View,
     PositionHeaderRows();
   }
 
-  void ReorderChildLayers(ui::Layer* parent_layer) override {
-    views::View::ReorderChildLayers(parent_layer);
-    ui::Layer* topmost_layer = TopmostLayer(this, parent_layer);
-    if (!topmost_layer)
-      return;
-
-    // Keep the sticky headers with layers above the rest of the children's
-    // layers. Make sure to avoid changing the stacking order of the layers that
-    // are children of |parent_layer| but do not belong to the same parent view.
-    // Note: this assumes that all views that have id=VIEW_ID_STICKY_HEADER have
-    // a layer.
-    for (int i = child_count() - 1; i >= 0; --i) {
-      View* child = child_at(i);
-      if (child->id() == VIEW_ID_STICKY_HEADER &&
-          child->layer() != topmost_layer) {
-        parent_layer->StackAbove(child->layer(), topmost_layer);
-      }
+  View::Views GetChildrenInZOrder() override {
+    View::Views children;
+    // Iterate over regular children and later over the sticky headers to keep
+    // the sticky headers above in Z-order.
+    for (int i = 0; i < child_count(); ++i) {
+      if (child_at(i)->id() != VIEW_ID_STICKY_HEADER)
+        children.push_back(child_at(i));
     }
+    for (int i = 0; i < child_count(); ++i) {
+      if (child_at(i)->id() == VIEW_ID_STICKY_HEADER)
+        children.push_back(child_at(i));
+    }
+    DCHECK_EQ(child_count(), static_cast<int>(children.size()));
+    return children;
   }
 
   void ViewHierarchyChanged(
@@ -141,19 +130,6 @@ class ScrollContentsView : public views::View,
                           : kMenuSeparatorVerticalPadding,
                       0, kMenuSeparatorVerticalPadding, 0));
     }
-  }
-
-  // views::ViewTargeterDelegate:
-  View* TargetForRect(View* root, const gfx::Rect& rect) override {
-    // Give header rows first dibs on events.
-    for (auto& header : headers_) {
-      views::View* view = header.view;
-      gfx::Rect local_to_header = rect;
-      local_to_header.Offset(-view->x(), -view->y());
-      if (ViewTargeterDelegate::DoesIntersectRect(view, local_to_header))
-        return ViewTargeterDelegate::TargetForRect(view, local_to_header);
-    }
-    return ViewTargeterDelegate::TargetForRect(root, rect);
   }
 
  private:
@@ -246,27 +222,8 @@ class ScrollContentsView : public views::View,
                         kSeparatorColor);
     paint.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadow));
     paint.setAntiAlias(true);
-    canvas->ClipRect(shadowed_area, SkRegion::kDifference_Op);
+    canvas->ClipRect(shadowed_area, SkClipOp::kDifference);
     canvas->DrawRect(shadowed_area, paint);
-  }
-
-  // Recursively iterates through children to return the child layer that is
-  // stacked at the top. Only considers layers that are direct |parent_layer|'s
-  // children.
-  ui::Layer* TopmostLayer(views::View* view, ui::Layer* parent_layer) {
-    DCHECK(parent_layer);
-    // Iterate backwards through the children to find the topmost layer.
-    for (int i = view->child_count() - 1; i >= 0; --i) {
-      views::View* child = view->child_at(i);
-      ui::Layer* layer = TopmostLayer(child, parent_layer);
-      if (layer)
-        return layer;
-    }
-    if (view->layer() && view->layer() != parent_layer &&
-        view->layer()->parent() == parent_layer) {
-      return view->layer();
-    }
-    return nullptr;
   }
 
   views::BoxLayout* box_layout_;
@@ -571,7 +528,7 @@ void TrayDetailsView::Layout() {
     // row.
     gfx::Size scroller_size = scroll_content_->GetPreferredSize();
     scroller_->set_fixed_size(
-        gfx::Size(width() + scroller_->GetScrollBarWidth(),
+        gfx::Size(width() + scroller_->GetScrollBarLayoutWidth(),
                   scroller_size.height() - (size.height() - height())));
   }
 

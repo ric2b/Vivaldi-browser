@@ -4,8 +4,8 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/extensions/browser_actions_container_view.h"
+#import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -14,18 +14,6 @@ namespace {
 const CGFloat kContainerHeight = 15.0;
 const CGFloat kMinimumContainerWidth = 3.0;
 const CGFloat kMaxAllowedWidthForTest = 50.0;
-
-class BrowserActionsContainerTestDelegate
-    : public BrowserActionsContainerViewSizeDelegate {
- public:
-  BrowserActionsContainerTestDelegate() {}
-  ~BrowserActionsContainerTestDelegate() override {}
-
-  CGFloat GetMaxAllowedWidth() override { return kMaxAllowedWidthForTest; }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BrowserActionsContainerTestDelegate);
-};
 
 class BrowserActionsContainerViewTest : public CocoaTest {
  public:
@@ -39,13 +27,14 @@ class BrowserActionsContainerViewTest : public CocoaTest {
 };
 
 TEST_F(BrowserActionsContainerViewTest, BasicTests) {
-  EXPECT_TRUE([view_ canDragLeft]);
-  EXPECT_TRUE([view_ canDragRight]);
   EXPECT_TRUE([view_ isHidden]);
 }
 
 TEST_F(BrowserActionsContainerViewTest, SetWidthTests) {
-  // Try setting below the minimum width (10 pixels).
+  [view_ setMinWidth:kMinimumContainerWidth];
+  [view_ setMaxWidth:kMaxAllowedWidthForTest];
+
+  // Try setting below the minimum width.
   [view_ resizeToWidth:kMinimumContainerWidth - 1 animate:NO];
   EXPECT_EQ(kMinimumContainerWidth, NSWidth([view_ frame])) << "Frame width is "
       << "less than the minimum allowed.";
@@ -73,11 +62,8 @@ TEST_F(BrowserActionsContainerViewTest, SetWidthTests) {
   EXPECT_EQ(35.0, NSWidth([view_ frame]));
   EXPECT_EQ(35.0, NSWidth([view_ animationEndFrame]));
 
-  BrowserActionsContainerTestDelegate delegate;
-  [view_ setDelegate:&delegate];
   [view_ resizeToWidth:kMaxAllowedWidthForTest + 10.0 animate:NO];
   EXPECT_EQ(kMaxAllowedWidthForTest, NSWidth([view_ frame]));
-  [view_ setDelegate:nil];
 }
 
 }  // namespace

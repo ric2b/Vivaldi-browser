@@ -4,7 +4,7 @@
 
 #include "services/ui/ime/test_ime_driver/test_ime_driver.h"
 
-#include "services/ui/public/interfaces/ime.mojom.h"
+#include "services/ui/public/interfaces/ime/ime.mojom.h"
 
 namespace ui {
 namespace test {
@@ -17,19 +17,14 @@ class TestInputMethod : public mojom::InputMethod {
 
  private:
   // mojom::InputMethod:
-  void OnTextInputModeChanged(mojom::TextInputMode text_input_mode) override {}
-  void OnTextInputTypeChanged(mojom::TextInputType text_input_type) override {}
+  void OnTextInputTypeChanged(TextInputType text_input_type) override {}
   void OnCaretBoundsChanged(const gfx::Rect& caret_bounds) override {}
   void ProcessKeyEvent(std::unique_ptr<Event> key_event,
                        const ProcessKeyEventCallback& callback) override {
     DCHECK(key_event->IsKeyEvent());
 
     if (key_event->AsKeyEvent()->is_char()) {
-      mojom::CompositionEventPtr composition_event =
-          mojom::CompositionEvent::New();
-      composition_event->type = mojom::CompositionEventType::INSERT_CHAR;
-      composition_event->key_event = std::move(key_event);
-      client_->OnCompositionEvent(std::move(composition_event));
+      client_->InsertChar(std::move(key_event));
       callback.Run(true);
     } else {
       callback.Run(false);
@@ -46,14 +41,12 @@ TestIMEDriver::TestIMEDriver() {}
 
 TestIMEDriver::~TestIMEDriver() {}
 
-void TestIMEDriver::StartSession(
-    int32_t session_id,
-    mojom::TextInputClientPtr client,
-    mojom::InputMethodRequest input_method_request) {
+void TestIMEDriver::StartSession(int32_t session_id,
+                                 mojom::StartSessionDetailsPtr details) {
   input_method_bindings_[session_id].reset(
       new mojo::Binding<mojom::InputMethod>(
-          new TestInputMethod(std::move(client)),
-          std::move(input_method_request)));
+          new TestInputMethod(std::move(details->client)),
+          std::move(details->input_method_request)));
 }
 
 void TestIMEDriver::CancelSession(int32_t session_id) {

@@ -200,7 +200,7 @@ template("chromium_merge_grit_action") {
     vivaldi_extract_untranslated(name) {
       source = combined_target_file
       original_source = main_resource_path
-      stampfile = translation_stamp
+      vivaldi_source = vivaldi_resource_path
       deps = [
         ":" + merger_name,
         ":" + resource_id_name,

@@ -50,6 +50,7 @@ cr.define('print_preview', function() {
    *     Connection status of the print destination.
    * @param {{tags: (Array<string>|undefined),
    *          isOwned: (boolean|undefined),
+   *          isEnterprisePrinter: (boolean|undefined),
    *          account: (string|undefined),
    *          lastAccessTime: (number|undefined),
    *          isTosAccepted: (boolean|undefined),
@@ -111,6 +112,13 @@ cr.define('print_preview', function() {
      * @private {boolean}
      */
     this.isOwned_ = (opt_params && opt_params.isOwned) || false;
+
+    /**
+     * Whether the destination is an enterprise policy controlled printer.
+     * @private {boolean}
+     */
+    this.isEnterprisePrinter_ =
+        (opt_params && opt_params.isEnterprisePrinter) || false;
 
     /**
      * Account this destination is registered for, if known.
@@ -229,7 +237,8 @@ cr.define('print_preview', function() {
     PROFILE: 'profile',
     DEVICE: 'device',
     PRIVET: 'privet',
-    EXTENSION: 'extension'
+    EXTENSION: 'extension',
+    CROS: 'chrome_os',
   };
 
   /**
@@ -247,7 +256,7 @@ cr.define('print_preview', function() {
   /**
    * Enumeration specifying whether a destination is provisional and the reason
    * the destination is provisional.
-   * @enum {string
+   * @enum {string}
    */
   Destination.ProvisionalType = {
     /** Destination is not provisional. */
@@ -273,7 +282,8 @@ cr.define('print_preview', function() {
     THIRD_PARTY: 'images/third_party.png',
     PDF: 'images/pdf.png',
     DOCS: 'images/google_doc.png',
-    FEDEX: 'images/third_party_fedex.png'
+    FEDEX: 'images/third_party_fedex.png',
+    ENTERPRISE: 'images/business.svg'
   };
 
   Destination.prototype = {
@@ -330,6 +340,7 @@ cr.define('print_preview', function() {
     get isLocal() {
       return this.origin_ == Destination.Origin.LOCAL ||
              this.origin_ == Destination.Origin.EXTENSION ||
+             this.origin_ == Destination.Origin.CROS ||
              (this.origin_ == Destination.Origin.PRIVET &&
               this.connectionStatus_ !=
               Destination.ConnectionStatus.UNREGISTERED);
@@ -480,21 +491,29 @@ cr.define('print_preview', function() {
     get iconUrl() {
       if (this.id_ == Destination.GooglePromotedId.DOCS) {
         return Destination.IconUrl_.DOCS;
-      } else if (this.id_ == Destination.GooglePromotedId.FEDEX) {
-        return Destination.IconUrl_.FEDEX;
-      } else if (this.id_ == Destination.GooglePromotedId.SAVE_AS_PDF) {
-        return Destination.IconUrl_.PDF;
-      } else if (this.isLocal) {
-        return Destination.IconUrl_.LOCAL;
-      } else if (this.type_ == Destination.Type.MOBILE && this.isOwned_) {
-        return Destination.IconUrl_.MOBILE;
-      } else if (this.type_ == Destination.Type.MOBILE) {
-        return Destination.IconUrl_.MOBILE_SHARED;
-      } else if (this.isOwned_) {
-        return Destination.IconUrl_.CLOUD;
-      } else {
-        return Destination.IconUrl_.CLOUD_SHARED;
       }
+      if (this.id_ == Destination.GooglePromotedId.FEDEX) {
+        return Destination.IconUrl_.FEDEX;
+      }
+      if (this.id_ == Destination.GooglePromotedId.SAVE_AS_PDF) {
+        return Destination.IconUrl_.PDF;
+      }
+      if (this.isEnterprisePrinter) {
+        return Destination.IconUrl_.ENTERPRISE;
+      }
+      if (this.isLocal) {
+        return Destination.IconUrl_.LOCAL;
+      }
+      if (this.type_ == Destination.Type.MOBILE && this.isOwned_) {
+        return Destination.IconUrl_.MOBILE;
+      }
+      if (this.type_ == Destination.Type.MOBILE) {
+        return Destination.IconUrl_.MOBILE_SHARED;
+      }
+      if (this.isOwned_) {
+        return Destination.IconUrl_.CLOUD;
+      }
+      return Destination.IconUrl_.CLOUD_SHARED;
     },
 
     /**
@@ -551,7 +570,15 @@ cr.define('print_preview', function() {
      */
     get isProvisional() {
       return this.provisionalType_ != Destination.ProvisionalType.NONE;
-    }
+    },
+
+    /**
+     * Whether the printer is enterprise policy controlled printer.
+     * @return {boolean}
+     */
+    get isEnterprisePrinter() {
+      return this.isEnterprisePrinter_;
+    },
   };
 
   // Export

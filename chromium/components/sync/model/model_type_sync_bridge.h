@@ -11,32 +11,32 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "components/sync/engine/activation_context.h"
 #include "components/sync/model/conflict_resolution.h"
-#include "components/sync/model/data_type_error_handler.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/entity_data.h"
+#include "components/sync/model/model_error.h"
 #include "components/sync/model/model_type_change_processor.h"
-#include "components/sync/model/sync_error.h"
 
 namespace syncer {
 
 class DataBatch;
 class MetadataChangeList;
 
-// Interface implemented by model types to receive updates from sync via the
-// SharedModelTypeProcessor. Provides a way for sync to update the data and
+// Interface implemented by model types to receive updates from sync via a
+// ModelTypeChangeProcessor. Provides a way for sync to update the data and
 // metadata for entities, as well as the model type state. Sync bridge
-// implementations have the responsibility of providing thier change_processor()
-// with metadata through ModelTypeChangeProcessor::OnMetadataLoaded() as soon as
-// possible. Sync will wait for this method to be called, and afterwards it will
-// start calling into the bridge.
+// implementations must provide their change_processor() with metadata through
+// ModelReadyToSync() as soon as possible. Once this is called, sync will
+// immediately begin locally tracking changes and can start syncing with the
+// server soon afterward. If an error occurs during startup, the processor's
+// ReportError() method should be called instead of ModelReadyToSync().
 class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
  public:
-  typedef base::Callback<void(SyncError, std::unique_ptr<DataBatch>)>
-      DataCallback;
+  typedef base::Callback<void(std::unique_ptr<DataBatch>)> DataCallback;
   typedef std::vector<std::string> StorageKeyList;
-  typedef base::Callback<std::unique_ptr<ModelTypeChangeProcessor>(
+  typedef base::RepeatingCallback<std::unique_ptr<ModelTypeChangeProcessor>(
       ModelType type,
       ModelTypeSyncBridge* bridge)>
       ChangeProcessorFactory;
@@ -63,7 +63,7 @@ class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
   // combine all change atomically, should save the metadata after the data
   // changes, so that this merge will be re-driven by sync if is not completely
   // saved during the current run.
-  virtual SyncError MergeSyncData(
+  virtual base::Optional<ModelError> MergeSyncData(
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityDataMap entity_data_map) = 0;
 
@@ -72,14 +72,18 @@ class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
   // |metadata_change_list| in case when some of the data changes are filtered
   // out, or even be empty in case when a commit confirmation is processed and
   // only the metadata needs to persisted.
-  virtual SyncError ApplySyncChanges(
+  virtual base::Optional<ModelError> ApplySyncChanges(
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) = 0;
 
   // Asynchronously retrieve the corresponding sync data for |storage_keys|.
+  // |callback| should be invoked if the operation is successful, otherwise
+  // the processor's ReportError method should be called.
   virtual void GetData(StorageKeyList storage_keys, DataCallback callback) = 0;
 
-  // Asynchronously retrieve all of the local sync data.
+  // Asynchronously retrieve all of the local sync data. |callback| should be
+  // invoked if the operation is successful, otherwise the processor's
+  // ReportError method should be called.
   virtual void GetAllData(DataCallback callback) = 0;
 
   // Get or generate a client tag for |entity_data|. This must be the same tag
@@ -109,7 +113,7 @@ class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
   // Called by the DataTypeController to gather additional information needed
   // before the processor can be connected to a sync worker. Once the
   // metadata has been loaded, the info is collected and given to |callback|.
-  void OnSyncStarting(std::unique_ptr<DataTypeErrorHandler> error_handler,
+  void OnSyncStarting(const ModelErrorHandler& error_handler,
                       const ModelTypeChangeProcessor::StartCallback& callback);
 
   // Indicates that we no longer want to do any sync-related things for this
@@ -117,6 +121,9 @@ class ModelTypeSyncBridge : public base::SupportsWeakPtr<ModelTypeSyncBridge> {
   // metadata, and then destroys the change processor.
   virtual void DisableSync();
 
+  // Needs to be informed about any model change occurring via Delete() and
+  // Put(). The changing metadata should be stored to persistent storage before
+  // or atomically with the model changes.
   ModelTypeChangeProcessor* change_processor() const;
 
  private:

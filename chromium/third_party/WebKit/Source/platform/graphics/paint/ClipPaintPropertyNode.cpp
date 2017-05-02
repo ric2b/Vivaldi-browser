@@ -16,4 +16,12 @@ ClipPaintPropertyNode* ClipPaintPropertyNode::root() {
   return root;
 }
 
+String ClipPaintPropertyNode::toString() const {
+  return String::format(
+      "parent=%p localTransformSpace=%p rect=%s directCompositingReasons=%s",
+      m_parent.get(), m_localTransformSpace.get(),
+      m_clipRect.toString().ascii().data(),
+      compositingReasonsAsString(m_directCompositingReasons).ascii().data());
+}
+
 }  // namespace blink

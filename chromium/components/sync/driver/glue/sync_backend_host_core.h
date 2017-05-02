@@ -14,12 +14,16 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "components/invalidation/public/invalidation.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/system_encryptor.h"
 #include "components/sync/driver/glue/sync_backend_host_impl.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
+#include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "url/gurl.h"
@@ -28,79 +32,20 @@ namespace syncer {
 
 class SyncBackendHostImpl;
 
-// Utility struct for holding initialization options.
-struct DoInitializeOptions {
-  DoInitializeOptions(
-      base::MessageLoop* sync_loop,
-      SyncBackendRegistrar* registrar,
-      const std::vector<scoped_refptr<ModelSafeWorker>>& workers,
-      const scoped_refptr<ExtensionsActivity>& extensions_activity,
-      const WeakHandle<JsEventHandler>& event_handler,
-      const GURL& service_url,
-      const std::string& sync_user_agent,
-      std::unique_ptr<HttpPostProviderFactory> http_bridge_factory,
-      const SyncCredentials& credentials,
-      const std::string& invalidator_client_id,
-      std::unique_ptr<SyncManagerFactory> sync_manager_factory,
-      bool delete_sync_data_folder,
-      bool enable_local_sync_backend,
-      const base::FilePath& local_sync_backend_folder,
-      const std::string& restored_key_for_bootstrapping,
-      const std::string& restored_keystore_key_for_bootstrapping,
-      std::unique_ptr<EngineComponentsFactory> engine_components_factory,
-      const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
-      const base::Closure& report_unrecoverable_error_function,
-      std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state,
-      const std::map<ModelType, int64_t>& invalidation_versions);
-  ~DoInitializeOptions();
-
-  base::MessageLoop* sync_loop;
-  SyncBackendRegistrar* registrar;
-  std::vector<scoped_refptr<ModelSafeWorker>> workers;
-  scoped_refptr<ExtensionsActivity> extensions_activity;
-  WeakHandle<JsEventHandler> event_handler;
-  GURL service_url;
-  std::string sync_user_agent;
-  // Overridden by tests.
-  std::unique_ptr<HttpPostProviderFactory> http_bridge_factory;
-  SyncCredentials credentials;
-  const std::string invalidator_client_id;
-  std::unique_ptr<SyncManagerFactory> sync_manager_factory;
-  std::string lsid;
-  bool delete_sync_data_folder;
-  bool enable_local_sync_backend;
-  const base::FilePath local_sync_backend_folder;
-  std::string restored_key_for_bootstrapping;
-  std::string restored_keystore_key_for_bootstrapping;
-  std::unique_ptr<EngineComponentsFactory> engine_components_factory;
-  const WeakHandle<UnrecoverableErrorHandler> unrecoverable_error_handler;
-  base::Closure report_unrecoverable_error_function;
-  std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state;
-  const std::map<ModelType, int64_t> invalidation_versions;
-};
-
-// Helper struct to handle currying params to
-// SyncBackendHost::Core::DoConfigureSyncer.
-struct DoConfigureSyncerTypes {
-  DoConfigureSyncerTypes();
-  DoConfigureSyncerTypes(const DoConfigureSyncerTypes& other);
-  ~DoConfigureSyncerTypes();
-  ModelTypeSet to_download;
-  ModelTypeSet to_purge;
-  ModelTypeSet to_journal;
-  ModelTypeSet to_unapply;
-};
-
 class SyncBackendHostCore
     : public base::RefCountedThreadSafe<SyncBackendHostCore>,
+      public base::trace_event::MemoryDumpProvider,
       public SyncEncryptionHandler::Observer,
       public SyncManager::Observer,
       public TypeDebugInfoObserver {
  public:
   SyncBackendHostCore(const std::string& name,
-                      const base::FilePath& sync_data_folder_path,
-                      bool has_sync_setup_completed,
+                      const base::FilePath& sync_data_folder,
                       const base::WeakPtr<SyncBackendHostImpl>& backend);
+
+  // MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
   // SyncManager::Observer implementation.  The Core just acts like an air
   // traffic controller here, forwarding incoming messages to appropriate
@@ -149,17 +94,16 @@ class SyncBackendHostCore
 
   // Note:
   //
-  // The Do* methods are the various entry points from our
-  // SyncBackendHost.  They are all called on the sync thread to
-  // actually perform synchronous (and potentially blocking) syncapi
-  // operations.
+  // The Do* methods are the various entry points from our SyncBackendHostImpl.
+  // They are all called on the sync thread to actually perform synchronous (and
+  // potentially blocking) syncapi operations.
   //
   // Called to perform initialization of the syncapi on behalf of
-  // SyncBackendHost::Initialize.
-  void DoInitialize(std::unique_ptr<DoInitializeOptions> options);
+  // SyncEngine::Initialize.
+  void DoInitialize(SyncEngine::InitParams params);
 
   // Called to perform credential update on behalf of
-  // SyncBackendHost::UpdateCredentials.
+  // SyncEngine::UpdateCredentials.
   void DoUpdateCredentials(const SyncCredentials& credentials);
 
   // Called to tell the syncapi to start syncing (generally after
@@ -182,7 +126,7 @@ class SyncBackendHostCore
   void DoRefreshTypes(ModelTypeSet types);
 
   // Invoked if we failed to download the necessary control types at startup.
-  // Invokes SyncBackendHost::HandleControlTypesDownloadRetry.
+  // Invokes SyncEngine::HandleControlTypesDownloadRetry.
   void OnControlTypesDownloadRetry();
 
   // Called to perform tasks which require the control data to be downloaded.
@@ -199,12 +143,10 @@ class SyncBackendHostCore
   void DoDestroySyncManager(ShutdownReason reason);
 
   // Configuration methods that must execute on sync loop.
-  void DoConfigureSyncer(
-      ConfigureReason reason,
-      const DoConfigureSyncerTypes& config_types,
-      const ModelSafeRoutingInfo routing_info,
-      const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task,
-      const base::Closure& retry_callback);
+  void DoPurgeDisabledTypes(const ModelTypeSet& to_purge,
+                            const ModelTypeSet& to_journal,
+                            const ModelTypeSet& to_unapply);
+  void DoConfigureSyncer(ModelTypeConfigurer::ConfigureParams params);
   void DoFinishConfigureDataTypes(
       ModelTypeSet types_to_config,
       const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task);
@@ -220,23 +162,12 @@ class SyncBackendHostCore
   void DisableProtocolEventForwarding();
 
   // Enables the forwarding of directory type debug counters to the
-  // SyncBackendHost.  Also requests that updates to all counters be
-  // emitted right away to initialize any new listeners' states.
+  // SyncEngineHost. Also requests that updates to all counters be emitted right
+  // away to initialize any new listeners' states.
   void EnableDirectoryTypeDebugInfoForwarding();
 
   // Disables forwarding of directory type debug counters.
   void DisableDirectoryTypeDebugInfoForwarding();
-
-  // Delete the sync data folder to cleanup backend data.  Happens the first
-  // time sync is enabled for a user (to prevent accidentally reusing old
-  // sync databases), as well as shutdown when you're no longer syncing.
-  void DeleteSyncDataFolder();
-
-  // We expose this member because it's required in the construction of the
-  // HttpBridgeFactory.
-  CancelationSignal* GetRequestContextCancelationSignal() {
-    return &release_request_context_signal_;
-  }
 
   // Tell the sync manager to persist its state by writing to disk.
   // Called on the sync thread, both by a timer and, on Android, when the
@@ -266,18 +197,13 @@ class SyncBackendHostCore
   const std::string name_;
 
   // Path of the folder that stores the sync data files.
-  const base::FilePath sync_data_folder_path_;
+  const base::FilePath sync_data_folder_;
 
-  // Our parent SyncBackendHost.
+  // Our parent SyncBackendHostImpl.
   WeakHandle<SyncBackendHostImpl> host_;
 
-  // The loop where all the sync backend operations happen.
-  // Non-null only between calls to DoInitialize() and ~Core().
-  base::MessageLoop* sync_loop_;
-
-  // Our parent's registrar (not owned).  Non-null only between
-  // calls to DoInitialize() and DoShutdown().
-  SyncBackendRegistrar* registrar_;
+  // Non-null only between calls to DoInitialize() and DoShutdown().
+  std::unique_ptr<SyncBackendRegistrar> registrar_;
 
   // The timer used to periodically call SaveChanges.
   std::unique_ptr<base::RepeatingTimer> save_changes_timer_;
@@ -289,7 +215,7 @@ class SyncBackendHostCore
   std::unique_ptr<SyncManager> sync_manager_;
 
   // Temporary holder of sync manager's initialization results. Set by
-  // OnInitializeComplete, and consumed when we pass it via OnBackendInitialized
+  // OnInitializeComplete, and consumed when we pass it via OnEngineInitialized
   // in the final state of HandleInitializationSuccessOnFrontendLoop.
   WeakHandle<JsBackend> js_backend_;
   WeakHandle<DataTypeDebugInfoListener> debug_info_listener_;
@@ -302,21 +228,20 @@ class SyncBackendHostCore
   CancelationSignal release_request_context_signal_;
   CancelationSignal stop_syncing_signal_;
 
-  // Matches the value of SyncPref's IsFirstSetupComplete() flag at init time.
-  // Should not be used for anything except for UMAs and logging.
-  const bool has_sync_setup_completed_;
-
   // Set when we've been asked to forward sync protocol events to the frontend.
-  bool forward_protocol_events_;
+  bool forward_protocol_events_ = false;
 
   // Set when the forwarding of per-type debug counters is enabled.
-  bool forward_type_info_;
+  bool forward_type_info_ = false;
 
   // A map of data type -> invalidation version to track the most recently
   // received invalidation version for each type.
   // This allows dropping any invalidations with versions older than those
   // most recently received for that data type.
   std::map<ModelType, int64_t> last_invalidation_versions_;
+
+  // Checks that we are on the sync thread.
+  base::ThreadChecker thread_checker_;
 
   base::WeakPtrFactory<SyncBackendHostCore> weak_ptr_factory_;
 

@@ -47,7 +47,7 @@
 
 #if defined(USE_OZONE)
 #if defined(OS_CHROMEOS)
-#include "ui/display/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 #include "ui/display/types/native_display_delegate.h"
 #endif  // defined(OS_CHROMEOS)
 #include "ui/ozone/public/ozone_platform.h"
@@ -86,23 +86,24 @@ void WaitForSwapAck(const base::Closure& callback, gfx::SwapResult result) {
 
 #if defined(USE_OZONE)
 
-class DisplayConfiguratorObserver : public ui::DisplayConfigurator::Observer {
+class DisplayConfiguratorObserver
+    : public display::DisplayConfigurator::Observer {
  public:
   explicit DisplayConfiguratorObserver(base::RunLoop* loop) : loop_(loop) {}
   ~DisplayConfiguratorObserver() override {}
 
  private:
-  // ui::DisplayConfigurator::Observer overrides:
+  // display::DisplayConfigurator::Observer overrides:
   void OnDisplayModeChanged(
-      const ui::DisplayConfigurator::DisplayStateList& outputs) override {
+      const display::DisplayConfigurator::DisplayStateList& outputs) override {
     if (!loop_)
       return;
     loop_->Quit();
     loop_ = nullptr;
   }
   void OnDisplayModeChangeFailed(
-      const ui::DisplayConfigurator::DisplayStateList& outputs,
-      ui::MultipleDisplayState failed_new_state) override {
+      const display::DisplayConfigurator::DisplayStateList& outputs,
+      display::MultipleDisplayState failed_new_state) override {
     LOG(FATAL) << "Could not configure display";
   }
 
@@ -257,7 +258,7 @@ void RenderingHelper::Setup() {
   // the same size.
   base::RunLoop wait_display_setup;
   DisplayConfiguratorObserver display_setup_observer(&wait_display_setup);
-  display_configurator_.reset(new ui::DisplayConfigurator());
+  display_configurator_.reset(new display::DisplayConfigurator());
   display_configurator_->SetDelegateForTesting(0);
   display_configurator_->AddObserver(&display_setup_observer);
   display_configurator_->Init(
@@ -740,7 +741,7 @@ void RenderingHelper::RenderContent() {
         static_cast<base::WaitableEvent*>(NULL)));
   }
 
-  int tex_flip = 1;
+  int tex_flip = !gl_surface_->FlipsVertically();
 #if defined(USE_OZONE)
   // Ozone surfaceless renders flipped from normal GL, so there's no need to
   // do an extra flip.

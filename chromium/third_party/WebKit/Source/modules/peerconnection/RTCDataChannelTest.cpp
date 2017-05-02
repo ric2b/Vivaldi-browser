@@ -4,7 +4,7 @@
 
 #include "modules/peerconnection/RTCDataChannel.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMException.h"
 #include "core/events/Event.h"
@@ -75,22 +75,22 @@ class MockHandler final : public WebRTCDataChannelHandler {
 
 TEST(RTCDataChannelTest, BufferedAmount) {
   MockHandler* handler = new MockHandler();
-  RTCDataChannel* channel = RTCDataChannel::create(0, wrapUnique(handler));
+  RTCDataChannel* channel = RTCDataChannel::create(0, WTF::wrapUnique(handler));
 
   handler->changeState(WebRTCDataChannelHandlerClient::ReadyStateOpen);
   String message(std::string(100, 'A').c_str());
-  channel->send(message, IGNORE_EXCEPTION);
+  channel->send(message, IGNORE_EXCEPTION_FOR_TESTING);
   EXPECT_EQ(100U, channel->bufferedAmount());
 }
 
 TEST(RTCDataChannelTest, BufferedAmountLow) {
   MockHandler* handler = new MockHandler();
-  RTCDataChannel* channel = RTCDataChannel::create(0, wrapUnique(handler));
+  RTCDataChannel* channel = RTCDataChannel::create(0, WTF::wrapUnique(handler));
 
   // Add and drain 100 bytes
   handler->changeState(WebRTCDataChannelHandlerClient::ReadyStateOpen);
   String message(std::string(100, 'A').c_str());
-  channel->send(message, IGNORE_EXCEPTION);
+  channel->send(message, IGNORE_EXCEPTION_FOR_TESTING);
   EXPECT_EQ(100U, channel->bufferedAmount());
   EXPECT_EQ(1U, channel->m_scheduledEvents.size());
 
@@ -99,10 +99,10 @@ TEST(RTCDataChannelTest, BufferedAmountLow) {
   EXPECT_EQ(2U, channel->m_scheduledEvents.size());
   EXPECT_EQ(
       "bufferedamountlow",
-      std::string(channel->m_scheduledEvents.last()->type().utf8().data()));
+      std::string(channel->m_scheduledEvents.back()->type().utf8().data()));
 
   // Add and drain 1 byte
-  channel->send("A", IGNORE_EXCEPTION);
+  channel->send("A", IGNORE_EXCEPTION_FOR_TESTING);
   EXPECT_EQ(1U, channel->bufferedAmount());
   EXPECT_EQ(2U, channel->m_scheduledEvents.size());
 
@@ -111,14 +111,14 @@ TEST(RTCDataChannelTest, BufferedAmountLow) {
   EXPECT_EQ(3U, channel->m_scheduledEvents.size());
   EXPECT_EQ(
       "bufferedamountlow",
-      std::string(channel->m_scheduledEvents.last()->type().utf8().data()));
+      std::string(channel->m_scheduledEvents.back()->type().utf8().data()));
 
   // Set the threshold to 99 bytes, add 101, and drain 1 byte at a time.
   channel->setBufferedAmountLowThreshold(99U);
-  channel->send(message, IGNORE_EXCEPTION);
+  channel->send(message, IGNORE_EXCEPTION_FOR_TESTING);
   EXPECT_EQ(100U, channel->bufferedAmount());
 
-  channel->send("A", IGNORE_EXCEPTION);
+  channel->send("A", IGNORE_EXCEPTION_FOR_TESTING);
   EXPECT_EQ(101U, channel->bufferedAmount());
 
   handler->drainBuffer(1);
@@ -130,7 +130,7 @@ TEST(RTCDataChannelTest, BufferedAmountLow) {
   EXPECT_EQ(4U, channel->m_scheduledEvents.size());  // One new event.
   EXPECT_EQ(
       "bufferedamountlow",
-      std::string(channel->m_scheduledEvents.last()->type().utf8().data()));
+      std::string(channel->m_scheduledEvents.back()->type().utf8().data()));
 
   handler->drainBuffer(1);
   EXPECT_EQ(98U, channel->bufferedAmount());
@@ -143,7 +143,7 @@ TEST(RTCDataChannelTest, BufferedAmountLow) {
   EXPECT_EQ(5U, channel->m_scheduledEvents.size());  // New event.
   EXPECT_EQ(
       "bufferedamountlow",
-      std::string(channel->m_scheduledEvents.last()->type().utf8().data()));
+      std::string(channel->m_scheduledEvents.back()->type().utf8().data()));
 }
 
 }  // namespace blink

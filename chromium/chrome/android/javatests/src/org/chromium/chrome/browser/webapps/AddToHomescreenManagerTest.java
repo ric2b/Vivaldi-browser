@@ -8,7 +8,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
+import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.common.ContentSwitches;
@@ -69,6 +70,10 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
 
     private static final String MANIFEST_PATH = "/chrome/test/data/banners/manifest_test_page.html";
     private static final String MANIFEST_TITLE = "Web app banner test page";
+
+    private static final String EVENT_WEBAPP_PATH =
+            "/chrome/test/data/banners/appinstalled_test_page.html";
+    private static final String EVENT_WEBAPP_TITLE = "appinstalled event test page";
 
     private static class TestShortcutHelperDelegate extends ShortcutHelper.Delegate {
         public Intent mBroadcastedIntent;
@@ -160,8 +165,6 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
         super.setUp();
         ChromeWebApkHost.initForTesting(false);
         mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
-        // Register handler for "slow?10000" URL.
-        mTestServer.addDefaultHandlers(mTestServer.getURL("/chrome/test/data"));
         mShortcutHelperDelegate = new TestShortcutHelperDelegate();
         ShortcutHelper.setDelegateForTests(mShortcutHelperDelegate);
         mActivity = getActivity();
@@ -281,6 +284,23 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
         }
     }
 
+    /** Tests that the appinstalled event is fired when an app is installed.
+     */
+    @SmallTest
+    @Feature("{Webapp}")
+    public void testAddWebappShortcutAppInstalledEvent() throws Exception {
+        try {
+            loadUrl(mTestServer.getURL(EVENT_WEBAPP_PATH), EVENT_WEBAPP_TITLE);
+            addShortcutToTab(mTab, "");
+
+            // Wait for the tab title to change. This will happen (due to the JavaScript that runs
+            // in the page) once the appinstalled event has been fired.
+            new TabTitleObserver(mTab, "Got appinstalled").waitForTitleUpdate(3);
+        } finally {
+            mTestServer.stopAndDestroyServer();
+        }
+    }
+
     private void loadUrl(String url, String expectedPageTitle) throws Exception {
         new TabLoadObserver(mTab, expectedPageTitle, null).fullyLoadUrl(url);
     }
@@ -322,7 +342,7 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
     /**
      * Spawns popup via window.open() at {@link url}.
      */
-    private Tab spawnPopupInBackground(final String url) throws InterruptedException {
+    private Tab spawnPopupInBackground(final String url) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {

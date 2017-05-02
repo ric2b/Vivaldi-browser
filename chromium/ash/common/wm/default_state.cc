@@ -4,6 +4,7 @@
 
 #include "ash/common/wm/default_state.h"
 
+#include "ash/common/ash_switches.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 #include "ash/common/wm/window_animation_types.h"
 #include "ash/common/wm/window_parenting_utils.h"
@@ -13,10 +14,10 @@
 #include "ash/common/wm/window_state_util.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/wm_screen_util.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -105,7 +106,35 @@ class ScopedDockedLayoutEventSourceResetter {
   DISALLOW_COPY_AND_ASSIGN(ScopedDockedLayoutEventSourceResetter);
 };
 
+void CycleSnap(WindowState* window_state, WMEventType event) {
+  DCHECK(!ash::switches::DockedWindowsEnabled());
+
+  wm::WindowStateType desired_snap_state =
+      event == WM_EVENT_CYCLE_SNAP_DOCK_LEFT
+          ? wm::WINDOW_STATE_TYPE_LEFT_SNAPPED
+          : wm::WINDOW_STATE_TYPE_RIGHT_SNAPPED;
+
+  if (window_state->CanSnap() &&
+      window_state->GetStateType() != desired_snap_state &&
+      window_state->window()->GetType() != ui::wm::WINDOW_TYPE_PANEL) {
+    const wm::WMEvent event(desired_snap_state ==
+                                    wm::WINDOW_STATE_TYPE_LEFT_SNAPPED
+                                ? wm::WM_EVENT_SNAP_LEFT
+                                : wm::WM_EVENT_SNAP_RIGHT);
+    window_state->OnWMEvent(&event);
+    return;
+  }
+
+  if (window_state->IsSnapped()) {
+    window_state->Restore();
+    return;
+  }
+  window_state->window()->Animate(::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
+}
+
 void CycleSnapDock(WindowState* window_state, WMEventType event) {
+  DCHECK(ash::switches::DockedWindowsEnabled());
+
   DockedWindowLayoutManager* dock_layout =
       GetDockedWindowLayoutManager(window_state->window()->GetShell());
   wm::WindowStateType desired_snap_state =
@@ -379,7 +408,10 @@ bool DefaultState::ProcessCompoundEvents(WindowState* window_state,
       return true;
     case WM_EVENT_CYCLE_SNAP_DOCK_LEFT:
     case WM_EVENT_CYCLE_SNAP_DOCK_RIGHT:
-      CycleSnapDock(window_state, event->type());
+      if (ash::switches::DockedWindowsEnabled())
+        CycleSnapDock(window_state, event->type());
+      else
+        CycleSnap(window_state, event->type());
       return true;
     case WM_EVENT_CENTER:
       CenterWindow(window_state);
@@ -455,12 +487,12 @@ bool DefaultState::ProcessWorkspaceEvents(WindowState* window_state,
       }
       gfx::Rect work_area_in_parent =
           GetDisplayWorkAreaBoundsInParent(window_state->window());
-      gfx::Rect bounds = window_state->window()->GetBounds();
+      gfx::Rect bounds = window_state->window()->GetTargetBounds();
       // When display bounds has changed, make sure the entire window is fully
       // visible.
       bounds.AdjustToFit(work_area_in_parent);
       window_state->AdjustSnappedBounds(&bounds);
-      if (window_state->window()->GetBounds() != bounds)
+      if (window_state->window()->GetTargetBounds() != bounds)
         window_state->SetBoundsDirectAnimated(bounds);
       return true;
     }
@@ -480,11 +512,13 @@ bool DefaultState::ProcessWorkspaceEvents(WindowState* window_state,
       }
       gfx::Rect work_area_in_parent =
           GetDisplayWorkAreaBoundsInParent(window_state->window());
-      gfx::Rect bounds = window_state->window()->GetBounds();
-      wm::AdjustBoundsToEnsureMinimumWindowVisibility(work_area_in_parent,
-                                                      &bounds);
+      gfx::Rect bounds = window_state->window()->GetTargetBounds();
+      if (!window_state->window()->GetTransientParent()) {
+        wm::AdjustBoundsToEnsureMinimumWindowVisibility(work_area_in_parent,
+                                                        &bounds);
+      }
       window_state->AdjustSnappedBounds(&bounds);
-      if (window_state->window()->GetBounds() != bounds)
+      if (window_state->window()->GetTargetBounds() != bounds)
         window_state->SetBoundsDirectAnimated(bounds);
       return true;
     }
@@ -655,6 +689,8 @@ void DefaultState::UpdateBoundsFromState(WindowState* window_state,
               : GetDefaultRightSnappedWindowBoundsInParent(window);
       break;
     case WINDOW_STATE_TYPE_DOCKED: {
+      // TODO(afakhry): Remove in M58.
+      DCHECK(ash::switches::DockedWindowsEnabled());
       if (window->GetParent()->GetShellWindowId() !=
           kShellWindowId_DockedContainer) {
         WmWindow* docked_container =
@@ -686,8 +722,13 @@ void DefaultState::UpdateBoundsFromState(WindowState* window_state,
         bounds_in_parent = window->GetBounds();
       }
       // Make sure that part of the window is always visible.
-      wm::AdjustBoundsToEnsureMinimumWindowVisibility(work_area_in_parent,
-                                                      &bounds_in_parent);
+      if (!window_state->is_dragged()) {
+        // Avoid doing this while the window is being dragged as its root
+        // window hasn't been updated yet in the case of dragging to another
+        // display. crbug.com/666836.
+        wm::AdjustBoundsToEnsureMinimumWindowVisibility(work_area_in_parent,
+                                                        &bounds_in_parent);
+      }
       break;
     }
     case WINDOW_STATE_TYPE_MAXIMIZED:

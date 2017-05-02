@@ -74,7 +74,7 @@ CrElementsProfileAvatarSelectorTest.prototype = {
 
 TEST_F('CrElementsProfileAvatarSelectorTest', 'All', function() {
   cr_profile_avatar_selector.registerTests();
-  mocha.run();
+  mocha.grep(cr_profile_avatar_selector.TestNames.Basic).run();
 });
 
 function CrElementsToolbarSearchFieldTest() {}
@@ -116,39 +116,19 @@ TEST_F('CrElementsSliderTest', 'All', function() {
   mocha.run();
 });
 
-function CrElementsSharedMenuTest() {}
+function CrElementsDrawerTest() {}
 
-CrElementsSharedMenuTest.prototype = {
+CrElementsDrawerTest.prototype = {
   __proto__: CrElementsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://resources/cr_elements/cr_shared_menu/cr_shared_menu.html',
+  browsePreload: 'chrome://resources/cr_elements/cr_drawer/cr_drawer.html',
 
   /** @override */
-  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
-    'cr_shared_menu_tests.js'
-  ]),
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat(
+      ['cr_drawer_tests.js', ROOT_PATH + 'ui/webui/resources/js/util.js']),
 };
 
-TEST_F('CrElementsSharedMenuTest', 'All', function() {
-  mocha.run();
-});
-
-function CrElementsActionMenuTest() {}
-
-CrElementsActionMenuTest.prototype = {
-  __proto__: CrElementsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload:
-      'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html',
-
-  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
-    'cr_action_menu_test.js',
-  ]),
-};
-
-TEST_F('CrElementsActionMenuTest', 'All', function() {
+TEST_F('CrElementsDrawerTest', 'All', function() {
   mocha.run();
 });

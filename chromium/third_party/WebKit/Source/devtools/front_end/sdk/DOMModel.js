@@ -75,6 +75,7 @@ SDK.DOMNode = class extends SDK.SDKObject {
     this._shadowRootType = payload.shadowRootType;
     this._frameOwnerFrameId = payload.frameId || null;
     this._xmlVersion = payload.xmlVersion;
+    this._isSVGNode = !!payload.isSVG;
 
     this._shadowRoots = [];
 
@@ -143,6 +144,13 @@ SDK.DOMNode = class extends SDK.SDKObject {
       this.name = payload.name;
       this.value = payload.value;
     }
+  }
+
+  /**
+   * @return {boolean}
+   */
+  isSVGNode() {
+    return this._isSVGNode;
   }
 
   /**
@@ -1029,7 +1037,6 @@ SDK.DOMDocument = class extends SDK.DOMNode {
     this._init(this, false, payload);
     this.documentURL = payload.documentURL || '';
     this.baseURL = payload.baseURL || '';
-    this._listeners = {};
   }
 };
 
@@ -1107,7 +1114,7 @@ SDK.DOMModel = class extends SDK.SDKModel {
    * @return {?SDK.DOMModel}
    */
   static fromTarget(target) {
-    return /** @type {?SDK.DOMModel} */ (target.model(SDK.DOMModel));
+    return target.model(SDK.DOMModel);
   }
 
   /**
@@ -1370,7 +1377,7 @@ SDK.DOMModel = class extends SDK.SDKModel {
       this._document = new SDK.DOMDocument(this, payload);
     else
       this._document = null;
-    this.dispatchEventToListeners(SDK.DOMModel.Events.DocumentUpdated, this._document);
+    this.dispatchEventToListeners(SDK.DOMModel.Events.DocumentUpdated, this);
   }
 
   /**
@@ -1728,7 +1735,7 @@ SDK.DOMModel = class extends SDK.SDKModel {
      */
     function onDocumentAvailable() {
       this._inspectModeEnabled = mode !== Protocol.DOM.InspectMode.None;
-      this.dispatchEventToListeners(SDK.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeEnabled);
+      this.dispatchEventToListeners(SDK.DOMModel.Events.InspectModeWillBeToggled, this);
       this._highlighter.setInspectMode(mode, this._buildHighlightConfig(), callback);
     }
     this.requestDocument(onDocumentAvailable.bind(this));
@@ -1765,7 +1772,7 @@ SDK.DOMModel = class extends SDK.SDKModel {
       highlightConfig.eventTargetColor = Common.Color.PageHighlight.EventTarget.toProtocolRGBA();
       highlightConfig.shapeColor = Common.Color.PageHighlight.Shape.toProtocolRGBA();
       highlightConfig.shapeMarginColor = Common.Color.PageHighlight.ShapeMargin.toProtocolRGBA();
-      highlightConfig.displayAsMaterial = Runtime.experiments.isEnabled('inspectTooltip');
+      highlightConfig.displayAsMaterial = true;
     }
     return highlightConfig;
   }
@@ -1799,16 +1806,6 @@ SDK.DOMModel = class extends SDK.SDKModel {
    * @param {function(?Protocol.Error)=} callback
    */
   undo(callback) {
-    /**
-     * @param {?Protocol.Error} error
-     * @this {SDK.DOMModel}
-     */
-    function mycallback(error) {
-      this.dispatchEventToListeners(SDK.DOMModel.Events.UndoRedoCompleted);
-      callback(error);
-    }
-
-    this.dispatchEventToListeners(SDK.DOMModel.Events.UndoRedoRequested);
     this._agent.undo(callback);
   }
 
@@ -1816,16 +1813,6 @@ SDK.DOMModel = class extends SDK.SDKModel {
    * @param {function(?Protocol.Error)=} callback
    */
   redo(callback) {
-    /**
-     * @param {?Protocol.Error} error
-     * @this {SDK.DOMModel}
-     */
-    function mycallback(error) {
-      this.dispatchEventToListeners(SDK.DOMModel.Events.UndoRedoCompleted);
-      callback(error);
-    }
-
-    this.dispatchEventToListeners(SDK.DOMModel.Events.UndoRedoRequested);
     this._agent.redo(callback);
   }
 
@@ -1933,10 +1920,7 @@ SDK.DOMModel.Events = {
   NodeRemoved: Symbol('NodeRemoved'),
   DocumentUpdated: Symbol('DocumentUpdated'),
   ChildNodeCountUpdated: Symbol('ChildNodeCountUpdated'),
-  UndoRedoRequested: Symbol('UndoRedoRequested'),
-  UndoRedoCompleted: Symbol('UndoRedoCompleted'),
   DistributedNodesChanged: Symbol('DistributedNodesChanged'),
-  ModelSuspended: Symbol('ModelSuspended'),
   InspectModeWillBeToggled: Symbol('InspectModeWillBeToggled'),
   MarkersChanged: Symbol('MarkersChanged')
 };
@@ -2108,19 +2092,19 @@ SDK.DOMNodeHighlighter.prototype = {
    * @param {!Protocol.DOM.BackendNodeId=} backendNodeId
    * @param {!Protocol.Runtime.RemoteObjectId=} objectId
    */
-  highlightDOMNode: function(node, config, backendNodeId, objectId) {},
+  highlightDOMNode(node, config, backendNodeId, objectId) {},
 
   /**
    * @param {!Protocol.DOM.InspectMode} mode
    * @param {!Protocol.DOM.HighlightConfig} config
    * @param {function(?Protocol.Error)=} callback
    */
-  setInspectMode: function(mode, config, callback) {},
+  setInspectMode(mode, config, callback) {},
 
   /**
    * @param {!Protocol.Page.FrameId} frameId
    */
-  highlightFrame: function(frameId) {}
+  highlightFrame(frameId) {}
 };
 
 /**

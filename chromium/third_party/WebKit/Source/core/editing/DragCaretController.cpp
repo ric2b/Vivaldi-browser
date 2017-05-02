@@ -34,6 +34,8 @@ namespace blink {
 
 DragCaretController::DragCaretController() : m_caretBase(new CaretBase()) {}
 
+DragCaretController::~DragCaretController() = default;
+
 DragCaretController* DragCaretController::create() {
   return new DragCaretController;
 }
@@ -59,19 +61,20 @@ void DragCaretController::setCaretPosition(
   DisableCompositingQueryAsserts disabler;
 
   if (Node* node = m_position.anchorNode())
-    m_caretBase->invalidateCaretRect(node);
+    m_caretBase->invalidateCaretRect(node, m_caretLocalRect);
   m_position = createVisiblePosition(position).toPositionWithAffinity();
   Document* document = nullptr;
   if (Node* node = m_position.anchorNode()) {
-    m_caretBase->invalidateCaretRect(node);
+    m_caretBase->invalidateCaretRect(node, m_caretLocalRect);
     document = &node->document();
+    setContext(document);
   }
   if (m_position.isNull()) {
-    m_caretBase->clearCaretRect();
+    m_caretLocalRect = LayoutRect();
   } else {
     DCHECK(!m_position.isOrphan());
     document->updateStyleAndLayoutTree();
-    m_caretBase->updateCaretRect(m_position);
+    m_caretLocalRect = CaretBase::computeCaretRect(m_position);
   }
 }
 
@@ -101,15 +104,15 @@ void DragCaretController::nodeWillBeRemoved(Node& node) {
 
 DEFINE_TRACE(DragCaretController) {
   visitor->trace(m_position);
-  visitor->trace(m_caretBase);
+  SynchronousMutationObserver::trace(visitor);
 }
 
 void DragCaretController::paintDragCaret(LocalFrame* frame,
                                          GraphicsContext& context,
                                          const LayoutPoint& paintOffset) const {
   if (m_position.anchorNode()->document().frame() == frame) {
-    m_caretBase->paintCaret(m_position.anchorNode(), context, paintOffset,
-                            DisplayItem::kDragCaret);
+    m_caretBase->paintCaret(m_position.anchorNode(), context, m_caretLocalRect,
+                            paintOffset, DisplayItem::kDragCaret);
   }
 }
 

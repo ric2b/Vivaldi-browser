@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("geolocation") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "CLLocation+OmniboxGeolocation.h",
     "CLLocation+OmniboxGeolocation.mm",
@@ -33,6 +34,7 @@ source_set("geolocation") {
 }
 
 source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "test_location_manager.h",
@@ -45,6 +47,7 @@ source_set("test_support") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "CLLocation+XGeoHeaderTest.mm",
@@ -59,5 +62,28 @@ source_set("unit_tests") {
     "//ios/public/provider/chrome/browser",
     "//testing/gtest",
     "//third_party/ocmock",
+  ]
+}
+
+source_set("geolocation_internal") {
+  sources = [
+    "omnibox_geolocation_controller+Testing.h",
+    "omnibox_geolocation_controller.h",
+    "omnibox_geolocation_controller.mm",
+  ]
+  deps = [
+    ":geolocation",
+    "//base",
+    "//components/google/core/browser",
+    "//components/version_info",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/tabs",
+    "//ios/web",
+    "//ui/base",
+    "//url",
+  ]
+  libs = [
+    "CoreLocation.framework",
+    "UIKit.framework",
   ]
 }

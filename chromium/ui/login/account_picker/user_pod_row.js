@@ -89,11 +89,13 @@ cr.define('login', function() {
    * @const
    */
   var UserPodTabOrder = {
-    POD_INPUT: 1,        // Password input field, Action box menu button, and
-                         // the pod itself.
-    POD_CUSTOM_ICON: 2,  // Pod custom icon next to password input field.
-    HEADER_BAR: 3,       // Buttons on the header bar (Shutdown, Add User).
-    POD_MENU_ITEM: 4     // User pad menu items (User info, Remove user).
+    POD_INPUT: 1,        // Password input field, Action box menu button, submit
+                         // button next to password input field and the pod
+                         // itself.
+    PIN_KEYBOARD: 2,     // Pin keyboard below the password input field.
+    POD_CUSTOM_ICON: 3,  // Pod custom icon next to password input field.
+    HEADER_BAR: 4,       // Buttons on the header bar (Shutdown, Add User).
+    POD_MENU_ITEM: 5     // User pad menu items (User info, Remove user).
   };
 
   /**
@@ -374,7 +376,12 @@ cr.define('login', function() {
      * Shows the icon.
      */
     show: function() {
-      this.hidden = false;
+      // Show the icon if the current iconId is valid.
+      var validIcon = false;
+      UserPodCustomIcon.ICONS.forEach(function(icon) {
+        validIcon = validIcon || this.iconId_ == icon.id;
+      }, this);
+      this.hidden = validIcon ? false : true;
     },
 
     /**
@@ -717,6 +724,7 @@ cr.define('login', function() {
         this.pinKeyboard.passwordElement = this.passwordElement;
         this.pinKeyboard.addEventListener('pin-change',
             this.handleInputChanged_.bind(this));
+        this.pinKeyboard.tabIndex = UserPodTabOrder.PIN_KEYBOARD;
       }
 
       this.actionBoxAreaElement.addEventListener('mousedown',
@@ -762,6 +770,7 @@ cr.define('login', function() {
       if (this.submitButton) {
         this.submitButton.addEventListener('click',
             this.handleSubmitButtonClick_.bind(this));
+        this.submitButton.tabIndex = UserPodTabOrder.POD_INPUT;
       }
 
       this.imageElement.addEventListener('load',
@@ -1529,6 +1538,7 @@ cr.define('login', function() {
         case 'Meta':
           break;
         case 'Escape':
+          this.actionBoxAreaElement.focus();
           this.isActionBoxMenuActive = false;
           e.stopPropagation();
           break;
@@ -2729,10 +2739,10 @@ cr.define('login', function() {
     },
 
     /**
-     * Enables or disables transitions on the user pod.
+     * Enables or disables transitions on every pod instance.
      * @param {boolean} enable
      */
-    togglePinTransitions: function(enable) {
+    toggleTransitions: function(enable) {
       for (var i = 0; i < this.pods.length; ++i)
         this.pods[i].toggleTransitions(enable);
     },
@@ -2770,15 +2780,6 @@ cr.define('login', function() {
             0, 0, 0, 0, 0, ctrlKey, false, false, false, 0, null);
         app.dispatchEvent(activationEvent);
       }
-    },
-
-    /**
-     * Function that hides the pin keyboard. Meant to be called when the virtual
-     * keyboard is enabled and being toggled.
-     * @param {boolean} hidden
-     */
-    setPinHidden: function(hidden) {
-      this.setFocusedPodPinVisibility(!hidden);
     },
 
     /**

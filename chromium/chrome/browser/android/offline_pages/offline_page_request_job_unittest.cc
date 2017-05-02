@@ -23,13 +23,14 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/offline_pages/client_namespace_constants.h"
-#include "components/offline_pages/offline_page_model_impl.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/offline_page_model_impl.h"
 #include "components/previews/core/previews_decider.h"
 #include "components/previews/core/previews_experiments.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/url_request/url_request.h"
@@ -47,17 +48,22 @@ const GURL kTestUrl("http://test.org/page1");
 const GURL kTestUrl2("http://test.org/page2");
 const GURL kTestUrl3("http://test.org/page3");
 const GURL kTestUrl3WithFragment("http://test.org/page3#ref1");
+const GURL kTestUrl4("http://test.org/page4");
 const GURL kTestOriginalUrl("http://test.org/first");
 const ClientId kTestClientId = ClientId(kBookmarkNamespace, "1234");
 const ClientId kTestClientId2 = ClientId(kDownloadNamespace, "1a2b3c4d");
 const ClientId kTestClientId3 = ClientId(kDownloadNamespace, "3456abcd");
+const ClientId kTestClientId4 = ClientId(kDownloadNamespace, "5678");
 const int kTestFileSize = 444;
 const int kTestFileSize2 = 450;
 const int kTestFileSize3 = 450;
+const int kTestFileSize4 = 111;
 const int kTabId = 1;
 const int kBufSize = 1024;
 const char kAggregatedRequestResultHistogram[] =
     "OfflinePages.AggregatedRequestResult2";
+const char kOpenFileErrorCodeHistogram[] =
+    "OfflinePages.RequestJob.OpenFileErrorCode";
 
 class OfflinePageRequestJobTestDelegate :
     public OfflinePageRequestJob::Delegate {
@@ -208,7 +214,7 @@ class TestOfflinePageArchiver : public OfflinePageArchiver {
   ~TestOfflinePageArchiver() override {}
 
   void CreateArchive(const base::FilePath& archives_dir,
-                     int64_t archive_id,
+                     const CreateArchiveParams& create_archive_params,
                      const CreateArchiveCallback& callback) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
@@ -262,6 +268,8 @@ class OfflinePageRequestJobTest : public testing::Test {
   void ExpectOneNonuniqueSampleForAggregatedRequestResult(
       OfflinePageRequestJob::AggregatedRequestResult result);
 
+  void ExpectOpenFileErrorCode(int result);
+
   net::TestURLRequestContext* url_request_context() {
     return test_url_request_context_.get();
   }
@@ -272,6 +280,7 @@ class OfflinePageRequestJobTest : public testing::Test {
   int64_t offline_id() const { return offline_id_; }
   int64_t offline_id2() const { return offline_id2_; }
   int64_t offline_id3() const { return offline_id3_; }
+  int64_t offline_id4() const { return offline_id4_; }
   int bytes_read() const { return bytes_read_; }
 
   TestPreviewsDecider* test_previews_decider() {
@@ -313,6 +322,7 @@ class OfflinePageRequestJobTest : public testing::Test {
   int64_t offline_id_;
   int64_t offline_id2_;
   int64_t offline_id3_;
+  int64_t offline_id4_;
   int bytes_read_;
 
   DISALLOW_COPY_AND_ASSIGN(OfflinePageRequestJobTest);
@@ -325,8 +335,8 @@ OfflinePageRequestJobTest::OfflinePageRequestJobTest()
       offline_id_(-1),
       offline_id2_(-1),
       offline_id3_(-1),
-      bytes_read_(0)  {
-}
+      offline_id4_(-1),
+      bytes_read_(0) {}
 
 void OfflinePageRequestJobTest::SetUp() {
   // Create a test profile.
@@ -392,6 +402,16 @@ void OfflinePageRequestJobTest::SetUp() {
   SavePage(kTestUrl3WithFragment, kTestClientId3, kTestOriginalUrl,
       std::move(archiver3));
 
+  // Save an offline page pointing to non-existent archive file.
+  base::FilePath archive_file_path4 =
+      test_data_dir_path.AppendASCII("offline_pages")
+          .AppendASCII("nonexistent.mhtml");
+  std::unique_ptr<TestOfflinePageArchiver> archiver4(
+      new TestOfflinePageArchiver(kTestUrl4, archive_file_path4,
+                                  kTestFileSize4));
+
+  SavePage(kTestUrl4, kTestClientId4, GURL(), std::move(archiver4));
+
   // Create a context with delayed initialization.
   test_url_request_context_.reset(new net::TestURLRequestContext(true));
 
@@ -440,17 +460,13 @@ std::unique_ptr<net::URLRequest> OfflinePageRequestJobTest::CreateRequest(
   request->set_method(method);
 
   content::ResourceRequestInfo::AllocateForTesting(
-      request.get(),
-      resource_type,
-      nullptr,
-      1,     /* render_process_id */
-      -1,    /* render_view_id */
-      1,     /* render_frame_id */
-      true,  /* is_main_frame */
-      false, /* parent_is_main_frame */
-      true,  /* allow_download */
-      true,  /* is_async */
-      false  /* is_using_lofi */);
+      request.get(), resource_type, nullptr, /*render_process_id=*/1,
+      /*render_view_id=*/-1,
+      /*render_frame_id=*/1,
+      /*is_main_frame=*/true,
+      /*parent_is_main_frame=*/false,
+      /*allow_download=*/true,
+      /*is_async=*/true, content::PREVIEWS_OFF);
 
   return request;
 }
@@ -474,6 +490,10 @@ OfflinePageRequestJobTest::ExpectOneNonuniqueSampleForAggregatedRequestResult(
     OfflinePageRequestJob::AggregatedRequestResult result) {
   histogram_tester_.ExpectBucketCount(
       kAggregatedRequestResultHistogram, static_cast<int>(result), 1);
+}
+
+void OfflinePageRequestJobTest::ExpectOpenFileErrorCode(int result) {
+  histogram_tester_.ExpectUniqueSample(kOpenFileErrorCodeHistogram, -result, 1);
 }
 
 void OfflinePageRequestJobTest::SavePage(
@@ -502,6 +522,8 @@ void OfflinePageRequestJobTest::OnSavePageDone(SavePageResult result,
     offline_id2_ = offline_id;
   else if (offline_id3_ == -1)
     offline_id3_ = offline_id;
+  else if (offline_id4_ == -1)
+    offline_id4_ = offline_id;
 }
 
 void OfflinePageRequestJobTest::InterceptRequestOnIO(
@@ -863,6 +885,22 @@ TEST_F(OfflinePageRequestJobTest, LoadOfflinePageAfterRedirect) {
   ExpectOneNonuniqueSampleForAggregatedRequestResult(
       OfflinePageRequestJob::AggregatedRequestResult::
           SHOW_OFFLINE_ON_DISCONNECTED_NETWORK);
+}
+
+TEST_F(OfflinePageRequestJobTest, LoadOfflinePageFromNonExistentFile) {
+  SimulateHasNetworkConnectivity(false);
+
+  InterceptRequest(kTestUrl4, "GET", "", "", content::RESOURCE_TYPE_MAIN_FRAME);
+  base::RunLoop().Run();
+
+  EXPECT_EQ(0, bytes_read());
+  ASSERT_TRUE(offline_page_tab_helper()->GetOfflinePageForTest());
+  EXPECT_EQ(offline_id4(),
+            offline_page_tab_helper()->GetOfflinePageForTest()->offline_id);
+  ExpectOneUniqueSampleForAggregatedRequestResult(
+      OfflinePageRequestJob::AggregatedRequestResult::
+          SHOW_OFFLINE_ON_DISCONNECTED_NETWORK);
+  ExpectOpenFileErrorCode(net::ERR_FILE_NOT_FOUND);
 }
 
 }  // namespace offline_pages

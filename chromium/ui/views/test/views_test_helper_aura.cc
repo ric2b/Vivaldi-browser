@@ -14,14 +14,20 @@
 namespace views {
 
 // static
-ViewsTestHelper* ViewsTestHelper::Create(base::MessageLoopForUI* message_loop,
-                                         ui::ContextFactory* context_factory) {
-  return new ViewsTestHelperAura(message_loop, context_factory);
+ViewsTestHelper* ViewsTestHelper::Create(
+    base::MessageLoopForUI* message_loop,
+    ui::ContextFactory* context_factory,
+    ui::ContextFactoryPrivate* context_factory_private) {
+  return new ViewsTestHelperAura(message_loop, context_factory,
+                                 context_factory_private);
 }
 
-ViewsTestHelperAura::ViewsTestHelperAura(base::MessageLoopForUI* message_loop,
-                                         ui::ContextFactory* context_factory)
-    : context_factory_(context_factory) {
+ViewsTestHelperAura::ViewsTestHelperAura(
+    base::MessageLoopForUI* message_loop,
+    ui::ContextFactory* context_factory,
+    ui::ContextFactoryPrivate* context_factory_private)
+    : context_factory_(context_factory),
+      context_factory_private_(context_factory_private) {
   aura_test_helper_.reset(new aura::test::AuraTestHelper(message_loop));
 }
 
@@ -34,7 +40,7 @@ void ViewsTestHelperAura::EnableMusWithWindowTreeClient(
 }
 
 void ViewsTestHelperAura::SetUp() {
-  aura_test_helper_->SetUp(context_factory_);
+  aura_test_helper_->SetUp(context_factory_, context_factory_private_);
 
   // GetContext() may return null. See comment in GetContext().
   gfx::NativeWindow root_window = GetContext();
@@ -73,7 +79,7 @@ void ViewsTestHelperAura::TearDown() {
 }
 
 gfx::NativeWindow ViewsTestHelperAura::GetContext() {
-  if (PlatformTestHelper::IsAuraMusClient()) {
+  if (PlatformTestHelper::IsMus()) {
     // GetContext() returns the root of a WindowTreeHost associated with a
     // single display that is intended for an ash like environment. Such a
     // configuration doesn't make sense for aura-mus-client, where it's testing

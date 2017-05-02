@@ -13,6 +13,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "net/base/completion_callback.h"
 #include "net/base/layered_network_delegate.h"
@@ -20,18 +21,11 @@
 
 class GURL;
 
-namespace base {
-class Value;
-}
-
 namespace net {
-class HttpResponseHeaders;
 class HttpRequestHeaders;
 class NetworkDelegate;
 class ProxyConfig;
 class ProxyInfo;
-class ProxyServer;
-class ProxyService;
 class URLRequest;
 }
 
@@ -39,7 +33,6 @@ namespace data_reduction_proxy {
 class DataReductionProxyBypassStats;
 class DataReductionProxyConfig;
 class DataReductionProxyConfigurator;
-class DataReductionProxyExperimentsStats;
 class DataReductionProxyIOData;
 class DataReductionProxyRequestOptions;
 class DataUseGroupProvider;
@@ -83,13 +76,12 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
       DataReductionProxyIOData* io_data,
       DataReductionProxyBypassStats* bypass_stats);
 
-  // Creates a base::Value summary of the state of the network session.
-  std::unique_ptr<base::Value> SessionNetworkStatsInfoToValue() const;
-
   void SetDataUseGroupProvider(
       std::unique_ptr<DataUseGroupProvider> data_use_group_provider);
 
  private:
+  friend class DataReductionProxyTestContext;
+
   // Resets if Lo-Fi has been used for the last main frame load to false.
   void OnBeforeURLRequestInternal(net::URLRequest* request,
                                   const net::CompletionCallback& callback,
@@ -120,12 +112,9 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
 
   // Calculates actual data usage that went over the network at the HTTP layer
   // (e.g. not including network layer overhead) and estimates original data
-  // usage for |request|. Passing in -1 for |original_content_length| indicates
-  // that the original content length of the response could not be determined.
+  // usage for |request|.
   void CalculateAndRecordDataUsage(const net::URLRequest& request,
-                                   DataReductionProxyRequestType request_type,
-                                   int64_t original_content_length,
-                                   int net_error);
+                                   DataReductionProxyRequestType request_type);
 
   // Posts to the UI thread to UpdateContentLengthPrefs in the data reduction
   // proxy metrics and updates |received_content_length_| and
@@ -156,11 +145,12 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
       const net::ProxyInfo& proxy_info,
       const net::ProxyRetryInfoMap& proxy_retry_info) const;
 
-  // Total size of all content that has been received over the network.
-  int64_t total_received_bytes_;
-
-  // Total original size of all content before it was transferred.
-  int64_t total_original_received_bytes_;
+  // May add Brotli to Accept Encoding request header if |proxy_info| contains
+  // a proxy server that is expected to support Brotli encoding.
+  void MaybeAddBrotliToAcceptEncodingHeader(
+      const net::ProxyInfo& proxy_info,
+      net::HttpRequestHeaders* request_headers,
+      const net::URLRequest& request) const;
 
   // All raw Data Reduction Proxy pointers must outlive |this|.
   DataReductionProxyConfig* data_reduction_proxy_config_;
@@ -174,6 +164,8 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   const DataReductionProxyConfigurator* configurator_;
 
   std::unique_ptr<DataUseGroupProvider> data_use_group_provider_;
+
+  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyNetworkDelegate);
 };

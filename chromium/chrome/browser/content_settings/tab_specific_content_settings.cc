@@ -27,6 +27,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/renderer_configuration.mojom.h"
 #include "components/content_settings/core/browser/content_settings_details.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
@@ -41,6 +42,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -220,14 +222,12 @@ void TabSpecificContentSettings::FileSystemAccessed(int render_process_id,
 
 // static
 void TabSpecificContentSettings::ServiceWorkerAccessed(
-    int render_process_id,
-    int render_frame_id,
+    const base::Callback<content::WebContents*(void)>& wc_getter,
     const GURL& scope,
     bool blocked_by_policy_javascript,
     bool blocked_by_policy_cookie) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TabSpecificContentSettings* settings =
-      GetForFrame(render_process_id, render_frame_id);
+  TabSpecificContentSettings* settings = GetForWCGetter(wc_getter);
   if (settings)
     settings->OnServiceWorkerAccessed(scope, blocked_by_policy_javascript,
                                       blocked_by_policy_cookie);
@@ -251,8 +251,7 @@ bool TabSpecificContentSettings::IsContentBlocked(
       content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA ||
       content_type == CONTENT_SETTINGS_TYPE_PPAPI_BROKER ||
       content_type == CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS ||
-      content_type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX ||
-      content_type == CONTENT_SETTINGS_TYPE_KEYGEN) {
+      content_type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
     const auto& it = content_settings_status_.find(content_type);
     if (it != content_settings_status_.end())
       return it->second.blocked;
@@ -370,6 +369,9 @@ void TabSpecificContentSettings::OnContentBlockedWithDetail(
     } else if (type == CONTENT_SETTINGS_TYPE_PLUGINS) {
       content_settings::RecordPluginsAction(
           content_settings::PLUGINS_ACTION_DISPLAYED_BLOCKED_ICON_IN_OMNIBOX);
+    } else if (type == CONTENT_SETTINGS_TYPE_POPUPS) {
+      content_settings::RecordPopupsAction(
+          content_settings::POPUPS_ACTION_DISPLAYED_BLOCKED_ICON_IN_OMNIBOX);
     }
   }
 }
@@ -548,16 +550,6 @@ void TabSpecificContentSettings::OnGeolocationPermissionSet(
       chrome::NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED,
       content::Source<WebContents>(web_contents()),
       content::NotificationService::NoDetails());
-}
-
-void TabSpecificContentSettings::OnDidUseKeygen(const GURL& origin_url) {
-  HostContentSettingsMap* map = HostContentSettingsMapFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
-  GURL url = web_contents()->GetLastCommittedURL();
-  if (map->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_KEYGEN,
-                             std::string()) != CONTENT_SETTING_ALLOW) {
-    OnContentBlocked(CONTENT_SETTINGS_TYPE_KEYGEN);
-  }
 }
 
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
@@ -783,7 +775,15 @@ void TabSpecificContentSettings::OnContentSettingChanged(
     }
     RendererContentSettingRules rules;
     GetRendererContentSettingRules(map, &rules);
-    Send(new ChromeViewMsg_SetContentSettingRules(rules));
+
+    IPC::ChannelProxy* channel =
+        web_contents()->GetRenderProcessHost()->GetChannel();
+    // channel might be NULL in tests.
+    if (channel) {
+      chrome::mojom::RendererConfigurationAssociatedPtr rc_interface;
+      channel->GetRemoteAssociatedInterface(&rc_interface);
+      rc_interface->SetContentSettingRules(rules);
+    }
   }
 }
 
@@ -802,7 +802,6 @@ bool TabSpecificContentSettings::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(TabSpecificContentSettings, message)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_ContentBlocked,
                         OnContentBlockedWithDetail)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_DidUseKeygen, OnDidUseKeygen)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// http://dev.w3.org/fxtf/geometry/#DOMRect
+// https://dev.w3.org/fxtf/geometry/#DOMRect
 
 [
     Constructor(optional unrestricted double x = 0,
@@ -12,6 +12,8 @@
     // FIXME: Exposed=(Window,Worker)
     RuntimeEnabled=GeometryInterfaces,
 ] interface DOMRect : DOMRectReadOnly {
+    [NewObject] static DOMRect fromRect(optional DOMRectInit other);
+
     inherit attribute unrestricted double x;
     inherit attribute unrestricted double y;
     inherit attribute unrestricted double width;

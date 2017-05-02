@@ -36,7 +36,7 @@
 
 namespace blink {
 
-Navigator::Navigator(LocalFrame* frame) : DOMWindowProperty(frame) {}
+Navigator::Navigator(LocalFrame* frame) : DOMWindowClient(frame) {}
 
 String Navigator::productSub() const {
   return "20030107";
@@ -67,7 +67,7 @@ bool Navigator::cookieEnabled() const {
     return false;
 
   Settings* settings = frame()->settings();
-  if (!settings || !settings->cookieEnabled())
+  if (!settings || !settings->getCookieEnabled())
     return false;
 
   return cookiesEnabled(frame()->document());
@@ -77,7 +77,7 @@ Vector<String> Navigator::languages() {
   Vector<String> languages;
 
   if (!frame() || !frame()->host()) {
-    languages.append(defaultLanguage());
+    languages.push_back(defaultLanguage());
     return languages;
   }
 
@@ -98,7 +98,7 @@ Vector<String> Navigator::languages() {
 }
 
 DEFINE_TRACE(Navigator) {
-  DOMWindowProperty::trace(visitor);
+  DOMWindowClient::trace(visitor);
   Supplementable<Navigator>::trace(visitor);
 }
 

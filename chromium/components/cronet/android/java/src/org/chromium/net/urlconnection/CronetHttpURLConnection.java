@@ -8,8 +8,8 @@ import android.util.Pair;
 
 import org.chromium.base.Log;
 import org.chromium.net.CronetEngine;
+import org.chromium.net.CronetException;
 import org.chromium.net.UrlRequest;
-import org.chromium.net.UrlRequestException;
 import org.chromium.net.UrlResponseInfo;
 
 import java.io.FileNotFoundException;
@@ -34,7 +34,7 @@ import java.util.TreeMap;
  * {@hide}
  */
 public class CronetHttpURLConnection extends HttpURLConnection {
-    private static final String TAG = "cr_CronetHttpURLConn";
+    private static final String TAG = CronetHttpURLConnection.class.getSimpleName();
     private static final String CONTENT_LENGTH = "Content-Length";
     private final CronetEngine mCronetEngine;
     private final MessageLoop mMessageLoop;
@@ -44,9 +44,10 @@ public class CronetHttpURLConnection extends HttpURLConnection {
     private CronetInputStream mInputStream;
     private CronetOutputStream mOutputStream;
     private UrlResponseInfo mResponseInfo;
-    private UrlRequestException mException;
-    private boolean mOnRedirectCalled = false;
-    private boolean mHasResponse = false;
+    private CronetException mException;
+    private boolean mOnRedirectCalled;
+    // Whether response headers are received, the request is failed, or the request is canceled.
+    private boolean mHasResponseHeadersOrCompleted;
     private List<Map.Entry<String, String>> mResponseHeadersList;
     private Map<String, List<String>> mResponseHeadersMap;
 
@@ -437,6 +438,7 @@ public class CronetHttpURLConnection extends HttpURLConnection {
         @Override
         public void onResponseStarted(UrlRequest request, UrlResponseInfo info) {
             mResponseInfo = info;
+            mHasResponseHeadersOrCompleted = true;
             // Quits the message loop since we have the headers now.
             mMessageLoop.quit();
         }
@@ -479,8 +481,7 @@ public class CronetHttpURLConnection extends HttpURLConnection {
         }
 
         @Override
-        public void onFailed(
-                UrlRequest request, UrlResponseInfo info, UrlRequestException exception) {
+        public void onFailed(UrlRequest request, UrlResponseInfo info, CronetException exception) {
             if (exception == null) {
                 throw new IllegalStateException(
                         "Exception cannot be null in onFailed.");
@@ -509,7 +510,7 @@ public class CronetHttpURLConnection extends HttpURLConnection {
             if (mOutputStream != null) {
                 mOutputStream.setRequestCompleted(exception);
             }
-            mHasResponse = true;
+            mHasResponseHeadersOrCompleted = true;
             mMessageLoop.quit();
         }
     }
@@ -526,13 +527,12 @@ public class CronetHttpURLConnection extends HttpURLConnection {
                 mOutputStream.close();
             }
         }
-        if (!mHasResponse) {
+        if (!mHasResponseHeadersOrCompleted) {
             startRequest();
             // Blocks until onResponseStarted or onFailed is called.
             mMessageLoop.loop();
-            mHasResponse = true;
         }
-        checkHasResponse();
+        checkHasResponseHeaders();
     }
 
     /**
@@ -540,8 +540,8 @@ public class CronetHttpURLConnection extends HttpURLConnection {
      * an exception occurred before headers received. This method should only be
      * called after onResponseStarted or onFailed.
      */
-    private void checkHasResponse() throws IOException {
-        if (!mHasResponse) throw new IllegalStateException("No response.");
+    private void checkHasResponseHeaders() throws IOException {
+        if (!mHasResponseHeadersOrCompleted) throw new IllegalStateException("No response.");
         if (mException != null) {
             throw mException;
         } else if (mResponseInfo == null) {

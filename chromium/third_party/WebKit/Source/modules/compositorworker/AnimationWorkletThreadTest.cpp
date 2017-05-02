@@ -10,6 +10,7 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -33,10 +34,12 @@ namespace {
 class TestAnimationWorkletReportingProxy : public WorkerReportingProxy {
  public:
   static std::unique_ptr<TestAnimationWorkletReportingProxy> create() {
-    return wrapUnique(new TestAnimationWorkletReportingProxy());
+    return WTF::wrapUnique(new TestAnimationWorkletReportingProxy());
   }
 
   // (Empty) WorkerReportingProxy implementation:
+  void countFeature(UseCounter::Feature) override {}
+  void countDeprecation(UseCounter::Feature) override {}
   void reportException(const String& errorMessage,
                        std::unique_ptr<SourceLocation>,
                        int exceptionId) override {}
@@ -45,6 +48,9 @@ class TestAnimationWorkletReportingProxy : public WorkerReportingProxy {
                             const String& message,
                             SourceLocation*) override {}
   void postMessageToPageInspector(const String&) override {}
+  ParentFrameTaskRunners* getParentFrameTaskRunners() override {
+    return m_parentFrameTaskRunners.get();
+  }
 
   void didEvaluateWorkerScript(bool success) override {}
   void didCloseWorkerGlobalScope() override {}
@@ -52,13 +58,16 @@ class TestAnimationWorkletReportingProxy : public WorkerReportingProxy {
   void didTerminateWorkerThread() override {}
 
  private:
-  TestAnimationWorkletReportingProxy() {}
+  TestAnimationWorkletReportingProxy()
+      : m_parentFrameTaskRunners(ParentFrameTaskRunners::create(nullptr)) {}
+
+  Persistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
 };
 
 class AnimationWorkletTestPlatform : public TestingPlatformSupport {
  public:
   AnimationWorkletTestPlatform()
-      : m_thread(wrapUnique(m_oldPlatform->createThread("Compositor"))) {}
+      : m_thread(WTF::wrapUnique(m_oldPlatform->createThread("Compositor"))) {}
 
   WebThread* compositorThread() const override { return m_thread.get(); }
 
@@ -93,13 +102,13 @@ class AnimationWorkletThreadTest : public ::testing::Test {
         KURL(ParsedURLString, "http://fake.url/"), "fake user agent", "",
         nullptr, DontPauseWorkerGlobalScopeOnStart, nullptr, "",
         m_securityOrigin.get(), nullptr, WebAddressSpaceLocal, nullptr, nullptr,
-        V8CacheOptionsDefault));
+        WorkerV8Settings::Default()));
     return thread;
   }
 
   // Attempts to run some simple script for |thread|.
   void checkWorkletCanExecuteScript(WorkerThread* thread) {
-    std::unique_ptr<WaitableEvent> waitEvent = makeUnique<WaitableEvent>();
+    std::unique_ptr<WaitableEvent> waitEvent = WTF::makeUnique<WaitableEvent>();
     thread->workerBackingThread().backingThread().postTask(
         BLINK_FROM_HERE,
         crossThreadBind(&AnimationWorkletThreadTest::executeScriptInWorklet,
@@ -119,10 +128,12 @@ class AnimationWorkletThreadTest : public ::testing::Test {
 
   RefPtr<SecurityOrigin> m_securityOrigin;
   std::unique_ptr<WorkerReportingProxy> m_reportingProxy;
-  AnimationWorkletTestPlatform m_testPlatform;
+  ScopedTestingPlatformSupport<AnimationWorkletTestPlatform> m_platform;
 };
 
 TEST_F(AnimationWorkletThreadTest, Basic) {
+  ScopedTestingPlatformSupport<AnimationWorkletTestPlatform> platform;
+
   std::unique_ptr<AnimationWorkletThread> worklet =
       createAnimationWorkletThread();
   checkWorkletCanExecuteScript(worklet.get());

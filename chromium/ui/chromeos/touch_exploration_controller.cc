@@ -13,6 +13,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/chromeos/touch_accessibility_enabler.h"
 #include "ui/events/event.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
@@ -40,14 +41,16 @@ void SetTouchAccessibilityFlag(ui::Event* event) {
 
 TouchExplorationController::TouchExplorationController(
     aura::Window* root_window,
-    TouchExplorationControllerDelegate* delegate)
+    TouchExplorationControllerDelegate* delegate,
+    TouchAccessibilityEnabler* touch_accessibility_enabler)
     : root_window_(root_window),
       delegate_(delegate),
       state_(NO_FINGERS_DOWN),
       anchor_point_state_(ANCHOR_POINT_NONE),
       gesture_provider_(new GestureProviderAura(this, this)),
       prev_state_(NO_FINGERS_DOWN),
-      VLOG_on_(true) {
+      VLOG_on_(true),
+      touch_accessibility_enabler_(touch_accessibility_enabler) {
   DCHECK(root_window);
   root_window->GetHost()->GetEventSource()->AddEventRewriter(this);
 }
@@ -59,7 +62,7 @@ TouchExplorationController::~TouchExplorationController() {
 void TouchExplorationController::SetTouchAccessibilityAnchorPoint(
     const gfx::Point& anchor_point) {
   gfx::Point native_point = anchor_point;
-  root_window_->GetHost()->ConvertPointToNativeScreen(&native_point);
+  root_window_->GetHost()->ConvertDIPToScreenInPixels(&native_point);
 
   anchor_point_ = gfx::PointF(native_point.x(), native_point.y());
   anchor_point_state_ = ANCHOR_POINT_EXPLICITLY_SET;
@@ -84,9 +87,13 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
   }
   const ui::TouchEvent& touch_event = static_cast<const ui::TouchEvent&>(event);
 
+  // Let TouchAccessibilityEnabler process the unrewritten event.
+  if (touch_accessibility_enabler_)
+    touch_accessibility_enabler_->HandleTouchEvent(touch_event);
+
   if (!exclude_bounds_.IsEmpty()) {
     gfx::Point location = touch_event.location();
-    root_window_->GetHost()->ConvertPointFromNativeScreen(&location);
+    root_window_->GetHost()->ConvertScreenInPixelsToDIP(&location);
     bool in_exclude_area = exclude_bounds_.Contains(location);
     if (in_exclude_area) {
       if (state_ == NO_FINGERS_DOWN)
@@ -839,24 +846,20 @@ void TouchExplorationController::OnGestureEvent(ui::GestureConsumer* consumer,
                                                 ui::GestureEvent* gesture) {}
 
 void TouchExplorationController::ProcessGestureEvents() {
-  std::unique_ptr<ScopedVector<ui::GestureEvent>> gestures(
-      gesture_provider_->GetAndResetPendingGestures());
-  if (gestures) {
-    for (ScopedVector<GestureEvent>::iterator i = gestures->begin();
-         i != gestures->end();
-         ++i) {
-      if ((*i)->type() == ui::ET_GESTURE_SWIPE &&
-          state_ == GESTURE_IN_PROGRESS) {
-        OnSwipeEvent(*i);
-        // The tap timer to leave gesture state is ended, and we now wait for
-        // all fingers to be released.
-        tap_timer_.Stop();
-        SET_STATE(WAIT_FOR_NO_FINGERS);
-        return;
-      }
-      if (state_ == SLIDE_GESTURE && (*i)->IsScrollGestureEvent()) {
-        SideSlideControl(*i);
-      }
+  std::vector<std::unique_ptr<GestureEvent>> gestures =
+      gesture_provider_->GetAndResetPendingGestures();
+  for (const auto& gesture : gestures) {
+    if (gesture->type() == ui::ET_GESTURE_SWIPE &&
+        state_ == GESTURE_IN_PROGRESS) {
+      OnSwipeEvent(gesture.get());
+      // The tap timer to leave gesture state is ended, and we now wait for
+      // all fingers to be released.
+      tap_timer_.Stop();
+      SET_STATE(WAIT_FOR_NO_FINGERS);
+      return;
+    }
+    if (state_ == SLIDE_GESTURE && gesture->IsScrollGestureEvent()) {
+      SideSlideControl(gesture.get());
     }
   }
 }
@@ -894,7 +897,7 @@ void TouchExplorationController::SideSlideControl(ui::GestureEvent* gesture) {
   }
 
   location = gesture->location();
-  root_window_->GetHost()->ConvertPointFromNativeScreen(&location);
+  root_window_->GetHost()->ConvertScreenInPixelsToDIP(&location);
   float volume_adjust_height =
       root_window_->bounds().height() - 2 * kMaxDistanceFromEdge;
   float ratio = (location.y() - kMaxDistanceFromEdge) / volume_adjust_height;
@@ -996,7 +999,7 @@ int TouchExplorationController::FindEdgesWithinBounds(gfx::Point point,
                                                       float bounds) {
   // Since GetBoundsInScreen is in DIPs but point is not, then point needs to be
   // converted.
-  root_window_->GetHost()->ConvertPointFromNativeScreen(&point);
+  root_window_->GetHost()->ConvertScreenInPixelsToDIP(&point);
   gfx::Rect window = root_window_->GetBoundsInScreen();
 
   float left_edge_limit = window.x() + bounds;

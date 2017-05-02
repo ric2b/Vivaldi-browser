@@ -17,28 +17,29 @@
 #include "third_party/skia/include/core/SkFlattenable.h"
 #include "third_party/skia/include/core/SkFlattenableSerialization.h"
 #include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/core/SkXfermode.h"
+
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
 
 CompositingDisplayItem::CompositingDisplayItem(
     uint8_t alpha,
-    SkXfermode::Mode xfermode,
+    SkBlendMode xfermode,
     SkRect* bounds,
     sk_sp<SkColorFilter> cf,
-    bool lcd_text_requires_opaque_layer) {
+    bool lcd_text_requires_opaque_layer)
+    : DisplayItem(COMPOSITING) {
   SetNew(alpha, xfermode, bounds, std::move(cf),
          lcd_text_requires_opaque_layer);
 }
 
-CompositingDisplayItem::CompositingDisplayItem(
-    const proto::DisplayItem& proto) {
+CompositingDisplayItem::CompositingDisplayItem(const proto::DisplayItem& proto)
+    : DisplayItem(COMPOSITING) {
   DCHECK_EQ(proto::DisplayItem::Type_Compositing, proto.type());
 
   const proto::CompositingDisplayItem& details = proto.compositing_item();
   uint8_t alpha = static_cast<uint8_t>(details.alpha());
-  SkXfermode::Mode xfermode = SkXfermodeModeFromProto(details.mode());
+  SkBlendMode xfermode = SkXfermodeModeFromProto(details.mode());
   std::unique_ptr<SkRect> bounds;
   if (details.has_bounds()) {
     bounds.reset(
@@ -64,7 +65,7 @@ CompositingDisplayItem::~CompositingDisplayItem() {
 }
 
 void CompositingDisplayItem::SetNew(uint8_t alpha,
-                                    SkXfermode::Mode xfermode,
+                                    SkBlendMode xfermode,
                                     SkRect* bounds,
                                     sk_sp<SkColorFilter> cf,
                                     bool lcd_text_requires_opaque_layer) {
@@ -99,7 +100,7 @@ void CompositingDisplayItem::Raster(
     SkCanvas* canvas,
     SkPicture::AbortCallback* callback) const {
   SkPaint paint;
-  paint.setBlendMode(static_cast<SkBlendMode>(xfermode_));
+  paint.setBlendMode(xfermode_);
   paint.setAlpha(alpha_);
   paint.setColorFilter(color_filter_);
   const SkRect* bounds = has_bounds_ ? &bounds_ : nullptr;
@@ -114,7 +115,7 @@ void CompositingDisplayItem::AsValueInto(
     base::trace_event::TracedValue* array) const {
   std::string info = base::StringPrintf(
       "CompositingDisplayItem alpha: %d, xfermode: %d, visualRect: [%s]",
-      alpha_, xfermode_, visual_rect.ToString().c_str());
+      alpha_, static_cast<int>(xfermode_), visual_rect.ToString().c_str());
   if (has_bounds_) {
     base::StringAppendF(
         &info, ", bounds: [%f, %f, %f, %f]", static_cast<float>(bounds_.x()),
@@ -124,15 +125,12 @@ void CompositingDisplayItem::AsValueInto(
   array->AppendString(info);
 }
 
-size_t CompositingDisplayItem::ExternalMemoryUsage() const {
-  // TODO(pdr): Include color_filter's memory here.
-  return 0;
-}
-
-EndCompositingDisplayItem::EndCompositingDisplayItem() {}
+EndCompositingDisplayItem::EndCompositingDisplayItem()
+    : DisplayItem(END_COMPOSITING) {}
 
 EndCompositingDisplayItem::EndCompositingDisplayItem(
-    const proto::DisplayItem& proto) {
+    const proto::DisplayItem& proto)
+    : DisplayItem(END_COMPOSITING) {
   DCHECK_EQ(proto::DisplayItem::Type_EndCompositing, proto.type());
 }
 
@@ -155,10 +153,6 @@ void EndCompositingDisplayItem::AsValueInto(
   array->AppendString(
       base::StringPrintf("EndCompositingDisplayItem visualRect: [%s]",
                          visual_rect.ToString().c_str()));
-}
-
-size_t EndCompositingDisplayItem::ExternalMemoryUsage() const {
-  return 0;
 }
 
 }  // namespace cc

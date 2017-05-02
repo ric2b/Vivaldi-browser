@@ -16,7 +16,6 @@
 #include <vector>
 
 #include "base/containers/hash_tables.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -99,7 +98,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const MediaRoute::Id& route_id,
       std::unique_ptr<std::vector<uint8_t>> data,
       const SendRouteMessageCallback& callback) override;
-  void AddIssue(const Issue& issue) override;
+  void AddIssue(const IssueInfo& issue_info) override;
   void ClearIssue(const Issue::Id& issue_id) override;
   void OnUserGesture() override;
   void SearchSinks(
@@ -284,7 +283,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       mojom::MediaRouteProviderPtr media_route_provider_ptr,
       const mojom::MediaRouter::RegisterMediaRouteProviderCallback&
           callback) override;
-  void OnIssue(mojom::IssuePtr issue) override;
+  void OnIssue(const IssueInfo& issue) override;
   void OnSinksReceived(const std::string& media_source,
                        std::vector<mojom::MediaSinkPtr> sinks,
                        const std::vector<std::string>& origins) override;
@@ -369,14 +368,14 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   // becomes ready.
   std::deque<base::Closure> pending_requests_;
 
-  base::ScopedPtrHashMap<MediaSource::Id, std::unique_ptr<MediaSinksQuery>>
+  std::unordered_map<MediaSource::Id, std::unique_ptr<MediaSinksQuery>>
       sinks_queries_;
 
-  base::ScopedPtrHashMap<MediaSource::Id, std::unique_ptr<MediaRoutesQuery>>
+  std::unordered_map<MediaSource::Id, std::unique_ptr<MediaRoutesQuery>>
       routes_queries_;
 
-  base::ScopedPtrHashMap<
-      MediaRoute::Id, std::unique_ptr<base::ObserverList<RouteMessageObserver>>>
+  std::unordered_map<MediaRoute::Id,
+                     std::unique_ptr<base::ObserverList<RouteMessageObserver>>>
       message_observers_;
 
   IssueManager issue_manager_;

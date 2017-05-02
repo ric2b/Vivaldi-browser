@@ -6,11 +6,11 @@
     "chrome": "node scripts/chrome_debug_launcher/launch_chrome.js",
     "server": "node scripts/hosted_mode/server.js",
     "test": "node scripts/npm_test.js",
-    "test:build": "node scripts/npm_test.js --build-only",
-    "test:run": "node scripts/npm_test.js --test-only",
+    "debug-test": "node scripts/npm_test.js --debug-devtools",
     "lint": "eslint front_end",
     "format": "node scripts/format.js",
-    "closure": "python scripts/compile_frontend.py"
+    "closure": "python scripts/compile_frontend.py",
+    "setup-dtrun": "cd scripts/devtools_run && npm link"
   },
   "repository": {
     "type": "git",

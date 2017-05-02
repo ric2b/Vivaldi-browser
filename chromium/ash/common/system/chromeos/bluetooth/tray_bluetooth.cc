@@ -537,17 +537,22 @@ class BluetoothDetailedView : public TrayDetailsView {
 
   void HandleButtonPressed(views::Button* sender,
                            const ui::Event& event) override {
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (UseMd()) {
-      if (sender == toggle_)
-        WmShell::Get()->system_tray_delegate()->ToggleBluetooth();
-      else if (sender == settings_)
+      if (sender == toggle_) {
+        WmShell::Get()->RecordUserMetricsAction(
+            delegate->GetBluetoothEnabled()
+                ? UMA_STATUS_AREA_BLUETOOTH_DISABLED
+                : UMA_STATUS_AREA_BLUETOOTH_ENABLED);
+        delegate->ToggleBluetooth();
+      } else if (sender == settings_) {
         ShowSettings();
-      else
+      } else {
         NOTREACHED();
+      }
       return;
     }
 
-    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (sender == toggle_bluetooth_)
       delegate->ToggleBluetooth();
     else

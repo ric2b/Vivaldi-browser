@@ -185,15 +185,15 @@ void NinjaActionTargetWriter::WriteSourceRules(
 
     // The required types is the union of the args and response file. This
     // might theoretically duplicate a definition if the same substitution is
-    // used in both the args and the reponse file. However, this should be
+    // used in both the args and the response file. However, this should be
     // very unusual (normally the substitutions will go in one place or the
     // other) and the redundant assignment won't bother Ninja.
     SubstitutionWriter::WriteNinjaVariablesForSource(
-        settings_, sources[i],
+        target_, settings_, sources[i],
         target_->action_values().args().required_types(),
         args_escape_options, out_);
     SubstitutionWriter::WriteNinjaVariablesForSource(
-        settings_, sources[i],
+        target_, settings_, sources[i],
         target_->action_values().rsp_file_contents().required_types(),
         args_escape_options, out_);
 
@@ -211,7 +211,8 @@ void NinjaActionTargetWriter::WriteOutputFilesForBuildLine(
   size_t first_output_index = output_files->size();
 
   SubstitutionWriter::ApplyListToSourceAsOutputFile(
-      settings_, target_->action_values().outputs(), source, output_files);
+      target_, settings_, target_->action_values().outputs(), source,
+      output_files);
 
   for (size_t i = first_output_index; i < output_files->size(); i++) {
     out_ << " ";
@@ -222,5 +223,5 @@ void NinjaActionTargetWriter::WriteOutputFilesForBuildLine(
 void NinjaActionTargetWriter::WriteDepfile(const SourceFile& source) {
   path_output_.WriteFile(out_,
       SubstitutionWriter::ApplyPatternToSourceAsOutputFile(
-          settings_, target_->action_values().depfile(), source));
+          target_, settings_, target_->action_values().depfile(), source));
 }

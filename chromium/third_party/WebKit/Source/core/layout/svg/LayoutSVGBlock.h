@@ -65,12 +65,18 @@ class LayoutSVGBlock : public LayoutBlockFlow {
   void absoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulatedOffset) const final;
 
+  void updateFromStyle() final;
   void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) final;
 
   bool nodeAtPoint(HitTestResult&,
                    const HitTestLocation& locationInContainer,
                    const LayoutPoint& accumulatedOffset,
                    HitTestAction) override;
+
+  // The inherited version doesn't check for SVG effects.
+  bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override {
+    return false;
+  }
 };
 
 }  // namespace blink

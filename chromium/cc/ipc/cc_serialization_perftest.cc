@@ -120,7 +120,7 @@ class CCSerializationPerfTest : public testing::Test {
 
   static void RunDeserializationTestStructTraits(const std::string& test_name,
                                                  const CompositorFrame& frame) {
-    mojo::Array<uint8_t> data = mojom::CompositorFrame::Serialize(&frame);
+    auto data = mojom::CompositorFrame::Serialize(&frame);
     DCHECK_GT(data.size(), 0u);
     for (int i = 0; i < kNumWarmupRuns; ++i) {
       CompositorFrame compositor_frame;
@@ -160,7 +160,7 @@ class CCSerializationPerfTest : public testing::Test {
   static void RunSerializationTestStructTraits(const std::string& test_name,
                                                const CompositorFrame& frame) {
     for (int i = 0; i < kNumWarmupRuns; ++i) {
-      mojo::Array<uint8_t> data = mojom::CompositorFrame::Serialize(&frame);
+      auto data = mojom::CompositorFrame::Serialize(&frame);
       DCHECK_GT(data.size(), 0u);
     }
 
@@ -172,7 +172,7 @@ class CCSerializationPerfTest : public testing::Test {
     size_t count = 0;
     while (start < end) {
       for (int i = 0; i < kTimeCheckInterval; ++i) {
-        mojo::Array<uint8_t> data = mojom::CompositorFrame::Serialize(&frame);
+        auto data = mojom::CompositorFrame::Serialize(&frame);
         DCHECK_GT(data.size(), 0u);
         now = base::TimeTicks::Now();
         // We don't count iterations after the end time.
@@ -198,12 +198,10 @@ class CCSerializationPerfTest : public testing::Test {
                                      uint32_t num_passes,
                                      UseSingleSharedQuadState single_sqs) {
     CompositorFrame frame;
-    frame.delegated_frame_data.reset(new DelegatedFrameData);
 
     for (uint32_t i = 0; i < num_passes; ++i) {
       std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
-      render_pass->SetNew(RenderPassId(1, 1), gfx::Rect(), gfx::Rect(),
-                          gfx::Transform());
+      render_pass->SetNew(1, gfx::Rect(), gfx::Rect(), gfx::Transform());
       for (uint32_t j = 0; j < num_quads; ++j) {
         if (j == 0 || single_sqs == UseSingleSharedQuadState::NO)
           render_pass->CreateAndAppendSharedQuadState();
@@ -214,8 +212,7 @@ class CCSerializationPerfTest : public testing::Test {
         quad->SetNew(render_pass->shared_quad_state_list.back(), bounds, bounds,
                      SK_ColorRED, kForceAntiAliasingOff);
       }
-      frame.delegated_frame_data->render_pass_list.push_back(
-          std::move(render_pass));
+      frame.render_pass_list.push_back(std::move(render_pass));
     }
     RunTest(test_name, std::move(frame));
   }

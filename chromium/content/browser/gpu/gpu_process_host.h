@@ -21,7 +21,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/common/gpu_process_launch_causes.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -29,6 +28,7 @@
 #include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_sender.h"
 #include "ipc/message_filter.h"
+#include "services/ui/gpu/interfaces/gpu_main.mojom.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "url/gurl.h"
@@ -43,6 +43,7 @@ struct ChannelHandle;
 
 namespace gpu {
 struct GpuPreferences;
+class ShaderDiskCache;
 struct SyncToken;
 }
 
@@ -52,9 +53,7 @@ class InterfaceProvider;
 
 namespace content {
 class BrowserChildProcessHostImpl;
-class GpuMainThread;
 class InProcessChildThreadParams;
-class ShaderDiskCache;
 
 typedef base::Thread* (*GpuMainThreadFactoryFunction)(
     const InProcessChildThreadParams&, const gpu::GpuPreferences&);
@@ -77,8 +76,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
     EstablishChannelRequest(const EstablishChannelRequest& other);
     ~EstablishChannelRequest();
     int32_t client_id;
+    bool force_access_to_gpu;
     EstablishChannelCallback callback;
-    bool ignore_disallowed_gpu;
   };
 
   typedef base::Callback<void(const gfx::GpuMemoryBufferHandle& handle)>
@@ -94,8 +93,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // associated GPU host ID.  This could return NULL if GPU access is not
   // allowed (blacklisted).
   CONTENT_EXPORT static GpuProcessHost* Get(GpuProcessKind kind,
-      bool force_create = true,
-      CauseForGpuLaunch cause = CAUSE_FOR_GPU_LAUNCH_OTHER);
+                                            bool force_create = true,
+                                            bool force_access_to_gpu = false);
 
   // Retrieves a list of process handles for all gpu processes.
   static void GetProcessHandles(
@@ -134,15 +133,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                            bool preempts,
                            bool allow_view_command_buffers,
                            bool allow_real_time_streams,
-                           const EstablishChannelCallback& callback);
-  // TODO(mmaliszkiewicz): Remove when media pipeline has its own process.
-  void EstablishGpuChannelIgnoreDisallowedGpu(
-      int client_id,
-      uint64_t client_tracing_id,
-      bool preempts,
-      bool allow_view_command_buffers,
-      bool allow_real_time_streams,
-      const EstablishChannelCallback& callback);
+                           const EstablishChannelCallback& callback,
+                           bool force_access_to_gpu = false);
 
   // Tells the GPU process to create a new GPU memory buffer.
   void CreateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
@@ -230,15 +222,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Update GPU crash counters.  Disable GPU if crash limit is reached.
   void RecordProcessCrash();
 
-  std::string GetShaderPrefixKey();
-
-  void EstablishGpuChannelInternal(int client_id,
-                                   uint64_t client_tracing_id,
-                                   bool preempts,
-                                   bool allow_view_command_buffers,
-                                   bool allow_real_time_streams,
-                                   const EstablishChannelCallback& callback,
-                                   bool ignore_disallowed_gpu);
+  std::string GetShaderPrefixKey(const std::string& shader);
 
   // The serial number of the GpuProcessHost / GpuProcessHostUIShim pair.
   int host_id_;
@@ -302,11 +286,13 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // automatic execution of 3D content from those domains.
   std::multiset<GURL> urls_with_live_offscreen_contexts_;
 
-  typedef std::map<int32_t, scoped_refptr<ShaderDiskCache>>
+  typedef std::map<int32_t, scoped_refptr<gpu::ShaderDiskCache>>
       ClientIdToShaderCacheMap;
   ClientIdToShaderCacheMap client_id_to_shader_cache_;
 
-  std::string shader_prefix_key_;
+  std::string shader_prefix_key_info_;
+
+  ui::mojom::GpuMainAssociatedPtr gpu_main_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuProcessHost);
 };

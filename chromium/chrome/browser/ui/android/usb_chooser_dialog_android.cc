@@ -29,7 +29,6 @@
 #include "device/usb/usb_device_filter.h"
 #include "device/usb/webusb_descriptors.h"
 #include "jni/UsbChooserDialog_jni.h"
-#include "mojo/common/common_type_converters.h"
 #include "ui/android/window_android.h"
 #include "url/gurl.h"
 
@@ -50,13 +49,13 @@ void OnDevicePermissionRequestComplete(
 }  // namespace
 
 UsbChooserDialogAndroid::UsbChooserDialogAndroid(
-    std::vector<device::usb::DeviceFilterPtr> filters,
+    const std::vector<device::UsbDeviceFilter>& filters,
     content::RenderFrameHost* render_frame_host,
     const device::usb::ChooserService::GetPermissionCallback& callback)
     : render_frame_host_(render_frame_host),
       callback_(callback),
       usb_service_observer_(this),
-      filters_(mojo::ConvertTo<std::vector<device::UsbDeviceFilter>>(filters)),
+      filters_(filters),
       weak_factory_(this) {
   device::UsbService* usb_service =
       device::DeviceClient::Get()->GetUsbService();

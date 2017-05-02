@@ -6,7 +6,7 @@
  * @fileoverview Login UI based on a stripped down OOBE controller.
  */
 
-<include src="login_shared.js">
+// <include src="login_shared.js">
 
 /**
  * Asynchronously loads the pin keyboard.
@@ -29,7 +29,7 @@ function showPinKeyboardAsync() {
   // Called after polymer has been loaded. Fades the pin element in.
   var onPinLoaded = function(pinKeyboard) {
     var podRow = $('pod-row');
-    podRow.togglePinTransitions(true);
+    podRow.toggleTransitions(true);
     podRow.setFocusedPodPinVisibility(true);
   };
 
@@ -64,6 +64,14 @@ cr.define('cr.ui.Oobe', function() {
       login.HeaderBar.decorate($('login-header-bar'));
 
       chrome.send('screenStateInitialize');
+    },
+
+    /**
+     * Notification from the host that the PIN keyboard will be used in the
+     * lock session so it should also get preloaded.
+     */
+    preloadPinKeyboard: function() {
+      showPinKeyboardAsync();
     },
 
     // Dummy Oobe functions not present with stripped login UI.

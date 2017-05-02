@@ -5,16 +5,15 @@
 #include "net/quic/core/congestion_control/general_loss_algorithm.h"
 
 #include <algorithm>
+#include <cstdint>
 
-#include "base/logging.h"
+#include "base/stl_util.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_unacked_packet_map.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using std::vector;
 
 namespace net {
 namespace test {
@@ -38,7 +37,7 @@ class GeneralLossAlgorithmTest : public ::testing::Test {
     frame->stream_id = kHeadersStreamId;
     SerializedPacket packet(kDefaultPathId, packet_number,
                             PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
-                            0, false, false);
+                            false, false);
     packet.retransmittable_frames.push_back(QuicFrame(frame));
     unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
                                    true);
@@ -47,7 +46,7 @@ class GeneralLossAlgorithmTest : public ::testing::Test {
   void SendAckPacket(QuicPacketNumber packet_number) {
     SerializedPacket packet(kDefaultPathId, packet_number,
                             PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
-                            0, true, false);
+                            true, false);
     unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
                                    false);
   }
@@ -193,7 +192,7 @@ TEST_F(GeneralLossAlgorithmTest, DontEarlyRetransmitNeuteredPacket) {
 }
 
 TEST_F(GeneralLossAlgorithmTest, EarlyRetransmitWithLargerUnackablePackets) {
-  FLAGS_quic_largest_sent_retransmittable = true;
+  FLAGS_quic_reloadable_flag_quic_largest_sent_retransmittable = true;
   // Transmit 2 data packets and one ack.
   SendDataPacket(1);
   SendDataPacket(2);

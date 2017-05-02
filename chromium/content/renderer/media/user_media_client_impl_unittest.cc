@@ -36,6 +36,42 @@ using testing::_;
 
 namespace content {
 
+blink::WebMediaConstraints CreateDefaultConstraints() {
+  MockConstraintFactory factory;
+  factory.AddAdvanced();
+  return factory.CreateWebMediaConstraints();
+}
+
+blink::WebMediaConstraints CreateDeviceConstraints(
+    const char* basic_exact_value,
+    const char* basic_ideal_value = nullptr,
+    const char* advanced_exact_value = nullptr,
+    const char* advanced_ideal_value = nullptr) {
+  MockConstraintFactory factory;
+  blink::WebMediaTrackConstraintSet basic;
+  if (basic_exact_value) {
+    factory.basic().deviceId.setExact(
+        blink::WebString::fromUTF8(basic_exact_value));
+  }
+  if (basic_ideal_value) {
+    blink::WebString value = blink::WebString::fromUTF8(basic_ideal_value);
+    factory.basic().deviceId.setIdeal(
+        blink::WebVector<blink::WebString>(&value, 1));
+  }
+
+  auto& advanced = factory.AddAdvanced();
+  if (advanced_exact_value) {
+    blink::WebString value = blink::WebString::fromUTF8(advanced_exact_value);
+    advanced.deviceId.setExact(value);
+  }
+  if (advanced_ideal_value) {
+    blink::WebString value = blink::WebString::fromUTF8(advanced_ideal_value);
+    advanced.deviceId.setIdeal(blink::WebVector<blink::WebString>(&value, 1));
+  }
+
+  return factory.CreateWebMediaConstraints();
+}
+
 class MockMediaStreamVideoCapturerSource : public MockMediaStreamVideoSource {
  public:
   MockMediaStreamVideoCapturerSource(
@@ -47,6 +83,13 @@ class MockMediaStreamVideoCapturerSource : public MockMediaStreamVideoSource {
     SetStopCallback(stop_callback);
   }
 };
+
+const char kInvalidDeviceId[] = "invalid";
+const char kFakeAudioInputDeviceId1[] = "fake_audio_input 1";
+const char kFakeAudioInputDeviceId2[] = "fake_audio_input 2";
+const char kFakeVideoInputDeviceId1[] = "fake_video_input 1";
+const char kFakeVideoInputDeviceId2[] = "fake_video_input 2";
+const char kFakeAudioOutputDeviceId1[] = "fake_audio_output 1";
 
 class MockMediaDevicesDispatcherHost
     : public ::mojom::MediaDevicesDispatcherHost {
@@ -60,19 +103,19 @@ class MockMediaDevicesDispatcherHost
     std::vector<std::vector<MediaDeviceInfo>> result(NUM_MEDIA_DEVICE_TYPES);
     if (request_audio_input) {
       result[MEDIA_DEVICE_TYPE_AUDIO_INPUT].push_back(MediaDeviceInfo(
-          "fake_audio_input 1", "Fake Audio Input 1", "fake_group 1"));
+          kFakeAudioInputDeviceId1, "Fake Audio Input 1", "fake_group 1"));
       result[MEDIA_DEVICE_TYPE_AUDIO_INPUT].push_back(MediaDeviceInfo(
-          "fake_audio_input 2", "Fake Audio Input 2", "fake_group 2"));
+          kFakeAudioInputDeviceId2, "Fake Audio Input 2", "fake_group 2"));
     }
     if (request_video_input) {
       result[MEDIA_DEVICE_TYPE_VIDEO_INPUT].push_back(
-          MediaDeviceInfo("fake_video_input 1", "Fake Video Input 1", ""));
+          MediaDeviceInfo(kFakeVideoInputDeviceId1, "Fake Video Input 1", ""));
       result[MEDIA_DEVICE_TYPE_VIDEO_INPUT].push_back(
-          MediaDeviceInfo("fake_video_input 2", "Fake Video Input 2", ""));
+          MediaDeviceInfo(kFakeVideoInputDeviceId2, "Fake Video Input 2", ""));
     }
     if (request_audio_output) {
       result[MEDIA_DEVICE_TYPE_AUDIO_OUTPUT].push_back(MediaDeviceInfo(
-          "fake_audio_output 1", "Fake Audio Input 1", "fake_group 1"));
+          kFakeAudioOutputDeviceId1, "Fake Audio Input 1", "fake_group 1"));
     }
     callback.Run(result);
   }
@@ -110,10 +153,13 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
   void RequestUserMedia(const blink::WebUserMediaRequest& user_media_request) {
     state_ = REQUEST_NOT_COMPLETE;
     requestUserMedia(user_media_request);
+    base::RunLoop().RunUntilIdle();
   }
 
   void RequestUserMedia() {
-    blink::WebUserMediaRequest user_media_request;
+    blink::WebUserMediaRequest user_media_request =
+        blink::WebUserMediaRequest::createForTesting(
+            CreateDefaultConstraints(), CreateDefaultConstraints());
     RequestUserMedia(user_media_request);
   }
 
@@ -160,9 +206,16 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
     create_source_that_fails_ = should_fail;
   }
 
+  static void SignalSourceReady(
+      const MediaStreamSource::ConstraintsCallback& source_ready,
+      MediaStreamSource* source) {
+    source_ready.Run(source, MEDIA_DEVICE_OK, "");
+  }
+
   MediaStreamAudioSource* CreateAudioSource(
       const StreamDeviceInfo& device,
-      const blink::WebMediaConstraints& constraints) override {
+      const blink::WebMediaConstraints& constraints,
+      const MediaStreamSource::ConstraintsCallback& source_ready) override {
     MediaStreamAudioSource* source;
     if (create_source_that_fails_) {
       class FailedAtLifeAudioSource : public MediaStreamAudioSource {
@@ -179,6 +232,15 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
       source = new MediaStreamAudioSource(true);
     }
     source->SetDeviceInfo(device);
+
+    if (!create_source_that_fails_) {
+      // RunUntilIdle is required for this task to complete.
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::Bind(&UserMediaClientImplUnderTest::SignalSourceReady,
+                     source_ready, source));
+    }
+
     return source;
   }
 
@@ -245,10 +307,10 @@ class UserMediaClientImplTest : public ::testing::Test {
     child_process_.reset(new ChildProcess());
     dependency_factory_.reset(new MockPeerConnectionDependencyFactory());
     ms_dispatcher_ = new MockMediaStreamDispatcher();
-    used_media_impl_.reset(new UserMediaClientImplUnderTest(
+    user_media_client_impl_.reset(new UserMediaClientImplUnderTest(
         dependency_factory_.get(),
         std::unique_ptr<MediaStreamDispatcher>(ms_dispatcher_)));
-    used_media_impl_->SetMediaDevicesDispatcherForTesting(
+    user_media_client_impl_->SetMediaDevicesDispatcherForTesting(
         binding_user_media.CreateInterfacePtrAndBind());
     base::WeakPtr<MediaDevicesEventDispatcher> event_dispatcher =
         MediaDevicesEventDispatcher::GetForRenderFrame(nullptr);
@@ -258,23 +320,24 @@ class UserMediaClientImplTest : public ::testing::Test {
 
   void TearDown() override {
     MediaDevicesEventDispatcher::GetForRenderFrame(nullptr)->OnDestruct();
-    used_media_impl_.reset();
+    user_media_client_impl_.reset();
     blink::WebHeap::collectAllGarbageForTesting();
   }
 
   void LoadNewDocumentInFrame() {
-    used_media_impl_->WillCommitProvisionalLoad();
+    user_media_client_impl_->WillCommitProvisionalLoad();
   }
 
   blink::WebMediaStream RequestLocalMediaStream() {
-    used_media_impl_->RequestUserMedia();
+    user_media_client_impl_->RequestUserMedia();
     FakeMediaStreamDispatcherRequestUserMediaComplete();
     StartMockedVideoSource();
 
     EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_SUCCEEDED,
-              used_media_impl_->request_state());
+              user_media_client_impl_->request_state());
 
-    blink::WebMediaStream desc = used_media_impl_->last_generated_stream();
+    blink::WebMediaStream desc =
+        user_media_client_impl_->last_generated_stream();
     content::MediaStream* native_stream =
         content::MediaStream::GetMediaStream(desc);
     if (!native_stream) {
@@ -295,23 +358,23 @@ class UserMediaClientImplTest : public ::testing::Test {
 
   void FakeMediaStreamDispatcherRequestUserMediaComplete() {
     // Audio request ID is used as the shared request ID.
-    used_media_impl_->OnStreamGenerated(
+    user_media_client_impl_->OnStreamGenerated(
         ms_dispatcher_->audio_input_request_id(),
-        ms_dispatcher_->stream_label(),
-        ms_dispatcher_->audio_input_array(),
+        ms_dispatcher_->stream_label(), ms_dispatcher_->audio_input_array(),
         ms_dispatcher_->video_array());
+    base::RunLoop().RunUntilIdle();
   }
 
   void StartMockedVideoSource() {
     MockMediaStreamVideoCapturerSource* video_source =
-        used_media_impl_->last_created_video_source();
+        user_media_client_impl_->last_created_video_source();
     if (video_source->SourceHasAttemptedToStart())
       video_source->StartMockedSource();
   }
 
   void FailToStartMockedVideoSource() {
     MockMediaStreamVideoCapturerSource* video_source =
-        used_media_impl_->last_created_video_source();
+        user_media_client_impl_->last_created_video_source();
     if (video_source->SourceHasAttemptedToStart())
       video_source->FailToStartMockedSource();
     blink::WebHeap::collectGarbageForTesting();
@@ -323,11 +386,39 @@ class UserMediaClientImplTest : public ::testing::Test {
     blink::WebUserMediaRequest request =
         blink::WebUserMediaRequest::createForTesting(audio_constraints,
                                                      null_constraints);
-    used_media_impl_->RequestUserMedia(request);
-    bool result = used_media_impl_->UserMediaRequestHasAutomaticDeviceSelection(
+    user_media_client_impl_->RequestUserMedia(request);
+    bool result =
+        user_media_client_impl_->UserMediaRequestHasAutomaticDeviceSelection(
+            ms_dispatcher_->audio_input_request_id());
+    user_media_client_impl_->DeleteRequest(
         ms_dispatcher_->audio_input_request_id());
-    used_media_impl_->DeleteRequest(ms_dispatcher_->audio_input_request_id());
     return result;
+  }
+
+  void TestValidRequestWithDeviceConstraints(
+      const blink::WebMediaConstraints& audio_constraints,
+      const blink::WebMediaConstraints& video_constraints,
+      const std::string& expected_audio_device_id,
+      const std::string& expected_video_device_id) {
+    DCHECK(!audio_constraints.isNull());
+    DCHECK(!video_constraints.isNull());
+    blink::WebUserMediaRequest request =
+        blink::WebUserMediaRequest::createForTesting(audio_constraints,
+                                                     video_constraints);
+    user_media_client_impl_->RequestUserMedia(request);
+    FakeMediaStreamDispatcherRequestUserMediaComplete();
+    StartMockedVideoSource();
+
+    EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_SUCCEEDED,
+              user_media_client_impl_->request_state());
+    EXPECT_EQ(1U, ms_dispatcher_->audio_input_array().size());
+    EXPECT_EQ(1U, ms_dispatcher_->video_array().size());
+    // MockMediaStreamDispatcher appends the session ID to its internal device
+    // IDs.
+    EXPECT_EQ(std::string(expected_audio_device_id) + "0",
+              ms_dispatcher_->audio_input_array()[0].device.id);
+    EXPECT_EQ(std::string(expected_video_device_id) + "0",
+              ms_dispatcher_->video_array()[0].device.id);
   }
 
  protected:
@@ -338,7 +429,7 @@ class UserMediaClientImplTest : public ::testing::Test {
   mojo::Binding<::mojom::MediaDevicesDispatcherHost> binding_user_media;
   mojo::Binding<::mojom::MediaDevicesDispatcherHost> binding_event_dispatcher_;
 
-  std::unique_ptr<UserMediaClientImplUnderTest> used_media_impl_;
+  std::unique_ptr<UserMediaClientImplUnderTest> user_media_client_impl_;
   std::unique_ptr<MockPeerConnectionDependencyFactory> dependency_factory_;
 };
 
@@ -460,7 +551,7 @@ TEST_F(UserMediaClientImplTest, StopSourceWhenMediaStreamGoesOutOfScope) {
   RequestLocalMediaStream();
   // Makes sure the test itself don't hold a reference to the created
   // MediaStream.
-  used_media_impl_->ClearLastGeneratedStream();
+  user_media_client_impl_->ClearLastGeneratedStream();
   blink::WebHeap::collectAllGarbageForTesting();
 
   // Expect the sources to be stopped when the MediaStream goes out of scope.
@@ -482,13 +573,13 @@ TEST_F(UserMediaClientImplTest, LoadNewDocumentInFrame) {
 
 // This test what happens if a video source to a MediaSteam fails to start.
 TEST_F(UserMediaClientImplTest, MediaVideoSourceFailToStart) {
-  used_media_impl_->RequestUserMedia();
+  user_media_client_impl_->RequestUserMedia();
   FakeMediaStreamDispatcherRequestUserMediaComplete();
   FailToStartMockedVideoSource();
   EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_FAILED,
-            used_media_impl_->request_state());
+            user_media_client_impl_->request_state());
   EXPECT_EQ(MEDIA_DEVICE_TRACK_START_FAILURE,
-            used_media_impl_->error_reason());
+            user_media_client_impl_->error_reason());
   blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
@@ -497,14 +588,14 @@ TEST_F(UserMediaClientImplTest, MediaVideoSourceFailToStart) {
 
 // This test what happens if an audio source fail to initialize.
 TEST_F(UserMediaClientImplTest, MediaAudioSourceFailToInitialize) {
-  used_media_impl_->SetCreateSourceThatFails(true);
-  used_media_impl_->RequestUserMedia();
+  user_media_client_impl_->SetCreateSourceThatFails(true);
+  user_media_client_impl_->RequestUserMedia();
   FakeMediaStreamDispatcherRequestUserMediaComplete();
   StartMockedVideoSource();
   EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_FAILED,
-            used_media_impl_->request_state());
+            user_media_client_impl_->request_state());
   EXPECT_EQ(MEDIA_DEVICE_TRACK_START_FAILURE,
-            used_media_impl_->error_reason());
+            user_media_client_impl_->error_reason());
   blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
@@ -514,37 +605,37 @@ TEST_F(UserMediaClientImplTest, MediaAudioSourceFailToInitialize) {
 // This test what happens if UserMediaClientImpl is deleted before a source has
 // started.
 TEST_F(UserMediaClientImplTest, MediaStreamImplShutDown) {
-  used_media_impl_->RequestUserMedia();
+  user_media_client_impl_->RequestUserMedia();
   FakeMediaStreamDispatcherRequestUserMediaComplete();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_NOT_COMPLETE,
-            used_media_impl_->request_state());
-  used_media_impl_.reset();
+            user_media_client_impl_->request_state());
+  user_media_client_impl_.reset();
 }
 
 // This test what happens if a new document is loaded in the frame while the
 // MediaStream is being generated by the MediaStreamDispatcher.
 TEST_F(UserMediaClientImplTest, ReloadFrameWhileGeneratingStream) {
-  used_media_impl_->RequestUserMedia();
+  user_media_client_impl_->RequestUserMedia();
   LoadNewDocumentInFrame();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   EXPECT_EQ(0, ms_dispatcher_->stop_audio_device_counter());
   EXPECT_EQ(0, ms_dispatcher_->stop_video_device_counter());
   EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_NOT_COMPLETE,
-            used_media_impl_->request_state());
+            user_media_client_impl_->request_state());
 }
 
 // This test what happens if a newdocument is loaded in the frame while the
 // sources are being started.
 TEST_F(UserMediaClientImplTest, ReloadFrameWhileGeneratingSources) {
-  used_media_impl_->RequestUserMedia();
+  user_media_client_impl_->RequestUserMedia();
   FakeMediaStreamDispatcherRequestUserMediaComplete();
   EXPECT_EQ(1, ms_dispatcher_->request_stream_counter());
   LoadNewDocumentInFrame();
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_video_device_counter());
   EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_NOT_COMPLETE,
-            used_media_impl_->request_state());
+            user_media_client_impl_->request_state());
 }
 
 // This test what happens if stop is called on a track after the frame has
@@ -571,16 +662,17 @@ TEST_F(UserMediaClientImplTest, StopTrackAfterReload) {
 }
 
 TEST_F(UserMediaClientImplTest, EnumerateMediaDevices) {
-  used_media_impl_->RequestMediaDevices();
+  user_media_client_impl_->RequestMediaDevices();
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_SUCCEEDED,
-            used_media_impl_->request_state());
-  EXPECT_EQ(static_cast<size_t>(5), used_media_impl_->last_devices().size());
+            user_media_client_impl_->request_state());
+  EXPECT_EQ(static_cast<size_t>(5),
+            user_media_client_impl_->last_devices().size());
 
   // Audio input device with matched output ID.
   const blink::WebMediaDeviceInfo* device =
-      &used_media_impl_->last_devices()[0];
+      &user_media_client_impl_->last_devices()[0];
   EXPECT_FALSE(device->deviceId().isEmpty());
   EXPECT_EQ(blink::WebMediaDeviceInfo::MediaDeviceKindAudioInput,
             device->kind());
@@ -588,7 +680,7 @@ TEST_F(UserMediaClientImplTest, EnumerateMediaDevices) {
   EXPECT_FALSE(device->groupId().isEmpty());
 
   // Audio input device without matched output ID.
-  device = &used_media_impl_->last_devices()[1];
+  device = &user_media_client_impl_->last_devices()[1];
   EXPECT_FALSE(device->deviceId().isEmpty());
   EXPECT_EQ(blink::WebMediaDeviceInfo::MediaDeviceKindAudioInput,
             device->kind());
@@ -596,14 +688,14 @@ TEST_F(UserMediaClientImplTest, EnumerateMediaDevices) {
   EXPECT_FALSE(device->groupId().isEmpty());
 
   // Video input devices.
-  device = &used_media_impl_->last_devices()[2];
+  device = &user_media_client_impl_->last_devices()[2];
   EXPECT_FALSE(device->deviceId().isEmpty());
   EXPECT_EQ(blink::WebMediaDeviceInfo::MediaDeviceKindVideoInput,
             device->kind());
   EXPECT_FALSE(device->label().isEmpty());
   EXPECT_TRUE(device->groupId().isEmpty());
 
-  device = &used_media_impl_->last_devices()[3];
+  device = &user_media_client_impl_->last_devices()[3];
   EXPECT_FALSE(device->deviceId().isEmpty());
   EXPECT_EQ(blink::WebMediaDeviceInfo::MediaDeviceKindVideoInput,
             device->kind());
@@ -611,7 +703,7 @@ TEST_F(UserMediaClientImplTest, EnumerateMediaDevices) {
   EXPECT_TRUE(device->groupId().isEmpty());
 
   // Audio output device.
-  device = &used_media_impl_->last_devices()[4];
+  device = &user_media_client_impl_->last_devices()[4];
   EXPECT_FALSE(device->deviceId().isEmpty());
   EXPECT_EQ(blink::WebMediaDeviceInfo::MediaDeviceKindAudioOutput,
             device->kind());
@@ -619,18 +711,20 @@ TEST_F(UserMediaClientImplTest, EnumerateMediaDevices) {
   EXPECT_FALSE(device->groupId().isEmpty());
 
   // Verfify group IDs.
-  EXPECT_TRUE(used_media_impl_->last_devices()[0].groupId().equals(
-                  used_media_impl_->last_devices()[4].groupId()));
-  EXPECT_FALSE(used_media_impl_->last_devices()[1].groupId().equals(
-                   used_media_impl_->last_devices()[4].groupId()));
+  EXPECT_TRUE(user_media_client_impl_->last_devices()[0].groupId().equals(
+      user_media_client_impl_->last_devices()[4].groupId()));
+  EXPECT_FALSE(user_media_client_impl_->last_devices()[1].groupId().equals(
+      user_media_client_impl_->last_devices()[4].groupId()));
 }
 
 TEST_F(UserMediaClientImplTest, RenderToAssociatedSinkConstraint) {
   // For a null UserMediaRequest (no audio requested), we expect false.
-  used_media_impl_->RequestUserMedia();
-  EXPECT_FALSE(used_media_impl_->UserMediaRequestHasAutomaticDeviceSelection(
-      ms_dispatcher_->audio_input_request_id()));
-  used_media_impl_->DeleteRequest(ms_dispatcher_->audio_input_request_id());
+  user_media_client_impl_->RequestUserMedia();
+  EXPECT_FALSE(
+      user_media_client_impl_->UserMediaRequestHasAutomaticDeviceSelection(
+          ms_dispatcher_->audio_input_request_id()));
+  user_media_client_impl_->DeleteRequest(
+      ms_dispatcher_->audio_input_request_id());
 
   // If audio is requested, but no constraint, it should be true.
   // Currently we expect it to be false due to a suspected bug in the
@@ -669,7 +763,7 @@ TEST_F(UserMediaClientImplTest, ObserveMediaDeviceChanges) {
   EXPECT_CALL(
       media_devices_dispatcher_,
       SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, _, _));
-  used_media_impl_->SetMediaDeviceChangeObserver();
+  user_media_client_impl_->SetMediaDeviceChangeObserver();
   base::RunLoop().RunUntilIdle();
 
   base::WeakPtr<MediaDevicesEventDispatcher> event_dispatcher =
@@ -689,7 +783,7 @@ TEST_F(UserMediaClientImplTest, ObserveMediaDeviceChanges) {
   EXPECT_CALL(
       media_devices_dispatcher_,
       UnsubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, _));
-  used_media_impl_->RemoveMediaDeviceChangeObserver();
+  user_media_client_impl_->RemoveMediaDeviceChangeObserver();
   base::RunLoop().RunUntilIdle();
 }
 
@@ -717,6 +811,89 @@ TEST_F(UserMediaClientImplTest, AudioVideoWithSameId) {
   blink::WebHeap::collectAllGarbageForTesting();
   EXPECT_EQ(1, ms_dispatcher_->stop_video_device_counter());
   EXPECT_EQ(1, ms_dispatcher_->stop_audio_device_counter());
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithMandatoryInvalidAudioDeviceId) {
+  blink::WebMediaConstraints audio_constraints =
+      CreateDeviceConstraints(kInvalidDeviceId);
+  blink::WebUserMediaRequest request =
+      blink::WebUserMediaRequest::createForTesting(
+          audio_constraints, blink::WebMediaConstraints());
+  user_media_client_impl_->RequestUserMedia(request);
+  EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_FAILED,
+            user_media_client_impl_->request_state());
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithMandatoryInvalidVideoDeviceId) {
+  blink::WebMediaConstraints video_constraints =
+      CreateDeviceConstraints(kInvalidDeviceId);
+  blink::WebUserMediaRequest request =
+      blink::WebUserMediaRequest::createForTesting(blink::WebMediaConstraints(),
+                                                   video_constraints);
+  user_media_client_impl_->RequestUserMedia(request);
+  EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_FAILED,
+            user_media_client_impl_->request_state());
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithMandatoryValidDeviceIds) {
+  blink::WebMediaConstraints audio_constraints =
+      CreateDeviceConstraints(kFakeAudioInputDeviceId1);
+  blink::WebMediaConstraints video_constraints =
+      CreateDeviceConstraints(kFakeVideoInputDeviceId1);
+  TestValidRequestWithDeviceConstraints(audio_constraints, video_constraints,
+                                        kFakeAudioInputDeviceId1,
+                                        kFakeVideoInputDeviceId1);
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithBasicIdealValidDeviceId) {
+  blink::WebMediaConstraints audio_constraints =
+      CreateDeviceConstraints(nullptr, kFakeAudioInputDeviceId1);
+  blink::WebMediaConstraints video_constraints =
+      CreateDeviceConstraints(nullptr, kFakeVideoInputDeviceId1);
+  TestValidRequestWithDeviceConstraints(audio_constraints, video_constraints,
+                                        kFakeAudioInputDeviceId1,
+                                        kFakeVideoInputDeviceId1);
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithAdvancedExactValidDeviceId) {
+  blink::WebMediaConstraints audio_constraints =
+      CreateDeviceConstraints(nullptr, nullptr, kFakeAudioInputDeviceId1);
+  blink::WebMediaConstraints video_constraints = CreateDeviceConstraints(
+      nullptr, nullptr, kFakeVideoInputDeviceId1);
+  TestValidRequestWithDeviceConstraints(audio_constraints, video_constraints,
+                                        kFakeAudioInputDeviceId1,
+                                        kFakeVideoInputDeviceId1);
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithAdvancedIdealValidDeviceId) {
+  blink::WebMediaConstraints audio_constraints = CreateDeviceConstraints(
+      nullptr, nullptr, nullptr, kFakeAudioInputDeviceId1);
+  blink::WebMediaConstraints video_constraints = CreateDeviceConstraints(
+      nullptr, nullptr, nullptr, kFakeVideoInputDeviceId1);
+  TestValidRequestWithDeviceConstraints(audio_constraints, video_constraints,
+                                        kFakeAudioInputDeviceId1,
+                                        kFakeVideoInputDeviceId1);
+}
+
+TEST_F(UserMediaClientImplTest, CreateWithAllOptionalInvalidDeviceId) {
+  blink::WebMediaConstraints audio_constraints = CreateDeviceConstraints(
+      nullptr, kInvalidDeviceId, kInvalidDeviceId, kInvalidDeviceId);
+  blink::WebMediaConstraints video_constraints = CreateDeviceConstraints(
+      nullptr, kInvalidDeviceId, kInvalidDeviceId, kInvalidDeviceId);
+  // MockMediaStreamDispatcher uses empty string as default device ID.
+  TestValidRequestWithDeviceConstraints(audio_constraints, video_constraints,
+                                        std::string(), std::string());
+}
+
+TEST_F(UserMediaClientImplTest,
+       CreateWithAdvancedIdealValidOtherOptionalInvalidDeviceId) {
+  blink::WebMediaConstraints audio_constraints = CreateDeviceConstraints(
+      nullptr, kInvalidDeviceId, kInvalidDeviceId, kFakeAudioInputDeviceId1);
+  blink::WebMediaConstraints video_constraints = CreateDeviceConstraints(
+      nullptr, kInvalidDeviceId, kInvalidDeviceId, kFakeVideoInputDeviceId1);
+  TestValidRequestWithDeviceConstraints(audio_constraints, video_constraints,
+                                        kFakeAudioInputDeviceId1,
+                                        kFakeVideoInputDeviceId1);
 }
 
 }  // namespace content

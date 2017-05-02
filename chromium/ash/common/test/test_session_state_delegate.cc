@@ -161,12 +161,9 @@ session_manager::SessionState TestSessionStateDelegate::GetSessionState()
 }
 
 void TestSessionStateDelegate::SetHasActiveUser(bool has_active_user) {
-  if (!has_active_user) {
-    session_state_ = session_manager::SessionState::LOGIN_PRIMARY;
-  } else {
-    session_state_ = session_manager::SessionState::ACTIVE;
-    WmShell::Get()->ShowShelf();
-  }
+  session_state_ = has_active_user
+                       ? session_manager::SessionState::ACTIVE
+                       : session_manager::SessionState::LOGIN_PRIMARY;
 }
 
 void TestSessionStateDelegate::SetActiveUserSessionStarted(
@@ -174,7 +171,7 @@ void TestSessionStateDelegate::SetActiveUserSessionStarted(
   if (active_user_session_started) {
     user_manager_->SessionStarted();
     session_state_ = session_manager::SessionState::ACTIVE;
-    WmShell::Get()->CreateShelf();
+    WmShell::Get()->CreateShelfView();
     WmShell::Get()->UpdateAfterLoginStatusChange(LoginStatus::USER);
   } else {
     session_state_ = session_manager::SessionState::LOGIN_PRIMARY;

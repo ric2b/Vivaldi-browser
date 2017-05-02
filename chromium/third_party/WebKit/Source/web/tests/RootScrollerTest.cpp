@@ -11,10 +11,12 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
+#include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerScrollableArea.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -56,22 +58,15 @@ class RootScrollerTest : public ::testing::Test {
 
   WebViewImpl* initialize(const std::string& pageName,
                           FrameTestHelpers::TestWebViewClient* client) {
-    RuntimeEnabledFeatures::setSetRootScrollerEnabled(true);
-
-    m_helper.initializeAndLoad(m_baseURL + pageName, true, nullptr, client,
-                               nullptr, &configureSettings);
-
-    // Initialize browser controls to be shown.
-    webViewImpl()->resizeWithBrowserControls(IntSize(400, 400), 50, true);
-    webViewImpl()->browserControls().setShownRatio(1);
-
-    mainFrameView()->updateAllLifecyclePhases();
-
-    return webViewImpl();
+    return initializeInternal(m_baseURL + pageName, client);
   }
 
   WebViewImpl* initialize(const std::string& pageName) {
-    return initialize(pageName, &m_client);
+    return initializeInternal(m_baseURL + pageName, &m_client);
+  }
+
+  WebViewImpl* initialize() {
+    return initializeInternal("about:blank", &m_client);
   }
 
   static void configureSettings(WebSettings* settings) {
@@ -93,7 +88,6 @@ class RootScrollerTest : public ::testing::Test {
 
   void executeScript(const WebString& code) {
     executeScript(code, *mainWebFrame());
-    mainWebFrame()->view()->updateAllLifecyclePhases();
   }
 
   void executeScript(const WebString& code, WebLocalFrame& frame) {
@@ -126,8 +120,8 @@ class RootScrollerTest : public ::testing::Test {
     return frameHost().browserControls();
   }
 
-  Element* effectiveRootScroller(Document* doc) const {
-    return doc->rootScrollerController()->effectiveRootScroller();
+  Node* effectiveRootScroller(Document* doc) const {
+    return &doc->rootScrollerController().effectiveRootScroller();
   }
 
   WebGestureEvent generateTouchGestureEvent(WebInputEvent::Type type,
@@ -148,8 +142,8 @@ class RootScrollerTest : public ::testing::Test {
                                        WebGestureDevice device,
                                        int deltaX,
                                        int deltaY) {
-    WebGestureEvent event;
-    event.type = type;
+    WebGestureEvent event(type, WebInputEvent::NoModifiers,
+                          WebInputEvent::TimeStampForTesting);
     event.sourceDevice = device;
     event.x = 100;
     event.y = 100;
@@ -160,6 +154,22 @@ class RootScrollerTest : public ::testing::Test {
     return event;
   }
 
+  WebViewImpl* initializeInternal(const std::string& url,
+                                  FrameTestHelpers::TestWebViewClient* client) {
+    RuntimeEnabledFeatures::setSetRootScrollerEnabled(true);
+
+    m_helper.initializeAndLoad(url, true, nullptr, client, nullptr,
+                               &configureSettings);
+
+    // Initialize browser controls to be shown.
+    webViewImpl()->resizeWithBrowserControls(IntSize(400, 400), 50, true);
+    webViewImpl()->browserControls().setShownRatio(1);
+
+    mainFrameView()->updateAllLifecyclePhases();
+
+    return webViewImpl();
+  }
+
   std::string m_baseURL;
   FrameTestHelpers::TestWebViewClient m_client;
   FrameTestHelpers::WebViewHelper m_helper;
@@ -167,15 +177,45 @@ class RootScrollerTest : public ::testing::Test {
 };
 
 // Test that no root scroller element is set if setRootScroller isn't called on
-// any elements. The document element should be the default effective root
+// any elements. The document Node should be the default effective root
 // scroller.
 TEST_F(RootScrollerTest, TestDefaultRootScroller) {
   initialize("overflow-scrolling.html");
 
+  RootScrollerController& controller =
+      mainFrame()->document()->rootScrollerController();
+
   ASSERT_EQ(nullptr, mainFrame()->document()->rootScroller());
 
+  EXPECT_EQ(mainFrame()->document(),
+            effectiveRootScroller(mainFrame()->document()));
+
   Element* htmlElement = mainFrame()->document()->documentElement();
-  EXPECT_EQ(htmlElement, effectiveRootScroller(mainFrame()->document()));
+  EXPECT_TRUE(controller.scrollsViewport(*htmlElement));
+}
+
+// Make sure that replacing the documentElement doesn't change the effective
+// root scroller when no root scroller is set.
+TEST_F(RootScrollerTest, defaultEffectiveRootScrollerIsDocumentNode) {
+  initialize("root-scroller.html");
+
+  Document* document = mainFrame()->document();
+  Element* iframe = document->createElement("iframe");
+
+  EXPECT_EQ(mainFrame()->document(),
+            effectiveRootScroller(mainFrame()->document()));
+
+  // Replace the documentElement with the iframe. The effectiveRootScroller
+  // should remain the same.
+  NonThrowableExceptionState nonThrow;
+  HeapVector<NodeOrString> nodes;
+  nodes.push_back(NodeOrString::fromNode(iframe));
+  document->documentElement()->replaceWith(nodes, nonThrow);
+
+  mainFrameView()->updateAllLifecyclePhases();
+
+  EXPECT_EQ(mainFrame()->document(),
+            effectiveRootScroller(mainFrame()->document()));
 }
 
 class OverscrollTestWebViewClient : public FrameTestHelpers::TestWebViewClient {
@@ -194,12 +234,13 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
   initialize("root-scroller.html", &client);
 
   Element* container = mainFrame()->document()->getElementById("container");
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   mainFrame()->document()->setRootScroller(container, exceptionState);
   ASSERT_EQ(container, mainFrame()->document()->rootScroller());
 
-  // Content is 1000x1000, WebView size is 400x400 so max scroll is 600px.
-  double maximumScroll = 600;
+  // Content is 1000x1000, WebView size is 400x400 but hiding the top controls
+  // makes it 400x450 so max scroll is 550px.
+  double maximumScroll = 550;
 
   webViewImpl()->handleInputEvent(
       generateTouchGestureEvent(WebInputEvent::GestureScrollBegin));
@@ -218,7 +259,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
     webViewImpl()->handleInputEvent(
         generateTouchGestureEvent(WebInputEvent::GestureScrollUpdate, 0, -100));
     EXPECT_FLOAT_EQ(100, container->scrollTop());
-    EXPECT_FLOAT_EQ(0, mainFrameView()->scrollOffset().height());
+    EXPECT_FLOAT_EQ(0, mainFrameView()->getScrollOffset().height());
   }
 
   {
@@ -227,9 +268,9 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
     EXPECT_CALL(client, didOverscroll(WebFloatSize(0, 50), WebFloatSize(0, 50),
                                       WebFloatPoint(100, 100), WebFloatSize()));
     webViewImpl()->handleInputEvent(
-        generateTouchGestureEvent(WebInputEvent::GestureScrollUpdate, 0, -550));
+        generateTouchGestureEvent(WebInputEvent::GestureScrollUpdate, 0, -500));
     EXPECT_FLOAT_EQ(maximumScroll, container->scrollTop());
-    EXPECT_FLOAT_EQ(0, mainFrameView()->scrollOffset().height());
+    EXPECT_FLOAT_EQ(0, mainFrameView()->getScrollOffset().height());
     Mock::VerifyAndClearExpectations(&client);
   }
 
@@ -240,7 +281,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
     webViewImpl()->handleInputEvent(
         generateTouchGestureEvent(WebInputEvent::GestureScrollUpdate, 0, -20));
     EXPECT_FLOAT_EQ(maximumScroll, container->scrollTop());
-    EXPECT_FLOAT_EQ(0, mainFrameView()->scrollOffset().height());
+    EXPECT_FLOAT_EQ(0, mainFrameView()->getScrollOffset().height());
     Mock::VerifyAndClearExpectations(&client);
   }
 
@@ -258,7 +299,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
     webViewImpl()->handleInputEvent(
         generateTouchGestureEvent(WebInputEvent::GestureScrollUpdate, 0, -30));
     EXPECT_FLOAT_EQ(maximumScroll, container->scrollTop());
-    EXPECT_FLOAT_EQ(0, mainFrameView()->scrollOffset().height());
+    EXPECT_FLOAT_EQ(0, mainFrameView()->getScrollOffset().height());
     Mock::VerifyAndClearExpectations(&client);
 
     webViewImpl()->handleInputEvent(
@@ -292,7 +333,7 @@ TEST_F(RootScrollerTest, TestRemoveRootScrollerFromDom) {
   ASSERT_EQ(nullptr, mainFrame()->document()->rootScroller());
 
   Element* container = mainFrame()->document()->getElementById("container");
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   mainFrame()->document()->setRootScroller(container, exceptionState);
 
   EXPECT_EQ(container, mainFrame()->document()->rootScroller());
@@ -314,7 +355,7 @@ TEST_F(RootScrollerTest, TestSetRootScrollerOnInvalidElement) {
     // Set to a non-block element. Should be rejected and a console message
     // logged.
     Element* element = mainFrame()->document()->getElementById("nonBlock");
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     mainFrame()->document()->setRootScroller(element, exceptionState);
     mainFrameView()->updateAllLifecyclePhases();
     EXPECT_EQ(element, mainFrame()->document()->rootScroller());
@@ -324,7 +365,7 @@ TEST_F(RootScrollerTest, TestSetRootScrollerOnInvalidElement) {
   {
     // Set to an element with no size.
     Element* element = mainFrame()->document()->getElementById("empty");
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     mainFrame()->document()->setRootScroller(element, exceptionState);
     mainFrameView()->updateAllLifecyclePhases();
     EXPECT_EQ(element, mainFrame()->document()->rootScroller());
@@ -332,17 +373,17 @@ TEST_F(RootScrollerTest, TestSetRootScrollerOnInvalidElement) {
   }
 }
 
-// Test that the effective root scroller resets to the default element when the
+// Test that the effective root scroller resets to the document Node when the
 // current root scroller element becomes invalid as a scroller.
 TEST_F(RootScrollerTest, TestRootScrollerBecomesInvalid) {
   initialize("root-scroller.html");
 
-  Element* htmlElement = mainFrame()->document()->documentElement();
   Element* container = mainFrame()->document()->getElementById("container");
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
 
   ASSERT_EQ(nullptr, mainFrame()->document()->rootScroller());
-  ASSERT_EQ(htmlElement, effectiveRootScroller(mainFrame()->document()));
+  ASSERT_EQ(mainFrame()->document(),
+            effectiveRootScroller(mainFrame()->document()));
 
   {
     mainFrame()->document()->setRootScroller(container, exceptionState);
@@ -356,14 +397,16 @@ TEST_F(RootScrollerTest, TestRootScrollerBecomesInvalid) {
     mainFrameView()->updateAllLifecyclePhases();
 
     EXPECT_EQ(container, mainFrame()->document()->rootScroller());
-    EXPECT_EQ(htmlElement, effectiveRootScroller(mainFrame()->document()));
+    EXPECT_EQ(mainFrame()->document(),
+              effectiveRootScroller(mainFrame()->document()));
   }
 
   executeScript("document.querySelector('#container').style.display = 'block'");
   mainFrame()->document()->setRootScroller(nullptr, exceptionState);
   mainFrameView()->updateAllLifecyclePhases();
   EXPECT_EQ(nullptr, mainFrame()->document()->rootScroller());
-  EXPECT_EQ(htmlElement, effectiveRootScroller(mainFrame()->document()));
+  EXPECT_EQ(mainFrame()->document(),
+            effectiveRootScroller(mainFrame()->document()));
 
   {
     mainFrame()->document()->setRootScroller(container, exceptionState);
@@ -376,7 +419,8 @@ TEST_F(RootScrollerTest, TestRootScrollerBecomesInvalid) {
     mainFrameView()->updateAllLifecyclePhases();
 
     EXPECT_EQ(container, mainFrame()->document()->rootScroller());
-    EXPECT_EQ(htmlElement, effectiveRootScroller(mainFrame()->document()));
+    EXPECT_EQ(mainFrame()->document(),
+              effectiveRootScroller(mainFrame()->document()));
   }
 }
 
@@ -394,7 +438,7 @@ TEST_F(RootScrollerTest, TestSetRootScrollerOnElementInIframe) {
     Element* innerContainer =
         iframe->contentDocument()->getElementById("container");
 
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     mainFrame()->document()->setRootScroller(innerContainer, exceptionState);
     mainFrameView()->updateAllLifecyclePhases();
 
@@ -407,7 +451,7 @@ TEST_F(RootScrollerTest, TestSetRootScrollerOnElementInIframe) {
     HTMLFrameOwnerElement* iframe = toHTMLFrameOwnerElement(
         mainFrame()->document()->getElementById("iframe"));
 
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     mainFrame()->document()->setRootScroller(iframe, exceptionState);
     mainFrameView()->updateAllLifecyclePhases();
 
@@ -427,12 +471,12 @@ TEST_F(RootScrollerTest, TestRootScrollerWithinIframe) {
     HTMLFrameOwnerElement* iframe = toHTMLFrameOwnerElement(
         mainFrame()->document()->getElementById("iframe"));
 
-    EXPECT_EQ(iframe->contentDocument()->documentElement(),
+    EXPECT_EQ(iframe->contentDocument(),
               effectiveRootScroller(iframe->contentDocument()));
 
     Element* innerContainer =
         iframe->contentDocument()->getElementById("container");
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     iframe->contentDocument()->setRootScroller(innerContainer, exceptionState);
     mainFrameView()->updateAllLifecyclePhases();
 
@@ -458,24 +502,16 @@ TEST_F(RootScrollerTest, SetRootScrollerIframeBecomesEffective) {
     mainFrame()->document()->setRootScroller(iframe, nonThrow);
 
     EXPECT_EQ(iframe, mainFrame()->document()->rootScroller());
-    EXPECT_EQ(iframe, mainFrame()
-                          ->document()
-                          ->rootScrollerController()
-                          ->effectiveRootScroller());
+    EXPECT_EQ(iframe, effectiveRootScroller(mainFrame()->document()));
 
     Element* container = iframe->contentDocument()->getElementById("container");
 
     iframe->contentDocument()->setRootScroller(container, nonThrow);
 
     EXPECT_EQ(container, iframe->contentDocument()->rootScroller());
-    EXPECT_EQ(container, iframe->contentDocument()
-                             ->rootScrollerController()
-                             ->effectiveRootScroller());
+    EXPECT_EQ(container, effectiveRootScroller(iframe->contentDocument()));
     EXPECT_EQ(iframe, mainFrame()->document()->rootScroller());
-    EXPECT_EQ(iframe, mainFrame()
-                          ->document()
-                          ->rootScrollerController()
-                          ->effectiveRootScroller());
+    EXPECT_EQ(iframe, effectiveRootScroller(mainFrame()->document()));
   }
 }
 
@@ -498,8 +534,9 @@ TEST_F(RootScrollerTest, SetRootScrollerIframeUsesCorrectLayerAndCallback) {
   // No root scroller set, the documentElement should be the effective root
   // and the main FrameView's scroll layer should be the layer to use.
   {
-    EXPECT_EQ(mainController.rootScrollerLayer(),
-              mainFrameView()->layerForScrolling());
+    EXPECT_EQ(
+        mainController.rootScrollerLayer(),
+        mainFrameView()->layoutViewportScrollableArea()->layerForScrolling());
     EXPECT_TRUE(mainController.isViewportScrollCallback(
         mainFrame()->document()->documentElement()->getApplyScroll()));
   }
@@ -510,8 +547,9 @@ TEST_F(RootScrollerTest, SetRootScrollerIframeUsesCorrectLayerAndCallback) {
     iframe->contentDocument()->setRootScroller(container, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
 
-    EXPECT_EQ(mainController.rootScrollerLayer(),
-              mainFrameView()->layerForScrolling());
+    EXPECT_EQ(
+        mainController.rootScrollerLayer(),
+        mainFrameView()->layoutViewportScrollableArea()->layerForScrolling());
     EXPECT_TRUE(mainController.isViewportScrollCallback(
         mainFrame()->document()->documentElement()->getApplyScroll()));
   }
@@ -542,7 +580,10 @@ TEST_F(RootScrollerTest, SetRootScrollerIframeUsesCorrectLayerAndCallback) {
     iframe->contentDocument()->setRootScroller(nullptr, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
     EXPECT_EQ(mainController.rootScrollerLayer(),
-              iframe->contentDocument()->view()->layerForScrolling());
+              iframe->contentDocument()
+                  ->view()
+                  ->layoutViewportScrollableArea()
+                  ->layerForScrolling());
     EXPECT_FALSE(
         mainController.isViewportScrollCallback(container->getApplyScroll()));
     EXPECT_FALSE(mainController.isViewportScrollCallback(
@@ -556,8 +597,9 @@ TEST_F(RootScrollerTest, SetRootScrollerIframeUsesCorrectLayerAndCallback) {
   {
     mainFrame()->document()->setRootScroller(nullptr, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
-    EXPECT_EQ(mainController.rootScrollerLayer(),
-              mainFrameView()->layerForScrolling());
+    EXPECT_EQ(
+        mainController.rootScrollerLayer(),
+        mainFrameView()->layoutViewportScrollableArea()->layerForScrolling());
     EXPECT_TRUE(mainController.isViewportScrollCallback(
         mainFrame()->document()->documentElement()->getApplyScroll()));
     EXPECT_FALSE(
@@ -591,7 +633,7 @@ TEST_F(RootScrollerTest,
 
     EXPECT_EQ(nullptr, iframe->contentDocument()->rootScroller());
 
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     iframe->contentDocument()->setRootScroller(iframe, exceptionState);
 
     EXPECT_EQ(iframe, iframe->contentDocument()->rootScroller());
@@ -703,6 +745,12 @@ TEST_F(RootScrollerTest, RemoteMainFrame) {
   m_helper.reset();
 }
 
+GraphicsLayer* scrollingLayer(LayoutView& layoutView) {
+  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+    return layoutView.layer()->compositedLayerMapping()->scrollingLayer();
+  return layoutView.compositor()->rootContentLayer();
+}
+
 // Tests that clipping layers belonging to any compositors in the ancestor chain
 // of the global root scroller have their masking bit removed.
 TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
@@ -712,17 +760,17 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
       mainFrame()->document()->getElementById("iframe"));
   Element* container = iframe->contentDocument()->getElementById("container");
 
-  RootScrollerController* mainController =
+  RootScrollerController& mainController =
       mainFrame()->document()->rootScrollerController();
-  RootScrollerController* childController =
+  RootScrollerController& childController =
       iframe->contentDocument()->rootScrollerController();
   TopDocumentRootScrollerController& globalController =
       frameHost().globalRootScrollerController();
 
-  PaintLayerCompositor* mainCompositor =
-      mainFrameView()->layoutViewItem().compositor();
-  PaintLayerCompositor* childCompositor =
-      iframe->contentDocument()->view()->layoutViewItem().compositor();
+  LayoutView* mainLayoutView = mainFrameView()->layoutView();
+  LayoutView* childLayoutView = iframe->contentDocument()->layoutView();
+  PaintLayerCompositor* mainCompositor = mainLayoutView->compositor();
+  PaintLayerCompositor* childCompositor = childLayoutView->compositor();
 
   NonThrowableExceptionState nonThrow;
 
@@ -731,14 +779,14 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
   // container layers should also clip.
   {
     EXPECT_TRUE(
-        mainCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*mainLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->containerLayer()->platformLayer()->masksToBounds());
 
     EXPECT_TRUE(
-        childCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*childLayoutView)->platformLayer()->masksToBounds());
     EXPECT_TRUE(
         childCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_TRUE(
@@ -753,18 +801,18 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
     mainFrame()->document()->setRootScroller(iframe, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
 
-    ASSERT_EQ(iframe, mainController->effectiveRootScroller());
-    ASSERT_EQ(container, childController->effectiveRootScroller());
+    ASSERT_EQ(iframe, &mainController.effectiveRootScroller());
+    ASSERT_EQ(container, &childController.effectiveRootScroller());
 
     EXPECT_FALSE(
-        mainCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*mainLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->containerLayer()->platformLayer()->masksToBounds());
 
     EXPECT_FALSE(
-        childCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*childLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         childCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
@@ -778,21 +826,21 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
     iframe->contentDocument()->setRootScroller(nullptr, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
 
-    ASSERT_EQ(iframe, mainController->effectiveRootScroller());
-    ASSERT_EQ(iframe->contentDocument()->documentElement(),
-              childController->effectiveRootScroller());
+    ASSERT_EQ(iframe, &mainController.effectiveRootScroller());
+    ASSERT_EQ(iframe->contentDocument(),
+              &childController.effectiveRootScroller());
     ASSERT_EQ(iframe->contentDocument()->documentElement(),
               globalController.globalRootScroller());
 
     EXPECT_FALSE(
-        mainCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*mainLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->containerLayer()->platformLayer()->masksToBounds());
 
     EXPECT_TRUE(
-        childCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*childLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         childCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
@@ -809,22 +857,21 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
     mainFrame()->document()->setRootScroller(nullptr, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
 
-    ASSERT_EQ(mainFrame()->document()->documentElement(),
-              mainController->effectiveRootScroller());
-    ASSERT_EQ(iframe->contentDocument()->documentElement(),
-              childController->effectiveRootScroller());
+    ASSERT_EQ(mainFrame()->document(), &mainController.effectiveRootScroller());
+    ASSERT_EQ(iframe->contentDocument(),
+              &childController.effectiveRootScroller());
     ASSERT_EQ(mainFrame()->document()->documentElement(),
               globalController.globalRootScroller());
 
     EXPECT_TRUE(
-        mainCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*mainLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->containerLayer()->platformLayer()->masksToBounds());
 
     EXPECT_TRUE(
-        childCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*childLayoutView)->platformLayer()->masksToBounds());
     EXPECT_TRUE(
         childCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_TRUE(
@@ -839,21 +886,21 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
     mainFrame()->document()->setRootScroller(iframe, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
 
-    ASSERT_EQ(iframe, mainController->effectiveRootScroller());
-    ASSERT_EQ(iframe->contentDocument()->documentElement(),
-              childController->effectiveRootScroller());
+    ASSERT_EQ(iframe, &mainController.effectiveRootScroller());
+    ASSERT_EQ(iframe->contentDocument(),
+              &childController.effectiveRootScroller());
     ASSERT_EQ(iframe->contentDocument()->documentElement(),
               globalController.globalRootScroller());
 
     EXPECT_FALSE(
-        mainCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*mainLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->containerLayer()->platformLayer()->masksToBounds());
 
     EXPECT_TRUE(
-        childCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*childLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         childCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
@@ -867,24 +914,145 @@ TEST_F(RootScrollerTest, RemoveClippingOnCompositorLayers) {
     iframe->contentDocument()->setRootScroller(container, nonThrow);
     mainFrameView()->updateAllLifecyclePhases();
 
-    ASSERT_EQ(mainFrame()->document()->documentElement(),
-              mainController->effectiveRootScroller());
-    ASSERT_EQ(container, childController->effectiveRootScroller());
+    ASSERT_EQ(mainFrame()->document(), &mainController.effectiveRootScroller());
+    ASSERT_EQ(container, &childController.effectiveRootScroller());
 
     EXPECT_TRUE(
-        mainCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*mainLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         mainCompositor->containerLayer()->platformLayer()->masksToBounds());
 
     EXPECT_FALSE(
-        childCompositor->rootContentLayer()->platformLayer()->masksToBounds());
+        scrollingLayer(*childLayoutView)->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         childCompositor->rootGraphicsLayer()->platformLayer()->masksToBounds());
     EXPECT_FALSE(
         childCompositor->containerLayer()->platformLayer()->masksToBounds());
   }
+}
+
+// Tests that the clipping layer is resized on the root scroller element even
+// if the layout height doesn't change.
+TEST_F(RootScrollerTest, BrowserControlsResizeClippingLayer) {
+  bool oldInertTopControls = RuntimeEnabledFeatures::inertTopControlsEnabled();
+  RuntimeEnabledFeatures::setInertTopControlsEnabled(true);
+
+  initialize("root-scroller.html");
+  Element* container = mainFrame()->document()->getElementById("container");
+
+  {
+    NonThrowableExceptionState exceptionState;
+    mainFrame()->document()->setRootScroller(container, exceptionState);
+
+    mainFrameView()->updateAllLifecyclePhases();
+    ASSERT_EQ(toLayoutBox(container->layoutObject())->clientHeight(), 400);
+
+    GraphicsLayer* clipLayer = toLayoutBox(container->layoutObject())
+                                   ->layer()
+                                   ->compositedLayerMapping()
+                                   ->scrollingLayer();
+    ASSERT_EQ(clipLayer->size().height(), 400);
+  }
+
+  {
+    webViewImpl()->handleInputEvent(
+        generateTouchGestureEvent(WebInputEvent::GestureScrollBegin));
+
+    // Scrolling over the #container DIV should cause the browser controls to
+    // hide.
+    EXPECT_FLOAT_EQ(1, browserControls().shownRatio());
+    webViewImpl()->handleInputEvent(generateTouchGestureEvent(
+        WebInputEvent::GestureScrollUpdate, 0, -browserControls().height()));
+    EXPECT_FLOAT_EQ(0, browserControls().shownRatio());
+
+    webViewImpl()->handleInputEvent(
+        generateTouchGestureEvent(WebInputEvent::GestureScrollEnd));
+
+    webViewImpl()->resizeWithBrowserControls(IntSize(400, 450), 50, false);
+
+    EXPECT_FALSE(container->layoutObject()->needsLayout());
+
+    mainFrameView()->updateAllLifecyclePhases();
+
+    // Since inert top controls are enabled, the container should not have
+    // resized, however, the clip layer should.
+    EXPECT_EQ(toLayoutBox(container->layoutObject())->clientHeight(), 400);
+    GraphicsLayer* clipLayer = toLayoutBox(container->layoutObject())
+                                   ->layer()
+                                   ->compositedLayerMapping()
+                                   ->scrollingLayer();
+    EXPECT_EQ(clipLayer->size().height(), 450);
+  }
+
+  RuntimeEnabledFeatures::setInertTopControlsEnabled(oldInertTopControls);
+}
+
+// Tests that the clipping layer is resized on the root scroller element when
+// it's an iframe and even if the layout height doesn't change.
+TEST_F(RootScrollerTest, BrowserControlsResizeClippingLayerIFrame) {
+  bool oldInertTopControls = RuntimeEnabledFeatures::inertTopControlsEnabled();
+  RuntimeEnabledFeatures::setInertTopControlsEnabled(true);
+
+  initialize("root-scroller-iframe.html");
+
+  Element* iframe = mainFrame()->document()->getElementById("iframe");
+  LocalFrame* childFrame =
+      toLocalFrame(toHTMLFrameOwnerElement(iframe)->contentFrame());
+
+  PaintLayerCompositor* childPLC =
+      childFrame->view()->layoutViewItem().compositor();
+
+  // Give the iframe itself scrollable content and make it the root scroller.
+  {
+    NonThrowableExceptionState nonThrow;
+    mainFrame()->document()->setRootScroller(iframe, nonThrow);
+
+    WebLocalFrame* childWebFrame =
+        mainWebFrame()->firstChild()->toWebLocalFrame();
+    executeScript(
+        "document.getElementById('container').style.width = '300%';"
+        "document.getElementById('container').style.height = '300%';",
+        *childWebFrame);
+
+    mainFrameView()->updateAllLifecyclePhases();
+
+    // Some sanity checks to make sure the test is setup correctly.
+    ASSERT_EQ(childFrame->view()->visibleContentSize().height(), 400);
+    ASSERT_EQ(childPLC->containerLayer()->size().height(), 400);
+    ASSERT_EQ(childPLC->rootGraphicsLayer()->size().height(), 400);
+  }
+
+  {
+    webViewImpl()->handleInputEvent(
+        generateTouchGestureEvent(WebInputEvent::GestureScrollBegin));
+
+    // Scrolling over the #container DIV should cause the browser controls to
+    // hide.
+    EXPECT_FLOAT_EQ(1, browserControls().shownRatio());
+    webViewImpl()->handleInputEvent(generateTouchGestureEvent(
+        WebInputEvent::GestureScrollUpdate, 0, -browserControls().height()));
+    EXPECT_FLOAT_EQ(0, browserControls().shownRatio());
+
+    webViewImpl()->handleInputEvent(
+        generateTouchGestureEvent(WebInputEvent::GestureScrollEnd));
+
+    webViewImpl()->resizeWithBrowserControls(IntSize(400, 450), 50, false);
+
+    EXPECT_FALSE(childFrame->view()->needsLayout());
+
+    mainFrameView()->updateAllLifecyclePhases();
+
+    // Since inert top controls are enabled, the iframe element should not have
+    // resized, however, its clip layer should resize to reveal content as the
+    // browser controls hide.
+    EXPECT_EQ(childFrame->view()->visibleContentSize().height(), 400);
+    EXPECT_EQ(childPLC->containerLayer()->size().height(), 450);
+    EXPECT_EQ(childPLC->rootGraphicsLayer()->size().height(), 450);
+  }
+
+  RuntimeEnabledFeatures::setInertTopControlsEnabled(oldInertTopControls);
 }
 
 // Tests that removing the root scroller element from the DOM resets the
@@ -913,9 +1081,6 @@ TEST_F(RootScrollerTest, RemoveRootScrollerFromDom) {
     // If the root scroller wasn't updated by the DOM removal above, this
     // will touch the disposed root scroller's ScrollableArea.
     mainFrameView()->getRootFrameViewport()->serviceScrollAnimations(0);
-
-    EXPECT_EQ(iframe->contentDocument()->documentElement(),
-              effectiveRootScroller(iframe->contentDocument()));
   }
 }
 
@@ -924,9 +1089,9 @@ TEST_F(RootScrollerTest, RemoveRootScrollerFromDom) {
 TEST_F(RootScrollerTest, DocumentElementHasNoLayoutObject) {
   initialize("overflow-scrolling.html");
 
-  // There's no rootScroller set on this page so we should default to the <html>
-  // element, which means we should use the layout viewport. Ensure this happens
-  // even if the <html> element has no LayoutObject.
+  // There's no rootScroller set on this page so we should default to the
+  // document Node, which means we should use the layout viewport. Ensure this
+  // happens even if the <html> element has no LayoutObject.
   executeScript("document.documentElement.style.display = 'none';");
 
   const TopDocumentRootScrollerController& globalController =
@@ -990,6 +1155,63 @@ TEST_F(RootScrollerTest, UseVisualViewportScrollbarsIframe) {
   EXPECT_GT(containerScroller->maximumScrollOffset().height(), 0);
 }
 
+TEST_F(RootScrollerTest, TopControlsAdjustmentAppliedToRootScroller) {
+  initialize();
+
+  WebURL baseURL = URLTestHelpers::toKURL("http://www.test.com/");
+  FrameTestHelpers::loadHTMLString(webViewImpl()->mainFrame(),
+                                   "<!DOCTYPE html>"
+                                   "<style>"
+                                   "  body, html {"
+                                   "    width: 100%;"
+                                   "    height: 100%;"
+                                   "    margin: 0px;"
+                                   "  }"
+                                   "  #container {"
+                                   "    width: 100%;"
+                                   "    height: 100%;"
+                                   "    overflow: auto;"
+                                   "  }"
+                                   "</style>"
+                                   "<div id='container'>"
+                                   "  <div style='height:1000px'>test</div>"
+                                   "</div>",
+                                   baseURL);
+
+  webViewImpl()->resizeWithBrowserControls(IntSize(400, 400), 50, true);
+  mainFrameView()->updateAllLifecyclePhases();
+
+  Element* container = mainFrame()->document()->getElementById("container");
+  mainFrame()->document()->setRootScroller(container, ASSERT_NO_EXCEPTION);
+
+  ScrollableArea* containerScroller =
+      static_cast<PaintInvalidationCapableScrollableArea*>(
+          toLayoutBox(container->layoutObject())->getScrollableArea());
+
+  // Hide the top controls and scroll down maximally. We should account for the
+  // change in maximum scroll offset due to the top controls hiding. That is,
+  // since the controls are hidden, the "content area" is taller so the maximum
+  // scroll offset should shrink.
+  ASSERT_EQ(1000 - 400, containerScroller->maximumScrollOffset().height());
+
+  webViewImpl()->handleInputEvent(
+      generateTouchGestureEvent(WebInputEvent::GestureScrollBegin));
+  ASSERT_EQ(1, browserControls().shownRatio());
+  webViewImpl()->handleInputEvent(generateTouchGestureEvent(
+      WebInputEvent::GestureScrollUpdate, 0, -browserControls().height()));
+  ASSERT_EQ(0, browserControls().shownRatio());
+  EXPECT_EQ(1000 - 450, containerScroller->maximumScrollOffset().height());
+
+  webViewImpl()->handleInputEvent(
+      generateTouchGestureEvent(WebInputEvent::GestureScrollUpdate, 0, -3000));
+  EXPECT_EQ(1000 - 450, containerScroller->getScrollOffset().height());
+
+  webViewImpl()->handleInputEvent(
+      generateTouchGestureEvent(WebInputEvent::GestureScrollEnd));
+  webViewImpl()->resizeWithBrowserControls(IntSize(400, 450), 50, false);
+  EXPECT_EQ(1000 - 450, containerScroller->maximumScrollOffset().height());
+}
+
 TEST_F(RootScrollerTest, RotationAnchoring) {
   initialize("root-scroller-rotation.html");
 
@@ -1027,12 +1249,12 @@ TEST_F(RootScrollerTest, RotationAnchoring) {
 
     // The visual viewport should be 1.5 screens scrolled so that the target
     // occupies the bottom quadrant of the layout viewport.
-    ASSERT_EQ((250 * 3) / 2, containerScroller->scrollOffset().width());
-    ASSERT_EQ((1000 * 3) / 2, containerScroller->scrollOffset().height());
+    ASSERT_EQ((250 * 3) / 2, containerScroller->getScrollOffset().width());
+    ASSERT_EQ((1000 * 3) / 2, containerScroller->getScrollOffset().height());
 
     // The visual viewport should have scrolled the last half layout viewport.
-    ASSERT_EQ((250) / 2, visualViewport().scrollOffset().width());
-    ASSERT_EQ((1000) / 2, visualViewport().scrollOffset().height());
+    ASSERT_EQ((250) / 2, visualViewport().getScrollOffset().width());
+    ASSERT_EQ((1000) / 2, visualViewport().getScrollOffset().height());
   }
 
   // Now do a rotation resize.
@@ -1041,8 +1263,57 @@ TEST_F(RootScrollerTest, RotationAnchoring) {
 
   // The visual viewport should remain fully filled by the target.
   ClientRect* rect = target->getBoundingClientRect();
-  EXPECT_EQ(rect->left(), visualViewport().scrollOffset().width());
-  EXPECT_EQ(rect->top(), visualViewport().scrollOffset().height());
+  EXPECT_EQ(rect->left(), visualViewport().getScrollOffset().width());
+  EXPECT_EQ(rect->top(), visualViewport().getScrollOffset().height());
+}
+
+// Tests that we don't crash if the default documentElement isn't a valid root
+// scroller. This can happen in some edge cases where documentElement isn't
+// <html>. crbug.com/668553.
+TEST_F(RootScrollerTest, InvalidDefaultRootScroller) {
+  initialize("overflow-scrolling.html");
+
+  Document* document = mainFrame()->document();
+
+  Element* br = document->createElement("br");
+  document->replaceChild(br, document->documentElement());
+  mainFrameView()->updateAllLifecyclePhases();
+  Element* html = document->createElement("html");
+  Element* body = document->createElement("body");
+  html->appendChild(body);
+  body->appendChild(br);
+  document->appendChild(html);
+  mainFrameView()->updateAllLifecyclePhases();
+}
+
+// Ensure that removing the root scroller element causes an update to the RFV's
+// layout viewport immediately since old layout viewport is now part of a
+// detached layout hierarchy.
+TEST_F(RootScrollerTest, ImmediateUpdateOfLayoutViewport) {
+  initialize("root-scroller-iframe.html");
+
+  Document* document = mainFrame()->document();
+  HTMLFrameOwnerElement* iframe = toHTMLFrameOwnerElement(
+      mainFrame()->document()->getElementById("iframe"));
+
+  DummyExceptionStateForTesting exceptionState;
+  document->setRootScroller(iframe, exceptionState);
+  mainFrameView()->updateAllLifecyclePhases();
+
+  RootScrollerController& mainController =
+      mainFrame()->document()->rootScrollerController();
+
+  LocalFrame* iframeLocalFrame = toLocalFrame(iframe->contentFrame());
+  EXPECT_EQ(iframe, &mainController.effectiveRootScroller());
+  EXPECT_EQ(iframeLocalFrame->view()->layoutViewportScrollableArea(),
+            &mainFrameView()->getRootFrameViewport()->layoutViewport());
+
+  // Remove the <iframe> and make sure the layout viewport reverts to the
+  // FrameView without a layout.
+  iframe->remove();
+
+  EXPECT_EQ(mainFrameView()->layoutViewportScrollableArea(),
+            &mainFrameView()->getRootFrameViewport()->layoutViewport());
 }
 
 }  // namespace

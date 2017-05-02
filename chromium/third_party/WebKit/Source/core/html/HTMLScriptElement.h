@@ -52,6 +52,11 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
 
   ScriptLoader* loader() const { return m_loader.get(); }
 
+  // ScriptLoaderClient
+  AtomicString nonce() const override { return m_nonce; }
+  void setNonce(const String& nonce) override { m_nonce = AtomicString(nonce); }
+  void clearNonce() override { m_nonce = emptyAtom; }
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
@@ -60,9 +65,7 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
                     bool alreadyStarted,
                     bool createdDuringDocumentWrite);
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
   void didNotifySubtreeInsertionsToDocument() override;
   void childrenChanged(const ChildrenChange&) override;
@@ -87,6 +90,7 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
   Element* cloneElementWithoutAttributesAndChildren() override;
 
   Member<ScriptLoader> m_loader;
+  AtomicString m_nonce;
 };
 
 }  // namespace blink

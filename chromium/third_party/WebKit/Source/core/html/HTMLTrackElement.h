@@ -59,9 +59,7 @@ class HTMLTrackElement final : public HTMLElement,
   explicit HTMLTrackElement(Document&);
   ~HTMLTrackElement() override;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
 
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
 
@@ -88,7 +86,7 @@ class HTMLTrackElement final : public HTMLElement,
 
   Member<LoadableTextTrack> m_track;
   Member<TextTrackLoader> m_loader;
-  Timer<HTMLTrackElement> m_loadTimer;
+  TaskRunnerTimer<HTMLTrackElement> m_loadTimer;
   KURL m_url;
 };
 

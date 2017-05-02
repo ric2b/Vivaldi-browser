@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -39,6 +38,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/tracing_controller.h"
 #include "printing/features/features.h"
+#include "rlz/features/features.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/first_run/upgrade_util_win.h"
@@ -53,7 +53,7 @@
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"
 #endif
 
@@ -176,7 +176,7 @@ bool ShutdownPreThreadsStop() {
 
   prefs->CommitPendingWrite();
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
   // Cleanup any statics created by RLZ. Must be done before NotificationService
   // is destroyed.
   rlz::RLZTracker::CleanupRlz();

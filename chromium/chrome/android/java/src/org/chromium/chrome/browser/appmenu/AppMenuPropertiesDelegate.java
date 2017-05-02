@@ -13,6 +13,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.UrlConstants;
@@ -113,31 +114,26 @@ public class AppMenuPropertiesDelegate {
 
                 MenuItem offlineMenuItem = menu.findItem(R.id.offline_page_id);
                 if (offlineMenuItem != null) {
-                    if (DownloadUtils.isDownloadHomeEnabled()) {
-                        offlineMenuItem.setEnabled(
-                                DownloadUtils.isAllowedToDownloadPage(currentTab));
+                    offlineMenuItem.setEnabled(
+                            DownloadUtils.isAllowedToDownloadPage(currentTab));
 
-                        Drawable drawable = offlineMenuItem.getIcon();
-                        if (drawable != null) {
-                            int iconTint = ApiCompatibilityUtils.getColor(
-                                    mActivity.getResources(), R.color.light_normal_color);
-                            drawable.mutate();
-                            drawable.setColorFilter(iconTint, PorterDuff.Mode.SRC_ATOP);
-                        }
-                    } else {
-                        offlineMenuItem.setVisible(false);
+                    Drawable drawable = offlineMenuItem.getIcon();
+                    if (drawable != null) {
+                        int iconTint = ApiCompatibilityUtils.getColor(
+                                mActivity.getResources(), R.color.light_normal_color);
+                        drawable.mutate();
+                        drawable.setColorFilter(iconTint, PorterDuff.Mode.SRC_ATOP);
                     }
                 }
             }
 
-            menu.findItem(R.id.downloads_menu_id)
-                    .setVisible(DownloadUtils.isDownloadHomeEnabled());
-
             menu.findItem(R.id.update_menu_id).setVisible(
                     UpdateMenuItemHelper.getInstance().shouldShowMenuItem(mActivity));
 
+            boolean hasMoreThanOneTab = mActivity.getTabModelSelector().getTotalTabCount() > 1;
             menu.findItem(R.id.move_to_other_window_menu_id).setVisible(
-                    MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mActivity));
+                    MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mActivity)
+                    && hasMoreThanOneTab);
 
             MenuItem recentTabsMenuItem = menu.findItem(R.id.recent_tabs_menu_id);
             recentTabsMenuItem.setVisible(!isIncognito);
@@ -177,11 +173,7 @@ public class AppMenuPropertiesDelegate {
             // Hide request desktop site on all chrome:// pages except for the NTP. Check request
             // desktop site if it's activated on this page.
             MenuItem requestItem = menu.findItem(R.id.request_desktop_site_id);
-            requestItem.setVisible(!isChromeScheme || currentTab.isNativePage());
-            requestItem.setChecked(currentTab.getUseDesktopUserAgent());
-            requestItem.setTitleCondensed(requestItem.isChecked()
-                    ? mActivity.getString(R.string.menu_request_desktop_site_on)
-                    : mActivity.getString(R.string.menu_request_desktop_site_off));
+            updateRequestDesktopSiteMenuItem(requestItem, currentTab);
 
             // Only display reader mode settings menu option if the current page is in reader mode.
             menu.findItem(R.id.reader_mode_prefs_id)
@@ -190,6 +182,13 @@ public class AppMenuPropertiesDelegate {
             // Only display the Enter VR button if VR Shell Dev environment is enabled.
             menu.findItem(R.id.enter_vr_id).setVisible(
                     CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_VR_SHELL_DEV));
+
+            // Only display the standalone content suggestions UI if the corresponding feature
+            // is enabled.
+            MenuItem item = menu.findItem(R.id.content_suggestions_standalone_ui);
+            item.setTitle("🔰🆕👌");
+            item.setVisible(
+                    ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SUGGESTIONS_STANDALONE_UI));
         }
 
         if (isOverviewMenu) {
@@ -289,5 +288,23 @@ public class AppMenuPropertiesDelegate {
             bookmarkMenuItem.setChecked(false);
             bookmarkMenuItem.setTitleCondensed(null);
         }
+    }
+
+    /**
+     * Updates the request desktop site item's visibility
+     *
+     * @param requstMenuItem {@link MenuItem} for request desktop site.
+     * @param currentTab      Current tab being displayed.
+     */
+    protected void updateRequestDesktopSiteMenuItem(
+            MenuItem requstMenuItem, Tab currentTab) {
+        String url = currentTab.getUrl();
+        boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_SCHEME)
+                || url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME);
+        requstMenuItem.setVisible(!isChromeScheme || currentTab.isNativePage());
+        requstMenuItem.setChecked(currentTab.getUseDesktopUserAgent());
+        requstMenuItem.setTitleCondensed(requstMenuItem.isChecked()
+                ? mActivity.getString(R.string.menu_request_desktop_site_on)
+                : mActivity.getString(R.string.menu_request_desktop_site_off));
     }
 }

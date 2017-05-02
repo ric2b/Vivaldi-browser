@@ -8,10 +8,7 @@
 #include <stdint.h>
 
 #include <string>
-#include <utility>
-#include <vector>
 
-#include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 
 class GURL;
@@ -19,7 +16,8 @@ class TemplateURL;
 
 namespace search {
 
-// Returns whether the Instant Extended API is enabled.
+// Returns whether the Instant Extended API is enabled. This is always true on
+// desktop and false on mobile.
 bool IsInstantExtendedAPIEnabled();
 
 // Returns the value to pass to the &espv CGI parameter when loading the
@@ -61,11 +59,7 @@ bool GetBoolValueForFlagWithDefault(const std::string& flag,
 
 // Returns a string indicating whether InstantExtended is enabled, suitable
 // for adding as a query string param to the homepage or search requests.
-// Returns an empty string otherwise.
-//
-// |for_search| should be set to true for search requests, in which case this
-// returns a non-empty string only if query extraction is enabled.
-std::string InstantExtendedEnabledParam(bool for_search);
+std::string InstantExtendedEnabledParam();
 
 // Returns a string that will cause the search results page to update
 // incrementally. Currently, Instant Extended passes a different param to
@@ -77,12 +71,12 @@ std::string InstantExtendedEnabledParam(bool for_search);
 // the returned string to be non-empty.
 std::string ForceInstantResultsParam(bool for_prerender);
 
-// Returns true if 'prefetch_results' flag is set to true in field trials to
-// prefetch high-confidence search suggestions.
+// Returns whether to prefetch high-confidence search suggestions. True iff
+// the Instant Extended API is enabled.
 bool ShouldPrefetchSearchResults();
 
-// Returns true if 'reuse_instant_search_base_page' flag is set to true in field
-// trials to reuse the prerendered page to commit any search query.
+// Returns whether to reuse the prerendered page to commit any search query.
+// True iff the Instant Extended API is enabled.
 bool ShouldReuseInstantSearchBasePage();
 
 // |url| should either have a secure scheme or have a non-HTTPS base URL that

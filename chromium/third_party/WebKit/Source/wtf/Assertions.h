@@ -33,6 +33,7 @@
 // For non-debug builds, everything is disabled by default, except for the
 // RELEASE_ASSERT family of macros.
 
+#include "base/allocator/oom.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "wtf/Compiler.h"
@@ -45,26 +46,8 @@
 #include <windows.h>
 #endif
 
-// Users must test "#if ENABLE(ASSERT)", which helps ensure that code
-// testing this macro has included this header.
-#ifndef ENABLE_ASSERT
-#if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
-/* Disable ASSERT* macros in release mode by default. */
-#define ENABLE_ASSERT 0
-#else
-#define ENABLE_ASSERT 1
-#endif /* defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON) */
-#endif
-
 #ifndef LOG_DISABLED
-#define LOG_DISABLED !ENABLE(ASSERT)
-#endif
-
-#if COMPILER(GCC)
-#define WTF_ATTRIBUTE_PRINTF(formatStringArgument, extraArguments) \
-  __attribute__((__format__(printf, formatStringArgument, extraArguments)))
-#else
-#define WTF_ATTRIBUTE_PRINTF(formatStringArgument, extraArguments)
+#define LOG_DISABLED !DCHECK_IS_ON()
 #endif
 
 // These helper functions are always declared, but not necessarily always
@@ -75,8 +58,7 @@ WTF_EXPORT void WTFReportAssertionFailure(const char* file,
                                           const char* function,
                                           const char* assertion);
 // WTFLogAlways() is deprecated. crbug.com/638849
-WTF_EXPORT void WTFLogAlways(const char* format, ...)
-    WTF_ATTRIBUTE_PRINTF(1, 2);
+WTF_EXPORT PRINTF_FORMAT(1, 2) void WTFLogAlways(const char* format, ...);
 WTF_EXPORT void WTFReportBacktrace(int framesToShow = 31);
 
 namespace WTF {
@@ -103,10 +85,9 @@ class WTF_EXPORT ScopedLogger {
   // The first message is passed to the constructor.  Additional messages for
   // the same scope can be added with log(). If condition is false, produce no
   // output and do not create a scope.
-  ScopedLogger(bool condition, const char* format, ...)
-      WTF_ATTRIBUTE_PRINTF(3, 4);
+  PRINTF_FORMAT(3, 4) ScopedLogger(bool condition, const char* format, ...);
   ~ScopedLogger();
-  void log(const char* format, ...) WTF_ATTRIBUTE_PRINTF(2, 3);
+  PRINTF_FORMAT(2, 3) void log(const char* format, ...);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AssertionsTest, ScopedLogger);
@@ -138,30 +119,6 @@ class WTF_EXPORT ScopedLogger {
 
 }  // namespace WTF
 
-// IMMEDIATE_CRASH() - Like CRASH() below but crashes in the fastest, simplest
-// possible way with no attempt at logging.
-#ifndef IMMEDIATE_CRASH
-#if COMPILER(GCC) || COMPILER(CLANG)
-#define IMMEDIATE_CRASH() __builtin_trap()
-#else
-#define IMMEDIATE_CRASH() ((void)(*(volatile char*)0 = 0))
-#endif
-#endif
-
-// OOM_CRASH() - Specialization of IMMEDIATE_CRASH which will raise a custom
-// exception on Windows to signal this is OOM and not a normal assert.
-#ifndef OOM_CRASH
-#if OS(WIN)
-#define OOM_CRASH()                                                     \
-  do {                                                                  \
-    ::RaiseException(0xE0000008, EXCEPTION_NONCONTINUABLE, 0, nullptr); \
-    IMMEDIATE_CRASH();                                                  \
-  } while (0)
-#else
-#define OOM_CRASH() IMMEDIATE_CRASH()
-#endif
-#endif
-
 // CRASH() - Raises a fatal error resulting in program termination and
 // triggering either the debugger or the crash reporter.
 //
@@ -170,17 +127,7 @@ class WTF_EXPORT ScopedLogger {
 // To test for unknown errors and verify assumptions, use ASSERT instead, to
 // avoid impacting performance in release builds.
 #ifndef CRASH
-#if COMPILER(MSVC)
-#define CRASH() (__debugbreak(), IMMEDIATE_CRASH())
-#else
-#define CRASH() (WTFReportBacktrace(), IMMEDIATE_CRASH())
-#endif
-#endif
-
-#if COMPILER(CLANG)
-#define NO_RETURN_DUE_TO_CRASH NO_RETURN
-#else
-#define NO_RETURN_DUE_TO_CRASH
+#define CRASH() IMMEDIATE_CRASH()
 #endif
 
 // ASSERT and ASSERT_NOT_REACHED
@@ -199,33 +146,17 @@ class WTF_EXPORT ScopedLogger {
   LAZY_STREAM(logging::LogMessage(file, line, #assertion).stream(), \
               DCHECK_IS_ON() ? !(assertion) : false)
 
-#if ENABLE(ASSERT)
-
-#define ASSERT(assertion)                                                      \
-  (!(assertion) ? (WTFReportAssertionFailure(__FILE__, __LINE__,               \
-                                             WTF_PRETTY_FUNCTION, #assertion), \
-                   CRASH())                                                    \
-                : (void)0)
-
-#define ASSERT_NOT_REACHED()                                               \
-  do {                                                                     \
-    WTFReportAssertionFailure(__FILE__, __LINE__, WTF_PRETTY_FUNCTION, 0); \
-    CRASH();                                                               \
-  } while (0)
-
-#define NO_RETURN_DUE_TO_ASSERT NO_RETURN_DUE_TO_CRASH
-
+#if DCHECK_IS_ON()
+#define ASSERT(assertion) DCHECK(assertion)
+#define ASSERT_NOT_REACHED() NOTREACHED()
 #else
-
 #define ASSERT(assertion) ((void)0)
 #define ASSERT_NOT_REACHED() ((void)0)
-#define NO_RETURN_DUE_TO_ASSERT
-
 #endif
 
 // Users must test "#if ENABLE(SECURITY_ASSERT)", which helps ensure
 // that code testing this macro has included this header.
-#if defined(ADDRESS_SANITIZER) || ENABLE(ASSERT)
+#if defined(ADDRESS_SANITIZER) || DCHECK_IS_ON()
 #define ENABLE_SECURITY_ASSERT 1
 #else
 #define ENABLE_SECURITY_ASSERT 0
@@ -253,17 +184,11 @@ class WTF_EXPORT ScopedLogger {
 // vulnerability from which execution must not continue even in a release build.
 // Please sure to file bugs for these failures using the security template:
 //    http://code.google.com/p/chromium/issues/entry?template=Security%20Bug
-// RELEASE_ASSERT is deprecated.  We should use CHECK() instead.
-#if ENABLE(ASSERT)
-#define RELEASE_ASSERT(assertion) ASSERT(assertion)
-#elif defined(ADDRESS_SANITIZER)
+#if defined(ADDRESS_SANITIZER)
 #define RELEASE_ASSERT(condition) SECURITY_CHECK(condition)
 #else
-#define RELEASE_ASSERT(assertion) \
-  (UNLIKELY(!(assertion)) ? (IMMEDIATE_CRASH()) : (void)0)
+#define RELEASE_ASSERT(condition) CHECK(condition)
 #endif
-// TODO(tkent): Move this to base/logging.h?
-#define RELEASE_NOTREACHED() LOG(FATAL)
 
 // DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES
 // Allow equality comparisons of Objects by reference or pointer,

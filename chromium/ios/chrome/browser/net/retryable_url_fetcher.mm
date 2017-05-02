@@ -14,6 +14,10 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @interface RetryableURLFetcher ()
 - (void)urlFetchDidComplete:(const net::URLFetcher*)fetcher;
 @end
@@ -26,7 +30,7 @@ class URLRequestDelegate : public net::URLFetcherDelegate {
   }
 
  private:
-  RetryableURLFetcher* owner_;  // Weak.
+  __unsafe_unretained RetryableURLFetcher* owner_;  // Weak.
 };
 
 @implementation RetryableURLFetcher {
@@ -35,7 +39,7 @@ class URLRequestDelegate : public net::URLFetcherDelegate {
   std::unique_ptr<net::URLFetcher> fetcher_;
   std::unique_ptr<net::BackoffEntry> backoffEntry_;
   int retryCount_;
-  id<RetryableURLFetcherDelegate> delegate_;  // Weak.
+  __unsafe_unretained id<RetryableURLFetcherDelegate> delegate_;  // Weak.
 }
 
 - (instancetype)

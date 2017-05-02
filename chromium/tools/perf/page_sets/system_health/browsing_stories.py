@@ -1,3 +1,4 @@
+# encoding: utf-8
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -8,6 +9,7 @@ from page_sets.system_health import system_health_story
 from page_sets.login_helpers import pinterest_login
 
 from telemetry import decorators
+from telemetry.util import js_template
 
 
 class _BrowsingStory(system_health_story.SystemHealthStory):
@@ -20,6 +22,8 @@ class _BrowsingStory(system_health_story.SystemHealthStory):
 
   IS_SINGLE_PAGE_APP = False
   ITEM_SELECTOR = NotImplemented
+  # Defaults to using the body element if not set.
+  CONTAINER_SELECTOR = None
   ABSTRACT_STORY = True
 
   def _WaitForNavigation(self, action_runner):
@@ -31,7 +35,9 @@ class _BrowsingStory(system_health_story.SystemHealthStory):
         self.ITEM_SELECTOR, index)
     # Only scrolls if element is not currently in viewport.
     action_runner.WaitForElement(element_function=item_selector)
-    action_runner.ScrollPageToElement(element_function=item_selector)
+    action_runner.ScrollPageToElement(
+        element_function=item_selector,
+        container_selector=self.CONTAINER_SELECTOR)
     self._ClickLink(action_runner, item_selector)
 
   def _ClickLink(self, action_runner, element_function):
@@ -40,7 +46,7 @@ class _BrowsingStory(system_health_story.SystemHealthStory):
     self._WaitForNavigation(action_runner)
 
   def _NavigateBack(self, action_runner):
-    action_runner.ExecuteJavaScript('window.history.back()')
+    action_runner.NavigateBack()
     self._WaitForNavigation(action_runner)
 
 
@@ -87,10 +93,6 @@ class _NewsBrowsingStory(_BrowsingStory):
         repeat_count=self.MAIN_PAGE_SCROLL_REPEAT)
 
 
-# TODO(ulan): Enable this story on mobile once it uses less memory and does not
-# crash with OOM.
-@decorators.Disabled('android',
-                     'win') # crbug.com/665465
 class CnnStory(_NewsBrowsingStory):
   """The second top website in http://www.alexa.com/topsites/category/News"""
   NAME = 'browse:news:cnn'
@@ -127,8 +129,11 @@ class FlipboardMobileStory(_NewsBrowsingStory):
   ITEM_SCROLL_REPEAT = 4
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return possible_browser.platform.IsSvelte()  # crbug.com/668097
 
-@decorators.Disabled('mac') # crbug.com/663025
+
 class FlipboardDesktopStory(_NewsBrowsingStory):
   NAME = 'browse:news:flipboard'
   URL = 'https://flipboard.com/explore'
@@ -137,13 +142,15 @@ class FlipboardDesktopStory(_NewsBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
-@decorators.Disabled('win') # crbug.com/657665
+# crbug.com/657665 for win and mac
+@decorators.Disabled('win', 'yosemite', 'elcapitan')
 class HackerNewsStory(_NewsBrowsingStory):
   NAME = 'browse:news:hackernews'
   URL = 'https://news.ycombinator.com'
   ITEM_SELECTOR = '.athing .title > a'
 
 
+@decorators.Disabled('android')  # crbug.com/676315
 class NytimesMobileStory(_NewsBrowsingStory):
   """The third top website in http://www.alexa.com/topsites/category/News"""
   NAME = 'browse:news:nytimes'
@@ -171,7 +178,6 @@ class QqMobileStory(_NewsBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
-@decorators.Disabled('mac')  # crbug.com/662959
 class RedditDesktopStory(_NewsBrowsingStory):
   """The top website in http://www.alexa.com/topsites/category/News"""
   NAME = 'browse:news:reddit'
@@ -189,16 +195,15 @@ class RedditMobileStory(_NewsBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
-@decorators.Disabled('android')  # crbug.com/664515
 class TwitterMobileStory(_NewsBrowsingStory):
   NAME = 'browse:social:twitter'
   URL = 'https://www.twitter.com/nasa'
   ITEM_SELECTOR = '.Tweet-text'
+  CONTAINER_SELECTOR = '.NavigationSheet'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
-@decorators.Disabled('win',  # crbug.com/662971
-                     'mac')  # crbug.com/664661, crbug.com/663025
+@decorators.Disabled('win')  # crbug.com/662971
 class TwitterDesktopStory(_NewsBrowsingStory):
   NAME = 'browse:social:twitter'
   URL = 'https://www.twitter.com/nasa'
@@ -222,10 +227,113 @@ class WashingtonPostMobileStory(_NewsBrowsingStory):
     # to phone" button. So on tablets we run with the popup window open. The
     # popup is transparent, so this is mostly an aesthetical issue.
     has_button = action_runner.EvaluateJavaScript(
-        '!!document.querySelector("%s")' % self._CLOSE_BUTTON_SELECTOR)
+        '!!document.querySelector({{ selector }})',
+        selector=self._CLOSE_BUTTON_SELECTOR)
     if has_button:
       action_runner.ClickElement(selector=self._CLOSE_BUTTON_SELECTOR)
     super(WashingtonPostMobileStory, self)._DidLoadDocument(action_runner)
+
+
+##############################################################################
+# Search browsing stories.
+##############################################################################
+
+
+@decorators.Disabled('win')  # crbug.com/673775
+class GoogleDesktopStory(_NewsBrowsingStory):
+  """
+  A typical google search story:
+    _ Start at https://www.google.com/search?q=flower
+    _ Click on the wikipedia link & navigate to
+      https://en.wikipedia.org/wiki/Flower
+    _ Scroll down the wikipedia page about flower.
+    _ Back to the search main page.
+    _ Refine the search query to 'flower delivery'.
+    _ Scroll down the page.
+    _ Click the next page result of 'flower delivery'.
+    _ Scroll the search page.
+
+  """
+  NAME = 'browse:search:google'
+  URL = 'https://www.google.com/search?q=flower'
+  _SEARCH_BOX_SELECTOR = 'input[aria-label="Search"]'
+  _SEARCH_PAGE_2_SELECTOR = 'a[aria-label=\'Page 2\']'
+  SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
+
+  def _DidLoadDocument(self, action_runner):
+    # Click on flower Wikipedia link.
+    action_runner.Wait(2)
+    action_runner.ClickElement(text='Flower - Wikipedia')
+    action_runner.WaitForNavigate()
+
+    # Scroll the flower Wikipedia page, then navigate back.
+    action_runner.Wait(2)
+    action_runner.ScrollPage()
+    action_runner.Wait(2)
+    action_runner.NavigateBack()
+
+    # Click on the search box.
+    action_runner.WaitForElement(selector=self._SEARCH_BOX_SELECTOR)
+    action_runner.ClickElement(selector=self._SEARCH_BOX_SELECTOR)
+    action_runner.Wait(2)
+
+    # Submit search query.
+    action_runner.EnterText(' delivery')
+    action_runner.Wait(0.5)
+    action_runner.PressKey('Return')
+
+    # Scroll down & click next search result page.
+    action_runner.Wait(2)
+    action_runner.ScrollPageToElement(selector=self._SEARCH_PAGE_2_SELECTOR)
+    action_runner.Wait(2)
+    action_runner.ClickElement(selector=self._SEARCH_PAGE_2_SELECTOR)
+    action_runner.Wait(2)
+    action_runner.ScrollPage()
+
+
+class GoogleIndiaDesktopStory(_NewsBrowsingStory):
+  """
+  A typical google search story in India:
+    1. Start at https://www.google.co.in/search?q=%E0%A4%AB%E0%A5%82%E0%A4%B2`
+    2. Scroll down the page.
+    3. Refine the query & click search box, which navigates to
+    https://www.google.co.in/search?q=%E0%A4%AB%E0%A5%82%E0%A4%B2&rct=j#q=%E0%A4%AB%E0%A5%82%E0%A4%B2+%E0%A4%B5%E0%A4%BF%E0%A4%A4%E0%A4%B0%E0%A4%A3
+    4. Scroll down the page.
+    5. Click the next page result
+    6. Scroll the search result page.
+
+  """
+  NAME = 'browse:search:google_india'
+  URL = 'https://www.google.co.in/search?q=%E0%A4%AB%E0%A5%82%E0%A4%B2'
+  _SEARCH_BOX_SELECTOR = 'input[aria-label="Search"]'
+  _SEARCH_BUTTON_SELECTOR = 'button[aria-label="Google Search"]'
+  _SEARCH_PAGE_2_SELECTOR = 'a[aria-label=\'Page 2\']'
+  SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
+
+  def _DidLoadDocument(self, action_runner):
+    action_runner.Wait(2)
+    action_runner.ScrollPage()
+    action_runner.Wait(2)
+
+    action_runner.ScrollPage(direction='up')
+
+    # Refine search query in the search box.
+    # TODO(nednguyen): replace this with input text gesture to make it more
+    # realistic.
+    action_runner.ExecuteJavaScript(
+        js_template.Render(
+            'document.querySelector({{ selector }}).value += "वितरण";',
+            selector=self._SEARCH_BOX_SELECTOR))
+    action_runner.Wait(2)
+    action_runner.ClickElement(selector=self._SEARCH_BUTTON_SELECTOR)
+
+    # Scroll down & click next search result page.
+    action_runner.Wait(2)
+    action_runner.ScrollPageToElement(selector=self._SEARCH_PAGE_2_SELECTOR)
+    action_runner.Wait(2)
+    action_runner.ClickElement(selector=self._SEARCH_PAGE_2_SELECTOR)
+    action_runner.Wait(2)
+    action_runner.ScrollPage()
 
 
 ##############################################################################
@@ -288,8 +396,6 @@ class YouTubeMobileStory(_MediaBrowsingStory):
   ITEM_SELECTOR_INDEX = 3
 
 
-# Failing during CQ runs. crbug.com/661775
-@decorators.Disabled('linux', 'win')
 class YouTubeDesktopStory(_MediaBrowsingStory):
   NAME = 'browse:media:youtube'
   URL = 'https://www.youtube.com/watch?v=QGfhS1hfTWw&autoplay=false'

@@ -23,6 +23,7 @@
 
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/layout/svg/LayoutSVGResourceContainer.h"
 #include "core/svg/SVGStopElement.h"
 #include "core/svg/SVGTransformList.h"
@@ -34,9 +35,9 @@ const SVGEnumerationStringEntries&
 getStaticStringEntries<SVGSpreadMethodType>() {
   DEFINE_STATIC_LOCAL(SVGEnumerationStringEntries, entries, ());
   if (entries.isEmpty()) {
-    entries.append(std::make_pair(SVGSpreadMethodPad, "pad"));
-    entries.append(std::make_pair(SVGSpreadMethodReflect, "reflect"));
-    entries.append(std::make_pair(SVGSpreadMethodRepeat, "repeat"));
+    entries.push_back(std::make_pair(SVGSpreadMethodPad, "pad"));
+    entries.push_back(std::make_pair(SVGSpreadMethodReflect, "reflect"));
+    entries.push_back(std::make_pair(SVGSpreadMethodRepeat, "repeat"));
   }
   return entries;
 }
@@ -47,7 +48,8 @@ SVGGradientElement::SVGGradientElement(const QualifiedName& tagName,
       SVGURIReference(this),
       m_gradientTransform(
           SVGAnimatedTransformList::create(this,
-                                           SVGNames::gradientTransformAttr)),
+                                           SVGNames::gradientTransformAttr,
+                                           CSSPropertyTransform)),
       m_spreadMethod(SVGAnimatedEnumeration<SVGSpreadMethodType>::create(
           this,
           SVGNames::spreadMethodAttr,
@@ -69,7 +71,26 @@ DEFINE_TRACE(SVGGradientElement) {
   SVGURIReference::trace(visitor);
 }
 
+void SVGGradientElement::collectStyleForPresentationAttribute(
+    const QualifiedName& name,
+    const AtomicString& value,
+    MutableStylePropertySet* style) {
+  if (name == SVGNames::gradientTransformAttr) {
+    addPropertyToPresentationAttributeStyle(
+        style, CSSPropertyTransform,
+        m_gradientTransform->currentValue()->cssValue());
+    return;
+  }
+  SVGElement::collectStyleForPresentationAttribute(name, value, style);
+}
+
 void SVGGradientElement::svgAttributeChanged(const QualifiedName& attrName) {
+  if (attrName == SVGNames::gradientTransformAttr) {
+    invalidateSVGPresentationAttributeStyle();
+    setNeedsStyleRecalc(LocalStyleChange,
+                        StyleChangeReasonForTracing::fromAttribute(attrName));
+  }
+
   if (attrName == SVGNames::gradientUnitsAttr ||
       attrName == SVGNames::gradientTransformAttr ||
       attrName == SVGNames::spreadMethodAttr ||
@@ -109,7 +130,8 @@ Vector<Gradient::ColorStop> SVGGradientElement::buildStops() {
     offset = std::min(std::max(previousOffset, offset), 1.0f);
     previousOffset = offset;
 
-    stops.append(Gradient::ColorStop(offset, stop.stopColorIncludingOpacity()));
+    stops.push_back(
+        Gradient::ColorStop(offset, stop.stopColorIncludingOpacity()));
   }
   return stops;
 }

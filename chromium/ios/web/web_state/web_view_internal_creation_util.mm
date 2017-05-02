@@ -4,9 +4,13 @@
 
 #import "ios/web/web_state/web_view_internal_creation_util.h"
 
+#import <objc/runtime.h>
+
 #include "base/logging.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
-#include "ios/web/public/web_client.h"
+#import "ios/web/public/web_client.h"
+#import "ios/web/web_state/ui/crw_context_menu_controller.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 
 namespace web {
@@ -29,10 +33,11 @@ void VerifyWKWebViewCreationPreConditions(
 
 }  // namespace
 
-WKWebView* CreateWKWebView(CGRect frame,
-                           WKWebViewConfiguration* configuration,
-                           BrowserState* browser_state,
-                           BOOL use_desktop_user_agent) {
+WKWebView* BuildWKWebView(CGRect frame,
+                          WKWebViewConfiguration* configuration,
+                          BrowserState* browser_state,
+                          BOOL use_desktop_user_agent,
+                          id<CRWContextMenuDelegate> context_menu_delegate) {
   VerifyWKWebViewCreationPreConditions(browser_state, configuration);
 
   GetWebClient()->PreWebViewCreation();
@@ -53,15 +58,34 @@ WKWebView* CreateWKWebView(CGRect frame,
   // created.
   web_view.allowsLinkPreview = NO;
 
-  return web_view;
+  if (context_menu_delegate) {
+    base::scoped_nsobject<CRWContextMenuController> context_menu_controller(
+        [[CRWContextMenuController alloc]
+               initWithWebView:web_view
+            injectionEvaluator:nil
+                      delegate:context_menu_delegate]);
+    objc_setAssociatedObject(web_view, context_menu_controller.get(),
+                             context_menu_controller.get(),
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+
+  return [web_view autorelease];
 }
 
-WKWebView* CreateWKWebView(CGRect frame,
-                           WKWebViewConfiguration* configuration,
-                           BrowserState* browser_state) {
+WKWebView* BuildWKWebView(CGRect frame,
+                          WKWebViewConfiguration* configuration,
+                          BrowserState* browser_state,
+                          BOOL use_desktop_user_agent) {
+  return BuildWKWebView(frame, configuration, browser_state,
+                        use_desktop_user_agent, nil);
+}
+
+WKWebView* BuildWKWebView(CGRect frame,
+                          WKWebViewConfiguration* configuration,
+                          BrowserState* browser_state) {
   BOOL use_desktop_user_agent = NO;
-  return CreateWKWebView(frame, configuration, browser_state,
-                         use_desktop_user_agent);
+  return BuildWKWebView(frame, configuration, browser_state,
+                        use_desktop_user_agent);
 }
 
 }  // namespace web

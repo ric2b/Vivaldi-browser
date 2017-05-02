@@ -12,7 +12,7 @@
 // included file but that's all right since any javascript file should start
 // with a copyright comment anyway.
 
-//<include src="../../assert.js">
+// <include src="../../assert.js">
 
 cr.define('cr.ui', function() {
   /** @const */ var EventTarget = cr.EventTarget;
@@ -125,8 +125,9 @@ cr.define('cr.ui', function() {
      */
     slice: function(opt_from, opt_to) {
       var arr = this.array_;
-      return this.indexes_.slice(opt_from, opt_to).map(
-          function(index) { return arr[index] });
+      return this.indexes_.slice(opt_from, opt_to).map(function(index) {
+        return arr[index]
+      });
     },
 
     /**
@@ -181,8 +182,8 @@ cr.define('cr.ui', function() {
 
       var status = this.sortStatus;
       // if sortStatus.field is null, this restores original order.
-      var sortPermutation = this.doSort_(this.sortStatus.field,
-                                         this.sortStatus.direction);
+      var sortPermutation =
+          this.doSort_(this.sortStatus.field, this.sortStatus.direction);
       if (sortPermutation) {
         var splicePermutation = deletePermutation.map(function(element) {
           return element != -1 ? sortPermutation[element] : -1;
@@ -270,8 +271,8 @@ cr.define('cr.ui', function() {
 
       if (this.sortStatus.field) {
         var status = this.sortStatus;
-        var sortPermutation = this.doSort_(this.sortStatus.field,
-                                           this.sortStatus.direction);
+        var sortPermutation =
+            this.doSort_(this.sortStatus.field, this.sortStatus.direction);
         if (sortPermutation)
           this.dispatchPermutedEvent_(sortPermutation);
         // We should first call prepareSort (data may change), and then sort.
@@ -288,10 +289,7 @@ cr.define('cr.ui', function() {
      * @return {!Object} Created sort status.
      */
     createSortStatus: function(field, direction) {
-      return {
-        field: field,
-        direction: direction
-      };
+      return {field: field, direction: direction};
     },
 
     /**
@@ -426,8 +424,8 @@ cr.define('cr.ui', function() {
           compareResult = compareFunction.call(null, item1, item2);
         if (compareResult != 0)
           return dirMultiplier * compareResult;
-        return dirMultiplier * this.defaultValuesCompareFunction(index1,
-                                                                 index2);
+        return dirMultiplier *
+            this.defaultValuesCompareFunction(index1, index2);
       }.bind(this);
     },
 
@@ -444,7 +442,5 @@ cr.define('cr.ui', function() {
     }
   };
 
-  return {
-    ArrayDataModel: ArrayDataModel
-  };
+  return {ArrayDataModel: ArrayDataModel};
 });

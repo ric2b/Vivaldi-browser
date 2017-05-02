@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_DISPLAY_TEST_MANAGER_TEST_API_H_
-#define UI_DISPLAY_TEST_MANAGER_TEST_API_H_
+#ifndef UI_DISPLAY_TEST_DISPLAY_MANAGER_TEST_API_H_
+#define UI_DISPLAY_TEST_DISPLAY_MANAGER_TEST_API_H_
 
 #include <stdint.h>
 
@@ -12,8 +12,9 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "ui/display/display.h"
 #include "ui/display/display_export.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/types/display_constants.h"
 
 namespace gfx {
@@ -47,15 +48,17 @@ class DISPLAY_EXPORT DisplayManagerTestApi {
   // Sets the available color profiles for |display_id|.
   void SetAvailableColorProfiles(
       int64_t display_id,
-      const std::vector<ui::ColorCalibrationProfile>& profiles);
+      const std::vector<ColorCalibrationProfile>& profiles);
 
-  // Gets the internal display::ManagedDisplayInfo for a specific display id.
-  const display::ManagedDisplayInfo& GetInternalManagedDisplayInfo(
-      int64_t display_id);
+  // Gets the internal ManagedDisplayInfo for a specific display id.
+  const ManagedDisplayInfo& GetInternalManagedDisplayInfo(int64_t display_id);
 
   // Sets the UI scale for the |display_id|. Returns false if the
   // display_id is not an internal display.
   bool SetDisplayUIScale(int64_t display_id, float scale);
+
+  // Sets the touch support for |display_id|.
+  void SetTouchSupport(int64_t display_id, Display::TouchSupport touch_support);
 
  private:
   friend class ScopedSetInternalDisplayId;
@@ -96,17 +99,16 @@ DISPLAY_EXPORT bool SetDisplayResolution(DisplayManager* display_manager,
 // independent of current displays, use DisplayLayoutBuilder or simply
 // create a new DisplayLayout and set display id fields (primary, ids
 // in placement) manually.
-DISPLAY_EXPORT std::unique_ptr<display::DisplayLayout> CreateDisplayLayout(
+DISPLAY_EXPORT std::unique_ptr<DisplayLayout> CreateDisplayLayout(
     DisplayManager* display_manager,
-    display::DisplayPlacement::Position position,
+    DisplayPlacement::Position position,
     int offset);
 
 // Creates the DisplayIdList from ints.
-DISPLAY_EXPORT display::DisplayIdList CreateDisplayIdList2(int64_t id1,
-                                                           int64_t id2);
-DISPLAY_EXPORT display::DisplayIdList CreateDisplayIdListN(size_t count, ...);
+DISPLAY_EXPORT DisplayIdList CreateDisplayIdList2(int64_t id1, int64_t id2);
+DISPLAY_EXPORT DisplayIdList CreateDisplayIdListN(size_t count, ...);
 
 }  // namespace test
 }  // namespace display
 
-#endif  // UI_DISPLAY_TEST_MANAGER_TEST_API_H_
+#endif  // UI_DISPLAY_TEST_DISPLAY_MANAGER_TEST_API_H_

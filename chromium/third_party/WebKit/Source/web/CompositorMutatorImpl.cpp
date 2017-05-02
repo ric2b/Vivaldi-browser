@@ -11,7 +11,7 @@
 #include "platform/graphics/CompositorMutationsTarget.h"
 #include "platform/graphics/CompositorMutatorClient.h"
 #include "platform/heap/Handle.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "web/CompositorProxyClientImpl.h"
 #include "wtf/PtrUtil.h"
@@ -32,7 +32,7 @@ void createCompositorMutatorClient(
 }  // namespace
 
 CompositorMutatorImpl::CompositorMutatorImpl()
-    : m_animationManager(wrapUnique(new CustomCompositorAnimationManager)),
+    : m_animationManager(WTF::wrapUnique(new CustomCompositorAnimationManager)),
       m_client(nullptr) {}
 
 std::unique_ptr<CompositorMutatorClient> CompositorMutatorImpl::createClient() {

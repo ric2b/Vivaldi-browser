@@ -10,6 +10,7 @@
 
 #include "base/feature_list.h"
 #include "extensions/features/features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
 namespace features {
@@ -43,8 +44,6 @@ extern const base::Feature kBackspaceGoesBackFeature;
 
 extern const base::Feature kBlockPromptsIfDismissedOften;
 
-extern const base::Feature kBlockSmallContent;
-
 extern const base::Feature kBrowserHangFixesExperiment;
 
 #if defined(OS_ANDROID)
@@ -69,6 +68,8 @@ extern const base::Feature kHappinessTrackingSystem;
 extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 #endif
 
+extern const base::Feature kLsdPermissionPrompt;
+
 extern const base::Feature kMaterialDesignBookmarks;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -79,7 +80,16 @@ extern const base::Feature kMaterialDesignHistory;
 
 extern const base::Feature kMaterialDesignSettings;
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kMediaRemoting;
+extern const base::Feature kMediaRemotingEncrypted;
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+
 extern const base::Feature kModalPermissionPrompts;
+
+#if defined(OS_WIN)
+extern const base::Feature kModuleDatabase;
+#endif
 
 #if defined(OS_MACOSX)
 extern const base::Feature kNativeNotifications;
@@ -89,11 +99,19 @@ extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
 extern const base::Feature kOverrideYouTubeFlashEmbed;
 
-#if defined(ENABLE_PLUGINS)
+extern const base::Feature kPermissionsBlacklist;
+
+#if BUILDFLAG(ENABLE_PLUGINS)
 extern const base::Feature kPreferHtmlOverPlugins;
 #endif
 
+#if defined(OS_CHROMEOS)
+extern const base::Feature kPreloadLockScreen;
+#endif
+
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+extern const base::Feature kPrintPdfAsImage;
+
 extern const base::Feature kPrintScaling;
 #endif
 
@@ -103,17 +121,13 @@ extern const base::Feature kPushMessagingBackgroundMode;
 extern const base::Feature kRuntimeMemoryLeakDetector;
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 extern const base::Feature kRunAllFlashInAllowMode;
 #endif
 
 extern const base::Feature kSafeSearchUrlReporting;
 
 extern const base::Feature kSimplifiedFullscreenUI;
-
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
-extern const base::Feature kSecurityChip;
-#endif
 
 #if defined(SYZYASAN)
 extern const base::Feature kSyzyasanDeferredFree;

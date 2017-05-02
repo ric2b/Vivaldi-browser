@@ -20,17 +20,15 @@
 #ifndef SVGElementRareData_h
 #define SVGElementRareData_h
 
+#include "core/style/ComputedStyle.h"
 #include "core/svg/SVGElement.h"
 #include "platform/heap/Handle.h"
 #include "platform/transforms/AffineTransform.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/StdLibExtras.h"
 
 namespace blink {
 
-class CSSCursorImageValue;
-class SVGCursorElement;
 class SVGElementProxySet;
 
 class SVGElementRareData
@@ -40,8 +38,6 @@ class SVGElementRareData
  public:
   SVGElementRareData(SVGElement* owner)
       : m_owner(owner),
-        m_cursorElement(nullptr),
-        m_cursorImageValue(nullptr),
         m_correspondingElement(nullptr),
         m_instancesUpdatesBlocked(false),
         m_useOverrideComputedStyle(false),
@@ -71,23 +67,11 @@ class SVGElementRareData
     m_instancesUpdatesBlocked = value;
   }
 
-  SVGCursorElement* cursorElement() const { return m_cursorElement; }
-  void setCursorElement(SVGCursorElement* cursorElement) {
-    m_cursorElement = cursorElement;
-  }
-
   SVGElement* correspondingElement() const {
     return m_correspondingElement.get();
   }
   void setCorrespondingElement(SVGElement* correspondingElement) {
     m_correspondingElement = correspondingElement;
-  }
-
-  const CSSCursorImageValue* cursorImageValue() const {
-    return m_cursorImageValue;
-  }
-  void setCursorImageValue(const CSSCursorImageValue* cursorImageValue) {
-    m_cursorImageValue = cursorImageValue;
   }
 
   void setWebAnimatedAttributesDirty(bool dirty) {
@@ -119,15 +103,12 @@ class SVGElementRareData
   AffineTransform* animateMotionTransform();
 
   DECLARE_TRACE();
-  void processWeakMembers(Visitor*);
 
  private:
   Member<SVGElement> m_owner;
   SVGElementSet m_outgoingReferences;
   SVGElementSet m_incomingReferences;
   HeapHashSet<WeakMember<SVGElement>> m_elementInstances;
-  WeakMember<SVGCursorElement> m_cursorElement;
-  WeakMember<const CSSCursorImageValue> m_cursorImageValue;
   Member<SVGElementProxySet> m_elementProxySet;
   Member<SVGElement> m_correspondingElement;
   bool m_instancesUpdatesBlocked : 1;

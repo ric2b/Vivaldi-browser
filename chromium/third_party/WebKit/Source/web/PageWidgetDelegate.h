@@ -32,7 +32,7 @@
 #define PageWidgetDelegate_h
 
 #include "public/platform/WebCanvas.h"
-#include "public/platform/WebInputEvent.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/web/WebWidget.h"
 #include "web/WebExport.h"
 
@@ -49,7 +49,9 @@ class WebTouchEvent;
 
 class WEB_EXPORT PageWidgetEventHandler {
  public:
-  virtual void handleMouseMove(LocalFrame& mainFrame, const WebMouseEvent&);
+  virtual void handleMouseMove(LocalFrame& mainFrame,
+                               const WebMouseEvent&,
+                               const std::vector<const WebInputEvent*>&);
   virtual void handleMouseLeave(LocalFrame& mainFrame, const WebMouseEvent&);
   virtual void handleMouseDown(LocalFrame& mainFrame, const WebMouseEvent&);
   virtual void handleMouseUp(LocalFrame& mainFrame, const WebMouseEvent&);
@@ -58,8 +60,10 @@ class WEB_EXPORT PageWidgetEventHandler {
   virtual WebInputEventResult handleKeyEvent(const WebKeyboardEvent&) = 0;
   virtual WebInputEventResult handleCharEvent(const WebKeyboardEvent&) = 0;
   virtual WebInputEventResult handleGestureEvent(const WebGestureEvent&) = 0;
-  virtual WebInputEventResult handleTouchEvent(LocalFrame& mainFrame,
-                                               const WebTouchEvent&);
+  virtual WebInputEventResult handleTouchEvent(
+      LocalFrame& mainFrame,
+      const WebTouchEvent&,
+      const std::vector<const WebInputEvent*>&);
   virtual ~PageWidgetEventHandler() {}
 };
 
@@ -81,9 +85,10 @@ class PageWidgetDelegate {
                                        LocalFrame& root);
 
   // See FIXME in the function body about nullptr |root|.
-  static WebInputEventResult handleInputEvent(PageWidgetEventHandler&,
-                                              const WebInputEvent&,
-                                              LocalFrame* root);
+  static WebInputEventResult handleInputEvent(
+      PageWidgetEventHandler&,
+      const WebCoalescedInputEvent& coalescedEvent,
+      LocalFrame* root);
 
  private:
   PageWidgetDelegate() {}

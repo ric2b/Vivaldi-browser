@@ -12,12 +12,11 @@
 #include "net/quic/chromium/quic_http_stream.h"
 #include "net/quic/chromium/quic_stream_factory.h"
 #include "net/quic/core/crypto/quic_crypto_client_config.h"
-#include "net/quic/core/quic_clock.h"
+#include "net/quic/platform/impl/quic_chromium_clock.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 
 using std::string;
-using std::vector;
 
 namespace net {
 namespace test {
@@ -169,7 +168,7 @@ void QuicStreamFactoryPeer::CacheDummyServerConfig(
   string source_address_token("test_source_address_token");
   string signature("test_signature");
 
-  vector<string> certs;
+  std::vector<string> certs;
   // Load a certificate that is valid for *.example.org
   scoped_refptr<X509Certificate> cert(
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
@@ -181,7 +180,7 @@ void QuicStreamFactoryPeer::CacheDummyServerConfig(
   QuicCryptoClientConfig* crypto_config = &factory->crypto_config_;
   QuicCryptoClientConfig::CachedState* cached =
       crypto_config->LookupOrCreate(quic_server_id);
-  QuicClock clock;
+  QuicChromiumClock clock;
   cached->Initialize(server_config, source_address_token, certs, "", "",
                      signature, clock.WallNow(), QuicWallTime::Zero());
   DCHECK(!cached->certs().empty());

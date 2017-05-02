@@ -113,7 +113,7 @@ const char* GetBitFieldString(BitField bit_field) {
 }
 
 const char* GetStringFieldString(StringField string_field) {
-  ASSERT_ENUM_BOUNDS(NON_UNIQUE_NAME, UNIQUE_BOOKMARK_TAG, STRING_FIELDS_BEGIN,
+  ASSERT_ENUM_BOUNDS(NON_UNIQUE_NAME, UNIQUE_NOTES_TAG, STRING_FIELDS_BEGIN,
                      STRING_FIELDS_END - 1);
   switch (string_field) {
     ENUM_CASE(NON_UNIQUE_NAME);
@@ -121,6 +121,7 @@ const char* GetStringFieldString(StringField string_field) {
     ENUM_CASE(UNIQUE_SERVER_TAG);
     ENUM_CASE(UNIQUE_CLIENT_TAG);
     ENUM_CASE(UNIQUE_BOOKMARK_TAG);
+    ENUM_CASE(UNIQUE_NOTES_TAG);
     case STRING_FIELDS_END:
       break;
   }

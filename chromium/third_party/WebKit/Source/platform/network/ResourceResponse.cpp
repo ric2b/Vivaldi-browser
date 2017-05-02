@@ -40,10 +40,13 @@ Vector<Interface> isolatedCopy(const Vector<Interface>& src) {
   Vector<Interface> result;
   result.reserveCapacity(src.size());
   for (const auto& timestamp : src) {
-    result.append(timestamp.isolatedCopy());
+    result.push_back(timestamp.isolatedCopy());
   }
   return result;
 }
+
+static const char cacheControlHeader[] = "cache-control";
+static const char pragmaHeader[] = "pragma";
 
 }  // namespace
 
@@ -95,6 +98,7 @@ ResourceResponse::ResourceResponse()
       m_wasFetchedViaForeignFetch(false),
       m_wasFallbackRequiredByServiceWorker(false),
       m_serviceWorkerResponseType(WebServiceWorkerResponseTypeDefault),
+      m_didServiceWorkerNavigationPreload(false),
       m_responseTime(0),
       m_remotePort(0),
       m_encodedDataLength(0),
@@ -137,6 +141,7 @@ ResourceResponse::ResourceResponse(const KURL& url,
       m_wasFetchedViaForeignFetch(false),
       m_wasFallbackRequiredByServiceWorker(false),
       m_serviceWorkerResponseType(WebServiceWorkerResponseTypeDefault),
+      m_didServiceWorkerNavigationPreload(false),
       m_responseTime(0),
       m_remotePort(0),
       m_encodedDataLength(0),
@@ -170,7 +175,7 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
   m_securityDetails.validFrom = data->m_securityDetails.validFrom;
   m_securityDetails.validTo = data->m_securityDetails.validTo;
   for (auto& cert : data->m_certificate)
-    m_securityDetails.certificate.append(AtomicString(cert));
+    m_securityDetails.certificate.push_back(AtomicString(cert));
   m_securityDetails.sctList = data->m_securityDetails.sctList;
   m_httpVersion = data->m_httpVersion;
   m_appCacheID = data->m_appCacheID;
@@ -185,8 +190,10 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
   m_wasFallbackRequiredByServiceWorker =
       data->m_wasFallbackRequiredByServiceWorker;
   m_serviceWorkerResponseType = data->m_serviceWorkerResponseType;
-  m_originalURLViaServiceWorker = data->m_originalURLViaServiceWorker;
+  m_urlListViaServiceWorker = data->m_urlListViaServiceWorker;
   m_cacheStorageCacheName = data->m_cacheStorageCacheName;
+  m_didServiceWorkerNavigationPreload =
+      data->m_didServiceWorkerNavigationPreload;
   m_responseTime = data->m_responseTime;
   m_remoteIPAddress = AtomicString(data->m_remoteIPAddress);
   m_remotePort = data->m_remotePort;
@@ -207,7 +214,7 @@ ResourceResponse& ResourceResponse::operator=(const ResourceResponse&) =
 std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData()
     const {
   std::unique_ptr<CrossThreadResourceResponseData> data =
-      wrapUnique(new CrossThreadResourceResponseData);
+      WTF::wrapUnique(new CrossThreadResourceResponseData);
   data->m_url = url().copy();
   data->m_mimeType = mimeType().getString().isolatedCopy();
   data->m_expectedContentLength = expectedContentLength();
@@ -235,7 +242,7 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData()
   data->m_securityDetails.validFrom = m_securityDetails.validFrom;
   data->m_securityDetails.validTo = m_securityDetails.validTo;
   for (auto& cert : m_securityDetails.certificate)
-    data->m_certificate.append(cert.getString().isolatedCopy());
+    data->m_certificate.push_back(cert.getString().isolatedCopy());
   data->m_securityDetails.sctList = isolatedCopy(m_securityDetails.sctList);
   data->m_httpVersion = m_httpVersion;
   data->m_appCacheID = m_appCacheID;
@@ -250,8 +257,14 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData()
   data->m_wasFallbackRequiredByServiceWorker =
       m_wasFallbackRequiredByServiceWorker;
   data->m_serviceWorkerResponseType = m_serviceWorkerResponseType;
-  data->m_originalURLViaServiceWorker = m_originalURLViaServiceWorker.copy();
+  data->m_urlListViaServiceWorker.resize(m_urlListViaServiceWorker.size());
+  std::transform(m_urlListViaServiceWorker.begin(),
+                 m_urlListViaServiceWorker.end(),
+                 data->m_urlListViaServiceWorker.begin(),
+                 [](const KURL& url) { return url.copy(); });
   data->m_cacheStorageCacheName = cacheStorageCacheName().isolatedCopy();
+  data->m_didServiceWorkerNavigationPreload =
+      m_didServiceWorkerNavigationPreload;
   data->m_responseTime = m_responseTime;
   data->m_remoteIPAddress = m_remoteIPAddress.getString().isolatedCopy();
   data->m_remotePort = m_remotePort;
@@ -353,28 +366,16 @@ const AtomicString& ResourceResponse::httpHeaderField(
   return m_httpHeaderFields.get(name);
 }
 
-static const AtomicString& cacheControlHeaderString() {
-  DEFINE_STATIC_LOCAL(const AtomicString, cacheControlHeader,
-                      ("cache-control"));
-  return cacheControlHeader;
-}
-
-static const AtomicString& pragmaHeaderString() {
-  DEFINE_STATIC_LOCAL(const AtomicString, pragmaHeader, ("pragma"));
-  return pragmaHeader;
-}
-
 void ResourceResponse::updateHeaderParsedState(const AtomicString& name) {
-  DEFINE_STATIC_LOCAL(const AtomicString, ageHeader, ("age"));
-  DEFINE_STATIC_LOCAL(const AtomicString, dateHeader, ("date"));
-  DEFINE_STATIC_LOCAL(const AtomicString, expiresHeader, ("expires"));
-  DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader,
-                      ("last-modified"));
+  static const char ageHeader[] = "age";
+  static const char dateHeader[] = "date";
+  static const char expiresHeader[] = "expires";
+  static const char lastModifiedHeader[] = "last-modified";
 
   if (equalIgnoringCase(name, ageHeader))
     m_haveParsedAgeHeader = false;
-  else if (equalIgnoringCase(name, cacheControlHeaderString()) ||
-           equalIgnoringCase(name, pragmaHeaderString()))
+  else if (equalIgnoringCase(name, cacheControlHeader) ||
+           equalIgnoringCase(name, pragmaHeader))
     m_cacheControlHeader = CacheControlHeader();
   else if (equalIgnoringCase(name, dateHeader))
     m_haveParsedDateHeader = false;
@@ -436,50 +437,54 @@ const HTTPHeaderMap& ResourceResponse::httpHeaderFields() const {
 }
 
 bool ResourceResponse::cacheControlContainsNoCache() const {
-  if (!m_cacheControlHeader.parsed)
-    m_cacheControlHeader = parseCacheControlDirectives(
-        m_httpHeaderFields.get(cacheControlHeaderString()),
-        m_httpHeaderFields.get(pragmaHeaderString()));
+  if (!m_cacheControlHeader.parsed) {
+    m_cacheControlHeader =
+        parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeader),
+                                    m_httpHeaderFields.get(pragmaHeader));
+  }
   return m_cacheControlHeader.containsNoCache;
 }
 
 bool ResourceResponse::cacheControlContainsNoStore() const {
-  if (!m_cacheControlHeader.parsed)
-    m_cacheControlHeader = parseCacheControlDirectives(
-        m_httpHeaderFields.get(cacheControlHeaderString()),
-        m_httpHeaderFields.get(pragmaHeaderString()));
+  if (!m_cacheControlHeader.parsed) {
+    m_cacheControlHeader =
+        parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeader),
+                                    m_httpHeaderFields.get(pragmaHeader));
+  }
   return m_cacheControlHeader.containsNoStore;
 }
 
 bool ResourceResponse::cacheControlContainsMustRevalidate() const {
-  if (!m_cacheControlHeader.parsed)
-    m_cacheControlHeader = parseCacheControlDirectives(
-        m_httpHeaderFields.get(cacheControlHeaderString()),
-        m_httpHeaderFields.get(pragmaHeaderString()));
+  if (!m_cacheControlHeader.parsed) {
+    m_cacheControlHeader =
+        parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeader),
+                                    m_httpHeaderFields.get(pragmaHeader));
+  }
   return m_cacheControlHeader.containsMustRevalidate;
 }
 
 bool ResourceResponse::hasCacheValidatorFields() const {
-  DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader,
-                      ("last-modified"));
-  DEFINE_STATIC_LOCAL(const AtomicString, eTagHeader, ("etag"));
+  static const char lastModifiedHeader[] = "last-modified";
+  static const char eTagHeader[] = "etag";
   return !m_httpHeaderFields.get(lastModifiedHeader).isEmpty() ||
          !m_httpHeaderFields.get(eTagHeader).isEmpty();
 }
 
 double ResourceResponse::cacheControlMaxAge() const {
-  if (!m_cacheControlHeader.parsed)
-    m_cacheControlHeader = parseCacheControlDirectives(
-        m_httpHeaderFields.get(cacheControlHeaderString()),
-        m_httpHeaderFields.get(pragmaHeaderString()));
+  if (!m_cacheControlHeader.parsed) {
+    m_cacheControlHeader =
+        parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeader),
+                                    m_httpHeaderFields.get(pragmaHeader));
+  }
   return m_cacheControlHeader.maxAge;
 }
 
 double ResourceResponse::cacheControlStaleWhileRevalidate() const {
-  if (!m_cacheControlHeader.parsed)
-    m_cacheControlHeader = parseCacheControlDirectives(
-        m_httpHeaderFields.get(cacheControlHeaderString()),
-        m_httpHeaderFields.get(pragmaHeaderString()));
+  if (!m_cacheControlHeader.parsed) {
+    m_cacheControlHeader =
+        parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeader),
+                                    m_httpHeaderFields.get(pragmaHeader));
+  }
   return m_cacheControlHeader.staleWhileRevalidate;
 }
 
@@ -500,7 +505,7 @@ static double parseDateValueInHeader(const HTTPHeaderMap& headers,
 
 double ResourceResponse::date() const {
   if (!m_haveParsedDateHeader) {
-    DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("date"));
+    static const char headerName[] = "date";
     m_date = parseDateValueInHeader(m_httpHeaderFields, headerName);
     m_haveParsedDateHeader = true;
   }
@@ -509,7 +514,7 @@ double ResourceResponse::date() const {
 
 double ResourceResponse::age() const {
   if (!m_haveParsedAgeHeader) {
-    DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("age"));
+    static const char headerName[] = "age";
     const AtomicString& headerValue = m_httpHeaderFields.get(headerName);
     bool ok;
     m_age = headerValue.toDouble(&ok);
@@ -522,7 +527,7 @@ double ResourceResponse::age() const {
 
 double ResourceResponse::expires() const {
   if (!m_haveParsedExpiresHeader) {
-    DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("expires"));
+    static const char headerName[] = "expires";
     m_expires = parseDateValueInHeader(m_httpHeaderFields, headerName);
     m_haveParsedExpiresHeader = true;
   }
@@ -531,7 +536,7 @@ double ResourceResponse::expires() const {
 
 double ResourceResponse::lastModified() const {
   if (!m_haveParsedLastModifiedHeader) {
-    DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("last-modified"));
+    static const char headerName[] = "last-modified";
     m_lastModified = parseDateValueInHeader(m_httpHeaderFields, headerName);
     m_haveParsedLastModifiedHeader = true;
   }
@@ -539,13 +544,13 @@ double ResourceResponse::lastModified() const {
 }
 
 bool ResourceResponse::isAttachment() const {
-  DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("content-disposition"));
+  static const char headerName[] = "content-disposition";
+  static const char attachmentString[] = "attachment";
   String value = m_httpHeaderFields.get(headerName);
   size_t loc = value.find(';');
   if (loc != kNotFound)
     value = value.left(loc);
   value = value.stripWhiteSpace();
-  DEFINE_STATIC_LOCAL(const AtomicString, attachmentString, ("attachment"));
   return equalIgnoringCase(value, attachmentString);
 }
 
@@ -599,8 +604,14 @@ void ResourceResponse::setResourceLoadInfo(
   m_resourceLoadInfo = loadInfo;
 }
 
-void ResourceResponse::addToEncodedDataLength(long long value) {
-  m_encodedDataLength += value;
+KURL ResourceResponse::originalURLViaServiceWorker() const {
+  if (m_urlListViaServiceWorker.isEmpty())
+    return KURL();
+  return m_urlListViaServiceWorker.back();
+}
+
+void ResourceResponse::setEncodedDataLength(long long value) {
+  m_encodedDataLength = value;
 }
 
 void ResourceResponse::addToEncodedBodyLength(long long value) {
@@ -626,7 +637,7 @@ void ResourceResponse::setDownloadedFilePath(const String& downloadedFilePath) {
 
 void ResourceResponse::appendRedirectResponse(
     const ResourceResponse& response) {
-  m_redirectResponses.append(response);
+  m_redirectResponses.push_back(response);
 }
 
 bool ResourceResponse::compare(const ResourceResponse& a,

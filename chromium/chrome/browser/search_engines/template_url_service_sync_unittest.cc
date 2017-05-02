@@ -77,7 +77,6 @@ syncer::SyncData CreateCustomSyncData(const TemplateURL& turl,
   se_specifics->set_date_created(turl.date_created().ToInternalValue());
   se_specifics->set_input_encodings(
       base::JoinString(turl.input_encodings(), ";"));
-  se_specifics->set_show_in_default_list(turl.show_in_default_list());
   se_specifics->set_suggestions_url(turl.suggestions_url());
   se_specifics->set_prepopulate_id(prepopulate_id == -1 ? turl.prepopulate_id()
                                                         : prepopulate_id);
@@ -310,7 +309,6 @@ void TemplateURLServiceSyncTest::AssertEquals(const TemplateURL& expected,
   ASSERT_EQ(expected.url(), actual.url());
   ASSERT_EQ(expected.suggestions_url(), actual.suggestions_url());
   ASSERT_EQ(expected.favicon_url(), actual.favicon_url());
-  ASSERT_EQ(expected.show_in_default_list(), actual.show_in_default_list());
   ASSERT_EQ(expected.safe_for_autoreplace(), actual.safe_for_autoreplace());
   ASSERT_EQ(expected.input_encodings(), actual.input_encodings());
   ASSERT_EQ(expected.date_created(), actual.date_created());
@@ -1093,9 +1091,10 @@ TEST_F(TemplateURLServiceSyncTest, ProcessChangesWithLocalExtensions) {
 
   // Create some sync changes that will conflict with the extension keywords.
   syncer::SyncChangeList changes;
-  changes.push_back(CreateTestSyncChange(syncer::SyncChange::ACTION_ADD,
-    CreateTestTemplateURL(ASCIIToUTF16("keyword1"), "http://aaa.com",
-                          std::string(), 100, true)));
+  changes.push_back(CreateTestSyncChange(
+      syncer::SyncChange::ACTION_ADD,
+      CreateTestTemplateURL(ASCIIToUTF16("keyword1"), "http://aaa.com",
+                            std::string(), 100, true, false, 0)));
   changes.push_back(CreateTestSyncChange(syncer::SyncChange::ACTION_ADD,
     CreateTestTemplateURL(ASCIIToUTF16("keyword2"), "http://bbb.com")));
   model()->ProcessSyncChanges(FROM_HERE, changes);
@@ -1525,7 +1524,6 @@ TEST_F(TemplateURLServiceSyncTest, DefaultGuidDeletedBeforeNewDSPArrives) {
   data.created_by_policy = false;
   data.prepopulate_id = 999999;
   data.sync_guid = "key2";
-  data.show_in_default_list = true;
   std::unique_ptr<TemplateURL> turl2(new TemplateURL(data));
   initial_data.push_back(TemplateURLService::CreateSyncDataFromTemplateURL(
       *turl1));
@@ -1665,16 +1663,16 @@ TEST_F(TemplateURLServiceSyncTest, SyncWithManagedDefaultSearch) {
   ASSERT_TRUE(model()->GetDefaultSearchProvider());
 
   // Change the default search provider to a managed one.
-  const char kName[] = "manageddefault";
-  const char kSearchURL[] = "http://manageddefault.com/search?t={searchTerms}";
-  const char kIconURL[] = "http://manageddefault.com/icon.jpg";
-  const char kEncodings[] = "UTF-16;UTF-32";
-  const char kAlternateURL[] =
-      "http://manageddefault.com/search#t={searchTerms}";
-  const char kSearchTermsReplacementKey[] = "espv";
-  test_util_a_->SetManagedDefaultSearchPreferences(true, kName, kName,
-      kSearchURL, std::string(), kIconURL, kEncodings, kAlternateURL,
-      kSearchTermsReplacementKey);
+  TemplateURLData managed;
+  managed.SetShortName(ASCIIToUTF16("manageddefault"));
+  managed.SetKeyword(ASCIIToUTF16("manageddefault"));
+  managed.SetURL("http://manageddefault.com/search?t={searchTerms}");
+  managed.favicon_url = GURL("http://manageddefault.com/icon.jpg");
+  managed.input_encodings = {"UTF-16", "UTF-32"};
+  managed.alternate_urls = {"http://manageddefault.com/search#t={searchTerms}"};
+  managed.search_terms_replacement_key = "espv";
+
+  SetManagedDefaultSearchPreferences(managed, true, test_util_a_->profile());
   const TemplateURL* dsp_turl = model()->GetDefaultSearchProvider();
 
   EXPECT_TRUE(model()->is_default_search_managed());
@@ -1703,7 +1701,7 @@ TEST_F(TemplateURLServiceSyncTest, SyncWithManagedDefaultSearch) {
   // from Sync.
   const TemplateURL* expected_default =
       model()->GetTemplateURLForGUID("newdefault");
-  test_util_a_->RemoveManagedDefaultSearchPreferences();
+  RemoveManagedDefaultSearchPreferences(test_util_a_->profile());
 
   EXPECT_EQ(expected_default, model()->GetDefaultSearchProvider());
 }
@@ -1832,10 +1830,9 @@ TEST_F(TemplateURLServiceSyncTest, PreSyncDeletes) {
 TEST_F(TemplateURLServiceSyncTest, PreSyncUpdates) {
   const char* kNewKeyword = "somethingnew";
   // Fetch the prepopulate search engines so we know what they are.
-  size_t default_search_provider_index = 0;
   std::vector<std::unique_ptr<TemplateURLData>> prepop_turls =
       TemplateURLPrepopulateData::GetPrepopulatedEngines(
-          profile_a()->GetTestingPrefService(), &default_search_provider_index);
+          profile_a()->GetTestingPrefService(), nullptr);
 
   // We have to prematurely exit this test if for some reason this machine does
   // not have any prepopulate TemplateURLs.

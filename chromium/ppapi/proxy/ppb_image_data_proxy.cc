@@ -98,12 +98,9 @@ static const int kMaxAgeSeconds = 2;
 // ImageDataCacheEntry ---------------------------------------------------------
 
 struct ImageDataCacheEntry {
-  ImageDataCacheEntry() : added_time(), usable(false), image() {}
-  ImageDataCacheEntry(ImageData* i)
-      : added_time(base::TimeTicks::Now()),
-        usable(false),
-        image(i) {
-  }
+  ImageDataCacheEntry() : usable(false) {}
+  explicit ImageDataCacheEntry(ImageData* i)
+      : added_time(base::TimeTicks::Now()), usable(false), image(i) {}
 
   base::TimeTicks added_time;
 
@@ -135,12 +132,12 @@ class ImageDataInstanceCache {
   void IncrementInsertionPoint();
 
   // We'll store this many ImageDatas per instance.
-  const static int kCacheSize = 2;
+  static const size_t kCacheSize = 2;
 
   ImageDataCacheEntry images_[kCacheSize];
 
   // Index into cache where the next item will go.
-  int next_insertion_point_;
+  size_t next_insertion_point_;
 };
 
 scoped_refptr<ImageData> ImageDataInstanceCache::Get(
@@ -148,7 +145,7 @@ scoped_refptr<ImageData> ImageDataInstanceCache::Get(
     int width, int height,
     PP_ImageDataFormat format) {
   // Just do a brute-force search since the cache is so small.
-  for (int i = 0; i < kCacheSize; i++) {
+  for (size_t i = 0; i < kCacheSize; i++) {
     if (!images_[i].usable)
       continue;
     if (images_[i].image->type() != type)
@@ -174,7 +171,7 @@ void ImageDataInstanceCache::Add(ImageData* image_data) {
 }
 
 void ImageDataInstanceCache::ImageDataUsable(ImageData* image_data) {
-  for (int i = 0; i < kCacheSize; i++) {
+  for (size_t i = 0; i < kCacheSize; i++) {
     if (images_[i].image.get() == image_data) {
       images_[i].usable = true;
 
@@ -196,7 +193,7 @@ bool ImageDataInstanceCache::ExpireEntries() {
       base::TimeTicks::Now() - base::TimeDelta::FromSeconds(kMaxAgeSeconds);
 
   bool has_entry = false;
-  for (int i = 0; i < kCacheSize; i++) {
+  for (size_t i = 0; i < kCacheSize; i++) {
     if (images_[i].image.get()) {
       // Entry present.
       if (images_[i].added_time <= threshold_time) {
@@ -391,10 +388,8 @@ void* PlatformImageData::Map() {
       return NULL;
 
     const bool is_opaque = false;
-    mapped_canvas_ =
-        sk_sp<SkCanvas>(transport_dib_->GetPlatformCanvas(desc_.size.width,
-                                                          desc_.size.height,
-                                                          is_opaque));
+    mapped_canvas_ = transport_dib_->GetPlatformCanvas(
+        desc_.size.width, desc_.size.height, is_opaque);
     if (!mapped_canvas_.get())
       return NULL;
   }
@@ -407,10 +402,6 @@ void PlatformImageData::Unmap() {
   // TODO(brettw) have a way to unmap a TransportDIB. Currently this isn't
   // possible since deleting the TransportDIB also frees all the handles.
   // We need to add a method to TransportDIB to release the handles.
-}
-
-SkCanvas* PlatformImageData::GetPlatformCanvas() {
-  return mapped_canvas_.get();
 }
 
 SkCanvas* PlatformImageData::GetCanvas() {
@@ -446,10 +437,6 @@ void* SimpleImageData::Map() {
 void SimpleImageData::Unmap() {
   if (--map_count_ == 0)
     shm_.Unmap();
-}
-
-SkCanvas* SimpleImageData::GetPlatformCanvas() {
-  return NULL;  // No canvas available.
 }
 
 SkCanvas* SimpleImageData::GetCanvas() {
@@ -496,9 +483,10 @@ PP_Resource PPB_ImageData_Proxy::CreateProxyResource(
           &result, &desc, &image_handle_wrapper));
       if (image_handle_wrapper.is_shmem()) {
         base::SharedMemoryHandle image_handle = image_handle_wrapper.shmem();
-        if (!result.is_null())
+        if (!result.is_null()) {
           return
               (new SimpleImageData(result, desc, image_handle))->GetReference();
+        }
       }
       break;
     }
@@ -508,9 +496,10 @@ PP_Resource PPB_ImageData_Proxy::CreateProxyResource(
       dispatcher->Send(new PpapiHostMsg_PPBImageData_CreatePlatform(
           kApiID, instance, format, size, init_to_zero,
           &result, &desc, &image_handle));
-      if (!result.is_null())
+      if (!result.is_null()) {
         return
             (new PlatformImageData(result, desc, image_handle))->GetReference();
+      }
 #else
       // PlatformImageData shouldn't be created in untrusted code.
       NOTREACHED();
@@ -606,7 +595,7 @@ void PPB_ImageData_Proxy::OnHostMsgCreatePlatform(
     HostResource* result,
     PP_ImageDataDesc* desc,
     ImageHandle* result_image_handle) {
-  // Clear |desc| so we don't send unitialized memory to the plugin.
+  // Clear |desc| so we don't send uninitialized memory to the plugin.
   // https://crbug.com/391023.
   *desc = PP_ImageDataDesc();
   base::SharedMemoryHandle image_handle;
@@ -619,11 +608,8 @@ void PPB_ImageData_Proxy::OnHostMsgCreatePlatform(
                       true /* init_to_zero */,
                       desc, &image_handle, &byte_count);
   result->SetHostResource(instance, resource);
-  if (resource) {
-    *result_image_handle = image_handle;
-  } else {
-    *result_image_handle = PlatformImageData::NullHandle();
-  }
+  *result_image_handle =
+      resource ? image_handle : PlatformImageData::NullHandle();
 }
 
 void PPB_ImageData_Proxy::OnHostMsgCreateSimple(
@@ -634,7 +620,7 @@ void PPB_ImageData_Proxy::OnHostMsgCreateSimple(
     HostResource* result,
     PP_ImageDataDesc* desc,
     ppapi::proxy::SerializedHandle* result_image_handle) {
-  // Clear |desc| so we don't send unitialized memory to the plugin.
+  // Clear |desc| so we don't send uninitialized memory to the plugin.
   // https://crbug.com/391023.
   *desc = PP_ImageDataDesc();
   base::SharedMemoryHandle image_handle;
@@ -659,9 +645,10 @@ void PPB_ImageData_Proxy::OnHostMsgCreateSimple(
 void PPB_ImageData_Proxy::OnPluginMsgNotifyUnusedImageData(
     const HostResource& old_image_data) {
   PluginGlobals* plugin_globals = PluginGlobals::Get();
-  if (!plugin_globals)
+  if (!plugin_globals) {
     return;  // This may happen if the plugin is maliciously sending this
              // message to the renderer.
+  }
 
   EnterPluginFromHostResource<PPB_ImageData_API> enter(old_image_data);
   if (enter.succeeded()) {

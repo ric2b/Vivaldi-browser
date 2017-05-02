@@ -28,11 +28,13 @@ class NET_EXPORT_PRIVATE HpackDecoderInterface {
 
   // If a SpdyHeadersHandlerInterface is provided, the decoder will emit
   // headers to it rather than accumulating them in a SpdyHeaderBlock.
+  // Does not take ownership of the handler, but does use the pointer until
+  // the current HPACK block is completely decoded.
   virtual void HandleControlFrameHeadersStart(
       SpdyHeadersHandlerInterface* handler) = 0;
 
   // Called as HPACK block fragments arrive. Returns false if an error occurred
-  // while decoding the block.
+  // while decoding the block. Does not take ownership of headers_data.
   virtual bool HandleControlFrameHeadersData(const char* headers_data,
                                              size_t headers_data_length) = 0;
 
@@ -44,7 +46,7 @@ class NET_EXPORT_PRIVATE HpackDecoderInterface {
   // Discards the handler supplied at the start of decoding the block.
   // TODO(jamessynge): Determine if compressed_len is needed; it is used to
   // produce UUMA stat Net.SpdyHpackDecompressionPercentage, but only for
-  // SPDY3, not HTTP2.
+  // deprecated SPDY3.
   virtual bool HandleControlFrameHeadersComplete(size_t* compressed_len) = 0;
 
   // Accessor for the most recently decoded headers block. Valid until the next
@@ -57,6 +59,11 @@ class NET_EXPORT_PRIVATE HpackDecoderInterface {
       std::unique_ptr<HpackHeaderTable::DebugVisitorInterface> visitor) = 0;
 
   // Set how much encoded data this decoder is willing to buffer.
+  // TODO(jamessynge): Resolve definition of this value, as it is currently
+  // too tied to a single implementation. We probably want to limit one or more
+  // of these: individual name or value strings, header entries, the entire
+  // header list, or the HPACK block; we probably shouldn't care about the size
+  // of individual transport buffers.
   virtual void set_max_decode_buffer_size_bytes(
       size_t max_decode_buffer_size_bytes) = 0;
 };

@@ -50,6 +50,24 @@ BOOL ThePasteboardIsTooDamnBig() {
   return [[pb stringForType:type] length] > kMaxPasteLength;
 }
 
+// Returns a possibly disabled "Paste and {Go, Search}" menu item.
+NSMenuItem* PasteAndGoMenuItemForObserver(
+    AutocompleteTextFieldObserver* observer) {
+  DCHECK(observer);
+  int string_id = IDS_PASTE_AND_GO;
+  BOOL enabled = !ThePasteboardIsTooDamnBig() && observer->CanPasteAndGo();
+  if (enabled)
+    string_id = observer->GetPasteActionStringId();
+
+  NSString* title = l10n_util::GetNSStringWithFixup(string_id);
+  base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
+      initWithTitle:title
+             action:@selector(pasteAndGo:)
+      keyEquivalent:@""]);
+  [item setEnabled:enabled];
+  return item.autorelease();
+}
+
 }  // namespace
 
 @interface AutocompleteTextFieldEditor ()<NSDraggingSource>
@@ -291,21 +309,8 @@ BOOL ThePasteboardIsTooDamnBig() {
                   action:@selector(paste:)
            keyEquivalent:@""];
 
-  // TODO(shess): If the control is not editable, should we show a
-  // greyed-out "Paste and Go"?
   if ([self isEditable]) {
-    // Paste and go/search.
-    AutocompleteTextFieldObserver* observer = [self observer];
-    DCHECK(observer);
-    if (!ThePasteboardIsTooDamnBig()) {
-      NSString* pasteAndGoLabel =
-          l10n_util::GetNSStringWithFixup(observer->GetPasteActionStringId());
-      DCHECK([pasteAndGoLabel length]);
-      [menu addItemWithTitle:pasteAndGoLabel
-                      action:@selector(pasteAndGo:)
-               keyEquivalent:@""];
-    }
-
+    [menu addItem:PasteAndGoMenuItemForObserver([self observer])];
     [menu addItem:[NSMenuItem separatorItem]];
 
     NSString* searchEngineLabel =
@@ -571,13 +576,12 @@ BOOL ThePasteboardIsTooDamnBig() {
 - (BOOL)validateMenuItem:(NSMenuItem*)item {
   if ([item action] == @selector(copyToFindPboard:))
     return [self selectedRange].length > 0;
-  if ([item action] == @selector(pasteAndGo:)) {
-    // TODO(rohitrao): If the clipboard is empty, should we show a
-    // greyed-out "Paste and Go" or nothing at all?
-    AutocompleteTextFieldObserver* observer = [self observer];
-    DCHECK(observer);
-    return observer->CanPasteAndGo();
-  }
+
+  // Paste & Go doesn't appear in the mainMenu. Use the enabled state when the
+  // menu item was added in -menuForEvent:.
+  if ([item action] == @selector(pasteAndGo:))
+    return [item isEnabled];
+
   return [super validateMenuItem:item];
 }
 
@@ -613,12 +617,6 @@ BOOL ThePasteboardIsTooDamnBig() {
   if (observer)
     observer->OnBeforeDrawRect();
   [super drawRect:rect];
-  autocomplete_text_field::DrawGrayTextAutocompletion(
-      [self textStorage],
-      [[self delegate] suggestText],
-      [[self delegate] suggestColor],
-      self,
-      [self bounds]);
   if (observer)
     observer->OnDidDrawRect();
 }

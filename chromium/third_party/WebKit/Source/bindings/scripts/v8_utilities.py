@@ -112,6 +112,11 @@ def uncapitalize(name):
     return name[0].lower() + name[1:]
 
 
+def runtime_enabled_function(name):
+    """Returns a function call of a runtime enabled feature."""
+    return 'RuntimeEnabledFeatures::%sEnabled()' % uncapitalize(name)
+
+
 def unique_by(dict_list, key):
     """Returns elements from a list of dictionaries with unique values for the named key."""
     keys_seen = set()
@@ -123,20 +128,11 @@ def unique_by(dict_list, key):
     return filtered_list
 
 
-def for_origin_trial_feature(items, feature_name):
-    """Filters the list of attributes or constants, and returns those defined for the named origin trial feature."""
-    return [item for item in items if
-            item['origin_trial_feature_name'] == feature_name and
-            not item.get('exposed_test')]
-
-
 ################################################################################
 # C++
 ################################################################################
 
 def scoped_name(interface, definition, base_name):
-    if 'ImplementedInPrivateScript' in definition.extended_attributes:
-        return '%s::PrivateScript::%s' % (v8_class_name(interface), base_name)
     # partial interfaces are implemented as separate classes, with their members
     # implemented as static member functions
     partial_interface_implemented_as = definition.extended_attributes.get('PartialInterfaceImplementedAs')
@@ -303,8 +299,7 @@ class ExposureSet:
         exposed = ('executionContext->%s()' %
                    EXPOSED_EXECUTION_CONTEXT_METHOD[exposure.exposed])
         if exposure.runtime_enabled is not None:
-            runtime_enabled = ('RuntimeEnabledFeatures::%sEnabled()' %
-                               uncapitalize(exposure.runtime_enabled))
+            runtime_enabled = (runtime_enabled_function(exposure.runtime_enabled))
             return '({0} && {1})'.format(exposed, runtime_enabled)
         return exposed
 
@@ -436,31 +431,13 @@ def origin_trial_feature_name(definition_or_member):
     return extended_attributes.get('OriginTrialEnabled') or extended_attributes.get('FeaturePolicy')
 
 
-def runtime_feature_name(definition_or_member):
+# [RuntimeEnabled]
+def runtime_enabled_feature_name(definition_or_member):
     extended_attributes = definition_or_member.extended_attributes
     if 'RuntimeEnabled' not in extended_attributes:
         return None
-    return extended_attributes['RuntimeEnabled']
-
-
-# [RuntimeEnabled]
-def runtime_enabled_function_name(definition_or_member):
-    """Returns the name of the RuntimeEnabledFeatures function.
-
-    The returned function checks if a method/attribute is enabled.
-    Given extended attribute RuntimeEnabled=FeatureName, return:
-        RuntimeEnabledFeatures::{featureName}Enabled
-
-    If the RuntimeEnabled extended attribute is found, the includes
-    are also updated as a side-effect.
-    """
-    feature_name = runtime_feature_name(definition_or_member)
-
-    if not feature_name:
-        return
-
     includes.add('platform/RuntimeEnabledFeatures.h')
-    return 'RuntimeEnabledFeatures::%sEnabled' % uncapitalize(feature_name)
+    return extended_attributes['RuntimeEnabled']
 
 
 # [Unforgeable]

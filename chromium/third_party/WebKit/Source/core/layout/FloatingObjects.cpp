@@ -29,8 +29,6 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
-#include "core/paint/PaintLayer.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/PtrUtil.h"
 #include <algorithm>
 #include <memory>
@@ -61,10 +59,10 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject)
 #endif
 {
   EFloat type = layoutObject->style()->floating();
-  DCHECK_NE(type, EFloat::None);
-  if (type == EFloat::Left)
+  DCHECK_NE(type, EFloat::kNone);
+  if (type == EFloat::kLeft)
     m_type = FloatLeft;
-  else if (type == EFloat::Right)
+  else if (type == EFloat::kRight)
     m_type = FloatRight;
 }
 
@@ -78,6 +76,7 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject,
       m_originatingLine(nullptr),
       m_frameRect(frameRect),
       m_type(type),
+      m_shouldPaint(shouldPaint),
       m_isDescendant(isDescendant),
       m_isPlaced(true),
       m_isLowestNonOverhangingFloatInChild(isLowestNonOverhangingFloatInChild)
@@ -86,48 +85,27 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject,
       m_isInPlacedTree(false)
 #endif
 {
-  m_shouldPaint = shouldPaint || shouldPaintForCompositedLayoutPart();
-}
-
-bool FloatingObject::shouldPaintForCompositedLayoutPart() {
-  // HACK: only non-self-painting floats should paint. However, due to the
-  // fundamental compositing bug, some LayoutPart objects may become
-  // self-painting due to being composited. This leads to a chicken-egg issue
-  // because layout may not depend on compositing.
-  // If this is the case, set shouldPaint() to true even if the layer is
-  // technically self-painting. This lets the float which contains a LayoutPart
-  // start painting as soon as it stops being composited, without having to
-  // re-layout the float.
-  // This hack can be removed after SPv2.
-  return m_layoutObject->layer() &&
-         m_layoutObject->layer()->isSelfPaintingOnlyBecauseIsCompositedPart() &&
-         !RuntimeEnabledFeatures::slimmingPaintV2Enabled();
 }
 
 std::unique_ptr<FloatingObject> FloatingObject::create(
     LayoutBox* layoutObject) {
   std::unique_ptr<FloatingObject> newObj =
-      wrapUnique(new FloatingObject(layoutObject));
+      WTF::wrapUnique(new FloatingObject(layoutObject));
 
   // If a layer exists, the float will paint itself. Otherwise someone else
   // will.
-  newObj->setShouldPaint(!layoutObject->hasSelfPaintingLayer() ||
-                         newObj->shouldPaintForCompositedLayoutPart());
+  newObj->setShouldPaint(!layoutObject->hasSelfPaintingLayer());
 
   newObj->setIsDescendant(true);
 
   return newObj;
 }
 
-bool FloatingObject::shouldPaint() const {
-  return m_shouldPaint && !m_layoutObject->hasSelfPaintingLayer();
-}
-
 std::unique_ptr<FloatingObject> FloatingObject::copyToNewContainer(
     LayoutSize offset,
     bool shouldPaint,
     bool isDescendant) const {
-  return wrapUnique(new FloatingObject(
+  return WTF::wrapUnique(new FloatingObject(
       layoutObject(), getType(),
       LayoutRect(frameRect().location() - offset, frameRect().size()),
       shouldPaint, isDescendant, isLowestNonOverhangingFloatInChild()));
@@ -135,8 +113,8 @@ std::unique_ptr<FloatingObject> FloatingObject::copyToNewContainer(
 
 std::unique_ptr<FloatingObject> FloatingObject::unsafeClone() const {
   std::unique_ptr<FloatingObject> cloneObject =
-      wrapUnique(new FloatingObject(layoutObject(), getType(), m_frameRect,
-                                    m_shouldPaint, m_isDescendant, false));
+      WTF::wrapUnique(new FloatingObject(layoutObject(), getType(), m_frameRect,
+                                         m_shouldPaint, m_isDescendant, false));
   cloneObject->m_isPlaced = m_isPlaced;
   return cloneObject;
 }
@@ -527,7 +505,7 @@ void FloatingObjects::addPlacedObject(FloatingObject& floatingObject) {
   if (m_placedFloatsTree.isInitialized())
     m_placedFloatsTree.add(intervalForFloatingObject(floatingObject));
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   floatingObject.setIsInPlacedTree(true);
 #endif
   markLowestFloatLogicalBottomCacheAsDirty();
@@ -543,7 +521,7 @@ void FloatingObjects::removePlacedObject(FloatingObject& floatingObject) {
   }
 
   floatingObject.setIsPlaced(false);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   floatingObject.setIsInPlacedTree(false);
 #endif
   markLowestFloatLogicalBottomCacheAsDirty();
@@ -553,7 +531,7 @@ FloatingObject* FloatingObjects::add(
     std::unique_ptr<FloatingObject> floatingObject) {
   FloatingObject* newObject = floatingObject.release();
   increaseObjectsCount(newObject->getType());
-  m_set.add(wrapUnique(newObject));
+  m_set.add(WTF::wrapUnique(newObject));
   if (newObject->isPlaced())
     addPlacedObject(*newObject);
   markLowestFloatLogicalBottomCacheAsDirty();

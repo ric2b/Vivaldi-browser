@@ -275,11 +275,34 @@ void WebNavigationTabObserver::DidStartNavigation(
     return;
   }
 
-  helpers::DispatchOnBeforeNavigate(navigation_handle);
+  pending_on_before_navigate_event_ =
+      helpers::CreateOnBeforeNavigateEvent(navigation_handle);
+
+  // Only dispatch the onBeforeNavigate event if the associated WebContents
+  // is already added to the tab strip. Otherwise the event should be delayed
+  // and sent after the addition, to preserve the ordering of events.
+  //
+  // TODO(nasko|devlin): This check is necessary because chrome::Navigate()
+  // begins the navigation before the sending the TAB_ADDED notification, and it
+  // is used an indication of that. It would be best if instead it was known
+  // when the tab was created and immediately sent the created event instead of
+  // waiting for the later TAB_ADDED notification, but this appears to work for
+  // now.
+  if (ExtensionTabUtil::GetTabById(ExtensionTabUtil::GetTabId(web_contents()),
+                                   web_contents()->GetBrowserContext(), false,
+                                   nullptr, nullptr, nullptr, nullptr)) {
+    DispatchCachedOnBeforeNavigate();
+  }
 }
 
 void WebNavigationTabObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
+  // If there has been a DidStartNavigation call before the tab was ready to
+  // dispatch events, ensure that it is sent before processing the
+  // DidFinishNavigation.
+  // Note: This is exercised by WebNavigationApiTest.TargetBlankIncognito.
+  DispatchCachedOnBeforeNavigate();
+
   if (navigation_handle->HasCommitted() && !navigation_handle->IsErrorPage()) {
     HandleCommit(navigation_handle);
     return;
@@ -324,13 +347,8 @@ void WebNavigationTabObserver::DidFinishLoad(
 
   // A new navigation might have started before the old one completed.
   // Ignore the old navigation completion in that case.
-  // srcdoc iframes will report a url of about:blank, still let it through.
-  if (navigation_state_.GetUrl(render_frame_host) != validated_url &&
-      (navigation_state_.GetUrl(render_frame_host) !=
-           content::kAboutSrcDocURL ||
-       validated_url != url::kAboutBlankURL)) {
+  if (navigation_state_.GetUrl(render_frame_host) != validated_url)
     return;
-  }
 
   // The load might already have finished by the time we finished parsing. For
   // compatibility reasons, we artifically delay the load completed signal until
@@ -395,6 +413,17 @@ void WebNavigationTabObserver::WebContentsDestroyed() {
   registrar_.RemoveAll();
 }
 
+void WebNavigationTabObserver::DispatchCachedOnBeforeNavigate() {
+  if (!pending_on_before_navigate_event_)
+    return;
+
+  // EventRouter can be null in unit tests.
+  EventRouter* event_router =
+      EventRouter::Get(web_contents()->GetBrowserContext());
+  if (event_router)
+    event_router->BroadcastEvent(std::move(pending_on_before_navigate_event_));
+}
+
 void WebNavigationTabObserver::HandleCommit(
     content::NavigationHandle* navigation_handle) {
   bool is_reference_fragment_navigation = IsReferenceFragmentNavigation(
@@ -403,8 +432,7 @@ void WebNavigationTabObserver::HandleCommit(
   navigation_state_.StartTrackingDocumentLoad(
       navigation_handle->GetRenderFrameHost(), navigation_handle->GetURL(),
       navigation_handle->IsSamePage(),
-      false,  // is_error_page
-      navigation_handle->IsSrcdoc());
+      false);  // is_error_page
 
   events::HistogramValue histogram_value = events::UNKNOWN;
   std::string event_name;
@@ -427,8 +455,7 @@ void WebNavigationTabObserver::HandleError(
     navigation_state_.StartTrackingDocumentLoad(
         navigation_handle->GetRenderFrameHost(), navigation_handle->GetURL(),
         navigation_handle->IsSamePage(),
-        true,  // is_error_page
-        navigation_handle->IsSrcdoc());
+        true);  // is_error_page
   }
 
   helpers::DispatchOnErrorOccurred(navigation_handle);

@@ -4,6 +4,7 @@
 
 #include <tuple>
 
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -72,8 +73,6 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
                               const gfx::RectF& bounding_box) override {}
 
   void HidePopup() override {}
-
-  void PingAck() override {}
 
   void FocusNoLongerOnForm() override { did_unfocus_form_ = true; }
 

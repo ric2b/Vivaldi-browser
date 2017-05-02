@@ -42,14 +42,11 @@ std::move(p_{{param.name}})
 
 {#--- Begin #}
 const char {{class_name}}::Name_[] = "{{namespace_as_string}}::{{class_name}}";
-const uint32_t {{class_name}}::Version_;
 
 {#--- Constants #}
 {%-  for constant in interface.constants %}
-{%-   if constant.kind|is_integral_kind %}
-const {{constant.kind|cpp_pod_type}} {{interface.name}}::{{constant.name}};
-{%-   else %}
-const {{constant.kind|cpp_pod_type}} {{interface.name}}::{{constant.name}} = {{constant|constant_value}};
+{%-   if constant.kind|is_string_kind %}
+const char {{interface.name}}::{{constant.name}}[] = {{constant|constant_value}};
 {%-   endif %}
 {%- endfor %}
 
@@ -115,9 +112,13 @@ class {{class_name}}_{{method.name}}_ForwardToCallback
     : public mojo::MessageReceiver {
  public:
   {{class_name}}_{{method.name}}_ForwardToCallback(
+{%-     if use_once_callback %}
+      {{class_name}}::{{method.name}}Callback callback,
+{%-     else %}
       const {{class_name}}::{{method.name}}Callback& callback,
+{%-     endif %}
       scoped_refptr<mojo::AssociatedGroupController> group_controller)
-      : callback_(callback),
+      : callback_(std::move(callback)),
         serialization_context_(std::move(group_controller)) {
   }
   bool Accept(mojo::Message* message) override;
@@ -137,7 +138,7 @@ bool {{class_name}}_{{method.name}}_ForwardToCallback::Accept(
                  "&serialization_context_", desc)}}
   if (!callback_.is_null()) {
     mojo::internal::MessageDispatchContext context(message);
-    callback_.Run({{pass_params(method.response_parameters)}});
+    std::move(callback_).Run({{pass_params(method.response_parameters)}});
   }
   return true;
 }
@@ -184,7 +185,7 @@ bool {{proxy_name}}::{{method.name}}(
 {%-   endif %}
 
 void {{proxy_name}}::{{method.name}}(
-    {{interface_macros.declare_request_params("in_", method)}}) {
+    {{interface_macros.declare_request_params("in_", method, use_once_callback)}}) {
    mojo::internal::SerializationContext serialization_context(
       group_controller_);
   {{struct_macros.get_serialized_size(params_struct, "in_%s",
@@ -202,7 +203,7 @@ void {{proxy_name}}::{{method.name}}(
 {%- if method.response_parameters != None %}
   mojo::MessageReceiver* responder =
       new {{class_name}}_{{method.name}}_ForwardToCallback(
-          callback, group_controller_);
+          std::move(callback), group_controller_);
   if (!receiver_->AcceptWithResponder(builder.message(), responder))
     delete responder;
 {%- else %}
@@ -265,8 +266,7 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
 
   void Run(
       {{interface_macros.declare_responder_params(
-          "in_", method.response_parameters, for_blink,
-          use_new_wrapper_types)}});
+          "in_", method.response_parameters, for_blink)}});
 
   uint64_t request_id_;
   bool is_sync_;
@@ -279,8 +279,7 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
 
 void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
     {{interface_macros.declare_responder_params(
-        "in_", method.response_parameters, for_blink,
-        use_new_wrapper_types)}}) {
+        "in_", method.response_parameters, for_blink)}}) {
   {{struct_macros.get_serialized_size(response_params_struct, "in_%s",
                                       "&serialization_context_")}}
   mojo::internal::ResponseMessageBuilder builder(
@@ -362,7 +361,7 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
       TRACE_EVENT0("mojom", "{{class_name}}::{{method.name}}");
       mojo::internal::MessageDispatchContext context(message);
       impl->{{method.name}}(
-{%- if method.parameters -%}{{pass_params(method.parameters)}}, {% endif -%}callback);
+{%- if method.parameters -%}{{pass_params(method.parameters)}}, {% endif -%}std::move(callback));
       return true;
 {%-     else %}
       break;

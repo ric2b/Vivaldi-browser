@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
@@ -32,7 +31,6 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -45,27 +43,12 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/webplugininfo.h"
 
-#if !defined(DISABLE_NACL)
-#include "components/nacl/common/nacl_constants.h"
-#endif
+#include "prefs/vivaldi_pref_names.h"
 
 using content::BrowserThread;
 using content::PluginService;
 
 namespace {
-
-bool IsComponentUpdatedPepperFlash(const base::FilePath& plugin) {
-  if (plugin.BaseName().value() == chrome::kPepperFlashPluginFilename) {
-    base::FilePath component_updated_pepper_flash_dir;
-    if (PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN,
-                         &component_updated_pepper_flash_dir) &&
-        component_updated_pepper_flash_dir.IsParent(plugin)) {
-      return true;
-    }
-  }
-
-  return false;
-}
 
 bool IsPDFViewerPlugin(const base::string16& plugin_name) {
   return plugin_name == base::ASCIIToUTF16(ChromeContentClient::kPDFPluginName);
@@ -78,41 +61,6 @@ bool IsAdobeFlashPlayerPlugin(const base::string16& plugin_name) {
 }
 
 }  // namespace
-
-PluginPrefs::PluginState::PluginState() {
-}
-
-PluginPrefs::PluginState::~PluginState() {
-}
-
-bool PluginPrefs::PluginState::Get(const base::FilePath& plugin,
-                                   bool* enabled) const {
-  base::FilePath key = ConvertMapKey(plugin);
-  std::map<base::FilePath, bool>::const_iterator iter = state_.find(key);
-  if (iter != state_.end()) {
-    *enabled = iter->second;
-    return true;
-  }
-  return false;
-}
-
-void PluginPrefs::PluginState::Set(const base::FilePath& plugin, bool enabled) {
-  state_[ConvertMapKey(plugin)] = enabled;
-}
-
-base::FilePath PluginPrefs::PluginState::ConvertMapKey(
-    const base::FilePath& plugin) const {
-  // Keep the state of component-updated and bundled Pepper Flash in sync.
-  if (IsComponentUpdatedPepperFlash(plugin)) {
-    base::FilePath bundled_pepper_flash;
-    if (PathService::Get(chrome::FILE_PEPPER_FLASH_PLUGIN,
-                         &bundled_pepper_flash)) {
-      return bundled_pepper_flash;
-    }
-  }
-
-  return plugin;
-}
 
 // static
 scoped_refptr<PluginPrefs> PluginPrefs::GetForProfile(Profile* profile) {
@@ -127,118 +75,6 @@ scoped_refptr<PluginPrefs> PluginPrefs::GetForTestingProfile(
           profile, &PluginPrefsFactory::CreateForTestingProfile).get());
 }
 
-void PluginPrefs::EnablePluginGroup(bool enabled,
-                                    const base::string16& group_name) {
-  PluginService::GetInstance()->GetPlugins(
-      base::Bind(&PluginPrefs::EnablePluginGroupInternal,
-                 this, enabled, group_name));
-}
-
-void PluginPrefs::EnablePluginGroupInternal(
-    bool enabled,
-    const base::string16& group_name,
-    const std::vector<content::WebPluginInfo>& plugins) {
-  base::AutoLock auto_lock(lock_);
-  PluginFinder* finder = PluginFinder::GetInstance();
-
-  // Set the desired state for the group.
-  plugin_group_state_[group_name] = enabled;
-
-  // Update the state for all plugins in the group.
-  for (size_t i = 0; i < plugins.size(); ++i) {
-    std::unique_ptr<PluginMetadata> plugin(
-        finder->GetPluginMetadata(plugins[i]));
-    if (group_name != plugin->name())
-      continue;
-    plugin_state_.Set(plugins[i].path, enabled);
-  }
-
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&PluginPrefs::OnUpdatePreferences, this, plugins));
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&PluginPrefs::NotifyPluginStatusChanged, this));
-}
-
-void PluginPrefs::EnablePlugin(
-    bool enabled, const base::FilePath& path,
-    const base::Callback<void(bool)>& callback) {
-  PluginFinder* finder = PluginFinder::GetInstance();
-  content::WebPluginInfo plugin;
-  bool can_enable = true;
-  if (PluginService::GetInstance()->GetPluginInfoByPath(path, &plugin)) {
-    std::unique_ptr<PluginMetadata> plugin_metadata(
-        finder->GetPluginMetadata(plugin));
-    PolicyStatus plugin_status = PolicyStatusForPlugin(plugin.name);
-    PolicyStatus group_status = PolicyStatusForPlugin(plugin_metadata->name());
-    if (enabled) {
-      if (plugin_status == POLICY_DISABLED || group_status == POLICY_DISABLED)
-        can_enable = false;
-    } else {
-      if (plugin_status == POLICY_ENABLED || group_status == POLICY_ENABLED)
-        can_enable = false;
-    }
-  } else {
-    NOTREACHED();
-  }
-
-  if (!can_enable) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  base::Bind(callback, false));
-    return;
-  }
-
-  PluginService::GetInstance()->GetPlugins(
-      base::Bind(&PluginPrefs::EnablePluginInternal, this,
-                 enabled, path, finder, callback));
-}
-
-void PluginPrefs::EnablePluginInternal(
-    bool enabled,
-    const base::FilePath& path,
-    PluginFinder* plugin_finder,
-    const base::Callback<void(bool)>& callback,
-    const std::vector<content::WebPluginInfo>& plugins) {
-  {
-    // Set the desired state for the plugin.
-    base::AutoLock auto_lock(lock_);
-    plugin_state_.Set(path, enabled);
-  }
-
-  base::string16 group_name;
-  for (size_t i = 0; i < plugins.size(); ++i) {
-    if (plugins[i].path == path) {
-      std::unique_ptr<PluginMetadata> plugin_metadata(
-          plugin_finder->GetPluginMetadata(plugins[i]));
-      // set the group name for this plugin.
-      group_name = plugin_metadata->name();
-      DCHECK_EQ(enabled, IsPluginEnabled(plugins[i]));
-      break;
-    }
-  }
-
-  bool all_disabled = true;
-  for (size_t i = 0; i < plugins.size(); ++i) {
-    std::unique_ptr<PluginMetadata> plugin_metadata(
-        plugin_finder->GetPluginMetadata(plugins[i]));
-    DCHECK(!plugin_metadata->name().empty());
-    if (group_name == plugin_metadata->name()) {
-      all_disabled = all_disabled && !IsPluginEnabled(plugins[i]);
-    }
-  }
-
-  if (!group_name.empty()) {
-    // Update the state for the corresponding plugin group.
-    base::AutoLock auto_lock(lock_);
-    plugin_group_state_[group_name] = !all_disabled;
-  }
-
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&PluginPrefs::OnUpdatePreferences, this, plugins));
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&PluginPrefs::NotifyPluginStatusChanged, this));
-  callback.Run(true);
-}
-
 PluginPrefs::PolicyStatus PluginPrefs::PolicyStatusForPlugin(
     const base::string16& name) const {
   base::AutoLock auto_lock(lock_);
@@ -247,14 +83,9 @@ PluginPrefs::PolicyStatus PluginPrefs::PolicyStatusForPlugin(
   if (IsPDFViewerPlugin(name) && always_open_pdf_externally_)
     return POLICY_DISABLED;
 
-  if (IsStringMatchedInSet(name, policy_enabled_plugin_patterns_))
-    return POLICY_ENABLED;
-
-  if (IsStringMatchedInSet(name, policy_disabled_plugin_patterns_) &&
-      !IsStringMatchedInSet(
-          name, policy_disabled_plugin_exception_patterns_)) {
+  if (name == base::ASCIIToUTF16("Widevine Content Decryption Module") &&
+      !enable_widevine_)
     return POLICY_DISABLED;
-  }
 
   return NO_POLICY;
 }
@@ -274,40 +105,8 @@ bool PluginPrefs::IsPluginEnabled(const content::WebPluginInfo& plugin) const {
   if (plugin_status == POLICY_DISABLED || group_status == POLICY_DISABLED)
     return false;
 
-#if !defined(DISABLE_NACL)
-  // If enabling NaCl, make sure the plugin is also enabled. See bug
-  // http://code.google.com/p/chromium/issues/detail?id=81010 for more
-  // information.
-  // TODO(dspringer): When NaCl is on by default, remove this code.
-  if ((plugin.name == base::ASCIIToUTF16(nacl::kNaClPluginName)) &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNaCl)) {
-    return true;
-  }
-#endif
-
-  base::AutoLock auto_lock(lock_);
-  // Check user preferences for the plugin.
-  bool plugin_enabled = false;
-  if (plugin_state_.Get(plugin.path, &plugin_enabled))
-    return plugin_enabled;
-
-  // Check user preferences for the plugin group.
-  std::map<base::string16, bool>::const_iterator group_it(
-      plugin_group_state_.find(group_name));
-  if (group_it != plugin_group_state_.end())
-    return group_it->second;
-
   // Default to enabled.
   return true;
-}
-
-void PluginPrefs::UpdatePatternsAndNotify(std::set<base::string16>* patterns,
-                                          const std::string& pref_name) {
-  base::AutoLock auto_lock(lock_);
-  ListValueToStringSet(prefs_->GetList(pref_name.c_str()), patterns);
-
-  NotifyPluginStatusChanged();
 }
 
 void PluginPrefs::UpdatePdfPolicy(const std::string& pref_name) {
@@ -318,34 +117,12 @@ void PluginPrefs::UpdatePdfPolicy(const std::string& pref_name) {
   NotifyPluginStatusChanged();
 }
 
-/*static*/
-bool PluginPrefs::IsStringMatchedInSet(
-    const base::string16& name,
-    const std::set<base::string16>& pattern_set) {
-  std::set<base::string16>::const_iterator pattern(pattern_set.begin());
-  while (pattern != pattern_set.end()) {
-    if (base::MatchPattern(name, *pattern))
-      return true;
-    ++pattern;
-  }
+void PluginPrefs::UpdateWidevinePolicy(const std::string& pref_name) {
+  base::AutoLock auto_lock(lock_);
+  enable_widevine_ =
+      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevideEnabled);
 
-  return false;
-}
-
-/* static */
-void PluginPrefs::ListValueToStringSet(const base::ListValue* src,
-                                       std::set<base::string16>* dest) {
-  DCHECK(src);
-  DCHECK(dest);
-  dest->clear();
-  base::ListValue::const_iterator end(src->end());
-  for (base::ListValue::const_iterator current(src->begin());
-       current != end; ++current) {
-    base::string16 plugin_name;
-    if ((*current)->GetAsString(&plugin_name)) {
-      dest->insert(plugin_name);
-    }
-  }
+  NotifyPluginStatusChanged();
 }
 
 void PluginPrefs::SetPrefs(PrefService* prefs) {
@@ -389,9 +166,6 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
                 ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
                                            CONTENT_SETTING_BLOCK);
           }
-          // TODO(http://crbug.com/662002): Remove the enabled flag completely.
-          enabled = true;
-          plugin->SetBoolean("enabled", true);
           plugins_migrated = true;
         }
 
@@ -440,36 +214,18 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
               plugin->SetString("path", path);
             }
           }
-
-          plugin_state_.Set(plugin_path, enabled);
         }
       }
-    } else {
-      // If the saved plugin list is empty, then the call to UpdatePreferences()
-      // below failed in an earlier run, possibly because the user closed the
-      // browser too quickly.
-
-      // Only want one PDF plugin enabled at a time. See http://crbug.com/50105
-      // for background.
-      plugin_group_state_[base::ASCIIToUTF16(
-          PluginMetadata::kAdobeReaderGroupName)] = false;
     }
   }  // Scoped update of prefs::kPluginsPluginsList.
 
   UMA_HISTOGRAM_BOOLEAN("Plugin.EnabledStatusMigrationDone", plugins_migrated);
 
-  // Build the set of policy enabled/disabled plugin patterns once and cache it.
-  // Don't do this in the constructor, there's no profile available there.
-  // TODO(http://crbug.com/662002): : Remove the prefs completely.
-  ListValueToStringSet(prefs_->GetList(prefs::kPluginsDisabledPlugins),
-                       &policy_disabled_plugin_patterns_);
-  ListValueToStringSet(
-      prefs_->GetList(prefs::kPluginsDisabledPluginsExceptions),
-      &policy_disabled_plugin_exception_patterns_);
-  ListValueToStringSet(prefs_->GetList(prefs::kPluginsEnabledPlugins),
-                       &policy_enabled_plugin_patterns_);
   always_open_pdf_externally_ =
       prefs_->GetBoolean(prefs::kPluginsAlwaysOpenPdfExternally);
+
+  enable_widevine_ =
+      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevideEnabled);
 
   registrar_.Init(prefs_);
 
@@ -477,20 +233,11 @@ void PluginPrefs::SetPrefs(PrefService* prefs) {
   // lifetime of |registrar_| (which we also own), we can bind their
   // pointer values directly in the callbacks to avoid string-based
   // lookups at notification time.
-  registrar_.Add(prefs::kPluginsDisabledPlugins,
-                 base::Bind(&PluginPrefs::UpdatePatternsAndNotify,
-                            base::Unretained(this),
-                            &policy_disabled_plugin_patterns_));
-  registrar_.Add(prefs::kPluginsDisabledPluginsExceptions,
-                 base::Bind(&PluginPrefs::UpdatePatternsAndNotify,
-                            base::Unretained(this),
-                            &policy_disabled_plugin_exception_patterns_));
-  registrar_.Add(prefs::kPluginsEnabledPlugins,
-                 base::Bind(&PluginPrefs::UpdatePatternsAndNotify,
-                            base::Unretained(this),
-                            &policy_enabled_plugin_patterns_));
   registrar_.Add(prefs::kPluginsAlwaysOpenPdfExternally,
                  base::Bind(&PluginPrefs::UpdatePdfPolicy,
+                 base::Unretained(this)));
+  registrar_.Add(vivaldiprefs::kPluginsWidevideEnabled,
+                 base::Bind(&PluginPrefs::UpdateWidevinePolicy,
                  base::Unretained(this)));
 
   NotifyPluginStatusChanged();
@@ -502,20 +249,12 @@ void PluginPrefs::ShutdownOnUIThread() {
 }
 
 PluginPrefs::PluginPrefs() : always_open_pdf_externally_(false),
+                             enable_widevine_(true),
                              profile_(NULL),
                              prefs_(NULL) {
 }
 
 PluginPrefs::~PluginPrefs() {
-}
-
-void PluginPrefs::SetPolicyEnforcedPluginPatternsForTests(
-    const std::set<base::string16>& disabled_patterns,
-    const std::set<base::string16>& disabled_exception_patterns,
-    const std::set<base::string16>& enabled_patterns) {
-  policy_disabled_plugin_patterns_ = disabled_patterns;
-  policy_disabled_plugin_exception_patterns_ = disabled_exception_patterns;
-  policy_enabled_plugin_patterns_ = enabled_patterns;
 }
 
 void PluginPrefs::SetAlwaysOpenPdfExternallyForTests(
@@ -547,9 +286,6 @@ void PluginPrefs::OnUpdatePreferences(
     summary->SetString("path", plugins[i].path.value());
     summary->SetString("name", plugins[i].name);
     summary->SetString("version", plugins[i].version);
-    bool enabled = true;
-    plugin_state_.Get(plugins[i].path, &enabled);
-    summary->SetBoolean("enabled", enabled);
     plugins_list->Append(std::move(summary));
 
     std::unique_ptr<PluginMetadata> plugin_metadata(
@@ -563,12 +299,6 @@ void PluginPrefs::OnUpdatePreferences(
       it != group_names.end(); ++it) {
     std::unique_ptr<base::DictionaryValue> summary(new base::DictionaryValue());
     summary->SetString("name", *it);
-    bool enabled = true;
-    std::map<base::string16, bool>::iterator gstate_it =
-        plugin_group_state_.find(*it);
-    if (gstate_it != plugin_group_state_.end())
-      enabled = gstate_it->second;
-    summary->SetBoolean("enabled", enabled);
     plugins_list->Append(std::move(summary));
   }
 }

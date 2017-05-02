@@ -4,13 +4,15 @@
 
 #include "content/browser/indexed_db/database_impl.h"
 
+#include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
+#include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
-#include "content/common/indexed_db/indexed_db_messages.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
@@ -21,6 +23,7 @@ namespace content {
 
 namespace {
 const char kInvalidBlobUuid[] = "Blob UUID is invalid";
+const char kInvalidBlobFilePath[] = "Blob file path is invalid";
 }  // namespace
 
 class DatabaseImpl::IDBThreadHelper {
@@ -68,6 +71,7 @@ class DatabaseImpl::IDBThreadHelper {
            int64_t object_store_id,
            ::indexed_db::mojom::ValuePtr value,
            std::vector<std::unique_ptr<storage::BlobDataHandle>> handles,
+           std::vector<IndexedDBBlobInfo> blob_info,
            const IndexedDBKey& key,
            blink::WebIDBPutMode mode,
            const std::vector<IndexedDBIndexKeys>& index_keys,
@@ -251,8 +255,15 @@ void DatabaseImpl::Put(
     blink::WebIDBPutMode mode,
     const std::vector<IndexedDBIndexKeys>& index_keys,
     ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks_info) {
-  std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
-  for (const auto& info : value->blob_or_file_info) {
+  ChildProcessSecurityPolicyImpl* policy =
+      ChildProcessSecurityPolicyImpl::GetInstance();
+
+  std::vector<std::unique_ptr<storage::BlobDataHandle>> handles(
+      value->blob_or_file_info.size());
+  std::vector<IndexedDBBlobInfo> blob_info(value->blob_or_file_info.size());
+  for (size_t i = 0; i < value->blob_or_file_info.size(); ++i) {
+    ::indexed_db::mojom::BlobInfoPtr& info = value->blob_or_file_info[i];
+
     std::unique_ptr<storage::BlobDataHandle> handle =
         dispatcher_host_->blob_storage_context()->GetBlobDataFromUUID(
             info->uuid);
@@ -260,17 +271,35 @@ void DatabaseImpl::Put(
       mojo::ReportBadMessage(kInvalidBlobUuid);
       return;
     }
-    handles.push_back(std::move(handle));
+    handles[i] = std::move(handle);
+
+    if (info->file) {
+      if (!info->file->path.empty() &&
+          !policy->CanReadFile(dispatcher_host_->ipc_process_id(),
+                               info->file->path)) {
+        mojo::ReportBadMessage(kInvalidBlobFilePath);
+        return;
+      }
+      blob_info[i] = IndexedDBBlobInfo(info->uuid, info->file->path,
+                                       info->file->name, info->mime_type);
+      if (info->size != -1) {
+        blob_info[i].set_last_modified(info->file->last_modified);
+        blob_info[i].set_size(info->size);
+      }
+    } else {
+      blob_info[i] = IndexedDBBlobInfo(info->uuid, info->mime_type, info->size);
+    }
   }
 
   scoped_refptr<IndexedDBCallbacks> callbacks(new IndexedDBCallbacks(
       dispatcher_host_.get(), origin_, std::move(callbacks_info)));
 
   idb_runner_->PostTask(
-      FROM_HERE, base::Bind(&IDBThreadHelper::Put, base::Unretained(helper_),
-                            transaction_id, object_store_id,
-                            base::Passed(&value), base::Passed(&handles), key,
-                            mode, index_keys, base::Passed(&callbacks)));
+      FROM_HERE,
+      base::Bind(&IDBThreadHelper::Put, base::Unretained(helper_),
+                 transaction_id, object_store_id, base::Passed(&value),
+                 base::Passed(&handles), base::Passed(&blob_info), key, mode,
+                 index_keys, base::Passed(&callbacks)));
 }
 
 void DatabaseImpl::SetIndexKeys(
@@ -427,9 +456,13 @@ void DatabaseImpl::IDBThreadHelper::CreateObjectStore(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->CreateObjectStore(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      name, key_path, auto_increment);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->CreateObjectStore(transaction, object_store_id, name,
+                                             key_path, auto_increment);
 }
 
 void DatabaseImpl::IDBThreadHelper::DeleteObjectStore(int64_t transaction_id,
@@ -437,8 +470,12 @@ void DatabaseImpl::IDBThreadHelper::DeleteObjectStore(int64_t transaction_id,
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->DeleteObjectStore(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->DeleteObjectStore(transaction, object_store_id);
 }
 
 void DatabaseImpl::IDBThreadHelper::RenameObjectStore(
@@ -448,9 +485,13 @@ void DatabaseImpl::IDBThreadHelper::RenameObjectStore(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->RenameObjectStore(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      new_name);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->RenameObjectStore(transaction, object_store_id,
+                                             new_name);
 }
 
 void DatabaseImpl::IDBThreadHelper::CreateTransaction(
@@ -460,15 +501,8 @@ void DatabaseImpl::IDBThreadHelper::CreateTransaction(
   if (!connection_->IsConnected())
     return;
 
-  int64_t host_transaction_id =
-      dispatcher_host_->HostTransactionId(transaction_id);
-  if (!dispatcher_host_->RegisterTransactionId(host_transaction_id, origin_)) {
-    DLOG(ERROR) << "Duplicate host_transaction_id.";
-    return;
-  }
-
-  connection_->database()->CreateTransaction(
-      host_transaction_id, connection_.get(), object_store_ids, mode);
+  connection_->database()->CreateTransaction(transaction_id, connection_.get(),
+                                             object_store_ids, mode);
 }
 
 void DatabaseImpl::IDBThreadHelper::Close() {
@@ -494,11 +528,15 @@ void DatabaseImpl::IDBThreadHelper::AddObserver(int64_t transaction_id,
   if (!connection_->IsConnected())
     return;
 
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
   IndexedDBObserver::Options options(include_transaction, no_records, values,
                                      operation_types);
-  connection_->database()->AddPendingObserver(
-      dispatcher_host_->HostTransactionId(transaction_id), observer_id,
-      options);
+  connection_->database()->AddPendingObserver(transaction, observer_id,
+                                              options);
 }
 
 void DatabaseImpl::IDBThreadHelper::RemoveObservers(
@@ -519,10 +557,14 @@ void DatabaseImpl::IDBThreadHelper::Get(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->Get(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id, base::MakeUnique<IndexedDBKeyRange>(key_range), key_only,
-      callbacks);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->Get(transaction, object_store_id, index_id,
+                               base::MakeUnique<IndexedDBKeyRange>(key_range),
+                               key_only, callbacks);
 }
 
 void DatabaseImpl::IDBThreadHelper::GetAll(
@@ -536,10 +578,15 @@ void DatabaseImpl::IDBThreadHelper::GetAll(
   if (!connection_->IsConnected())
     return;
 
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
   connection_->database()->GetAll(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id, base::MakeUnique<IndexedDBKeyRange>(key_range), key_only,
-      max_count, std::move(callbacks));
+      transaction, object_store_id, index_id,
+      base::MakeUnique<IndexedDBKeyRange>(key_range), key_only, max_count,
+      std::move(callbacks));
 }
 
 void DatabaseImpl::IDBThreadHelper::Put(
@@ -547,6 +594,7 @@ void DatabaseImpl::IDBThreadHelper::Put(
     int64_t object_store_id,
     ::indexed_db::mojom::ValuePtr mojo_value,
     std::vector<std::unique_ptr<storage::BlobDataHandle>> handles,
+    std::vector<IndexedDBBlobInfo> blob_info,
     const IndexedDBKey& key,
     blink::WebIDBPutMode mode,
     const std::vector<IndexedDBIndexKeys>& index_keys,
@@ -554,46 +602,22 @@ void DatabaseImpl::IDBThreadHelper::Put(
   if (!connection_->IsConnected())
     return;
 
-  int64_t host_transaction_id =
-      dispatcher_host_->HostTransactionId(transaction_id);
-
-  ChildProcessSecurityPolicyImpl* policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-  std::vector<IndexedDBBlobInfo> blob_info(
-      mojo_value->blob_or_file_info.size());
-  for (size_t i = 0; i < mojo_value->blob_or_file_info.size(); ++i) {
-    const auto& info = mojo_value->blob_or_file_info[i];
-    if (info->file) {
-      if (!info->file->path.empty()) {
-        if (!policy->CanReadFile(dispatcher_host_->ipc_process_id(),
-                                 info->file->path)) {
-          bad_message::ReceivedBadMessage(dispatcher_host_.get(),
-                                          bad_message::IDBDH_CAN_READ_FILE);
-          return;
-        }
-      }
-      blob_info[i] = IndexedDBBlobInfo(info->uuid, info->file->path,
-                                       info->file->name, info->mime_type);
-      if (info->size != static_cast<uint64_t>(-1)) {
-        blob_info[i].set_last_modified(info->file->last_modified);
-        blob_info[i].set_size(info->size);
-      }
-    } else {
-      blob_info[i] = IndexedDBBlobInfo(info->uuid, info->mime_type, info->size);
-    }
-  }
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
 
   uint64_t commit_size = mojo_value->bits.size();
   IndexedDBValue value;
   swap(value.bits, mojo_value->bits);
   swap(value.blob_info, blob_info);
-  connection_->database()->Put(host_transaction_id, object_store_id, &value,
-                               &handles, base::MakeUnique<IndexedDBKey>(key),
-                               mode, std::move(callbacks), index_keys);
+  connection_->database()->Put(transaction, object_store_id, &value, &handles,
+                               base::MakeUnique<IndexedDBKey>(key), mode,
+                               std::move(callbacks), index_keys);
 
   // Size can't be big enough to overflow because it represents the
   // actual bytes passed through IPC.
-  dispatcher_host_->AddToTransaction(host_transaction_id, commit_size);
+  transaction->set_size(transaction->size() + commit_size);
 }
 
 void DatabaseImpl::IDBThreadHelper::SetIndexKeys(
@@ -604,9 +628,14 @@ void DatabaseImpl::IDBThreadHelper::SetIndexKeys(
   if (!connection_->IsConnected())
     return;
 
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
   connection_->database()->SetIndexKeys(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      base::MakeUnique<IndexedDBKey>(primary_key), index_keys);
+      transaction, object_store_id, base::MakeUnique<IndexedDBKey>(primary_key),
+      index_keys);
 }
 
 void DatabaseImpl::IDBThreadHelper::SetIndexesReady(
@@ -616,9 +645,13 @@ void DatabaseImpl::IDBThreadHelper::SetIndexesReady(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->SetIndexesReady(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_ids);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->SetIndexesReady(transaction, object_store_id,
+                                           index_ids);
 }
 
 void DatabaseImpl::IDBThreadHelper::OpenCursor(
@@ -633,10 +666,15 @@ void DatabaseImpl::IDBThreadHelper::OpenCursor(
   if (!connection_->IsConnected())
     return;
 
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
   connection_->database()->OpenCursor(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id, base::MakeUnique<IndexedDBKeyRange>(key_range), direction,
-      key_only, task_type, std::move(callbacks));
+      transaction, object_store_id, index_id,
+      base::MakeUnique<IndexedDBKeyRange>(key_range), direction, key_only,
+      task_type, std::move(callbacks));
 }
 
 void DatabaseImpl::IDBThreadHelper::Count(
@@ -648,10 +686,14 @@ void DatabaseImpl::IDBThreadHelper::Count(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->Count(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id, base::MakeUnique<IndexedDBKeyRange>(key_range),
-      std::move(callbacks));
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->Count(transaction, object_store_id, index_id,
+                                 base::MakeUnique<IndexedDBKeyRange>(key_range),
+                                 std::move(callbacks));
 }
 
 void DatabaseImpl::IDBThreadHelper::DeleteRange(
@@ -662,8 +704,13 @@ void DatabaseImpl::IDBThreadHelper::DeleteRange(
   if (!connection_->IsConnected())
     return;
 
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
   connection_->database()->DeleteRange(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
+      transaction, object_store_id,
       base::MakeUnique<IndexedDBKeyRange>(key_range), std::move(callbacks));
 }
 
@@ -674,9 +721,12 @@ void DatabaseImpl::IDBThreadHelper::Clear(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->Clear(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      callbacks);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->Clear(transaction, object_store_id, callbacks);
 }
 
 void DatabaseImpl::IDBThreadHelper::CreateIndex(
@@ -690,9 +740,13 @@ void DatabaseImpl::IDBThreadHelper::CreateIndex(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->CreateIndex(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id, name, key_path, unique, multi_entry);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->CreateIndex(transaction, object_store_id, index_id,
+                                       name, key_path, unique, multi_entry);
 }
 
 void DatabaseImpl::IDBThreadHelper::DeleteIndex(int64_t transaction_id,
@@ -701,9 +755,12 @@ void DatabaseImpl::IDBThreadHelper::DeleteIndex(int64_t transaction_id,
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->DeleteIndex(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->DeleteIndex(transaction, object_store_id, index_id);
 }
 
 void DatabaseImpl::IDBThreadHelper::RenameIndex(
@@ -714,34 +771,39 @@ void DatabaseImpl::IDBThreadHelper::RenameIndex(
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->RenameIndex(
-      dispatcher_host_->HostTransactionId(transaction_id), object_store_id,
-      index_id, new_name);
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->database()->RenameIndex(transaction, object_store_id, index_id,
+                                       new_name);
 }
 
 void DatabaseImpl::IDBThreadHelper::Abort(int64_t transaction_id) {
   if (!connection_->IsConnected())
     return;
 
-  connection_->database()->Abort(
-      dispatcher_host_->HostTransactionId(transaction_id));
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+
+  connection_->AbortTransaction(transaction);
 }
 
 void DatabaseImpl::IDBThreadHelper::Commit(int64_t transaction_id) {
   if (!connection_->IsConnected())
     return;
 
-  int64_t host_transaction_id =
-      dispatcher_host_->HostTransactionId(transaction_id);
-  // May have been aborted by back end before front-end could request commit.
-  int64_t transaction_size;
-  if (!dispatcher_host_->GetTransactionSize(host_transaction_id,
-                                            &transaction_size))
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
     return;
 
   // Always allow empty or delete-only transactions.
-  if (transaction_size == 0) {
-    connection_->database()->Commit(host_transaction_id);
+  if (transaction->size() == 0) {
+    connection_->database()->Commit(transaction);
     return;
   }
 
@@ -761,19 +823,17 @@ void DatabaseImpl::IDBThreadHelper::OnGotUsageAndQuotaForCommit(
   if (!connection_->IsConnected())
     return;
 
-  int64_t host_transaction_id =
-      dispatcher_host_->HostTransactionId(transaction_id);
-  // May have aborted while quota check was pending.
-  int64_t transaction_size;
-  if (!dispatcher_host_->GetTransactionSize(host_transaction_id,
-                                            &transaction_size))
+  IndexedDBTransaction* transaction =
+      connection_->GetTransaction(transaction_id);
+  if (!transaction)
     return;
 
-  if (status == storage::kQuotaStatusOk && usage + transaction_size <= quota) {
-    connection_->database()->Commit(host_transaction_id);
+  if (status == storage::kQuotaStatusOk &&
+      usage + transaction->size() <= quota) {
+    connection_->database()->Commit(transaction);
   } else {
-    connection_->database()->Abort(
-        host_transaction_id,
+    connection_->AbortTransaction(
+        transaction,
         IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionQuotaError));
   }
 }

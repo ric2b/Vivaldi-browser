@@ -29,6 +29,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/css/parser/CSSParserMode.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/BitVector.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/WTFString.h"
@@ -72,7 +73,6 @@ class CORE_EXPORT UseCounter {
     // Do not change assigned numbers of existing items: add new features
     // to the end of the list.
     OBSOLETE_PageDestruction = 0,
-    PrefixedIndexedDB = 3,
     WorkerStart = 4,
     SharedWorkerStart = 5,
     UnprefixedIndexedDB = 9,
@@ -114,9 +114,6 @@ class CORE_EXPORT UseCounter {
     HTMLMarqueeElement = 53,
     Reflection = 55,
     PrefixedStorageInfo = 57,
-    XFrameOptions = 58,
-    XFrameOptionsSameOrigin = 59,
-    XFrameOptionsSameOriginWithBadAncestorChain = 60,
     DeprecatedFlexboxWebContent = 61,
     DeprecatedFlexboxChrome = 62,
     DeprecatedFlexboxChromeExtension = 63,
@@ -243,7 +240,6 @@ class CORE_EXPORT UseCounter {
     HTMLMediaElementPauseAtFragmentEnd = 282,
     PrefixedWindowURL = 283,
     WindowOrientation = 285,
-    DOMStringListContains = 286,
     DocumentCaptureEvents = 287,
     DocumentReleaseEvents = 288,
     WindowCaptureEvents = 289,
@@ -254,7 +250,6 @@ class CORE_EXPORT UseCounter {
     AnimationConstructorKeyframeListEffectObjectTiming = 300,
     AnimationConstructorKeyframeListEffectNoTiming = 302,
     PrefixedCancelAnimationFrame = 304,
-    PrefixedCancelRequestAnimationFrame = 305,
     NamedNodeMapGetNamedItem = 306,
     NamedNodeMapSetNamedItem = 307,
     NamedNodeMapRemoveNamedItem = 308,
@@ -274,8 +269,6 @@ class CORE_EXPORT UseCounter {
     SelectionSetPosition = 327,
     AnimationFinishEvent = 328,
     SVGSVGElementInXMLDocument = 329,
-    PrefixedPerformanceClearResourceTimings = 341,
-    PrefixedPerformanceSetResourceTimingBufferSize = 342,
     EventSrcElement = 343,
     EventCancelBubble = 344,
     EventPath = 345,
@@ -289,14 +282,6 @@ class CORE_EXPORT UseCounter {
     WindowDefaultstatus = 358,
     PrefixedTransitionEventConstructor = 361,
     PrefixedMutationObserverConstructor = 362,
-    PrefixedIDBCursorConstructor = 363,
-    PrefixedIDBDatabaseConstructor = 364,
-    PrefixedIDBFactoryConstructor = 365,
-    PrefixedIDBIndexConstructor = 366,
-    PrefixedIDBKeyRangeConstructor = 367,
-    PrefixedIDBObjectStoreConstructor = 368,
-    PrefixedIDBRequestConstructor = 369,
-    PrefixedIDBTransactionConstructor = 370,
     NotificationPermission = 371,
     RangeDetach = 372,
     PrefixedFileRelativePath = 386,
@@ -491,10 +476,6 @@ class CORE_EXPORT UseCounter {
     AudioContextDecodeAudioData = 649,
     AudioContextResume = 650,
     AudioContextSuspend = 651,
-    AudioContext = 652,
-    OfflineAudioContext = 653,
-    PrefixedAudioContext = 654,
-    PrefixedOfflineAudioContext = 655,
     MixedContentInNonHTTPSFrameThatRestrictsMixedContent = 661,
     MixedContentInSecureFrameThatDoesNotRestrictMixedContent = 662,
     MixedContentWebSocket = 663,
@@ -621,10 +602,6 @@ class CORE_EXPORT UseCounter {
     V8DOMError_Constructor = 816,
     V8DOMError_Name_AttributeGetter = 817,
     V8DOMError_Message_AttributeGetter = 818,
-    V8Location_AncestorOrigins_AttributeGetter = 823,
-    V8IDBDatabase_ObjectStoreNames_AttributeGetter = 824,
-    V8IDBObjectStore_IndexNames_AttributeGetter = 825,
-    V8IDBTransaction_ObjectStoreNames_AttributeGetter = 826,
     TextInputFired = 830,
     V8TextEvent_Data_AttributeGetter = 831,
     V8TextEvent_InitTextEvent_Method = 832,
@@ -632,16 +609,8 @@ class CORE_EXPORT UseCounter {
     ClientHintsResourceWidth = 836,
     ClientHintsViewportWidth = 837,
     SRIElementIntegrityAttributeButIneligible = 838,
-    FormDataAppendFile = 839,
-    FormDataAppendFileWithFilename = 840,
-    FormDataAppendBlob = 841,
-    FormDataAppendBlobWithFilename = 842,
     FormDataAppendNull = 843,
     NonHTMLElementSetAttributeNodeFromHTMLDocumentNameNotLowercase = 845,
-    DOMStringList_Item_AttributeGetter_IndexedDB = 846,
-    DOMStringList_Item_AttributeGetter_Location = 847,
-    DOMStringList_Contains_Method_IndexedDB = 848,
-    DOMStringList_Contains_Method_Location = 849,
     NavigatorVibrate = 850,
     NavigatorVibrateSubFrame = 851,
     V8XPathEvaluator_Constructor = 853,
@@ -673,7 +642,6 @@ class CORE_EXPORT UseCounter {
     V8Performance_Navigation_AttributeGetter = 883,
     V8Performance_Memory_AttributeGetter = 884,
     V8SharedWorker_WorkerStart_AttributeGetter = 885,
-    HTMLKeygenElement = 886,
     // The above items are available in M45 branch.
 
     HTMLMediaElementPreloadNone = 892,
@@ -703,7 +671,6 @@ class CORE_EXPORT UseCounter {
     LinkRelPrefetch = 917,
     LinkRelPrerender = 918,
     LinkRelNext = 919,
-    PrefixedPerformanceResourceTimingBufferFull = 920,
     CSSValuePrefixedMinContent = 921,
     CSSValuePrefixedMaxContent = 922,
     CSSValuePrefixedFitContent = 923,
@@ -724,8 +691,6 @@ class CORE_EXPORT UseCounter {
     // The above items are available in M46 branch.
 
     HTMLImportsHasStyleSheets = 940,
-    ClipPathOfPositionedElement = 944,
-    ClipCssOfPositionedElement = 945,
     NetInfoType = 946,
     NetInfoDownlinkMax = 947,
     NetInfoOnChange = 948,
@@ -880,8 +845,6 @@ class CORE_EXPORT UseCounter {
     V8SVGAElement_Target_AttributeGetter = 1109,
     V8SVGClipPathElement_ClipPathUnits_AttributeGetter = 1110,
     SVG1DOMFitToViewBox = 1111,
-    SVG1DOMCursorElement = 1112,
-    V8SVGPathElement_PathLength_AttributeGetter = 1113,
     SVG1DOMSVGElement = 1114,
     SVG1DOMImageElement = 1115,
     SVG1DOMForeignObjectElement = 1116,
@@ -964,8 +927,6 @@ class CORE_EXPORT UseCounter {
     V8ForInInitializer = 1238,
     V8Animation_Id_AttributeGetter = 1239,
     V8Animation_Id_AttributeSetter = 1240,
-    WebAnimationHyphenatedProperty = 1243,
-    FormControlsCollectionReturnsRadioNodeListForFieldSet = 1244,
     ApplicationCacheManifestSelectInsecureOrigin = 1245,
     ApplicationCacheManifestSelectSecureOrigin = 1246,
     ApplicationCacheAPIInsecureOrigin = 1247,
@@ -1217,9 +1178,6 @@ class CORE_EXPORT UseCounter {
     MapNameMatchingStrict = 1510,
     MapNameMatchingASCIICaseless = 1511,
     MapNameMatchingUnicodeLower = 1512,
-    RadioNameMatchingStrict = 1513,
-    RadioNameMatchingASCIICaseless = 1514,
-    RadioNameMatchingCaseFolding = 1515,
     InputSelectionGettersThrow = 1517,
     UsbGetDevices = 1519,
     UsbRequestDevice = 1520,
@@ -1254,7 +1212,6 @@ class CORE_EXPORT UseCounter {
     MetaSetCookieWhenCSPBlocksInlineScript = 1549,
     MetaRefreshWhenCSPBlocksInlineScript = 1550,
     MiddleClickAutoscrollStart = 1551,
-    ClipCssOfFixedPositionElement = 1552,
     RTCPeerConnectionCreateOfferOptionsOfferToReceive = 1553,
     DragAndDropScrollStart = 1554,
     PresentationConnectionListConnectionAvailableEventListener = 1555,
@@ -1287,8 +1244,6 @@ class CORE_EXPORT UseCounter {
     XSSAuditorEnabledFilter = 1584,
     XSSAuditorEnabledBlock = 1585,
     XSSAuditorInvalid = 1586,
-    SVGCursorElement = 1587,
-    SVGCursorElementHasClient = 1588,
     TextInputEventOnInput = 1589,
     TextInputEventOnTextArea = 1590,
     TextInputEventOnContentEditable = 1591,
@@ -1393,12 +1348,118 @@ class CORE_EXPORT UseCounter {
     CustomElementRegistryDefine = 1689,
     LinkHeaderServiceWorker = 1690,
     CSSShadowPiercingDescendantCombinator = 1691,
+    // The above items are available in M56 branch.
+
+    CSSFlexibleBox = 1692,
+    CSSGridLayout = 1693,
+    V8BarcodeDetector_Detect_Method = 1694,
+    V8FaceDetector_Detect_Method = 1695,
     FullscreenAllowedByOrientationChange = 1696,
+    ServiceWorkerRespondToNavigationRequestWithRedirectedResponse = 1697,
+    V8AudioContext_Constructor = 1698,
+    V8OfflineAudioContext_Constructor = 1699,
+    AppInstalledEventAddListener = 1700,
+    AudioContextGetOutputTimestamp = 1701,
+    V8MediaStreamAudioDestinationNode_Constructor = 1702,
+    V8AnalyserNode_Constructor = 1703,
+    V8AudioBuffer_Constructor = 1704,
+    V8AudioBufferSourceNode_Constructor = 1705,
+    V8AudioProcessingEvent_Constructor = 1706,
+    V8BiquadFilterNode_Constructor = 1707,
+    V8ChannelMergerNode_Constructor = 1708,
+    V8ChannelSplitterNode_Constructor = 1709,
+    V8ConstantSourceNode_Constructor = 1710,
+    V8ConvolverNode_Constructor = 1711,
+    V8DelayNode_Constructor = 1712,
+    V8DynamicsCompressorNode_Constructor = 1713,
+    V8GainNode_Constructor = 1714,
+    V8IIRFilterNode_Constructor = 1715,
+    V8MediaElementAudioSourceNode_Constructor = 1716,
+    V8MediaStreamAudioSourceNode_Constructor = 1717,
+    V8OfflineAudioCompletionEvent_Constructor = 1718,
+    V8OscillatorNode_Constructor = 1719,
+    V8PannerNode_Constructor = 1720,
+    V8PeriodicWave_Constructor = 1721,
+    V8StereoPannerNode_Constructor = 1722,
+    V8WaveShaperNode_Constructor = 1723,
+    V8Headers_GetAll_Method = 1724,
+    NavigatorVibrateEngagementNone = 1725,
+    NavigatorVibrateEngagementMinimal = 1726,
+    NavigatorVibrateEngagementLow = 1727,
+    NavigatorVibrateEngagementMedium = 1728,
+    NavigatorVibrateEngagementHigh = 1729,
+    NavigatorVibrateEngagementMax = 1730,
+    AlertEngagementNone = 1731,
+    AlertEngagementMinimal = 1732,
+    AlertEngagementLow = 1733,
+    AlertEngagementMedium = 1734,
+    AlertEngagementHigh = 1735,
+    AlertEngagementMax = 1736,
+    ConfirmEngagementNone = 1737,
+    ConfirmEngagementMinimal = 1738,
+    ConfirmEngagementLow = 1739,
+    ConfirmEngagementMedium = 1740,
+    ConfirmEngagementHigh = 1741,
+    ConfirmEngagementMax = 1742,
+    PromptEngagementNone = 1743,
+    PromptEngagementMinimal = 1744,
+    PromptEngagementLow = 1745,
+    PromptEngagementMedium = 1746,
+    PromptEngagementHigh = 1747,
+    PromptEngagementMax = 1748,
     TopNavInSandbox = 1749,
     TopNavInSandboxWithoutGesture = 1750,
     TopNavInSandboxWithPerm = 1751,
     TopNavInSandboxWithPermButNoGesture = 1752,
-    
+    ReferrerPolicyHeader = 1753,
+    HTMLAnchorElementReferrerPolicyAttribute = 1754,
+    HTMLIFrameElementReferrerPolicyAttribute = 1755,
+    HTMLImageElementReferrerPolicyAttribute = 1756,
+    HTMLLinkElementReferrerPolicyAttribute = 1757,
+    BaseElement = 1758,
+    BaseWithCrossOriginHref = 1759,
+    BaseWithDataHref = 1760,
+    BaseWithNewlinesInTarget = 1761,
+    BaseWithOpenBracketInTarget = 1762,
+    BaseWouldBeBlockedByDefaultSrc = 1763,
+    V8AssigmentExpressionLHSIsCallInSloppy = 1764,
+    V8AssigmentExpressionLHSIsCallInStrict = 1765,
+    V8PromiseConstructorReturnedUndefined = 1766,
+    FormSubmittedWithUnclosedFormControl = 1767,
+    DocumentCompleteURLHTTPContainingNewline = 1768,
+    DocumentCompleteURLHTTPContainingNewlineAndLessThan = 1770,
+    DocumentCompleteURLNonHTTPContainingNewline = 1771,
+    CSSSelectorInternalMediaControlsTextTrackList = 1772,
+    CSSSelectorInternalMediaControlsTextTrackListItem = 1773,
+    CSSSelectorInternalMediaControlsTextTrackListItemInput = 1774,
+    CSSSelectorInternalMediaControlsTextTrackListKindCaptions = 1775,
+    CSSSelectorInternalMediaControlsTextTrackListKindSubtitles = 1776,
+    ScrollbarUseVerticalScrollbarButton = 1777,
+    ScrollbarUseVerticalScrollbarThumb = 1778,
+    ScrollbarUseVerticalScrollbarTrack = 1779,
+    ScrollbarUseHorizontalScrollbarButton = 1780,
+    ScrollbarUseHorizontalScrollbarThumb = 1781,
+    ScrollbarUseHorizontalScrollbarTrack = 1782,
+    HTMLTableCellElementColspan = 1783,
+    HTMLTableCellElementColspanGreaterThan1000 = 1784,
+    HTMLTableCellElementColspanGreaterThan8190 = 1785,
+    SelectionAddRangeIntersect = 1786,
+    V8MediaSession_Metadata_AttributeGetter = 1788,
+    V8MediaSession_Metadata_AttributeSetter = 1789,
+    V8MediaSession_PlaybackState_AttributeGetter = 1790,
+    V8MediaSession_PlaybackState_AttributeSetter = 1791,
+    V8MediaSession_SetActionHandler_Method = 1792,
+    AudioParamCancelAndHoldAtTime = 1797,
+    CSSValueUserModifyReadOnly = 1798,
+    CSSValueUserModifyReadWrite = 1799,
+    CSSValueUserModifyReadWritePlaintextOnly = 1800,
+    CSSValueOnDemand = 1802,
+    ServiceWorkerNavigationPreload = 1803,
+    HTMLIFrameElementAllowfullscreenAttributeSetAfterContentLoad = 1805,
+    V8FileReaderSync_Constructor = 1812,
+    FileReaderSyncInServiceWorker = 1818,
+    RtcpMuxPolicyNegotiate = 1823,
+
     // Add new features immediately above this line. Don't change assigned
     // numbers of any item, and don't reuse removed slots.
     // Also, run update_use_counter_feature_enum.py in
@@ -1409,17 +1470,7 @@ class CORE_EXPORT UseCounter {
   // "count" sets the bit for this feature to 1. Repeated calls are ignored.
   static void count(const Frame*, Feature);
   static void count(const Document&, Feature);
-  // This doesn't count for ExecutionContexts for shared workers and service
-  // workers.
-  static void count(const ExecutionContext*, Feature);
-  // Use countIfNotPrivateScript() instead of count() if you don't want
-  // to count metrics in private scripts. You should use
-  // countIfNotPrivateScript() in a binding layer.
-  static void countIfNotPrivateScript(v8::Isolate*, const Frame*, Feature);
-  static void countIfNotPrivateScript(v8::Isolate*, const Document&, Feature);
-  static void countIfNotPrivateScript(v8::Isolate*,
-                                      const ExecutionContext*,
-                                      Feature);
+  static void count(ExecutionContext*, Feature);
 
   void count(CSSParserMode, CSSPropertyID);
   void count(Feature);
@@ -1436,7 +1487,8 @@ class CORE_EXPORT UseCounter {
   static bool isCounted(Document&, const String&);
   bool isCounted(CSSPropertyID unresolvedProperty);
 
-  void didCommitLoad();
+  // Invoked when a new document is loaded into the main frame of the page.
+  void didCommitLoad(KURL);
 
   static UseCounter* getFrom(const Document*);
   static UseCounter* getFrom(const CSSStyleSheet*);
@@ -1444,19 +1496,28 @@ class CORE_EXPORT UseCounter {
 
   static int mapCSSPropertyIdToCSSSampleIdForHistogram(CSSPropertyID);
 
+  // When muted, all calls to "count" functions are ignoed.  May be nested.
   void muteForInspector();
   void unmuteForInspector();
 
   void recordMeasurement(Feature);
-  void updateMeasurements();
 
+  // Return whether the feature has been seen since the last page load
+  // (except when muted).  Does include features seen in documents which have
+  // reporting disabled.
   bool hasRecordedMeasurement(Feature) const;
 
  private:
   EnumerationHistogram& featuresHistogram() const;
   EnumerationHistogram& cssHistogram() const;
 
+  // If non-zero, ignore all 'count' calls completely.
   unsigned m_muteCount;
+
+  // If true, disable reporting all histogram entries.
+  bool m_disableReporting;
+
+  // The scope represented by this UseCounter instance.
   Context m_context;
 
   // Track what features/properties have been reported to the (non-legacy)
@@ -1466,7 +1527,7 @@ class CORE_EXPORT UseCounter {
 
   // Encapsulates the work to preserve the old "FeatureObserver" histogram with
   // original semantics
-  // TODO(rbyers): remove this - http://crbug.com/597963
+  // TODO(rbyers): remove this - http://crbug.com/676837
   class CORE_EXPORT LegacyCounter {
    public:
     LegacyCounter();

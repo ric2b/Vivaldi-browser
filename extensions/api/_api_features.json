@@ -17,6 +17,7 @@
 
 {
   "autoUpdate": {
+    "vivaldi": true,
     "dependencies": [ "permission:autoUpdate" ],
     "contexts": [ "blessed_extension" ]
   },
@@ -70,6 +71,10 @@
   "showMenu": {
     "vivaldi": true,
     "dependencies": [ "permission:showMenu" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "sync": {
+    "dependencies": [ "permission:sync" ],
     "contexts": [ "blessed_extension" ]
   },
   "tabsPrivate": {

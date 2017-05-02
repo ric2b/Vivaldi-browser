@@ -145,6 +145,21 @@ struct LifetimeOf {
       !kIsGarbageCollected ? kRefCountedLifetime : kGarbageCollectedLifetime;
 };
 
+template <typename T>
+struct GenericHashTraitsBase {
+  // We don't want to capitalize fields in type traits
+  // (i.e. the |value| -> |kValue| rename is undesirable below).
+  // This problem is prevented by IsCallee heuristic.
+  static const int kWeakHandlingFlag = TypeTrait2<T>::value ? 123 : 456;
+};
+
+template <int Format>
+struct IntermediateFormat {
+  // Some type traits have int type.  Example below is loosely based on
+  // third_party/WebKit/Source/platform/graphics/gpu/WebGLImageConversion.cpp
+  static const int value = (Format == 123) ? 456 : 789;
+};
+
 };  // namespace WTF
 
 void F() {

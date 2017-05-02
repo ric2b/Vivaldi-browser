@@ -8,12 +8,10 @@
 #include "chrome/common/extensions/extension_constants.h"
 
 LauncherItemController::LauncherItemController(
-    Type type,
     const std::string& app_id,
     const std::string& launch_id,
     ChromeLauncherController* launcher_controller)
-    : type_(type),
-      app_id_(app_id),
+    : app_id_(app_id),
       launch_id_(launch_id),
       shelf_id_(0),
       launcher_controller_(launcher_controller),
@@ -22,19 +20,7 @@ LauncherItemController::LauncherItemController(
 
 LauncherItemController::~LauncherItemController() {}
 
-ash::ShelfItemType LauncherItemController::GetShelfItemType() const {
-  if (extension_misc::IsImeMenuExtensionId(app_id_))
-    return ash::TYPE_IME_MENU;
-
-  switch (type_) {
-    case LauncherItemController::TYPE_SHORTCUT:
-    case LauncherItemController::TYPE_WINDOWED_APP:
-      return ash::TYPE_APP_SHORTCUT;
-    case LauncherItemController::TYPE_APP:
-      return ash::TYPE_PLATFORM_APP;
-    case LauncherItemController::TYPE_APP_PANEL:
-      return ash::TYPE_APP_PANEL;
-  }
-  NOTREACHED();
-  return ash::TYPE_APP_SHORTCUT;
+AppWindowLauncherItemController*
+LauncherItemController::AsAppWindowLauncherItemController() {
+  return nullptr;
 }

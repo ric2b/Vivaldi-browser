@@ -5,17 +5,15 @@
 #include "ash/display/display_configuration_controller.h"
 
 #include "ash/display/display_animator.h"
+#include "ash/display/display_animator_chromeos.h"
 #include "ash/display/display_util.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "base/time/time.h"
-#include "ui/display/manager/display_layout.h"
-#include "ui/display/manager/display_manager.h"
-
-#if defined(OS_CHROMEOS)
-#include "ash/display/display_animator_chromeos.h"
-#include "base/sys_info.h"
+#include "chromeos/system/devicemode.h"
 #include "grit/ash_strings.h"
-#endif
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/display/display_layout.h"
+#include "ui/display/manager/display_manager.h"
 
 namespace {
 
@@ -57,11 +55,9 @@ DisplayConfigurationController::DisplayConfigurationController(
       window_tree_host_manager_(window_tree_host_manager),
       weak_ptr_factory_(this) {
   window_tree_host_manager_->AddObserver(this);
-#if defined(OS_CHROMEOS)
-  if (base::SysInfo::IsRunningOnChromeOS())
+  if (chromeos::IsRunningAsSystemCompositor())
     limiter_.reset(new DisplayChangeLimiter);
   display_animator_.reset(new DisplayAnimatorChromeOS());
-#endif
 }
 
 DisplayConfigurationController::~DisplayConfigurationController() {
@@ -83,10 +79,11 @@ void DisplayConfigurationController::SetDisplayLayout(
 void DisplayConfigurationController::SetMirrorMode(bool mirror,
                                                    bool user_action) {
   if (display_manager_->num_connected_displays() > 2) {
-#if defined(OS_CHROMEOS)
-    if (user_action)
-      ShowDisplayErrorNotification(IDS_ASH_DISPLAY_MIRRORING_NOT_SUPPORTED);
-#endif
+    if (user_action) {
+      ShowDisplayErrorNotification(
+          l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_MIRRORING_NOT_SUPPORTED),
+          false);
+    }
     return;
   }
   if (display_manager_->num_connected_displays() <= 1 ||

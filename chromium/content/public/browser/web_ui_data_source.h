@@ -7,6 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <string>
+#include <unordered_set>
+
 #include "base/callback.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
@@ -27,9 +31,17 @@ class WebUIDataSource {
 
   CONTENT_EXPORT static WebUIDataSource* Create(const std::string& source_name);
 
-  // Adds a WebUI data source to |browser_context|.
+  // Adds a WebUI data source to |browser_context|. TODO(dbeam): update this API
+  // to take a std::unique_ptr instead to make it clear that |source| can be
+  // destroyed and references should not be kept by callers. Use |Update()|
+  // if you need to change an existing data source.
   CONTENT_EXPORT static void Add(BrowserContext* browser_context,
                                  WebUIDataSource* source);
+
+  CONTENT_EXPORT static void Update(
+      BrowserContext* browser_context,
+      const std::string& source_name,
+      std::unique_ptr<base::DictionaryValue> update);
 
   // Adds a string keyed to its name to our dictionary.
   virtual void AddString(const std::string& name,
@@ -87,15 +99,18 @@ class WebUIDataSource {
   // Currently only used by embedders for WebUIs with multiple instances.
   virtual void DisableReplaceExistingSource() = 0;
   virtual void DisableContentSecurityPolicy() = 0;
+  virtual void OverrideContentSecurityPolicyScriptSrc(
+      const std::string& data) = 0;
   virtual void OverrideContentSecurityPolicyObjectSrc(
       const std::string& data) = 0;
   virtual void OverrideContentSecurityPolicyChildSrc(
       const std::string& data) = 0;
   virtual void DisableDenyXFrameOptions() = 0;
 
-  // Tells the loading code that resources are gzipped on disk. TODO(dbeam):
-  // write a streaming $i18n{} replacer and remove the "DisableI18n" part.
-  virtual void DisableI18nAndUseGzipForAllPaths() = 0;
+  // Tells the loading code that resources are gzipped on disk. |excluded_paths|
+  // are uncompressed paths, and therefore should not be decompressed.
+  virtual void UseGzip(const std::unordered_set<std::string>& excluded_paths)
+      = 0;
 };
 
 }  // namespace content

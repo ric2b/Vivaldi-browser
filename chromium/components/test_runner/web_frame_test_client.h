@@ -13,7 +13,6 @@
 
 namespace test_runner {
 
-class AccessibilityController;
 class TestRunner;
 class WebFrameTestProxyBase;
 class WebTestDelegate;
@@ -61,6 +60,7 @@ class WebFrameTestClient : public blink::WebFrameClient {
                          blink::WebNavigationPolicy policy,
                          const blink::WebString& suggested_name,
                          bool replaces_current_history_item) override;
+  void loadErrorPage(int reason) override;
   void didStartProvisionalLoad(blink::WebLocalFrame* frame) override;
   void didReceiveServerRedirectForProvisionalLoad(
       blink::WebLocalFrame* frame) override;

@@ -39,6 +39,7 @@
 #import "ios/chrome/browser/passwords/js_password_manager.h"
 #import "ios/chrome/browser/passwords/password_generation_agent.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#import "ios/web/public/origin_util.h"
 #include "ios/web/public/url_scheme_util.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -364,7 +365,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 #pragma mark -
 #pragma mark CRWWebStateObserver
 
-- (void)webStateDidLoadPage:(web::WebState*)webState {
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   // Clear per-page state.
   formData_.reset();
 
@@ -455,7 +456,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
   std::string errorMessage;
   std::unique_ptr<base::Value> jsonData(base::JSONReader::ReadAndReturnError(
       JSONString, false, &errorCode, &errorMessage));
-  if (errorCode || !jsonData || !jsonData->IsType(base::Value::TYPE_LIST)) {
+  if (errorCode || !jsonData || !jsonData->IsType(base::Value::Type::LIST)) {
     VLOG(1) << "JSON parse error " << errorMessage
             << " JSON string: " << JSONString;
     return;
@@ -528,7 +529,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
     return NO;
   }
 
-  if (errorCode || !JSONData->IsType(base::Value::TYPE_DICTIONARY)) {
+  if (errorCode || !JSONData->IsType(base::Value::Type::DICTIONARY)) {
     VLOG(1) << "JSON parse error " << errorMessage
             << " JSON string: " << JSONString;
     return NO;
@@ -548,6 +549,15 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
     return;
 
   if (!forms.empty()) {
+    // Notify web_state about password forms, so that this can be taken into
+    // account for the security state.
+    if (webStateObserverBridge_) {
+      web::WebState* web_state = webStateObserverBridge_->web_state();
+      if (web_state && !web::IsOriginSecure(web_state->GetLastCommittedURL())) {
+        web_state->OnPasswordInputShownOnHttp();
+      }
+    }
+
     // Invoke the password manager callback to autofill password forms
     // on the loaded page.
     passwordManager_->OnPasswordFormsParsed(passwordManagerDriver_.get(),
@@ -852,8 +862,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
         IOSChromeProfileSyncServiceFactory::GetForBrowserState(
             self.browserState);
     isSmartLockBrandingEnabled =
-        password_bubble_experiment::IsSmartLockBrandingSavePromptEnabled(
-            sync_service);
+        password_bubble_experiment::IsSmartLockUser(sync_service);
   }
   infobars::InfoBarManager* infoBarManager =
       InfoBarManagerImpl::FromWebState(webStateObserverBridge_->web_state());

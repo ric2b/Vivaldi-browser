@@ -39,7 +39,7 @@ AcceleratedStaticBitmapImage::createFromWebGLContextImage(
 
 AcceleratedStaticBitmapImage::AcceleratedStaticBitmapImage(
     sk_sp<SkImage> image) {
-  m_textureHolder = wrapUnique(new SkiaTextureHolder(std::move(image)));
+  m_textureHolder = WTF::wrapUnique(new SkiaTextureHolder(std::move(image)));
   m_threadChecker.DetachFromThread();
 }
 
@@ -49,7 +49,7 @@ AcceleratedStaticBitmapImage::AcceleratedStaticBitmapImage(
     unsigned textureId,
     WeakPtr<WebGraphicsContext3DProviderWrapper> contextProvider,
     IntSize mailboxSize) {
-  m_textureHolder = wrapUnique(new MailboxTextureHolder(
+  m_textureHolder = WTF::wrapUnique(new MailboxTextureHolder(
       mailbox, syncToken, textureId, contextProvider, mailboxSize));
   m_threadChecker.DetachFromThread();
 }
@@ -82,14 +82,17 @@ void AcceleratedStaticBitmapImage::copyToTexture(
   destGL->WaitSyncTokenCHROMIUM(m_textureHolder->syncToken().GetData());
   GLuint sourceTextureId = destGL->CreateAndConsumeTextureCHROMIUM(
       GL_TEXTURE_2D, m_textureHolder->mailbox().name);
-  destGL->CopyTextureCHROMIUM(sourceTextureId, destTextureId, internalFormat,
-                              destType, flipY, false, false);
+  destGL->CopyTextureCHROMIUM(sourceTextureId, 0, destTextureId, 0,
+                              internalFormat, destType, flipY, false, false);
   // This drops the |destGL| context's reference on our |m_mailbox|, but it's
   // still held alive by our SkImage.
   destGL->DeleteTextures(1, &sourceTextureId);
 }
 
-sk_sp<SkImage> AcceleratedStaticBitmapImage::imageForCurrentFrame() {
+sk_sp<SkImage> AcceleratedStaticBitmapImage::imageForCurrentFrame(
+    const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/672306
   checkThread();
   if (!isValid())
     return nullptr;
@@ -102,7 +105,10 @@ void AcceleratedStaticBitmapImage::draw(SkCanvas* canvas,
                                         const FloatRect& dstRect,
                                         const FloatRect& srcRect,
                                         RespectImageOrientationEnum,
-                                        ImageClampingMode imageClampingMode) {
+                                        ImageClampingMode imageClampingMode,
+                                        const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/672306
   checkThread();
   if (!isValid())
     return;
@@ -132,7 +138,7 @@ void AcceleratedStaticBitmapImage::createImageFromMailboxIfNeeded() {
   if (m_textureHolder->isSkiaTextureHolder())
     return;
   m_textureHolder =
-      wrapUnique(new SkiaTextureHolder(std::move(m_textureHolder)));
+      WTF::wrapUnique(new SkiaTextureHolder(std::move(m_textureHolder)));
 }
 
 void AcceleratedStaticBitmapImage::ensureMailbox() {
@@ -140,7 +146,7 @@ void AcceleratedStaticBitmapImage::ensureMailbox() {
     return;
 
   m_textureHolder =
-      wrapUnique(new MailboxTextureHolder(std::move(m_textureHolder)));
+      WTF::wrapUnique(new MailboxTextureHolder(std::move(m_textureHolder)));
 }
 
 void AcceleratedStaticBitmapImage::transfer() {
@@ -155,7 +161,7 @@ void AcceleratedStaticBitmapImage::transfer() {
     WebThread* currentThread = Platform::current()->currentThread();
     m_textureHolder->setWasTransferred(true);
     m_textureHolder->setTextureThreadTaskRunner(
-        currentThread->getWebTaskRunner()->clone());
+        currentThread->getWebTaskRunner());
   }
   m_detachThreadAtNextCheck = true;
 }

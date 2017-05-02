@@ -13,6 +13,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "components/subresource_filter/content/common/document_load_statistics.h"
 #include "components/subresource_filter/core/common/activation_state.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
 #include "third_party/WebKit/public/platform/WebDocumentSubresourceFilter.h"
@@ -41,26 +43,22 @@ class DocumentSubresourceFilter
   //     first disallowed subresource load.
   DocumentSubresourceFilter(
       ActivationState activation_state,
+      bool measure_performance,
       const scoped_refptr<const MemoryMappedRuleset>& ruleset,
       const std::vector<GURL>& ancestor_document_urls,
       const base::Closure& first_disallowed_load_callback);
   ~DocumentSubresourceFilter() override;
 
+  const DocumentLoadStatistics& statistics() const { return statistics_; }
+
   // blink::WebDocumentSubresourceFilter:
   bool allowLoad(const blink::WebURL& resourceUrl,
                  blink::WebURLRequest::RequestContext) override;
 
-  // The number of subresource loads that went through the allowLoad method.
-  size_t num_loads_total() const { return num_loads_total_; }
-  // Statistics on the number of subresource loads that were evaluated, were
-  // matched by filtering rules, and were disallowed, respectively, during the
-  // lifetime of |this| filter.
-  size_t num_loads_evaluated() const { return num_loads_evaluated_; }
-  size_t num_loads_matching_rules() const { return num_loads_matching_rules_; }
-  size_t num_loads_disallowed() const { return num_loads_disallowed_; }
-
  private:
-  ActivationState activation_state_;
+  const ActivationState activation_state_;
+  const bool measure_performance_;
+
   scoped_refptr<const MemoryMappedRuleset> ruleset_;
   IndexedRulesetMatcher ruleset_matcher_;
 
@@ -68,11 +66,6 @@ class DocumentSubresourceFilter
   std::unique_ptr<FirstPartyOrigin> document_origin_;
 
   base::Closure first_disallowed_load_callback_;
-
-  size_t num_loads_total_ = 0;
-  size_t num_loads_evaluated_ = 0;
-  size_t num_loads_matching_rules_ = 0;
-  size_t num_loads_disallowed_ = 0;
 
   // Even when subresource filtering is activated at the page level by the
   // |activation_state| passed into the constructor, the current document or
@@ -88,6 +81,8 @@ class DocumentSubresourceFilter
   // GENERICBLOCK activation type. Undefined if
   // |filtering_disabled_for_document_|.
   bool generic_blocking_rules_disabled_ = false;
+
+  DocumentLoadStatistics statistics_;
 
   DISALLOW_COPY_AND_ASSIGN(DocumentSubresourceFilter);
 };

@@ -5,8 +5,6 @@ declare_overrides() {
   proprietary_codecs = true
   enable_widevine = true
 
-  enable_system_proprietary_codecs = is_win || is_mac
-
   is_win_fastlink = !is_official_build
 
   if (is_linux) {
@@ -22,4 +20,7 @@ declare_overrides() {
     # Static builds are mostly built by the builder
     mac_use_sdk = "10.10" 
   }
+
+  exclude_unwind_tables = is_official_build
+
 }

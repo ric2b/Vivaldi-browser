@@ -45,7 +45,6 @@ public class NativeTest {
     private StringBuilder mCommandLineFlags = new StringBuilder();
     private TestStatusReporter mReporter;
     private boolean mRunInSubThread = false;
-    private boolean mStdoutFifo = false;
     private String mStdoutFilePath;
 
     private static class ReportingUncaughtExceptionHandler
@@ -122,10 +121,6 @@ public class NativeTest {
         }
 
         mStdoutFilePath = intent.getStringExtra(EXTRA_STDOUT_FILE);
-        if (mStdoutFilePath == null) {
-            mStdoutFilePath = new File(activity.getFilesDir(), "test.fifo").getAbsolutePath();
-            mStdoutFifo = true;
-        }
     }
 
     public void appendCommandLineFlags(String flags) {
@@ -133,29 +128,46 @@ public class NativeTest {
     }
 
     public void postStart(final Activity activity, boolean forceRunInSubThread) {
+        final Runnable runTestsTask = new Runnable() {
+            @Override
+            public void run() {
+                runTests(activity);
+            }
+        };
+
         if (mRunInSubThread || forceRunInSubThread) {
-            // Create a new thread and run tests on it.
-            new Thread() {
+            // Post a task that posts a task that creates a new thread and runs tests on it.
+
+            // On L and M, the system posts a task to the main thread that prints to stdout
+            // from android::Layout (https://goo.gl/vZA38p). Chaining the subthread creation
+            // through multiple tasks executed on the main thread ensures that this task
+            // runs before we start running tests s.t. its output doesn't interfere with
+            // the test output. See crbug.com/678146 for additional context.
+
+            final Handler handler = new Handler();
+            final Runnable startTestThreadTask = new Runnable() {
                 @Override
                 public void run() {
-                    runTests(activity);
+                    new Thread(runTestsTask).start();
                 }
-            }.start();
+            };
+            final Runnable postTestStarterTask = new Runnable() {
+                @Override
+                public void run() {
+                    handler.post(startTestThreadTask);
+                }
+            };
+            handler.post(postTestStarterTask);
         } else {
             // Post a task to run the tests. This allows us to not block
             // onCreate and still run tests on the main thread.
-            new Handler().post(new Runnable() {
-                @Override
-                public void run() {
-                    runTests(activity);
-                }
-            });
+            new Handler().post(runTestsTask);
         }
     }
 
     private void runTests(Activity activity) {
         nativeRunTests(mCommandLineFlags.toString(), mCommandLineFilePath, mStdoutFilePath,
-                mStdoutFifo, activity.getApplicationContext(), UrlUtils.getIsolatedTestRoot());
+                activity.getApplicationContext(), UrlUtils.getIsolatedTestRoot());
         activity.finish();
         mReporter.testRunFinished(Process.myPid());
     }
@@ -168,5 +180,5 @@ public class NativeTest {
     }
 
     private native void nativeRunTests(String commandLineFlags, String commandLineFilePath,
-            String stdoutFilePath, boolean stdoutFifo, Context appContext, String testDataDir);
+            String stdoutFilePath, Context appContext, String testDataDir);
 }

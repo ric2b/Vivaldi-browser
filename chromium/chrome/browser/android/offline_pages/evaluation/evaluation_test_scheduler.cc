@@ -9,15 +9,23 @@
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/offline_pages/background/device_conditions.h"
-#include "components/offline_pages/background/request_coordinator.h"
+#include "components/offline_pages/core/background/device_conditions.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/offline_event_logger.h"
 #include "net/base/network_change_notifier.h"
+
+namespace {
+const int kBatteryPercentageHigh = 75;
+const bool kPowerRequired = true;
+}  // namespace
 
 namespace offline_pages {
 
 namespace android {
 
 namespace {
+
+const char kLogTag[] = "EvaluationTestScheduler";
 
 void StartProcessing();
 
@@ -32,11 +40,7 @@ void GetAllRequestsDone(
     Profile* profile = ProfileManager::GetLastUsedProfile();
     RequestCoordinator* coordinator =
         RequestCoordinatorFactory::GetInstance()->GetForBrowserContext(profile);
-    // TODO(romax) Maybe get current real condition.
-    DeviceConditions device_conditions(
-        true, 0, net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI);
-    coordinator->StartProcessing(device_conditions,
-                                 base::Bind(&ProcessingDoneCallback));
+    coordinator->StartImmediateProcessing(base::Bind(&ProcessingDoneCallback));
   }
 }
 
@@ -49,8 +53,25 @@ void StartProcessing() {
 
 }  // namespace
 
+EvaluationTestScheduler::EvaluationTestScheduler()
+    : device_conditions_(kPowerRequired,
+                         kBatteryPercentageHigh,
+                         net::NetworkChangeNotifier::CONNECTION_2G) {}
+
+EvaluationTestScheduler::~EvaluationTestScheduler() {}
+
 void EvaluationTestScheduler::Schedule(
     const TriggerConditions& trigger_conditions) {
+  Profile* profile = ProfileManager::GetLastUsedProfile();
+  if (!coordinator_) {
+    coordinator_ =
+        RequestCoordinatorFactory::GetInstance()->GetForBrowserContext(profile);
+    // It's not expected that the coordinator would be nullptr since this bridge
+    // would only be used for testing scenario.
+    DCHECK(coordinator_);
+  }
+  coordinator_->GetLogger()->RecordActivity(std::string(kLogTag) +
+                                            " Start schedule!");
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                 base::Bind(&StartProcessing));
 }
@@ -60,6 +81,10 @@ void EvaluationTestScheduler::BackupSchedule(
     long delay_in_seconds) {}
 
 void EvaluationTestScheduler::Unschedule() {}
+
+DeviceConditions& EvaluationTestScheduler::GetCurrentDeviceConditions() {
+  return device_conditions_;
+}
 
 void EvaluationTestScheduler::ImmediateScheduleCallback(bool result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,

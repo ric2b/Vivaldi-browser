@@ -9,11 +9,14 @@
 #include "chrome/browser/manifest/manifest_icon_downloader.h"
 #include "chrome/browser/manifest/manifest_icon_selector.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/base/url_util.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 
 namespace {
@@ -24,7 +27,7 @@ const char kPngExtension[] = ".png";
 // factor of a Nexus 5 device (3x). For mobile and desktop platforms, a 144px
 // icon is an approximate, appropriate lower bound. It is the currently
 // advertised minimum icon size for triggering banners.
-// TODO(dominickn): consolidate with minimum_icon_size_in_dp across platforms.
+// TODO(dominickn): consolidate with minimum_icon_size_in_px across platforms.
 const int kIconMinimumSizeInPx = 144;
 
 // Returns true if |manifest| specifies a PNG icon >= 144x144px (or size "any").
@@ -95,6 +98,23 @@ InstallableManager::InstallableManager(content::WebContents* web_contents)
 InstallableManager::~InstallableManager() = default;
 
 // static
+bool InstallableManager::IsContentSecure(content::WebContents* web_contents) {
+  if (!web_contents)
+    return false;
+
+  // Whitelist localhost. Check the VisibleURL to match what the
+  // SecurityStateTabHelper looks at.
+  if (net::IsLocalhost(web_contents->GetVisibleURL().HostNoBrackets()))
+    return true;
+
+  security_state::SecurityInfo security_info;
+  SecurityStateTabHelper::FromWebContents(web_contents)
+      ->GetSecurityInfo(&security_info);
+  return security_info.security_level == security_state::SECURE ||
+         security_info.security_level == security_state::EV_SECURE;
+}
+
+// static
 int InstallableManager::GetMinimumIconSizeInPx() {
   return kIconMinimumSizeInPx;
 }
@@ -115,12 +135,13 @@ void InstallableManager::GetData(const InstallableParams& params,
 
 InstallableManager::IconProperty& InstallableManager::GetIcon(
     const InstallableParams& params) {
-  return icons_[{params.ideal_icon_size_in_dp, params.minimum_icon_size_in_dp}];
+  return icons_[{params.ideal_primary_icon_size_in_px,
+                 params.minimum_primary_icon_size_in_px}];
 }
 
 bool InstallableManager::IsIconFetched(const InstallableParams& params) const {
-  const auto it = icons_.find(
-      {params.ideal_icon_size_in_dp, params.minimum_icon_size_in_dp});
+  const auto it = icons_.find({params.ideal_primary_icon_size_in_px,
+                               params.minimum_primary_icon_size_in_px});
   return it != icons_.end() && it->second.fetched;
 }
 
@@ -136,7 +157,7 @@ InstallableStatusCode InstallableManager::GetErrorCode(
   if (params.check_installable && installable_->error != NO_ERROR_DETECTED)
     return installable_->error;
 
-  if (params.fetch_valid_icon) {
+  if (params.fetch_valid_primary_icon) {
     IconProperty& icon = GetIcon(params);
     if (icon.error != NO_ERROR_DETECTED)
       return icon.error;
@@ -186,7 +207,7 @@ bool InstallableManager::IsComplete(const InstallableParams& params) const {
   //  b. the resource has been fetched/checked.
   return manifest_->fetched &&
          (!params.check_installable || installable_->fetched) &&
-         (!params.fetch_valid_icon || IsIconFetched(params));
+         (!params.fetch_valid_primary_icon || IsIconFetched(params));
 }
 
 void InstallableManager::Reset() {
@@ -217,8 +238,8 @@ void InstallableManager::RunCallback(const Task& task,
       code,
       manifest_url(),
       manifest(),
-      params.fetch_valid_icon ? icon.url : GURL::EmptyGURL(),
-      params.fetch_valid_icon ? icon.icon.get() : nullptr,
+      params.fetch_valid_primary_icon ? icon.url : GURL::EmptyGURL(),
+      params.fetch_valid_primary_icon ? icon.icon.get() : nullptr,
       params.check_installable ? is_installable() : false};
 
   task.second.Run(data);
@@ -253,7 +274,7 @@ void InstallableManager::WorkOnTask() {
     FetchManifest();
   else if (params.check_installable && !installable_->fetched)
     CheckInstallable();
-  else if (params.fetch_valid_icon && !IsIconFetched(params))
+  else if (params.fetch_valid_primary_icon && !IsIconFetched(params))
     CheckAndFetchBestIcon();
   else
     NOTREACHED();
@@ -381,15 +402,15 @@ void InstallableManager::CheckAndFetchBestIcon() {
   icon.fetched = true;
 
   GURL icon_url = ManifestIconSelector::FindBestMatchingIcon(
-      manifest().icons, params.ideal_icon_size_in_dp,
-      params.minimum_icon_size_in_dp);
+      manifest().icons, params.ideal_primary_icon_size_in_px,
+      params.minimum_primary_icon_size_in_px);
 
   if (icon_url.is_empty()) {
     icon.error = NO_ACCEPTABLE_ICON;
   } else {
     bool can_download_icon = ManifestIconDownloader::Download(
-        GetWebContents(), icon_url, params.ideal_icon_size_in_dp,
-        params.minimum_icon_size_in_dp,
+        GetWebContents(), icon_url, params.ideal_primary_icon_size_in_px,
+        params.minimum_primary_icon_size_in_px,
         base::Bind(&InstallableManager::OnAppIconFetched,
                    weak_factory_.GetWeakPtr(), icon_url));
     if (can_download_icon)

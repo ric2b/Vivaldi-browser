@@ -24,7 +24,7 @@
   ManagePasswordsBubbleModel* model = self.model;
   if (model) {
     model->OnSaveClicked();
-    if (model->ReplaceToShowSignInPromoIfNeeded()) {
+    if (model->ReplaceToShowPromotionIfNeeded()) {
       [self.delegate refreshBubble];
       return;
     }
@@ -46,10 +46,6 @@
       initWithModelAndForm:self.model
                       form:&self.model->pending_password()]);
   return [passwordItem_ view];
-}
-
-- (BOOL)shouldShowGoogleSmartLockWelcome {
-  return self.model->ShouldShowGoogleSmartLockWelcome();
 }
 
 - (NSArray*)createButtonsAndAddThemToView:(NSView*)view {

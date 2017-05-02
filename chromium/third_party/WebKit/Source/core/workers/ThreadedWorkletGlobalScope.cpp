@@ -30,6 +30,19 @@ ThreadedWorkletGlobalScope::~ThreadedWorkletGlobalScope() {
   DCHECK(!m_thread);
 }
 
+void ThreadedWorkletGlobalScope::countFeature(UseCounter::Feature feature) {
+  DCHECK(isContextThread());
+  DCHECK(m_thread);
+  m_thread->workerReportingProxy().countFeature(feature);
+}
+
+void ThreadedWorkletGlobalScope::countDeprecation(UseCounter::Feature feature) {
+  DCHECK(isContextThread());
+  DCHECK(m_thread);
+  addDeprecationMessage(feature);
+  m_thread->workerReportingProxy().countDeprecation(feature);
+}
+
 void ThreadedWorkletGlobalScope::dispose() {
   DCHECK(isContextThread());
   WorkletGlobalScope::dispose();
@@ -38,14 +51,6 @@ void ThreadedWorkletGlobalScope::dispose() {
 
 bool ThreadedWorkletGlobalScope::isContextThread() const {
   return thread()->isCurrentThread();
-}
-
-void ThreadedWorkletGlobalScope::postTask(
-    const WebTraceLocation& location,
-    std::unique_ptr<ExecutionContextTask> task,
-    const String& taskNameForInstrumentation) {
-  thread()->postTask(location, std::move(task),
-                     !taskNameForInstrumentation.isEmpty());
 }
 
 void ThreadedWorkletGlobalScope::addConsoleMessage(

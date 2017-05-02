@@ -178,7 +178,13 @@ class MockTextCheckingCompletion : public blink::WebTextCheckingCompletion {
 // A test with a "[ROBUSTNESS]" mark shows it is a robustness test and it uses
 // grammatically incorrect string.
 // TODO(groby): Please feel free to add more tests.
-TEST_F(SpellCheckTest, SpellCheckStrings_EN_US) {
+#if defined(OS_WIN) && !defined(NDEBUG)
+// Test times out on win dbg. crbug.com/678753.
+#define MAYBE_SpellCheckStrings_EN_US DISABLED_SpellCheckStrings_EN_US
+#else
+#define MAYBE_SpellCheckStrings_EN_US SpellCheckStrings_EN_US
+#endif
+TEST_F(SpellCheckTest, MAYBE_SpellCheckStrings_EN_US) {
   static const struct {
     // A string to be tested.
     const wchar_t* input;
@@ -489,9 +495,10 @@ TEST_F(SpellCheckTest, SpellCheckSuggestions_EN_US) {
 
 // This test verifies our spellchecker can split a text into words and check
 // the spelling of each word in the text.
-#if defined(THREAD_SANITIZER)
+#if defined(THREAD_SANITIZER) || defined(OS_WIN)
 // SpellCheckTest.SpellCheckText fails under ThreadSanitizer v2.
 // See http://crbug.com/217909.
+// Also fails on windows: crbug.com/678300.
 #define MAYBE_SpellCheckText DISABLED_SpellCheckText
 #else
 #define MAYBE_SpellCheckText SpellCheckText
@@ -1333,7 +1340,8 @@ TEST_F(SpellCheckTest, NoSuggest) {
 
     EXPECT_EQ(kTestCases[i].should_pass, result) << kTestCases[i].suggestion <<
         " in " << kTestCases[i].locale;
-
+    // TODO(cb/673424): Bring this back when suggestions are sped up.
+#if 0
     // Now verify that this test case does not show up as a suggestion.
     std::vector<base::string16> suggestions;
     size_t input_length = 0;
@@ -1360,6 +1368,7 @@ TEST_F(SpellCheckTest, NoSuggest) {
             " in " << kTestCases[i].locale;
       }
     }
+#endif
   }
 }
 

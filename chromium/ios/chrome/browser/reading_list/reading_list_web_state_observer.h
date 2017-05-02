@@ -7,15 +7,21 @@
 
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "components/reading_list/ios/reading_list_model_observer.h"
 #include "ios/web/public/web_state/web_state_observer.h"
+#include "url/gurl.h"
 
-class BrowserState;
 class ReadingListModel;
+
+namespace web {
+class NavigationItem;
+}
 
 // Observes the loading of pages coming from the reading list, determines
 // whether loading an offline version of the page is needed, and actually
 // trigger the loading of the offline page (if possible).
-class ReadingListWebStateObserver : public web::WebStateObserver {
+class ReadingListWebStateObserver : public web::WebStateObserver,
+                                    public ReadingListModelObserver {
  public:
   static ReadingListWebStateObserver* FromWebState(
       web::WebState* web_state,
@@ -23,32 +29,55 @@ class ReadingListWebStateObserver : public web::WebStateObserver {
 
   ~ReadingListWebStateObserver() override;
 
-  // Starts checking that the current navigation is loading quickly enough [1].
-  // If not, starts to load a distilled version of the page (if there is any).
-  // If that same WebStateObserver was already checking that a page was loading
-  // quickly enough, stops checking the loading of that page.
-  // [1] A page loading quickly enough is a page that has loaded 15% within
-  // 1 second.
-  void StartCheckingProgress();
+  // ReadingListModelObserver implementation.
+  void ReadingListModelLoaded(const ReadingListModel* model) override;
+  void ReadingListModelBeingDeleted(const ReadingListModel* model) override;
 
  private:
   ReadingListWebStateObserver(web::WebState* web_state,
                               ReadingListModel* reading_list_model);
 
-  // Looks at the loading percentage. If less than 15%, attemps to load the
-  // offline version of that page.
+  // Looks at the loading percentage. If less than 25% * time, attemps to load
+  // the offline version of that page.
+  // |time| is the number of seconds since |StartCheckingProgress| was called.
   void VerifyIfReadingListEntryStartedLoading();
 
   friend class ReadingListWebStateObserverUserDataWrapper;
 
+  // Stops checking the loading of the |pending_url_|.
+  // The WebState will still be observed, but no action will be done on events.
+  void StopCheckingProgress();
+
+  // Loads the offline version of the URL in place of the current page.
+  void LoadOfflineReadingListEntry();
+
+  // Returns if the current page with |url| has an offline version that can be
+  // displayed if the normal loading fails.
+  bool IsUrlAvailableOffline(const GURL& url) const;
+
+  // Checks if |item| should be observed or not.
+  // A non-null item should be observed if it is not already loading an offline
+  // URL.
+  bool ShouldObserveItem(web::NavigationItem* item) const;
+
+  // Starts checking that the current navigation is loading quickly enough [1].
+  // If not, starts to load a distilled version of the page (if there is any).
+  // [1] A page loading quickly enough is a page that has loaded 25% within
+  // 1 second, 50% within 2 seconds and 75% within 3 seconds.
+  void StartCheckingLoading();
+
   // WebContentsObserver implementation.
-  void DidStopLoading() override;
   void PageLoaded(
       web::PageLoadCompletionStatus load_completion_status) override;
   void WebStateDestroyed() override;
+  void DidStartLoading() override;
 
   ReadingListModel* reading_list_model_;
   std::unique_ptr<base::Timer> timer_;
+  GURL pending_url_;
+  int try_number_;
+  bool last_load_was_offline_;
+  web::PageLoadCompletionStatus last_load_result_;
 
   DISALLOW_COPY_AND_ASSIGN(ReadingListWebStateObserver);
 };

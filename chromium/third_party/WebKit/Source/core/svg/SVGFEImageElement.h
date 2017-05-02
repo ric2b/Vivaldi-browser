@@ -22,8 +22,8 @@
 #define SVGFEImageElement_h
 
 #include "core/SVGNames.h"
-#include "core/fetch/ImageResource.h"
-#include "core/fetch/ResourceClient.h"
+#include "core/loader/resource/ImageResourceContent.h"
+#include "core/loader/resource/ImageResourceObserver.h"
 #include "core/svg/SVGAnimatedPreserveAspectRatio.h"
 #include "core/svg/SVGFilterPrimitiveStandardAttributes.h"
 #include "core/svg/SVGURIReference.h"
@@ -33,7 +33,7 @@ namespace blink {
 
 class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
                                 public SVGURIReference,
-                                public ResourceClient {
+                                public ImageResourceObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SVGFEImageElement);
 
@@ -55,7 +55,7 @@ class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
   explicit SVGFEImageElement(Document&);
 
   void svgAttributeChanged(const QualifiedName&) override;
-  void notifyFinished(Resource*) override;
+  void imageNotifyFinished(ImageResourceContent*) override;
   String debugName() const override { return "SVGFEImageElement"; }
 
   FilterEffect* build(SVGFilterBuilder*, Filter*) override;
@@ -69,7 +69,7 @@ class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
 
   Member<SVGAnimatedPreserveAspectRatio> m_preserveAspectRatio;
 
-  Member<ImageResource> m_cachedImage;
+  Member<ImageResourceContent> m_cachedImage;
 };
 
 }  // namespace blink

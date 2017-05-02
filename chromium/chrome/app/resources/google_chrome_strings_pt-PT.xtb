@@ -2,10 +2,10 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
 <translation id="1001534784610492198">O arquivo do programa de instalação está corrompido ou é inválido. Transfira de novo o Google Chrome.</translation>
-<translation id="103396972844768118">Informações importantes acerca dos seus dados do Chrome</translation>
 <translation id="1035334672863811645">inicie sessão no Chrome</translation>
 <translation id="1061441684050139317">O Chrome necessita de acesso ao microfone para o partilhar com este site.</translation>
 <translation id="1065672644894730302">Não é possível ler as suas preferências. Algumas funcionalidades poderão estar indisponíveis e as alterações efetuadas às preferências não serão guardadas.</translation>
+<translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> estava a utilizar o Chrome</translation>
 <translation id="1104959162601287462">Acerca do SO &amp;Chrome</translation>
 <translation id="110877069173485804">Este é o seu Chrome</translation>
 <translation id="123620459398936149">O SO Chrome não conseguiu sincronizar os dados. Atualize a sua frase de acesso de sincronização.</translation>
@@ -17,7 +17,6 @@
 <translation id="1434626383986940139">Aplicações do Chrome para o Canary</translation>
 <translation id="1457721931618994305">A atualizar o Google Chrome...</translation>
 <translation id="1469002951682717133">Iniciador de Aplicações do Chrome</translation>
-<translation id="1475773083554142432">O Chrome armazena esta informação com o <ph name="SAVED_PASSWORD_LINK" /> e lembra-a da próxima vez que precisar.</translation>
 <translation id="1480489203462860648">Experimente, já está instalado</translation>
 <translation id="1553358976309200471">Atualizar o Chrome</translation>
 <translation id="1587223624401073077">O Google Chrome está a utilizar a câmara.</translation>
@@ -38,10 +37,10 @@
 <translation id="2063848847527508675">O SO Chrome tem de ser reiniciado para aplicar a atualização.</translation>
 <translation id="2077129598763517140">Utilizar aceleração de hardware sempre que estiver disponível</translation>
 <translation id="2084710999043359739">Adicionar ao Chrome</translation>
+<translation id="2120620239521071941">Esta ação elimina <ph name="ITEMS_COUNT" /> itens deste dispositivo. Para recuperar os seus dados mais tarde, inicie sessão no Chrome como <ph name="USER_EMAIL" />.</translation>
 <translation id="2147651015520127414">O Chrome confirmou que <ph name="ISSUER" /> emitiu o certificado deste Website.</translation>
 <translation id="2246246234298806438">O Google Chrome não pode mostrar a pré-visualização de impressão quando o visualizador de PDF incorporado está em falta.</translation>
 <translation id="2252923619938421629">Ajude a melhorar o Google Chrome, comunicando as definições atuais</translation>
-<translation id="225614027745146050">Bem-vindo</translation>
 <translation id="2286950485307333924">Tem agora sessão iniciada no Chrome</translation>
 <translation id="2290014774651636340">As chaves da API do Google estão em falta. Algumas funcionalidades do Google Chrome serão desativadas.</translation>
 <translation id="2290095356545025170">Tem a certeza de que pretende desinstalar o Google Chrome?</translation>
@@ -57,12 +56,11 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="2485422356828889247">Desinstalar</translation>
 <translation id="2580411288591421699">Não é possível instalar a mesma versão do Google Chrome atualmente em execução. Feche o Google Chrome e tente novamente.</translation>
 <translation id="2582790009689336987">Em breve, este computador deixará de receber atualizações do Google Chrome, uma vez que este sistema Linux já não será suportado.</translation>
+<translation id="2586406160782125153">Esta ação elimina os seus dados de navegação deste dispositivo. Para recuperar os seus dados mais tarde, inicie sessão no Chrome como <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Logótipo do Chrome</translation>
 <translation id="2664962310688259219">Licenças de código aberto do SO Chrome</translation>
 <translation id="2665296953892887393">Ajudar a melhorar o Google Chrome ao enviar relatórios de falhas e <ph name="UMA_LINK" /> à Google</translation>
-<translation id="2681064822612051220">Foi encontrada uma instalação do Google Chrome em conflito no sistema. Desinstale-a e tente novamente.</translation>
 <translation id="2689103672227170538">Esta extensão alterou a página apresentada quando inicia o Chrome.</translation>
-<translation id="2704356438731803243">Se preferir manter os seus dados do Chrome existentes em separado, pode criar um novo utilizador do Chrome para <ph name="USER_NAME" />.</translation>
 <translation id="2748463065602559597">Está a ver uma página segura do Google Chrome.</translation>
 <translation id="2769762047821873045">O Google Chrome não é o seu navegador predefinido.</translation>
 <translation id="2770231113462710648">Alterar o navegador predefinido para:</translation>
@@ -94,6 +92,7 @@ Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" 
 <translation id="345171907106878721">Adicionar-se ao Chrome</translation>
 <translation id="3612333635265770873">É conhecido um módulo com o mesmo nome que entra em conflito com o Google Chrome.</translation>
 <translation id="3622797965165704966">Agora é mais fácil utilizar o Chrome com a sua Conta Google e em computadores partilhados.</translation>
+<translation id="3718181793972440140">Esta ação elimina 1 item deste dispositivo. Para recuperar os seus dados mais tarde, inicie sessão no Chrome como <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">A extensão "<ph name="EXTENSION_NAME" />" alterou a página apresentada quando inicia o Chrome.</translation>
 <translation id="3738139272394829648">Tocar para pesquisar</translation>
 <translation id="3780814664026482060">Chrome – <ph name="PAGE_TITLE" /></translation>
@@ -132,7 +131,6 @@ Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" 
 <translation id="4771048833395599659">Este ficheiro pode ser perigoso. Como tal, o Chrome bloqueou-o.</translation>
 <translation id="4794050651896644714">Guardar os detalhes no Chrome</translation>
 <translation id="4891791193823137474">Permitir que o Google Chrome seja executado em segundo plano</translation>
-<translation id="4901390485477164536">O Google Chrome é o seu navegador predefinido. Viva!</translation>
 <translation id="4921569541910214635">Partilha um computador? Agora pode configurar o Chrome exatamente como pretende.</translation>
 <translation id="4953650215774548573">Definir o Google Chrome como o navegador predefinido</translation>
 <translation id="495931528404527476">No Chrome</translation>
@@ -150,7 +148,6 @@ Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" 
 <translation id="5251420635869119124">Os convidados podem utilizar o Chrome sem perder qualquer funcionalidade.</translation>
 <translation id="5253588388888612165">Se partilha este computador com <ph name="PROFILE_NAME" />, adicione-se ao Chrome para navegar em separado. Caso contrário, desassocie a Conta Google do outro utilizador.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{O Google Chrome irá reiniciar dentro de 1 segundo.}other{O Google Chrome irá reiniciar dentro de # segundos.}}</translation>
-<translation id="5328989068199000832">Binários do Google Chrome</translation>
 <translation id="5334545119300433702">Este módulo é conhecido por entrar em conflito com o Google Chrome.</translation>
 <translation id="5386244825306882791">Também controla a página apresentada quando inicia o Chrome ou pesquisa a partir da Caixa geral.</translation>
 <translation id="5430073640787465221">O ficheiro de preferências está danificado ou não é válido. O Google Chrome não consegue recuperar as suas definições.</translation>
@@ -199,13 +196,10 @@ Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" 
 <translation id="683440813066116847">Regra de importação para o Google Chrome Canary permitir o tráfego mDNS.</translation>
 <translation id="686561893457936865">Leve o Chrome para todo o lado</translation>
 <translation id="6883876366448858277">envia uma palavra e o respetivo contexto circundante à Pesquisa Google, que devolve definições, imagens e outros resultados da pesquisa.</translation>
-<translation id="6930860321615955692">https://support.google.com/chrome/?p=ib_chromeframe</translation>
 <translation id="6970811910055250180">A atualizar o dispositivo...</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" /> requer a leitura e aceitação dos seguintes Termos de Utilização antes de utilizar este dispositivo. Estes termos não ampliam, modificam nem limitam os Termos do SO Google Chrome.</translation>
 <translation id="6989339256997917931">O Google Chrome foi atualizado, mas já não o utiliza há, pelo menos, 30 dias.</translation>
-<translation id="699076943483372849">Este site utiliza o plug-in Google Chrome Frame descontinuado, que deixou de receber atualizações de segurança e estabilidade. Desinstale-o e atualize para um navegador moderno.</translation>
-<translation id="6991142834212251086">Associar os meus dados do Chrome a esta conta</translation>
-<translation id="7060865993964054389">Iniciador de Aplicações do Google Chrome</translation>
+<translation id="7048801529101012374">O Google Chrome é o seu navegador predefinido.</translation>
 <translation id="7098166902387133879">O Google Chrome está a utilizar o microfone.</translation>
 <translation id="7106741999175697885">Gestor de tarefas - Google Chrome</translation>
 <translation id="7125719106133729027">Não foi possível atualizar automaticamente o Chrome para a versão mais recente, pelo que está a perder novas funcionalidades e correções de segurança fantásticas. Tem de reinstalar manualmente o Chrome.</translation>
@@ -249,7 +243,6 @@ Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" 
 <translation id="8008534537613507642">Reinstalar Chrome</translation>
 <translation id="8030318113982266900">A atualizar o dispositivo para o canal <ph name="CHANNEL_NAME" />...</translation>
 <translation id="8032142183999901390">Depois de remover a sua conta do Chrome, poderá ter de recarregar os separadores abertos para que a alteração tenha efeito.</translation>
-<translation id="8037887340639533879">Não foi encontrada qualquer instalação do Google Chrome para atualização.</translation>
 <translation id="8129812357326543296">Acerca do &amp;Google Chrome</translation>
 <translation id="8183957050892517584">O Chrome armazena os seus detalhes pessoais em segurança para que não tenha de os introduzir novamente.</translation>
 <translation id="8211929904040702368">Esta ação elimina permanentemente, no mínimo, <ph name="TOTAL_COUNT" /> itens deste dispositivo. Para recuperar os seus dados mais tarde, inicie sessão no Chrome como $2.</translation>
@@ -259,7 +252,6 @@ Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" 
 <translation id="8342675569599923794">Este ficheiro é perigoso. Como tal, o Chrome bloqueou-o.</translation>
 <translation id="8406086379114794905">Ajude a melhorar o Chrome</translation>
 <translation id="8455999171311319804">Opcional: ajude a melhorar o SO Chrome ao enviar automaticamente dados de diagnóstico e de utilização para a Google.</translation>
-<translation id="853189717709780425">Está a iniciar sessão com uma conta gerida e a permitir que o administrador controle o seu perfil do Google Chrome. Os seus dados do Chrome, como aplicações, marcadores, histórico, palavras-passe e outras definições ficarão permanentemente associados a <ph name="USER_NAME" />. Poderá eliminar estes dados através do Painel de Controlo das Contas Google mas não poderá associar estes dados a outra conta.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Iniciador de Aplicações do Chrome para o Canary</translation>
 <translation id="8556340503434111824">Está disponível uma nova versão do Google Chrome, mais rápida do que nunca.</translation>

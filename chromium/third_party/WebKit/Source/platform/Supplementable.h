@@ -95,21 +95,37 @@ class Supplementable;
 template <typename T>
 class Supplement : public GarbageCollectedMixin {
  public:
-  static void provideTo(Supplementable<T>& host,
+  // TODO(haraken): Remove the default constructor.
+  // All Supplement objects should be instantiated with m_host.
+  Supplement() {}
+
+  explicit Supplement(T& supplementable) : m_supplementable(&supplementable) {}
+
+  // Supplementable and its supplements live and die together.
+  // Thus supplementable() should never return null (if the default constructor
+  // is completely removed).
+  T* supplementable() const { return m_supplementable; }
+
+  static void provideTo(Supplementable<T>& supplementable,
                         const char* key,
                         Supplement<T>* supplement) {
-    host.provideSupplement(key, supplement);
+    supplementable.provideSupplement(key, supplement);
   }
 
-  static Supplement<T>* from(Supplementable<T>& host, const char* key) {
-    return host.requireSupplement(key);
+  static Supplement<T>* from(Supplementable<T>& supplementable,
+                             const char* key) {
+    return supplementable.requireSupplement(key);
   }
 
-  static Supplement<T>* from(Supplementable<T>* host, const char* key) {
-    return host ? host->requireSupplement(key) : 0;
+  static Supplement<T>* from(Supplementable<T>* supplementable,
+                             const char* key) {
+    return supplementable ? supplementable->requireSupplement(key) : 0;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->trace(m_supplementable); }
+
+ private:
+  Member<T> m_supplementable;
 };
 
 // Supplementable<T> inherits from GarbageCollectedMixin virtually

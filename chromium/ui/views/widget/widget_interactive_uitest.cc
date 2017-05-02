@@ -799,7 +799,7 @@ TEST_F(WidgetTestInteractive, FullscreenMaximizedWindowBounds) {
 
   gfx::Rect monitor_bounds(monitor_info.rcMonitor);
   gfx::Rect window_bounds = widget.GetWindowBoundsInScreen();
-  gfx::Rect client_area_bounds = host->GetBounds();
+  gfx::Rect client_area_bounds = host->GetBoundsInPixels();
 
   EXPECT_EQ(window_bounds, monitor_bounds);
   EXPECT_EQ(monitor_bounds, client_area_bounds);
@@ -809,7 +809,7 @@ TEST_F(WidgetTestInteractive, FullscreenMaximizedWindowBounds) {
   EXPECT_FALSE(widget.IsFullscreen());
   EXPECT_TRUE(widget.IsMaximized());
 
-  client_area_bounds = host->GetBounds();
+  client_area_bounds = host->GetBoundsInPixels();
   EXPECT_TRUE(monitor_bounds.Contains(client_area_bounds));
   EXPECT_NE(monitor_bounds, client_area_bounds);
 
@@ -836,10 +836,6 @@ class ModalDialogDelegate : public DialogDelegateView {
 // Tests whether the focused window is set correctly when a modal window is
 // created and destroyed. When it is destroyed it should focus the owner window.
 TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
-  // Fails on mus due to focus issues. http://crbug.com/611601
-  if (IsMus())
-    return;
-
   TestWidgetFocusChangeListener focus_listener;
   WidgetFocusManager::GetInstance()->AddFocusChangeListener(&focus_listener);
   const std::vector<gfx::NativeView>& focus_changes =
@@ -911,10 +907,6 @@ TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
 
 // Test that when opening a system-modal window, capture is released.
 TEST_F(WidgetTestInteractive, MAYBE_SystemModalWindowReleasesCapture) {
-  // Crashes on mus due to capture issue. http://crbug.com/611764
-  if (IsMus())
-    return;
-
   TestWidgetFocusChangeListener focus_listener;
   WidgetFocusManager::GetInstance()->AddFocusChangeListener(&focus_listener);
 
@@ -1006,10 +998,6 @@ TEST_F(WidgetTestInteractive, TouchSelectionQuickMenuIsNotActivated) {
 #endif  // defined(USE_AURA)
 
 TEST_F(WidgetTestInteractive, DisableViewDoesNotActivateWidget) {
-  // Times out on mus. See http://crbug.com/612193
-  if (IsMus())
-    return;
-
 #if defined(OS_WIN)
   views_delegate()->set_use_desktop_native_widgets(true);
 #endif  // !defined(OS_WIN)
@@ -1025,6 +1013,7 @@ TEST_F(WidgetTestInteractive, DisableViewDoesNotActivateWidget) {
   view1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   widget1.GetRootView()->AddChildView(view1);
 
+  widget1.Show();
   ActivateSync(&widget1);
 
   FocusManager* focus_manager1 = widget1.GetFocusManager();
@@ -1043,6 +1032,7 @@ TEST_F(WidgetTestInteractive, DisableViewDoesNotActivateWidget) {
   view2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   widget2.GetRootView()->AddChildView(view2);
 
+  widget2.Show();
   ActivateSync(&widget2);
   EXPECT_TRUE(widget2.IsActive());
   EXPECT_FALSE(widget1.IsActive());
@@ -1199,7 +1189,7 @@ TEST_F(WidgetTestInteractive, MAYBE_ExitFullscreenRestoreState) {
 TEST_F(WidgetTestInteractive, InitialFocus) {
   // TODO: test uses GetContext(), which is not applicable to aura-mus.
   // http://crbug.com/663809.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   // By default, there is no initially focused view (even if there is a
@@ -1343,6 +1333,10 @@ class WidgetCaptureTest : public ViewsInteractiveUITestBase {
 
 // See description in TestCapture().
 TEST_F(WidgetCaptureTest, Capture) {
+  // TODO: capture isn't global in mus. http://crbug.com/678057.
+  if (IsMus())
+    return;
+
   TestCapture(false);
 }
 
@@ -1362,11 +1356,7 @@ TEST_F(WidgetCaptureTest, DestroyWithCapture_CloseNow) {
   EXPECT_FALSE(capture_state.GetAndClearGotCaptureLost());
   widget->CloseNow();
 
-  // Fails on mus. http://crbug.com/611764
-  if (IsMus())
-    EXPECT_FALSE(capture_state.GetAndClearGotCaptureLost());
-  else
-    EXPECT_TRUE(capture_state.GetAndClearGotCaptureLost());
+  EXPECT_TRUE(capture_state.GetAndClearGotCaptureLost());
 }
 
 TEST_F(WidgetCaptureTest, DestroyWithCapture_Close) {
@@ -1400,22 +1390,15 @@ TEST_F(WidgetCaptureTest, DestroyWithCapture_WidgetOwnsNativeWidget) {
 #if !defined(OS_CHROMEOS)
 // See description in TestCapture(). Creates DesktopNativeWidget.
 TEST_F(WidgetCaptureTest, CaptureDesktopNativeWidget) {
-  // Fails on mus. http://crbug.com/611764
-  if (IsMus())
-    return;
-
   TestCapture(true);
 }
 #endif
 
 // Test that no state is set if capture fails.
 TEST_F(WidgetCaptureTest, FailedCaptureRequestIsNoop) {
-  // Fails on mus. http://crbug.com/611764
-  if (IsMus())
-    return;
   // TODO: test uses GetContext(), which is not applicable to aura-mus.
   // http://crbug.com/663809.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   Widget widget;
@@ -1460,10 +1443,6 @@ TEST_F(WidgetCaptureTest, FailedCaptureRequestIsNoop) {
 // Test that a synthetic mouse exit is sent to the widget which was handling
 // mouse events when a different widget grabs capture.
 TEST_F(WidgetCaptureTest, MAYBE_MouseExitOnCaptureGrab) {
-  // Fails on mus. http://crbug.com/611764
-  if (IsMus())
-    return;
-
   Widget widget1;
   Widget::InitParams params1 =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -1527,6 +1506,10 @@ class CaptureOnActivationObserver : public WidgetObserver {
 // Test that setting capture on widget activation of a non-toplevel widget
 // (e.g. a bubble on Linux) succeeds.
 TEST_F(WidgetCaptureTest, SetCaptureToNonToplevel) {
+  // TODO: capture isn't global in mus. http://crbug.com/678057.
+  if (IsMus())
+    return;
+
   Widget toplevel;
   Widget::InitParams toplevel_params =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -1557,6 +1540,8 @@ TEST_F(WidgetCaptureTest, SetCaptureToNonToplevel) {
 
   EXPECT_TRUE(observer.activation_observed());
   EXPECT_TRUE(child->HasCapture());
+
+  child->RemoveObserver(&observer);
 }
 
 
@@ -1658,6 +1643,9 @@ class WidgetInputMethodInteractiveTest : public WidgetTestInteractive {
 
 // Test input method focus changes affected by top window activaction.
 TEST_F(WidgetInputMethodInteractiveTest, Activation) {
+  if (IsMus())
+    return;
+
   Widget* widget = CreateWidget();
   Textfield* textfield = new Textfield;
   widget->GetRootView()->AddChildView(textfield);
@@ -1719,10 +1707,6 @@ TEST_F(WidgetInputMethodInteractiveTest, OneWindow) {
 // Test input method focus changes affected by focus changes cross 2 windows
 // which shares the same top window.
 TEST_F(WidgetInputMethodInteractiveTest, TwoWindows) {
-  // Fails on mus. http://crbug.com/611766
-  if (IsMus())
-    return;
-
   Widget* parent = CreateWidget();
   parent->SetBounds(gfx::Rect(100, 100, 100, 100));
 

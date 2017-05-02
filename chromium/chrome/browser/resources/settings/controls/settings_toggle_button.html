@@ -17,19 +17,22 @@
         min-height: var(--settings-row-min-height);
       }
 
-      paper-toggle-button:not([checked]) .secondary {
-        @apply(--settings-secondary-unchecked);
+      paper-toggle-button,
+      cr-policy-pref-indicator {
+        -webkit-margin-start: var(--checkbox-spacing);
       }
 
-      cr-policy-pref-indicator {
-        -webkit-margin-end: var(--checkbox-spacing);
+      ::content .more-actions {
+        -webkit-margin-end: 10px;
       }
     </style>
     <div id="outerRow" noSubLabel$="[[!subLabel]]">
-      <div class="flex">
+      <div class="flex" on-tap="onLabelWrapperTap_"
+          actionable$="[[!controlDisabled_(disabled, pref)]]">
         <div>[[label]]</div>
         <div class="secondary">[[subLabel]]</div>
       </div>
+      <content selector=".more-actions"></content>
       <template is="dom-if" if="[[pref.controlledBy]]">
         <cr-policy-pref-indicator pref="[[pref]]"></cr-policy-pref-indicator>
       </template>

@@ -20,7 +20,7 @@ namespace {
 
 TEST(ServiceWorkerRequestTest, FromString) {
   V8TestingScope scope;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
 
   KURL url(ParsedURLString, "http://www.example.com/");
   Request* request =
@@ -32,7 +32,7 @@ TEST(ServiceWorkerRequestTest, FromString) {
 
 TEST(ServiceWorkerRequestTest, FromRequest) {
   V8TestingScope scope;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
 
   KURL url(ParsedURLString, "http://www.example.com/");
   Request* request1 =
@@ -88,7 +88,7 @@ TEST(ServiceWorkerRequestTest, FromAndToWebRequest) {
   EXPECT_EQ(headersMap.size(), requestHeaders->headerList()->size());
   for (WTF::HashMap<String, String>::iterator iter = headersMap.begin();
        iter != headersMap.end(); ++iter) {
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     EXPECT_EQ(iter->value, requestHeaders->get(iter->key, exceptionState));
     EXPECT_FALSE(exceptionState.hadException());
   }
@@ -99,14 +99,14 @@ TEST(ServiceWorkerRequestTest, FromAndToWebRequest) {
   EXPECT_EQ(method, String(secondWebRequest.method()));
   EXPECT_EQ(context, secondWebRequest.requestContext());
   EXPECT_EQ(referrer, KURL(secondWebRequest.referrerUrl()));
-  EXPECT_EQ(WebReferrerPolicyAlways, secondWebRequest.referrerPolicy());
+  EXPECT_EQ(WebReferrerPolicyAlways, secondWebRequest.getReferrerPolicy());
   EXPECT_EQ(webRequest.headers(), secondWebRequest.headers());
   EXPECT_EQ(WebURLRequest::FetchRequestModeNoCORS, secondWebRequest.mode());
 }
 
 TEST(ServiceWorkerRequestTest, ToWebRequestStripsURLFragment) {
   V8TestingScope scope;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   String urlWithoutFragment = "http://www.example.com/";
   String url = urlWithoutFragment + "#fragment";
   Request* request =

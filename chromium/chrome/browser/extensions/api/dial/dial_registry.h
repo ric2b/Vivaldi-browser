@@ -23,6 +23,8 @@
 #include "net/base/network_change_notifier.h"
 
 namespace extensions {
+namespace api {
+namespace dial {
 
 // Keeps track of devices that have responded to discovery requests and notifies
 // the observer with an updated, complete set of active devices.  The registry's
@@ -71,6 +73,15 @@ class DialRegistry : public DialService::Observer,
   // Called by the DIAL API to try to kickoff a discovery if there is not one
   // already active.
   bool DiscoverNow();
+
+  // Returns the URL of the device description for the device identified by
+  // |label|, or an empty GURL if no such device exists.
+  GURL GetDeviceDescriptionURL(const std::string& label) const;
+
+  // Adds a device directly to the registry as if it was discovered.  For tests
+  // only.  Note that if discovery is actually started, this device will be
+  // removed by PruneExpiredDevices().
+  void AddDeviceForTest(const DialDeviceData& device_data);
 
  protected:
   // Returns a new instance of the DIAL service.  Overridden by tests.
@@ -184,6 +195,8 @@ class DialRegistry : public DialService::Observer,
   DISALLOW_COPY_AND_ASSIGN(DialRegistry);
 };
 
+}  // namespace dial
+}  // namespace api
 }  // namespace extensions
 
 #endif  // CHROME_BROWSER_EXTENSIONS_API_DIAL_DIAL_REGISTRY_H_

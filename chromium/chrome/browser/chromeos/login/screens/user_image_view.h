@@ -5,12 +5,6 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_USER_IMAGE_VIEW_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_USER_IMAGE_VIEW_H_
 
-class SkBitmap;
-
-namespace gfx {
-class ImageSkia;
-}
-
 namespace chromeos {
 
 class UserImageModel;
@@ -24,9 +18,6 @@ class UserImageView {
   virtual void Bind(UserImageModel& model) = 0;
 
   virtual void Unbind() = 0;
-
-  // Prepare the contents to showing.
-  virtual void PrepareToShow() = 0;
 
   // Shows the contents of the screen.
   virtual void Show() = 0;

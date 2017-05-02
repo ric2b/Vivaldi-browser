@@ -24,7 +24,7 @@ VoiceSearchProvider::CreateVoiceSearchController(
   return scoped_refptr<VoiceSearchController>(nullptr);
 }
 
-UIView<VoiceSearchBar>* VoiceSearchProvider::CreateVoiceSearchBar(
+UIView<VoiceSearchBar>* VoiceSearchProvider::BuildVoiceSearchBar(
     CGRect frame) const {
   return nil;
 }

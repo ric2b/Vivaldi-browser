@@ -28,7 +28,7 @@ int ResourceHandler::GetRequestID() const {
 }
 
 ResourceMessageFilter* ResourceHandler::GetFilter() const {
-  return GetRequestInfo()->filter();
+  return GetRequestInfo()->requester_info()->filter();
 }
 
 /* NOTE(yngve): Risk of infinite loop, should only be a problem for us,

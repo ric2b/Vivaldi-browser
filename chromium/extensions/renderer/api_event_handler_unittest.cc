@@ -5,37 +5,29 @@
 #include "extensions/renderer/api_event_handler.h"
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/stringprintf.h"
+#include "base/test/mock_callback.h"
 #include "base/values.h"
 #include "extensions/renderer/api_binding_test.h"
 #include "extensions/renderer/api_binding_test_util.h"
 #include "gin/converter.h"
 #include "gin/public/context_holder.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace extensions {
 
-class APIEventHandlerTest : public APIBindingTest {
- protected:
-  APIEventHandlerTest() {}
-  ~APIEventHandlerTest() override {}
+namespace {
 
-  void CallFunctionOnObject(v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> object,
-                            const std::string& script_source) {
-    std::string wrapped_script_source =
-        base::StringPrintf("(function(obj) { %s })", script_source.c_str());
-    v8::Local<v8::Function> func =
-        FunctionFromString(context, wrapped_script_source);
-    ASSERT_FALSE(func.IsEmpty());
+using MockEventChangeHandler = ::testing::StrictMock<
+    base::MockCallback<APIEventHandler::EventListenersChangedMethod>>;
+using APIEventHandlerTest = APIBindingTest;
 
-    v8::Local<v8::Value> argv[] = {object};
-    RunFunction(func, context, object, 1, argv);
-  }
+void DoNothingOnEventListenersChanged(const std::string& event_name,
+                                      binding::EventListenersChanged change,
+                                      v8::Local<v8::Context> context) {}
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(APIEventHandlerTest);
-};
+}  // namespace
 
 // Tests adding, removing, and querying event listeners by calling the
 // associated methods on the JS object.
@@ -44,7 +36,8 @@ TEST_F(APIEventHandlerTest, AddingRemovingAndQueryingEventListeners) {
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = ContextLocal();
 
-  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult));
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
   v8::Local<v8::Object> event =
       handler.CreateEventInstance(kEventName, context);
   ASSERT_FALSE(event.IsEmpty());
@@ -144,7 +137,8 @@ TEST_F(APIEventHandlerTest, FiringEvents) {
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = ContextLocal();
 
-  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult));
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
   v8::Local<v8::Object> alpha_event =
       handler.CreateEventInstance(kAlphaName, context);
   v8::Local<v8::Object> beta_event =
@@ -240,7 +234,8 @@ TEST_F(APIEventHandlerTest, EventArguments) {
   v8::Local<v8::Context> context = ContextLocal();
 
   const char kEventName[] = "alpha";
-  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult));
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
   v8::Local<v8::Object> event =
       handler.CreateEventInstance(kEventName, context);
   ASSERT_FALSE(event.IsEmpty());
@@ -265,10 +260,9 @@ TEST_F(APIEventHandlerTest, EventArguments) {
   ASSERT_TRUE(event_args);
   handler.FireEventInContext(kEventName, context, *event_args);
 
-  std::unique_ptr<base::Value> result =
-      GetBaseValuePropertyFromObject(context->Global(), context, "eventArgs");
-  ASSERT_TRUE(result);
-  EXPECT_EQ(ReplaceSingleQuotes(kArguments), ValueToString(*result));
+  EXPECT_EQ(
+      ReplaceSingleQuotes(kArguments),
+      GetStringPropertyFromObject(context->Global(), context, "eventArgs"));
 }
 
 // Test dispatching events to multiple contexts.
@@ -282,7 +276,8 @@ TEST_F(APIEventHandlerTest, MultipleContexts) {
 
   const char kEventName[] = "onFoo";
 
-  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult));
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
 
   v8::Local<v8::Function> listener_a = FunctionFromString(
       context_a, "(function(arg) { this.eventArgs = arg + 'alpha'; })");
@@ -328,16 +323,13 @@ TEST_F(APIEventHandlerTest, MultipleContexts) {
 
   handler.FireEventInContext(kEventName, context_a, *arguments_a);
   {
-    std::unique_ptr<base::Value> result_a = GetBaseValuePropertyFromObject(
-        context_a->Global(), context_a, "eventArgs");
-    ASSERT_TRUE(result_a);
-    EXPECT_EQ("\"result_a:alpha\"", ValueToString(*result_a));
+    EXPECT_EQ("\"result_a:alpha\"",
+              GetStringPropertyFromObject(context_a->Global(), context_a,
+                                          "eventArgs"));
   }
   {
-    v8::Local<v8::Value> result_b =
-        GetPropertyFromObject(context_b->Global(), context_b, "eventArgs");
-    ASSERT_FALSE(result_b.IsEmpty());
-    EXPECT_TRUE(result_b->IsUndefined());
+    EXPECT_EQ("undefined", GetStringPropertyFromObject(context_b->Global(),
+                                                       context_b, "eventArgs"));
   }
 
   // Dispatch the event in context_b - the listener in context_a should not be
@@ -347,16 +339,14 @@ TEST_F(APIEventHandlerTest, MultipleContexts) {
   ASSERT_TRUE(arguments_b);
   handler.FireEventInContext(kEventName, context_b, *arguments_b);
   {
-    std::unique_ptr<base::Value> result_a = GetBaseValuePropertyFromObject(
-        context_a->Global(), context_a, "eventArgs");
-    ASSERT_TRUE(result_a);
-    EXPECT_EQ("\"result_a:alpha\"", ValueToString(*result_a));
+    EXPECT_EQ("\"result_a:alpha\"",
+              GetStringPropertyFromObject(context_a->Global(), context_a,
+                                          "eventArgs"));
   }
   {
-    std::unique_ptr<base::Value> result_b = GetBaseValuePropertyFromObject(
-        context_b->Global(), context_b, "eventArgs");
-    ASSERT_TRUE(result_b);
-    EXPECT_EQ("\"result_b:beta\"", ValueToString(*result_b));
+    EXPECT_EQ("\"result_b:beta\"",
+              GetStringPropertyFromObject(context_b->Global(), context_b,
+                                          "eventArgs"));
   }
 }
 
@@ -365,7 +355,8 @@ TEST_F(APIEventHandlerTest, DifferentCallingMethods) {
   v8::Local<v8::Context> context = ContextLocal();
 
   const char kEventName[] = "alpha";
-  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult));
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
   v8::Local<v8::Object> event =
       handler.CreateEventInstance(kEventName, context);
   ASSERT_FALSE(event.IsEmpty());
@@ -412,6 +403,308 @@ TEST_F(APIEventHandlerTest, DifferentCallingMethods) {
                 context, 1, args);
   }
   EXPECT_EQ(2u, handler.GetNumEventListenersForTesting(kEventName, context));
+}
+
+TEST_F(APIEventHandlerTest, TestDispatchFromJs) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
+
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
+  v8::Local<v8::Object> event = handler.CreateEventInstance("alpha", context);
+  ASSERT_FALSE(event.IsEmpty());
+
+  const char kListenerFunction[] =
+      "(function() {\n"
+      "  this.eventArgs = Array.from(arguments);\n"
+      "});";
+  v8::Local<v8::Function> listener =
+      FunctionFromString(context, kListenerFunction);
+
+  const char kAddListenerFunction[] =
+      "(function(event, listener) { event.addListener(listener); })";
+  v8::Local<v8::Function> add_listener_function =
+      FunctionFromString(context, kAddListenerFunction);
+
+  {
+    v8::Local<v8::Value> argv[] = {event, listener};
+    RunFunctionOnGlobal(add_listener_function, context, arraysize(argv), argv);
+  }
+
+  v8::Local<v8::Function> fire_event_function =
+      FunctionFromString(
+          context,
+          "(function(event) { event.dispatch(42, 'foo', {bar: 'baz'}); })");
+  {
+    v8::Local<v8::Value> argv[] = {event};
+    RunFunctionOnGlobal(fire_event_function, context, arraysize(argv), argv);
+  }
+
+  EXPECT_EQ("[42,\"foo\",{\"bar\":\"baz\"}]",
+            GetStringPropertyFromObject(
+                context->Global(), context, "eventArgs"));
+}
+
+// Test listeners that remove themselves in their handling of the event.
+TEST_F(APIEventHandlerTest, RemovingListenersWhileHandlingEvent) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
+
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          base::Bind(&DoNothingOnEventListenersChanged));
+  const char kEventName[] = "alpha";
+  v8::Local<v8::Object> event =
+      handler.CreateEventInstance(kEventName, context);
+  ASSERT_FALSE(event.IsEmpty());
+  {
+    // Cache the event object on the global in order to allow for easy removal.
+    v8::Local<v8::Function> set_event_on_global =
+        FunctionFromString(
+            context,
+           "(function(event) { this.testEvent = event; })");
+    v8::Local<v8::Value> args[] = {event};
+    RunFunctionOnGlobal(set_event_on_global, context, arraysize(args), args);
+    EXPECT_EQ(event,
+              GetPropertyFromObject(context->Global(), context, "testEvent"));
+  }
+
+  // A listener function that removes itself as a listener.
+  const char kListenerFunction[] =
+      "(function() {\n"
+      "  return function listener() {\n"
+      "    this.testEvent.removeListener(listener);\n"
+      "  };\n"
+      "})();";
+
+  // Create and add a bunch of listeners.
+  std::vector<v8::Local<v8::Function>> listeners;
+  const size_t kNumListeners = 20u;
+  listeners.reserve(kNumListeners);
+  for (size_t i = 0; i < kNumListeners; ++i)
+    listeners.push_back(FunctionFromString(context, kListenerFunction));
+
+  const char kAddListenerFunction[] =
+      "(function(event, listener) { event.addListener(listener); })";
+  v8::Local<v8::Function> add_listener_function =
+      FunctionFromString(context, kAddListenerFunction);
+
+  for (const auto& listener : listeners) {
+    v8::Local<v8::Value> argv[] = {event, listener};
+    RunFunctionOnGlobal(add_listener_function, context, arraysize(argv), argv);
+  }
+
+  // Fire the event. All listeners should be removed (and we shouldn't crash).
+  EXPECT_EQ(kNumListeners,
+            handler.GetNumEventListenersForTesting(kEventName, context));
+  handler.FireEventInContext(kEventName, context, base::ListValue());
+  EXPECT_EQ(0u, handler.GetNumEventListenersForTesting(kEventName, context));
+
+  // TODO(devlin): Another possible test: register listener a and listener b,
+  // where a removes b and b removes a. Theoretically, only one should be
+  // notified. Investigate what we currently do in JS-style bindings.
+}
+
+// Test an event listener throwing an exception.
+TEST_F(APIEventHandlerTest, TestEventListenersThrowingExceptions) {
+  // The default test util methods (RunFunction*) assume no errors will ever
+  // be encountered. Instead, use an implementation that allows errors.
+  auto run_js_and_expect_error = [](v8::Local<v8::Function> function,
+                                    v8::Local<v8::Context> context, int argc,
+                                    v8::Local<v8::Value> argv[]) {
+    v8::MaybeLocal<v8::Value> maybe_result =
+        function->Call(context, context->Global(), argc, argv);
+    v8::Global<v8::Value> result;
+    v8::Local<v8::Value> local;
+    if (maybe_result.ToLocal(&local))
+      result.Reset(context->GetIsolate(), local);
+  };
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
+
+  APIEventHandler handler(base::Bind(run_js_and_expect_error),
+                          base::Bind(&DoNothingOnEventListenersChanged));
+  const char kEventName[] = "alpha";
+  v8::Local<v8::Object> event =
+      handler.CreateEventInstance(kEventName, context);
+  ASSERT_FALSE(event.IsEmpty());
+
+  bool did_throw = false;
+  auto message_listener = [](v8::Local<v8::Message> message,
+                             v8::Local<v8::Value> data) {
+    ASSERT_FALSE(data.IsEmpty());
+    ASSERT_TRUE(data->IsExternal());
+    bool* did_throw = static_cast<bool*>(data.As<v8::External>()->Value());
+    *did_throw = true;
+    EXPECT_EQ("Uncaught Error: Event handler error",
+              gin::V8ToString(message->Get()));
+  };
+
+  isolate()->AddMessageListener(message_listener,
+                                v8::External::New(isolate(), &did_throw));
+  base::ScopedClosureRunner remove_message_listener(base::Bind(
+      [](v8::Isolate* isolate, v8::MessageCallback listener) {
+        isolate->RemoveMessageListeners(listener);
+      },
+      isolate(), message_listener));
+
+  // A listener that will throw an exception. We guarantee that we throw the
+  // exception first so that we don't rely on event listener ordering.
+  const char kListenerFunction[] =
+      "(function() {\n"
+      "  if (!this.didThrow) {\n"
+      "    this.didThrow = true;\n"
+      "    throw new Error('Event handler error');\n"
+      "  }\n"
+      "  this.eventArgs = Array.from(arguments);\n"
+      "});";
+
+  const char kAddListenerFunction[] =
+      "(function(event, listener) { event.addListener(listener); })";
+  v8::Local<v8::Function> add_listener_function =
+      FunctionFromString(context, kAddListenerFunction);
+
+  for (int i = 0; i < 2; ++i) {
+    v8::Local<v8::Function> listener =
+        FunctionFromString(context, kListenerFunction);
+    v8::Local<v8::Value> argv[] = {event, listener};
+    RunFunctionOnGlobal(add_listener_function, context, arraysize(argv), argv);
+  }
+  EXPECT_EQ(2u, handler.GetNumEventListenersForTesting(kEventName, context));
+
+  std::unique_ptr<base::ListValue> event_args = ListValueFromString("[42]");
+  ASSERT_TRUE(event_args);
+  handler.FireEventInContext(kEventName, context, *event_args);
+
+  // An exception should have been thrown by the first listener and the second
+  // listener should have recorded the event arguments.
+  EXPECT_EQ("true", GetStringPropertyFromObject(context->Global(), context,
+                                                "didThrow"));
+  EXPECT_EQ("[42]", GetStringPropertyFromObject(context->Global(), context,
+                                                "eventArgs"));
+  EXPECT_TRUE(did_throw);
+}
+
+// Tests being notified as listeners are added or removed from events.
+TEST_F(APIEventHandlerTest, CallbackNotifications) {
+  v8::HandleScope handle_scope(isolate());
+
+  v8::Local<v8::Context> context_a = ContextLocal();
+  v8::Local<v8::Context> context_b = v8::Context::New(isolate());
+  gin::ContextHolder holder_b(isolate());
+  holder_b.SetContext(context_b);
+
+  // TODO(devlin): Make this a member of the test. We always instantiate it the
+  // same way.
+  MockEventChangeHandler change_handler;
+  APIEventHandler handler(base::Bind(&RunFunctionOnGlobalAndIgnoreResult),
+                          change_handler.Get());
+
+  const char kEventName1[] = "onFoo";
+  const char kEventName2[] = "onBar";
+  v8::Local<v8::Object> event1_a =
+      handler.CreateEventInstance(kEventName1, context_a);
+  ASSERT_FALSE(event1_a.IsEmpty());
+  v8::Local<v8::Object> event2_a =
+      handler.CreateEventInstance(kEventName2, context_a);
+  ASSERT_FALSE(event2_a.IsEmpty());
+  v8::Local<v8::Object> event1_b =
+      handler.CreateEventInstance(kEventName1, context_b);
+  ASSERT_FALSE(event1_b.IsEmpty());
+
+  const char kAddListenerFunction[] =
+      "(function(event, listener) { event.addListener(listener); })";
+  const char kRemoveListenerFunction[] =
+      "(function(event, listener) { event.removeListener(listener); })";
+
+  // Add a listener to the first event. The APIEventHandler should notify
+  // since it's a change in state (no listeners -> listeners).
+  v8::Local<v8::Function> add_listener =
+      FunctionFromString(context_a, kAddListenerFunction);
+  v8::Local<v8::Function> listener1 =
+      FunctionFromString(context_a, "(function() {})");
+  {
+    EXPECT_CALL(change_handler,
+                Run(kEventName1, binding::EventListenersChanged::HAS_LISTENERS,
+                    context_a))
+        .Times(1);
+    v8::Local<v8::Value> argv[] = {event1_a, listener1};
+    RunFunction(add_listener, context_a, arraysize(argv), argv);
+    ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+  }
+  EXPECT_EQ(1u,
+            handler.GetNumEventListenersForTesting(kEventName1, context_a));
+
+  // Add a second listener to the same event. We should not be notified, since
+  // the event already had listeners.
+  v8::Local<v8::Function> listener2 =
+      FunctionFromString(context_a, "(function() {})");
+  {
+    v8::Local<v8::Value> argv[] = {event1_a, listener2};
+    RunFunction(add_listener, context_a, arraysize(argv), argv);
+  }
+  EXPECT_EQ(2u,
+            handler.GetNumEventListenersForTesting(kEventName1, context_a));
+
+  // Remove the first listener of the event. Again, since the event has
+  // listeners, we shouldn't be notified.
+  v8::Local<v8::Function> remove_listener =
+      FunctionFromString(context_a, kRemoveListenerFunction);
+  {
+    v8::Local<v8::Value> argv[] = {event1_a, listener1};
+    RunFunction(remove_listener, context_a, arraysize(argv), argv);
+  }
+
+  EXPECT_EQ(1u,
+            handler.GetNumEventListenersForTesting(kEventName1, context_a));
+
+  // Remove the final listener from the event. We should be notified that the
+  // event no longer has listeners.
+  {
+    EXPECT_CALL(change_handler,
+                Run(kEventName1, binding::EventListenersChanged::NO_LISTENERS,
+                    context_a))
+        .Times(1);
+    v8::Local<v8::Value> argv[] = {event1_a, listener2};
+    RunFunction(remove_listener, context_a, arraysize(argv), argv);
+    ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+  }
+  EXPECT_EQ(0u,
+            handler.GetNumEventListenersForTesting(kEventName1, context_a));
+
+  // Add a listener to a separate event to ensure we receive the right
+  // notifications.
+  v8::Local<v8::Function> listener3 =
+      FunctionFromString(context_a, "(function() {})");
+  {
+    EXPECT_CALL(change_handler,
+                Run(kEventName2, binding::EventListenersChanged::HAS_LISTENERS,
+                    context_a))
+        .Times(1);
+    v8::Local<v8::Value> argv[] = {event2_a, listener3};
+    RunFunction(add_listener, context_a, arraysize(argv), argv);
+    ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+  }
+  EXPECT_EQ(1u,
+            handler.GetNumEventListenersForTesting(kEventName2, context_a));
+
+  {
+    EXPECT_CALL(change_handler,
+                Run(kEventName1, binding::EventListenersChanged::HAS_LISTENERS,
+                    context_b))
+        .Times(1);
+    // And add a listener to an event in a different context to make sure the
+    // associated context is correct.
+    v8::Local<v8::Function> add_listener =
+        FunctionFromString(context_b, kAddListenerFunction);
+    v8::Local<v8::Function> listener =
+        FunctionFromString(context_b, "(function() {})");
+    v8::Local<v8::Value> argv[] = {event1_b, listener};
+    RunFunction(add_listener, context_b, arraysize(argv), argv);
+    ::testing::Mock::VerifyAndClearExpectations(&change_handler);
+  }
+  EXPECT_EQ(1u,
+            handler.GetNumEventListenersForTesting(kEventName1, context_b));
 }
 
 }  // namespace extensions

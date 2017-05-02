@@ -65,8 +65,7 @@ const unsigned long long EventSource::defaultReconnectDelay = 3000;
 inline EventSource::EventSource(ExecutionContext* context,
                                 const KURL& url,
                                 const EventSourceInit& eventSourceInit)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_url(url),
       m_currentURL(url),
       m_withCredentials(eventSourceInit.withCredentials()),
@@ -112,7 +111,6 @@ EventSource* EventSource::create(ExecutionContext* context,
   EventSource* source = new EventSource(context, fullURL, eventSourceInit);
 
   source->scheduleInitialConnect();
-  source->suspendIfNeeded();
   return source;
 }
 
@@ -175,10 +173,13 @@ void EventSource::connect() {
   resourceLoaderOptions.securityOrigin = origin;
 
   InspectorInstrumentation::willSendEventSourceRequest(&executionContext, this);
+  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
+  CHECK(!m_loader);
   // InspectorInstrumentation::documentThreadableLoaderStartedLoadingForClient
   // will be called synchronously.
-  m_loader = ThreadableLoader::create(executionContext, this, options,
-                                      resourceLoaderOptions);
+  m_loader = ThreadableLoader::create(
+      executionContext, this, options, resourceLoaderOptions,
+      ThreadableLoader::ClientSpec::kEventSource);
   m_loader->start(request);
 }
 
@@ -223,7 +224,7 @@ void EventSource::close() {
     m_parser->stop();
 
   // Stop trying to reconnect if EventSource was explicitly closed or if
-  // ActiveDOMObject::stop() was called.
+  // contextDestroyed() was called.
   if (m_connectTimer.isActive()) {
     m_connectTimer.stop();
   }
@@ -241,7 +242,7 @@ const AtomicString& EventSource::interfaceName() const {
 }
 
 ExecutionContext* EventSource::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 void EventSource::didReceiveResponse(
@@ -368,7 +369,7 @@ void EventSource::abortConnectionAttempt() {
   dispatchEvent(Event::create(EventTypeNames::error));
 }
 
-void EventSource::contextDestroyed() {
+void EventSource::contextDestroyed(ExecutionContext*) {
   close();
 }
 
@@ -380,7 +381,7 @@ DEFINE_TRACE(EventSource) {
   visitor->trace(m_parser);
   visitor->trace(m_loader);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   EventSourceParser::Client::trace(visitor);
 }
 

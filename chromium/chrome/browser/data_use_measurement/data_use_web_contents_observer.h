@@ -39,12 +39,13 @@ class DataUseWebContentsObserver
       content::NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void DidRedirectNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void WasShown() override;
+  void WasHidden() override;
+  void RenderFrameHostChanged(content::RenderFrameHost* old_host,
+                              content::RenderFrameHost* new_host) override;
 
  private:
   friend class content::WebContentsUserData<DataUseWebContentsObserver>;
-
   DataUseWebContentsObserver(content::WebContents* web_contents,
                              ChromeDataUseAscriberService* service);
   ChromeDataUseAscriberService* const service_;

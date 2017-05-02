@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -19,7 +20,6 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
-#include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "components/grit/components_resources.h"
 #include "components/net_log/chrome_net_log.h"
@@ -33,7 +33,7 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/android/intent_helper.h"
 #endif
 
@@ -290,7 +290,7 @@ void NetExportMessageHandler::SendEmail(const base::FilePath& file_to_send) {
     return;
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   std::string email;
   std::string subject = "net_internals_log";
   std::string title = "Issue number: ";
@@ -367,7 +367,7 @@ void NetExportMessageHandler::FileSelectionCanceled(void* params) {
 }  // namespace
 
 NetExportUI::NetExportUI(content::WebUI* web_ui) : WebUIController(web_ui) {
-  web_ui->AddMessageHandler(new NetExportMessageHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<NetExportMessageHandler>());
 
   // Set up the chrome://net-export/ source.
   Profile* profile = Profile::FromWebUI(web_ui);

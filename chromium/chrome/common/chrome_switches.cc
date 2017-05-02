@@ -7,6 +7,7 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
 namespace switches {
@@ -34,10 +35,6 @@ const char kAllowFileAccess[]               = "allow-file-access";
 // Allow non-secure origins to use the screen capture API and the desktopCapture
 // extension API.
 const char kAllowHttpScreenCapture[] = "allow-http-screen-capture";
-
-// Enables TLS/SSL errors on localhost to be ignored (no interstitial,
-// no blocking of requests).
-const char kAllowInsecureLocalhost[] = "allow-insecure-localhost";
 
 // Don't block outdated plugins.
 const char kAllowOutdatedPlugins[]          = "allow-outdated-plugins";
@@ -253,17 +250,10 @@ const char kDisableOfflineAutoReload[]      = "disable-offline-auto-reload";
 const char kDisableOfflineAutoReloadVisibleOnly[] =
     "disable-offline-auto-reload-visible-only";
 
-// Disable out-of-process V8 proxy resolver.
-const char kDisableOutOfProcessPac[]        = "disable-out-of-process-pac";
-
 // Disables permission action reporting to Safe Browsing servers for opted in
 // users.
 const char kDisablePermissionActionReporting[] =
     "disable-permission-action-reporting";
-
-// Disables the Permissions Blacklist, which blocks access to permissions
-// for blacklisted sites.
-const char kDisablePermissionsBlacklist[]   = "disable-permissions-blacklist";
 
 // Disable pop-up blocking.
 const char kDisablePopupBlocking[]          = "disable-popup-blocking";
@@ -282,24 +272,13 @@ const char kDisablePushApiBackgroundMode[] = "disable-push-api-background-mode";
 // Disables the QUIC protocol.
 const char kDisableQuic[] = "disable-quic";
 
-// Disable use of Chromium's port selection for the ephemeral port via bind().
-// This only has an effect if QUIC protocol is enabled.
-const char kDisableQuicPortSelection[] = "disable-quic-port-selection";
-
 // Disable settings in a separate browser window per profile
 // (see SettingsWindowEnabled() below).
 const char kDisableSettingsWindow[]          = "disable-settings-window";
 
-// Disables the Site Engagement service, which records interaction with sites
-// and allocates certain resources accordingly.
-const char kDisableSiteEngagementService[] = "disable-site-engagement-service";
-
 // Disables Web Notification custom layouts.
 const char kDisableWebNotificationCustomLayouts[] =
     "disable-web-notification-custom-layouts";
-
-// Disables WebUSB's CORS-like checks for origin->device communication.
-const char kDisableWebUsbSecurity[] = "disable-webusb-security";
 
 // Some tests seem to require the application to close when the last
 // browser window is closed. Thus, we need a switch to force this behavior
@@ -329,12 +308,12 @@ const char kEasyUnlockAppPath[]             = "easy-unlock-app-path";
 // app to their shelf (or platform-specific equivalent)
 const char kEnableAddToShelf[] = "enable-add-to-shelf";
 
-// Enable OS integration for Chrome app file associations.
-const char kEnableAppsFileAssociations[]    = "enable-apps-file-associations";
-
 // If the WebRTC logging private API is active, enables audio debug recordings.
 const char kEnableAudioDebugRecordingsFromExtension[] =
     "enable-audio-debug-recordings-from-extension";
+
+// Inform users that their browser is being controlled by an automated test.
+const char kEnableAutomation[] = "enable-automation";
 
 // Enables the benchmarking extensions.
 const char kEnableBenchmarking[]            = "enable-benchmarking";
@@ -408,10 +387,6 @@ const char kEnableOfflineAutoReloadVisibleOnly[] =
 const char kEnablePermissionActionReporting[] =
     "enable-permission-action-reporting";
 
-// Enables the Permissions Blacklist, which blocks access to permissions
-// for blacklisted sites.
-const char kEnablePermissionsBlacklist[] = "enable-permissions-blacklist";
-
 // Enables a number of potentially annoying security features (strict mixed
 // content mode, powerful feature restrictions, etc.)
 const char kEnablePotentiallyAnnoyingSecurityFeatures[] =
@@ -437,10 +412,6 @@ const char kEnablePushApiBackgroundMode[] = "enable-push-api-background-mode";
 // Enables the QUIC protocol.  This is a temporary testing flag.
 const char kEnableQuic[] = "enable-quic";
 
-// Enable use of Chromium's port selection for the ephemeral port via bind().
-// This only has an effect if the QUIC protocol is enabled.
-const char kEnableQuicPortSelection[] = "enable-quic-port-selection";
-
 // Switches 'Save as...' context and app menu labels to 'Download...'.
 const char kEnableSaveAsMenuLabelExperiment[] = "saveas-menu-label";
 
@@ -448,21 +419,11 @@ const char kEnableSaveAsMenuLabelExperiment[] = "saveas-menu-label";
 // (see SettingsWindowEnabled() below).
 const char kEnableSettingsWindow[]           = "enable-settings-window";
 
-// Enable the Site Engagement App Banner which triggers app install banners
-// using the site engagement service rather than a navigation-based heuristic.
-// Implicitly enables the site engagement service.
-const char kEnableSiteEngagementAppBanner[] =
-    "enable-site-engagement-app-banner";
-
 // Enable the Site Engagement Eviction Policy which evicts temporary storage
 // using the site engagement service. Implicitly enables the site engagement
 // service.
 const char kEnableSiteEngagementEvictionPolicy[] =
     "enable-site-engagement-eviction-policy";
-
-// Enable the Site Engagement service, which records interaction with sites and
-// allocates certain resources accordingly.
-const char kEnableSiteEngagementService[]   = "enable-site-engagement-service";
 
 // Enables the site settings all sites list and site details pages in the Chrome
 // settings UI.
@@ -482,10 +443,6 @@ const char kEnableThumbnailRetargeting[]   = "enable-thumbnail-retargeting";
 // Enables Alternate-Protocol when the port is user controlled (> 1024).
 const char kEnableUserAlternateProtocolPorts[] =
     "enable-user-controlled-alternate-protocol-ports";
-
-// Enables a new "web app" style frame for hosted apps (including bookmark
-// apps).
-const char kEnableWebAppFrame[] = "enable-web-app-frame";
 
 // Enables Web Notification custom layouts.
 const char kEnableWebNotificationCustomLayouts[] =
@@ -603,9 +560,6 @@ const char kKioskMode[]                     = "kiosk";
 // See http://crbug.com/31395.
 const char kKioskModePrinting[]             = "kiosk-printing";
 
-// Comma-separated list of directories with component extensions to load.
-const char kLoadComponentExtension[]        = "load-component-extension";
-
 // Loads an extension from the specified directory.
 const char kLoadExtension[]                 = "load-extension";
 
@@ -615,16 +569,6 @@ const char kLoadMediaRouterComponentExtension[] =
 
 // Makes Chrome default browser
 const char kMakeDefaultBrowser[]            = "make-default-browser";
-
-extern const char kSecurityChip[] = "security-chip";
-extern const char kSecurityChipShowNonSecureOnly[] = "show-nonsecure-only";
-extern const char kSecurityChipShowAll[] = "show-all";
-
-extern const char kSecurityChipAnimation[] = "security-chip-animation";
-extern const char kSecurityChipAnimationNone[] = "none";
-extern const char kSecurityChipAnimationNonSecureOnly[] =
-    "animate-nonsecure-only";
-extern const char kSecurityChipAnimationAll[] = "animate-all";
 
 // Forces the maximum disk space to be used by the media cache, in bytes.
 const char kMediaCacheSize[]                = "media-cache-size";
@@ -750,19 +694,6 @@ const char kPrerenderFromOmniboxSwitchValueDisabled[] = "disabled";
 //   enabled: Guaranteed prerendering.
 const char kPrerenderFromOmniboxSwitchValueEnabled[] = "enabled";
 
-// Controls speculative prerendering of pages, and content prefetching. Both
-// are dispatched from <link rel=prefetch href=...> elements.
-const char kPrerenderMode[]                 = "prerender";
-
-// These are the values the kPrerenderMode switch may have, as in
-// "--prerender=disabled".
-//   disabled: No prerendering.
-const char kPrerenderModeSwitchValueDisabled[] = "disabled";
-//   enabled: Prerendering.
-const char kPrerenderModeSwitchValueEnabled[] = "enabled";
-//   prefetch: NoState Prefetch experiment.
-const char kPrerenderModeSwitchValuePrefetch[] = "prefetch";
-
 // Use IPv6 only for privet HTTP.
 const char kPrivetIPv6Only[]                   = "privet-ipv6-only";
 
@@ -801,12 +732,6 @@ const char kProxyPacUrl[]                   = "proxy-pac-url";
 // highest priority.
 const char kProxyServer[]                   = "proxy-server";
 
-// Specifies the time for tab purging and suspending. When the indicated time
-// passes after a tab goes backgrounded, the backgrounded tab is purged and
-// suspended to save memory usage. The default value is "0" and purging and
-// suspending never happen.
-const char kPurgeAndSuspendTime[]           = "purge-and-suspend-time";
-
 // Specifies a comma separated list of QUIC connection options to send to
 // the server.
 const char kQuicConnectionOptions[] = "quic-connection-options";
@@ -831,32 +756,6 @@ const char kRestoreLastSession[]            = "restore-last-session";
 // (with a directory of sub-resources). Enable only saving pages as MHTML.
 // See http://crbug.com/120416 for how to remove this switch.
 const char kSavePageAsMHTML[]               = "save-page-as-mhtml";
-
-// If present, safebrowsing only performs update when
-// SafeBrowsingProtocolManager::ForceScheduleNextUpdate() is explicitly called.
-// This is used for testing only.
-const char kSbDisableAutoUpdate[] = "safebrowsing-disable-auto-update";
-
-// TODO(lzheng): Remove this flag once the feature works fine
-// (http://crbug.com/74848).
-//
-// Disables safebrowsing feature that checks download url and downloads
-// content's hash to make sure the content are not malicious.
-const char kSbDisableDownloadProtection[] =
-    "safebrowsing-disable-download-protection";
-
-// Disables safebrowsing feature that checks for blacklisted extensions.
-const char kSbDisableExtensionBlacklist[] =
-    "safebrowsing-disable-extension-blacklist";
-
-// List of comma-separated sha256 hashes of executable files which the
-// download-protection service should treat as "dangerous."  For a file to
-// show a warning, it also must be considered a dangerous filetype and not
-// be whitelisted otherwise (by signature or URL) and must be on a supported
-// OS. Hashes are in hex. This is used for manual testing when looking
-// for ways to by-pass download protection.
-const char kSbManualDownloadBlacklist[] =
-    "safebrowsing-manual-download-blacklist";
 
 // Causes the process to run as a service process.
 const char kServiceProcess[]                = "service";
@@ -897,6 +796,10 @@ const char kSpeculativeResourcePrefetchingDisabled[] = "disabled";
 // Speculative resource prefetching is enabled.
 const char kSpeculativeResourcePrefetchingEnabled[] = "enabled";
 
+// Speculative resource prefetching is enabled for external requests.
+const char kSpeculativeResourcePrefetchingEnabledExternal[] =
+    "enabled-external-only";
+
 // Speculative resource prefetching will only learn about resources that need to
 // be prefetched but will not prefetch them.
 const char kSpeculativeResourcePrefetchingLearning[] = "learning";
@@ -917,10 +820,6 @@ const char kStartStackProfiler[]            = "start-stack-profiler";
 // given value. Pass an empty string to mark the profile as non-supervised.
 // Used for testing.
 const char kSupervisedUserId[]              = "managed-user-id";
-
-// Enables/disables SafeSites filtering for supervised users. Possible values
-// are "enabled", "disabled", "blacklist-only", and "online-check-only".
-const char kSupervisedUserSafeSites[]       = "supervised-user-safesites";
 
 // Used to authenticate requests to the Sync service for supervised users.
 // Setting this switch also causes Sync to be set up for a supervised user.
@@ -963,12 +862,6 @@ const char kUserDataDir[]                   = "user-data-dir";
 
 // Uses experimental simple cache backend if possible.
 const char kUseSimpleCacheBackend[]         = "use-simple-cache-backend";
-
-// Enables using an in-process Mojo service for the v8 proxy resolver.
-const char kV8PacMojoInProcess[] = "v8-pac-mojo-in-process";
-
-// Enables using an out-of-process Mojo service for the v8 proxy resolver.
-const char kV8PacMojoOutOfProcess[] = "v8-pac-mojo-out-of-process";
 
 // Examines a .crx for validity and prints the result.
 const char kValidateCrx[]                   = "validate-crx";
@@ -1036,9 +929,6 @@ const char kEnableHostedMode[] = "enable-hosted-mode";
 // unresponsive web content.
 const char kEnableHungRendererInfoBar[] = "enable-hung-renderer-infobar";
 
-// Enables "Add to Home screen" in the app menu to generate WebAPKs.
-const char kEnableWebApk[] = "enable-improved-a2hs";
-
 // Forces the update menu badge to show.
 const char kForceShowUpdateMenuBadge[] = "force-show-update-menu-badge";
 
@@ -1069,11 +959,17 @@ const char kTabManagementExperimentTypeDisabled[] =
     "tab-management-experiment-type-disabled";
 const char kTabManagementExperimentTypeElderberry[] =
     "tab-management-experiment-type-elderberry";
+
+// Custom WebAPK server URL for the sake of testing.
+const char kWebApkServerUrl[] = "webapk-server-url";
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 // Enables native cups integration
 const char kEnableNativeCups[] = "enable-native-cups";
+
+// Custom crosh command.
+const char kCroshCommand[] = "crosh-command";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_ASH)
@@ -1086,8 +982,14 @@ const char kOpenAsh[]                       = "open-ash";
 const char kHelp[]                          = "help";
 const char kHelpShort[]                     = "h";
 
-// Specifies which password store to use
-// (detect, default, gnome-keyring, gnome-libsecret, kwallet).
+// Specifies which encryption storage backend to use. Possible values are
+// kwallet, kwallet5, gnome, gnome-keyring, gnome-libsecret, basic. Any other
+// value will lead to Chrome detecting the best backend automatically.
+// TODO(crbug.com/571003): Once PasswordStore no longer uses the Keyring or
+// KWallet for storing passwords, rename this flag to stop referencing
+// passwords. Do not rename it sooner, though; developers and testers might
+// rely on it keeping large amounts of testing passwords out of their Keyrings
+// or KWallets.
 const char kPasswordStore[]                 = "password-store";
 
 // The same as the --class argument in X applications.  Overrides the WM_CLASS
@@ -1244,7 +1146,7 @@ const char kWindows8Search[]                = "windows8-search";
 const char kDebugPrint[] = "debug-print";
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // Specifies comma-separated list of extension ids or hosts to grant
 // access to CRX file system APIs.
 const char kAllowNaClCrxFsAPI[]             = "allow-nacl-crxfs-api";

@@ -32,14 +32,16 @@ class TimeTicks;
 namespace net {
 class HttpServerPropertiesManager;
 class NetLog;
+class NetworkQualitiesPrefsManager;
 class ProxyConfigService;
 class SdchOwner;
 class URLRequestContext;
 class WriteToFileNetLogObserver;
-class BoundedFileNetLogObserver;
+class FileNetLogObserver;
 }  // namespace net
 
 namespace cronet {
+class TestUtil;
 
 #if defined(DATA_REDUCTION_PROXY_SUPPORT)
 class CronetDataReductionProxy;
@@ -111,14 +113,17 @@ class CronetURLRequestContextAdapter
   // Called on main Java thread to initialize URLRequestContext.
   void InitRequestContextOnMainThread();
 
-  // Configures the network quality estimator to observe localhost requests, and
-  // to consider smaller responses when observing throughput for testing. This
-  // should be called after the network quality estimator has been enabled.
+  // Configures the network quality estimator to observe requests to localhost,
+  // to use smaller responses when estimating throughput, and to disable the
+  // device offline checks when computing the effective connection type or when
+  // writing the prefs. This should only be used for testing. This can be
+  // called only after the network quality estimator has been enabled.
   void ConfigureNetworkQualityEstimatorForTesting(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
       jboolean use_local_host_requests,
-      jboolean use_smaller_responses);
+      jboolean use_smaller_responses,
+      jboolean disable_offline_check);
 
   // Request that RTT and/or throughput observations should or should not be
   // provided by the network quality estimator.
@@ -132,6 +137,8 @@ class CronetURLRequestContextAdapter
       bool should);
 
  private:
+  friend class TestUtil;
+
   // Initializes |context_| on the Network thread.
   void InitializeOnNetworkThread(
       std::unique_ptr<URLRequestContextConfig> config,
@@ -153,11 +160,13 @@ class CronetURLRequestContextAdapter
   base::Thread* GetFileThread();
 
   // Configures the network quality estimator to observe requests to localhost,
-  // as well as to use smaller responses when estimating throughput. This
-  // should only be used for testing.
+  // to use smaller responses when estimating throughput, and to disable the
+  // device offline checks when computing the effective connection type or when
+  // writing the prefs. This should only be used for testing.
   void ConfigureNetworkQualityEstimatorOnNetworkThreadForTesting(
       bool use_local_host_requests,
-      bool use_smaller_responses);
+      bool use_smaller_responses,
+      bool disable_offline_check);
 
   void ProvideRTTObservationsOnNetworkThread(bool should);
   void ProvideThroughputObservationsOnNetworkThread(bool should);
@@ -213,7 +222,7 @@ class CronetURLRequestContextAdapter
   std::unique_ptr<net::WriteToFileNetLogObserver> write_to_file_observer_;
   base::Lock write_to_file_observer_lock_;
 
-  std::unique_ptr<net::BoundedFileNetLogObserver> bounded_file_observer_;
+  std::unique_ptr<net::FileNetLogObserver> bounded_file_observer_;
 
   // |pref_service_| should outlive the HttpServerPropertiesManager owned by
   // |context_|.
@@ -238,6 +247,10 @@ class CronetURLRequestContextAdapter
 
   // A network quality estimator.
   std::unique_ptr<net::NetworkQualityEstimator> network_quality_estimator_;
+
+  // Manages the writing and reading of the network quality prefs.
+  std::unique_ptr<net::NetworkQualitiesPrefsManager>
+      network_qualities_prefs_manager_;
 
   // Java object that owns this CronetURLRequestContextAdapter.
   base::android::ScopedJavaGlobalRef<jobject> jcronet_url_request_context_;

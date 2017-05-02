@@ -8,8 +8,10 @@ import android.content.Context;
 import android.support.annotation.IntDef;
 import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
+import android.util.Pair;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.payments.ui.PaymentOption;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge;
@@ -58,6 +60,9 @@ public class AutofillAddress extends PaymentOption {
     private Context mContext;
     private AutofillProfile mProfile;
     @Nullable private Pattern mLanguageScriptCodePattern;
+    @Nullable private String mShippingLabelWithCountry;
+    @Nullable private String mShippingLabelWithoutCountry;
+    @Nullable private String mBillingLabel;
 
     /**
      * Builds the autofill address.
@@ -85,6 +90,12 @@ public class AutofillAddress extends PaymentOption {
      * @param profile The new profile to use.
      */
     public void completeAddress(AutofillProfile profile) {
+        // Since the profile changed, our cached labels are now out of date. Set them to null so the
+        // labels are recomputed next time they are needed.
+        mShippingLabelWithCountry = null;
+        mShippingLabelWithoutCountry = null;
+        mBillingLabel = null;
+
         mProfile = profile;
         updateIdentifierAndLabels(mProfile.getGUID(), mProfile.getFullName(), mProfile.getLabel(),
                 mProfile.getPhoneNumber());
@@ -93,14 +104,86 @@ public class AutofillAddress extends PaymentOption {
     }
 
     /**
+     * Gets the shipping address label which includes the country for the profile associated with
+     * this address and sets it as sublabel for this PaymentOption.
+     */
+    public void setShippingAddressLabelWithCountry() {
+        assert mProfile != null;
+
+        if (mShippingLabelWithCountry == null) {
+            mShippingLabelWithCountry =
+                    PersonalDataManager.getInstance()
+                            .getShippingAddressLabelWithCountryForPaymentRequest(mProfile);
+        }
+
+        mProfile.setLabel(mShippingLabelWithCountry);
+        updateSublabel(mProfile.getLabel());
+    }
+
+    /**
+     * Gets the shipping address label which does not include the country for the profile associated
+     * with this address and sets it as sublabel for this PaymentOption.
+     */
+    public void setShippingAddressLabelWithoutCountry() {
+        assert mProfile != null;
+
+        if (mShippingLabelWithoutCountry == null) {
+            mShippingLabelWithoutCountry =
+                    PersonalDataManager.getInstance()
+                            .getShippingAddressLabelWithoutCountryForPaymentRequest(mProfile);
+        }
+
+        mProfile.setLabel(mShippingLabelWithoutCountry);
+        updateSublabel(mProfile.getLabel());
+    }
+
+    /*
+     * Gets the billing address label for the profile associated with this address and sets it as
+     * sublabel for this PaymentOption.
+     */
+    public void setBillingAddressLabel() {
+        assert mProfile != null;
+
+        if (mBillingLabel == null) {
+            mBillingLabel =
+                    PersonalDataManager.getInstance().getBillingAddressLabelForPaymentRequest(
+                            mProfile);
+        }
+
+        mProfile.setLabel(mBillingLabel);
+        updateSublabel(mProfile.getLabel());
+    }
+
+    /**
      * Checks whether this address is complete and updates edit message, edit title and complete
      * status.
      */
     private void checkAndUpdateAddressCompleteness() {
+        Pair<Integer, Integer> messageResIds =
+                getEditMessageAndTitleResIds(checkAddressCompletionStatus(mProfile));
+
+        mEditMessage = messageResIds.first.intValue() == 0
+                ? null
+                : mContext.getString(messageResIds.first);
+        mEditTitle = messageResIds.second.intValue() == 0
+                ? null
+                : mContext.getString(messageResIds.second);
+        mIsComplete = mEditMessage == null;
+    }
+
+    /**
+     * Gets the edit message and title resource Ids for the completion status.
+     *
+     * @param  completionStatus The completion status.
+     * @return The resource Ids. The first is the edit message resource Id. The second is the
+     *         correspond editor title resource Id.
+     */
+    public static Pair<Integer, Integer> getEditMessageAndTitleResIds(
+            @CompletionStatus int completionStatus) {
         int editMessageResId = 0;
         int editTitleResId = 0;
 
-        switch (checkAddressCompletionStatus(mProfile)) {
+        switch (completionStatus) {
             case COMPLETE:
                 editTitleResId = R.string.autofill_edit_profile;
                 break;
@@ -124,9 +207,7 @@ public class AutofillAddress extends PaymentOption {
                 assert false : "Invalid completion status";
         }
 
-        mEditMessage = editMessageResId == 0 ? null : mContext.getString(editMessageResId);
-        mEditTitle = editTitleResId == 0 ? null : mContext.getString(editTitleResId);
-        mIsComplete = mEditMessage == null;
+        return new Pair<Integer, Integer>(editMessageResId, editTitleResId);
     }
 
     /**

@@ -113,7 +113,7 @@ class InheritedRotationChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedRotationChecker> create(
       const Rotation& inheritedRotation) {
-    return wrapUnique(new InheritedRotationChecker(inheritedRotation));
+    return WTF::wrapUnique(new InheritedRotationChecker(inheritedRotation));
   }
 
   bool isValid(const InterpolationEnvironment& environment,
@@ -149,7 +149,7 @@ InterpolationValue CSSRotateInterpolationType::maybeConvertInherit(
     const StyleResolverState& state,
     ConversionCheckers& conversionCheckers) const {
   Rotation inheritedRotation = getRotation(*state.parentStyle());
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedRotationChecker::create(inheritedRotation));
   return convertRotation(inheritedRotation);
 }
@@ -161,19 +161,10 @@ InterpolationValue CSSRotateInterpolationType::maybeConvertValue(
   return convertRotation(StyleBuilderConverter::convertRotation(value));
 }
 
-InterpolationValue CSSRotateInterpolationType::maybeConvertSingle(
-    const PropertySpecificKeyframe& keyframe,
-    const InterpolationEnvironment& environment,
-    const InterpolationValue& underlying,
-    ConversionCheckers& conversionCheckers) const {
-  InterpolationValue result = CSSInterpolationType::maybeConvertSingle(
-      keyframe, environment, underlying, conversionCheckers);
-  if (!result)
-    return nullptr;
-  if (keyframe.composite() != EffectModel::CompositeReplace)
-    toCSSRotateNonInterpolableValue(*result.nonInterpolableValue)
-        .setSingleAdditive();
-  return result;
+void CSSRotateInterpolationType::additiveKeyframeHook(
+    InterpolationValue& value) const {
+  toCSSRotateNonInterpolableValue(*value.nonInterpolableValue)
+      .setSingleAdditive();
 }
 
 PairwiseInterpolationValue CSSRotateInterpolationType::maybeMergeSingles(
@@ -186,9 +177,10 @@ PairwiseInterpolationValue CSSRotateInterpolationType::maybeMergeSingles(
           toCSSRotateNonInterpolableValue(*end.nonInterpolableValue)));
 }
 
-InterpolationValue CSSRotateInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return convertRotation(getRotation(*environment.state().style()));
+InterpolationValue
+CSSRotateInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  return convertRotation(getRotation(*state.style()));
 }
 
 void CSSRotateInterpolationType::composite(
@@ -206,15 +198,15 @@ void CSSRotateInterpolationType::composite(
       underlyingNonInterpolableValue.composite(nonInterpolableValue, progress);
 }
 
-void CSSRotateInterpolationType::apply(
+void CSSRotateInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* untypedNonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   double progress = toInterpolableNumber(interpolableValue).value();
   const CSSRotateNonInterpolableValue& nonInterpolableValue =
       toCSSRotateNonInterpolableValue(*untypedNonInterpolableValue);
   Rotation rotation = nonInterpolableValue.slerpedRotation(progress);
-  environment.state().style()->setRotate(
+  state.style()->setRotate(
       RotateTransformOperation::create(rotation, TransformOperation::Rotate3D));
 }
 

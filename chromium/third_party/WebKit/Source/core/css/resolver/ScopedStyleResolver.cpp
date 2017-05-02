@@ -79,29 +79,8 @@ void ScopedStyleResolver::addFontFaceRules(const RuleSet& ruleSet) {
       cssFontSelector->fontFaceCache()->add(cssFontSelector, fontFaceRule,
                                             fontFace);
   }
-  if (fontFaceRules.size())
+  if (fontFaceRules.size() && document.styleResolver())
     document.styleResolver()->invalidateMatchedPropertiesCache();
-}
-
-void ScopedStyleResolver::appendCSSStyleSheet(
-    CSSStyleSheet& cssSheet,
-    const MediaQueryEvaluator& medium) {
-  unsigned index = m_authorStyleSheets.size();
-  m_authorStyleSheets.append(&cssSheet);
-  StyleSheetContents* sheet = cssSheet.contents();
-  AddRuleFlags addRuleFlags =
-      treeScope().document().getSecurityOrigin()->canRequest(sheet->baseURL())
-          ? RuleHasDocumentSecurityOrigin
-          : RuleHasNoSpecialState;
-  const RuleSet& ruleSet = sheet->ensureRuleSet(medium, addRuleFlags);
-
-  addKeyframeRules(ruleSet);
-  addFontFaceRules(ruleSet);
-  addTreeBoundaryCrossingRules(ruleSet, &cssSheet, index);
-  treeScope().document().styleResolver()->addViewportDependentMediaQueries(
-      ruleSet.viewportDependentMediaQueryResults());
-  treeScope().document().styleResolver()->addDeviceDependentMediaQueries(
-      ruleSet.deviceDependentMediaQueryResults());
 }
 
 void ScopedStyleResolver::appendActiveStyleSheets(
@@ -110,10 +89,14 @@ void ScopedStyleResolver::appendActiveStyleSheets(
   for (auto activeIterator = activeSheets.begin() + index;
        activeIterator != activeSheets.end(); activeIterator++) {
     CSSStyleSheet* sheet = activeIterator->first;
+    m_viewportDependentMediaQueryResults.appendVector(
+        sheet->viewportDependentMediaQueryResults());
+    m_deviceDependentMediaQueryResults.appendVector(
+        sheet->deviceDependentMediaQueryResults());
     if (!activeIterator->second)
       continue;
     const RuleSet& ruleSet = *activeIterator->second;
-    m_authorStyleSheets.append(sheet);
+    m_authorStyleSheets.push_back(sheet);
     addKeyframeRules(ruleSet);
     addFontFaceRules(ruleSet);
     addTreeBoundaryCrossingRules(ruleSet, sheet, index++);
@@ -124,6 +107,11 @@ void ScopedStyleResolver::collectFeaturesTo(
     RuleFeatureSet& features,
     HeapHashSet<Member<const StyleSheetContents>>&
         visitedSharedStyleSheetContents) const {
+  features.viewportDependentMediaQueryResults().appendVector(
+      m_viewportDependentMediaQueryResults);
+  features.deviceDependentMediaQueryResults().appendVector(
+      m_deviceDependentMediaQueryResults);
+
   for (size_t i = 0; i < m_authorStyleSheets.size(); ++i) {
     ASSERT(m_authorStyleSheets[i]->ownerNode());
     StyleSheetContents* contents = m_authorStyleSheets[i]->contents();
@@ -141,9 +129,12 @@ void ScopedStyleResolver::collectFeaturesTo(
 
 void ScopedStyleResolver::resetAuthorStyle() {
   m_authorStyleSheets.clear();
+  m_viewportDependentMediaQueryResults.clear();
+  m_deviceDependentMediaQueryResults.clear();
   m_keyframesRuleMap.clear();
   m_treeBoundaryCrossingRuleSet = nullptr;
   m_hasDeepOrShadowSelector = false;
+  m_needsAppendAllSheets = false;
 }
 
 StyleRuleKeyframes* ScopedStyleResolver::keyframeStylesForAnimation(
@@ -262,6 +253,8 @@ void ScopedStyleResolver::matchPageRules(PageRuleCollector& collector) {
 DEFINE_TRACE(ScopedStyleResolver) {
   visitor->trace(m_scope);
   visitor->trace(m_authorStyleSheets);
+  visitor->trace(m_viewportDependentMediaQueryResults);
+  visitor->trace(m_deviceDependentMediaQueryResults);
   visitor->trace(m_keyframesRuleMap);
   visitor->trace(m_treeBoundaryCrossingRuleSet);
 }
@@ -301,8 +294,30 @@ void ScopedStyleResolver::addTreeBoundaryCrossingRules(
         treeScope());
   }
 
-  m_treeBoundaryCrossingRuleSet->append(
+  m_treeBoundaryCrossingRuleSet->push_back(
       RuleSubSet::create(parentStyleSheet, sheetIndex, ruleSetForScope));
+}
+
+bool ScopedStyleResolver::haveSameStyles(const ScopedStyleResolver* first,
+                                         const ScopedStyleResolver* second) {
+  // This method will return true if the two resolvers are either both empty, or
+  // if they contain the same active stylesheets by sharing the same
+  // StyleSheetContents. It is used to check if we can share ComputedStyle
+  // between two shadow hosts. This typically works when we have multiple
+  // instantiations of the same web component where the style elements are in
+  // the same order and contain the exact same source string in which case we
+  // will get a cache hit for sharing StyleSheetContents.
+
+  size_t firstCount = first ? first->m_authorStyleSheets.size() : 0;
+  size_t secondCount = second ? second->m_authorStyleSheets.size() : 0;
+  if (firstCount != secondCount)
+    return false;
+  while (firstCount--) {
+    if (first->m_authorStyleSheets[firstCount]->contents() !=
+        second->m_authorStyleSheets[firstCount]->contents())
+      return false;
+  }
+  return true;
 }
 
 DEFINE_TRACE(ScopedStyleResolver::RuleSubSet) {

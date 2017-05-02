@@ -10,7 +10,6 @@
 
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
 #include "ash/common/session/session_state_delegate.h"
@@ -18,6 +17,7 @@
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/content/gpu_support_impl.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
@@ -44,12 +44,9 @@
 #include "chrome/browser/signin/signin_error_notifier_factory_ash.h"
 #include "chrome/browser/speech/tts_controller.h"
 #include "chrome/browser/sync/sync_error_notifier_factory_ash.h"
-#include "chrome/browser/ui/app_list/app_list_view_delegate.h"
-#include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
-#include "chrome/browser/ui/ash/media_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/palette_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/session_state_delegate_chromeos.h"
@@ -75,7 +72,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/service_manager_connection.h"
-#include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -92,7 +88,7 @@ void InitAfterFirstSessionStart() {
   // Restore focus after the user session is started.  It's needed because some
   // windows can be opened in background while login UI is still active because
   // we currently restore browser windows before login UI is deleted.
-  aura::Window::Windows mru_list = ash::WmWindowAura::ToAuraWindows(
+  aura::Window::Windows mru_list = ash::WmWindow::ToAuraWindows(
       ash::WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   if (!mru_list.empty())
     mru_list.front()->Focus();
@@ -290,6 +286,15 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
         case ash::A11Y_ALERT_CAPS_OFF:
           msg = IDS_A11Y_ALERT_CAPS_OFF;
           break;
+        case ash::A11Y_ALERT_SCREEN_ON:
+          // Enable automation manager when alert is screen-on, as it is
+          // previously disabled by alert screen-off.
+          SetAutomationManagerEnabled(profile, true);
+          msg = IDS_A11Y_ALERT_SCREEN_ON;
+          break;
+        case ash::A11Y_ALERT_SCREEN_OFF:
+          msg = IDS_A11Y_ALERT_SCREEN_OFF;
+          break;
         case ash::A11Y_ALERT_WINDOW_NEEDED:
           msg = IDS_A11Y_ALERT_WINDOW_NEEDED;
           break;
@@ -304,12 +309,26 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
       if (msg) {
         AutomationManagerAura::GetInstance()->HandleAlert(
             profile, l10n_util::GetStringUTF8(msg));
+        // After handling the alert, if the alert is screen-off, we should
+        // disable automation manager to handle any following a11y events.
+        if (alert == ash::A11Y_ALERT_SCREEN_OFF)
+          SetAutomationManagerEnabled(profile, false);
       }
     }
   }
 
   ash::AccessibilityAlert GetLastAccessibilityAlert() override {
     return ash::A11Y_ALERT_NONE;
+  }
+
+  bool ShouldToggleSpokenFeedbackViaTouch() override {
+    DCHECK(AccessibilityManager::Get());
+    return AccessibilityManager::Get()->ShouldToggleSpokenFeedbackViaTouch();
+  }
+
+  void PlaySpokenFeedbackToggleCountdown(int tick_count) override {
+    DCHECK(AccessibilityManager::Get());
+    AccessibilityManager::Get()->PlaySpokenFeedbackToggleCountdown(tick_count);
   }
 
   void PlayEarcon(int sound_key) override {
@@ -327,6 +346,16 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
   }
 
  private:
+  void SetAutomationManagerEnabled(content::BrowserContext* context,
+                                   bool enabled) {
+    DCHECK(context);
+    AutomationManagerAura* manager = AutomationManagerAura::GetInstance();
+    if (enabled)
+      manager->Enable(context);
+    else
+      manager->Disable();
+  }
+
   DISALLOW_COPY_AND_ASSIGN(AccessibilityDelegateImpl);
 };
 
@@ -378,7 +407,7 @@ bool ChromeShellDelegate::IsRunningInForcedAppMode() const {
 }
 
 bool ChromeShellDelegate::CanShowWindowForUser(ash::WmWindow* window) const {
-  return ::CanShowWindowForUser(ash::WmWindowAura::GetAuraWindow(window),
+  return ::CanShowWindowForUser(ash::WmWindow::GetAuraWindow(window),
                                 base::Bind(&GetActiveBrowserContext));
 }
 
@@ -438,11 +467,6 @@ void ChromeShellDelegate::OpenUrlFromArc(const GURL& url) {
       displayer.browser()->window()->GetNativeWindow());
 }
 
-app_list::AppListPresenter* ChromeShellDelegate::GetAppListPresenter() {
-  DCHECK(ash::Shell::HasInstance());
-  return AppListServiceAsh::GetInstance()->GetAppListPresenter();
-}
-
 ash::ShelfDelegate* ChromeShellDelegate::CreateShelfDelegate(
     ash::ShelfModel* model) {
   if (!shelf_delegate_) {
@@ -494,12 +518,25 @@ gfx::Image ChromeShellDelegate::GetDeprecatedAcceleratorImage() const {
       IDR_BLUETOOTH_KEYBOARD);
 }
 
-void ChromeShellDelegate::ToggleTouchpad() {
-  chromeos::system::InputDeviceSettings::Get()->ToggleTouchpad();
+bool ChromeShellDelegate::IsTouchscreenEnabledInPrefs(
+    bool use_local_state) const {
+  return chromeos::system::InputDeviceSettings::Get()
+      ->IsTouchscreenEnabledInPrefs(use_local_state);
 }
 
-void ChromeShellDelegate::ToggleTouchscreen() {
-  chromeos::system::InputDeviceSettings::Get()->ToggleTouchscreen();
+void ChromeShellDelegate::SetTouchscreenEnabledInPrefs(bool enabled,
+                                                       bool use_local_state) {
+  chromeos::system::InputDeviceSettings::Get()->SetTouchscreenEnabledInPrefs(
+      enabled, use_local_state);
+}
+
+void ChromeShellDelegate::UpdateTouchscreenStatusFromPrefs() {
+  chromeos::system::InputDeviceSettings::Get()
+      ->UpdateTouchscreenStatusFromPrefs();
+}
+
+void ChromeShellDelegate::ToggleTouchpad() {
+  chromeos::system::InputDeviceSettings::Get()->ToggleTouchpad();
 }
 
 keyboard::KeyboardUI* ChromeShellDelegate::CreateKeyboardUI() {
@@ -514,13 +551,9 @@ ash::AccessibilityDelegate* ChromeShellDelegate::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateImpl;
 }
 
-ash::MediaDelegate* ChromeShellDelegate::CreateMediaDelegate() {
-  return new MediaDelegateChromeOS;
-}
-
 std::unique_ptr<ash::PaletteDelegate>
 ChromeShellDelegate::CreatePaletteDelegate() {
-  return chromeos::PaletteDelegateChromeOS::Create();
+  return base::MakeUnique<chromeos::PaletteDelegateChromeOS>();
 }
 
 ash::SystemTrayDelegate* ChromeShellDelegate::CreateSystemTrayDelegate() {
@@ -549,7 +582,6 @@ void ChromeShellDelegate::Observe(int type,
       // chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED instead.
       if (shelf_delegate_)
         shelf_delegate_->OnUserProfileReadyToSwitch(profile);
-      ash::Shell::GetInstance()->OnLoginUserProfilePrepared();
       break;
     }
     case chrome::NOTIFICATION_SESSION_STARTED:
@@ -557,7 +589,6 @@ void ChromeShellDelegate::Observe(int type,
       // start.
       if (user_manager::UserManager::Get()->GetLoggedInUsers().size() < 2)
         InitAfterFirstSessionStart();
-      ash::WmShell::Get()->ShowShelf();
       break;
     default:
       NOTREACHED() << "Unexpected notification " << type;

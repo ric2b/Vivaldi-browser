@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "jni/GlDisplay_jni.h"
 #include "remoting/client/cursor_shape_stub_proxy.h"
+#include "remoting/client/display/gl_canvas.h"
 #include "remoting/client/dual_buffer_frame_consumer.h"
 #include "remoting/client/jni/chromoting_jni_runtime.h"
 #include "remoting/client/jni/egl_thread_context.h"
@@ -21,7 +22,8 @@
 
 namespace remoting {
 
-// The core that lives on the display thread.
+// The core that lives on the display thread. Must not be created on the display
+// thread.
 class JniGlDisplayHandler::Core : public protocol::CursorShapeStub,
                                   public GlRendererDelegate {
  public:
@@ -40,6 +42,9 @@ class JniGlDisplayHandler::Core : public protocol::CursorShapeStub,
   // thread but no more than once.
   std::unique_ptr<protocol::FrameConsumer> GrabFrameConsumer();
 
+  void OnFrameReceived(std::unique_ptr<webrtc::DesktopFrame> frame,
+                       const base::Closure& done);
+
   void SurfaceCreated(base::android::ScopedJavaGlobalRef<jobject> surface);
   void SurfaceChanged(int width, int height);
   void SurfaceDestroyed();
@@ -52,6 +57,9 @@ class JniGlDisplayHandler::Core : public protocol::CursorShapeStub,
   base::WeakPtr<Core> GetWeakPtr();
 
  private:
+  // Initializes the core on the display thread.
+  void Initialize();
+
   ChromotingJniRuntime* runtime_;
   base::WeakPtr<JniGlDisplayHandler> shell_;
 
@@ -62,7 +70,7 @@ class JniGlDisplayHandler::Core : public protocol::CursorShapeStub,
 
   ANativeWindow* window_ = nullptr;
   std::unique_ptr<EglThreadContext> egl_context_;
-  GlRenderer renderer_;
+  std::unique_ptr<GlRenderer> renderer_;
 
   // Used on display thread.
   base::WeakPtr<Core> weak_ptr_;
@@ -74,12 +82,18 @@ class JniGlDisplayHandler::Core : public protocol::CursorShapeStub,
 JniGlDisplayHandler::Core::Core(ChromotingJniRuntime* runtime,
                                 base::WeakPtr<JniGlDisplayHandler> shell)
     : runtime_(runtime), shell_(shell), weak_factory_(this) {
+  DCHECK(!runtime_->display_task_runner()->BelongsToCurrentThread());
+  runtime_->display_task_runner()->PostTask(
+      FROM_HERE, base::Bind(&JniGlDisplayHandler::Core::Initialize,
+                            base::Unretained(this)));
+
   weak_ptr_ = weak_factory_.GetWeakPtr();
-  renderer_.SetDelegate(weak_ptr_);
+
+  // Do not bind GlRenderer::OnFrameReceived. |renderer_| is not ready yet.
   owned_frame_consumer_.reset(new DualBufferFrameConsumer(
-          base::Bind(&GlRenderer::OnFrameReceived, renderer_.GetWeakPtr()),
-          runtime_->display_task_runner(),
-          protocol::FrameConsumer::PixelFormat::FORMAT_RGBA));
+      base::Bind(&JniGlDisplayHandler::Core::OnFrameReceived, weak_ptr_),
+      runtime_->display_task_runner(),
+      protocol::FrameConsumer::PixelFormat::FORMAT_RGBA));
   frame_consumer_ = owned_frame_consumer_->GetWeakPtr();
 }
 
@@ -107,7 +121,7 @@ void JniGlDisplayHandler::Core::OnSizeChanged(int width, int height) {
 void JniGlDisplayHandler::Core::SetCursorShape(
     const protocol::CursorShapeInfo& cursor_shape) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
-  renderer_.OnCursorShapeChanged(cursor_shape);
+  renderer_->OnCursorShapeChanged(cursor_shape);
 }
 
 std::unique_ptr<protocol::FrameConsumer>
@@ -116,17 +130,27 @@ JniGlDisplayHandler::Core::GrabFrameConsumer() {
   return std::move(owned_frame_consumer_);
 }
 
+void JniGlDisplayHandler::Core::OnFrameReceived(
+    std::unique_ptr<webrtc::DesktopFrame> frame,
+    const base::Closure& done) {
+  DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
+  renderer_->OnFrameReceived(std::move(frame), done);
+}
+
 void JniGlDisplayHandler::Core::SurfaceCreated(
     base::android::ScopedJavaGlobalRef<jobject> surface) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
   DCHECK(!egl_context_);
   DCHECK(!window_);
-  renderer_.RequestCanvasSize();
+  renderer_->RequestCanvasSize();
   window_ = ANativeWindow_fromSurface(base::android::AttachCurrentThread(),
                                       surface.obj());
   egl_context_.reset(new EglThreadContext());
   egl_context_->BindToWindow(window_);
-  renderer_.OnSurfaceCreated(static_cast<int>(egl_context_->client_version()));
+
+  renderer_->OnSurfaceCreated(base::MakeUnique<GlCanvas>(
+      static_cast<int>(egl_context_->client_version())));
+
   runtime_->network_task_runner()->PostTask(
       FROM_HERE, base::Bind(&DualBufferFrameConsumer::RequestFullDesktopFrame,
                             frame_consumer_));
@@ -134,14 +158,14 @@ void JniGlDisplayHandler::Core::SurfaceCreated(
 
 void JniGlDisplayHandler::Core::SurfaceChanged(int width, int height) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
-  renderer_.OnSurfaceChanged(width, height);
+  renderer_->OnSurfaceChanged(width, height);
 }
 
 void JniGlDisplayHandler::Core::SurfaceDestroyed() {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
   DCHECK(egl_context_);
   DCHECK(window_);
-  renderer_.OnSurfaceDestroyed();
+  renderer_->OnSurfaceDestroyed();
   egl_context_.reset();
   ANativeWindow_release(window_);
   window_ = nullptr;
@@ -150,29 +174,36 @@ void JniGlDisplayHandler::Core::SurfaceDestroyed() {
 void JniGlDisplayHandler::Core::SetTransformation(
     const std::array<float, 9>& matrix) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
-  renderer_.OnPixelTransformationChanged(matrix);
+  renderer_->OnPixelTransformationChanged(matrix);
 }
 
 void JniGlDisplayHandler::Core::MoveCursor(float x, float y) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
-  renderer_.OnCursorMoved(x, y);
+  renderer_->OnCursorMoved(x, y);
 }
 
 void JniGlDisplayHandler::Core::SetCursorVisibility(bool visible) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
-  renderer_.OnCursorVisibilityChanged(visible);
+  renderer_->OnCursorVisibilityChanged(visible);
 }
 
 void JniGlDisplayHandler::Core::StartInputFeedback(float x,
                                                    float y,
                                                    float diameter) {
   DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
-  renderer_.OnCursorInputFeedback(x, y, diameter);
+  renderer_->OnCursorInputFeedback(x, y, diameter);
 }
 
 base::WeakPtr<JniGlDisplayHandler::Core>
 JniGlDisplayHandler::Core::GetWeakPtr() {
   return weak_ptr_;
+}
+
+void JniGlDisplayHandler::Core::Initialize() {
+  DCHECK(runtime_->display_task_runner()->BelongsToCurrentThread());
+
+  renderer_ = GlRenderer::CreateGlRendererWithDesktop();
+  renderer_->SetDelegate(weak_ptr_);
 }
 
 // Shell implementations.

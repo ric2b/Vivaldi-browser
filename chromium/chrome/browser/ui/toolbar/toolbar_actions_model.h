@@ -9,7 +9,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
@@ -31,7 +30,6 @@ namespace extensions {
 class ExtensionActionManager;
 class ExtensionMessageBubbleController;
 class ExtensionRegistry;
-class ExtensionSet;
 }
 
 // Model for the browser actions toolbar. This is a per-profile instance, and
@@ -50,7 +48,6 @@ class ToolbarActionsModel
   // The different options for highlighting.
   enum HighlightType {
     HIGHLIGHT_NONE,
-    HIGHLIGHT_INFO,
     HIGHLIGHT_WARNING,
   };
 
@@ -154,7 +151,7 @@ class ToolbarActionsModel
 
   bool actions_initialized() const { return actions_initialized_; }
 
-  ScopedVector<ToolbarActionViewController> CreateActions(
+  std::vector<std::unique_ptr<ToolbarActionViewController>> CreateActions(
       Browser* browser,
       ToolbarActionsBar* bar);
   std::unique_ptr<ToolbarActionViewController> CreateActionForItem(

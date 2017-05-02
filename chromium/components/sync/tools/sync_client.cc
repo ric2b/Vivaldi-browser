@@ -377,6 +377,7 @@ int SyncClientMain(int argc, char* argv[]) {
   model_types.Put(DICTIONARY);
   model_types.Put(FAVICON_IMAGES);
   model_types.Put(FAVICON_TRACKING);
+  model_types.Put(NOTES);
 
   ModelSafeRoutingInfo routing_info;
   for (ModelTypeSet::Iterator it = model_types.First(); it.Good(); it.Inc()) {

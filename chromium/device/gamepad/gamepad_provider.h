@@ -18,6 +18,7 @@
 #include "device/gamepad/gamepad_export.h"
 #include "device/gamepad/gamepad_pad_state_provider.h"
 #include "device/gamepad/gamepad_shared_buffer.h"
+#include "mojo/public/cpp/system/buffer.h"
 
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 
@@ -42,12 +43,10 @@ class DEVICE_GAMEPAD_EXPORT GamepadProvider
       public base::SystemMonitor::DevicesChangedObserver {
  public:
   explicit GamepadProvider(
-      std::unique_ptr<GamepadSharedBuffer> buffer,
       GamepadConnectionChangeClient* connection_change_client);
 
   // Manually specifies the data fetcher. Used for testing.
   explicit GamepadProvider(
-      std::unique_ptr<GamepadSharedBuffer> buffer,
       GamepadConnectionChangeClient* connection_change_client,
       std::unique_ptr<GamepadDataFetcher> fetcher);
 
@@ -57,6 +56,9 @@ class DEVICE_GAMEPAD_EXPORT GamepadProvider
   // given process.
   base::SharedMemoryHandle GetSharedMemoryHandleForProcess(
       base::ProcessHandle renderer_process);
+
+  // Returns a new mojo::ScopedSharedBufferHandle of the gamepad data.
+  mojo::ScopedSharedBufferHandle GetSharedBufferHandle();
 
   void AddGamepadDataFetcher(GamepadDataFetcher* fetcher);
   void RemoveGamepadDataFetcher(GamepadDataFetcher* fetcher);

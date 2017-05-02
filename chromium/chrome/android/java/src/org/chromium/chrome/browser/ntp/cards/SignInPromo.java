@@ -8,14 +8,14 @@ import android.content.Context;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
-import android.support.v7.widget.RecyclerView;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ntp.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
-import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.UiConfig;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.signin.AccountSigninActivity;
@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
+import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 
 /**
  * Shows a card prompting the user to sign in. This item is also an {@link OptionalLeaf}, and sign
@@ -42,13 +43,18 @@ public class SignInPromo extends OptionalLeaf
     @Nullable
     private final SigninObserver mObserver;
 
-    public SignInPromo(NodeParent parent, NewTabPageAdapter adapter) {
-        super(parent);
+    public SignInPromo(SuggestionsUiDelegate uiDelegate) {
         mDismissed = ChromePreferenceManager.getInstance(ContextUtils.getApplicationContext())
                              .getNewTabPageSigninPromoDismissed();
 
-        final SigninManager signinManager = SigninManager.get(ContextUtils.getApplicationContext());
-        mObserver = mDismissed ? null : new SigninObserver(signinManager, adapter);
+        SigninManager signinManager = SigninManager.get(ContextUtils.getApplicationContext());
+        if (mDismissed) {
+            mObserver = null;
+        } else {
+            mObserver = new SigninObserver(signinManager);
+            uiDelegate.addDestructionObserver(mObserver);
+        }
+
         setVisible(signinManager.isSignInAllowed() && !signinManager.isSignedInOnNative());
     }
 
@@ -109,27 +115,27 @@ public class SignInPromo extends OptionalLeaf
     }
 
     /** Hides the sign in promo and sets a preference to make sure it is not shown again. */
-    public void dismiss() {
+    @Override
+    public void dismiss(Callback<String> itemRemovedCallback) {
         mDismissed = true;
         setVisible(false);
 
         ChromePreferenceManager.getInstance(ContextUtils.getApplicationContext())
                 .setNewTabPageSigninPromoDismissed(true);
         mObserver.unregister();
+        itemRemovedCallback.onResult(ContextUtils.getApplicationContext().getString(getHeader()));
     }
 
     @VisibleForTesting
     class SigninObserver
             implements SignInStateObserver, SignInAllowedObserver, DestructionObserver {
         private final SigninManager mSigninManager;
-        private final NewTabPageAdapter mAdapter;
 
         /** Guards {@link #unregister()}, which can be called multiple times. */
         private boolean mUnregistered;
 
-        private SigninObserver(SigninManager signinManager, NewTabPageAdapter adapter) {
+        private SigninObserver(SigninManager signinManager) {
             mSigninManager = signinManager;
-            mAdapter = adapter;
             mSigninManager.addSignInAllowedObserver(this);
             mSigninManager.addSignInStateObserver(this);
         }
@@ -158,7 +164,6 @@ public class SignInPromo extends OptionalLeaf
         @Override
         public void onSignedIn() {
             setVisible(false);
-            mAdapter.resetSections(/*alwaysAllowEmptySections=*/false);
         }
 
         @Override
@@ -171,43 +176,17 @@ public class SignInPromo extends OptionalLeaf
      * View Holder for {@link SignInPromo}.
      */
     public static class ViewHolder extends StatusCardViewHolder {
-        private final int mSeparationSpaceSize;
-
-        public ViewHolder(NewTabPageRecyclerView parent, NewTabPageManager newTabPageManager,
+        public ViewHolder(NewTabPageRecyclerView parent, ContextMenuManager contextMenuManager,
                 UiConfig config) {
-            super(parent, newTabPageManager, config);
-            mSeparationSpaceSize = parent.getResources().getDimensionPixelSize(
+            super(parent, contextMenuManager, config);
+            getParams().topMargin = parent.getResources().getDimensionPixelSize(
                     R.dimen.ntp_sign_in_promo_margin_top);
         }
 
         @DrawableRes
         @Override
         protected int selectBackground(boolean hasCardAbove, boolean hasCardBelow) {
-            assert !hasCardBelow;
-            if (hasCardAbove) return R.drawable.ntp_signin_promo_card_bottom;
             return R.drawable.ntp_signin_promo_card_single;
-        }
-
-        @Override
-        public void updateLayoutParams() {
-            super.updateLayoutParams();
-
-            if (getAdapterPosition() == RecyclerView.NO_POSITION) return;
-
-            int precedingPosition = getAdapterPosition() - 1;
-            if (precedingPosition < 0) return; // Invalid adapter position, just do nothing.
-
-            @ItemViewType
-            int precedingCardType =
-                    getRecyclerView().getAdapter().getItemViewType(precedingPosition);
-
-            // The sign in promo should stick to the articles of the preceding section, but have
-            // some space otherwise.
-            if (precedingCardType != ItemViewType.SNIPPET) {
-                getParams().topMargin = mSeparationSpaceSize;
-            } else {
-                getParams().topMargin = 0;
-            }
         }
 
         @Override

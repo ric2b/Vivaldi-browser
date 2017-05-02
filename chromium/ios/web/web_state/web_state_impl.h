@@ -17,12 +17,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/values.h"
-#include "ios/web/navigation/navigation_manager_delegate.h"
-#include "ios/web/navigation/navigation_manager_impl.h"
-#include "ios/web/net/request_tracker_impl.h"
+#import "ios/web/navigation/navigation_manager_delegate.h"
+#import "ios/web/navigation/navigation_manager_impl.h"
+#import "ios/web/net/request_tracker_impl.h"
 #import "ios/web/public/java_script_dialog_callback.h"
 #include "ios/web/public/java_script_dialog_type.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state_delegate.h"
 #include "url/gurl.h"
 
 @protocol CRWRequestTrackerDelegate;
@@ -43,8 +44,8 @@ struct Credential;
 struct FaviconURL;
 struct LoadCommittedDetails;
 class NavigationManager;
+class ImageDataFetcher;
 class WebInterstitialImpl;
-class WebStateDelegate;
 class WebStateFacadeDelegate;
 class WebStatePolicyDecider;
 class WebUIIOS;
@@ -93,6 +94,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // Notifies the observers that the history state of the current page changed.
   void OnHistoryStateChanged();
 
+  // Notifies the observers that the render process was terminated.
+  void OnRenderProcessGone();
+
   // Called when a script command is received.
   // Returns true if the command was handled.
   bool OnScriptCommandReceived(const std::string& command,
@@ -113,7 +117,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                                 const std::string& field_name,
                                 const std::string& type,
                                 const std::string& value,
-                                int key_code,
                                 bool input_missing);
 
   // Called when new FaviconURL candidates are received.
@@ -243,6 +246,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void ShowTransientContentView(CRWContentView* content_view) override;
   bool IsShowingWebInterstitial() const override;
   WebInterstitial* GetWebInterstitial() const override;
+  void OnPasswordInputShownOnHttp() override;
   void AddScriptCommandCallback(const ScriptCommandCallback& callback,
                                 const std::string& command_prefix) override;
   void RemoveScriptCommandCallback(const std::string& command_prefix) override;
@@ -272,6 +276,12 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                            NSString* message_text,
                            NSString* default_prompt_text,
                            const DialogClosedCallback& callback);
+
+  // Notifies the delegate that request receives an authentication challenge
+  // and is unable to respond using cached credentials.
+  void OnAuthRequired(NSURLProtectionSpace* protection_space,
+                      NSURLCredential* proposed_credential,
+                      const WebStateDelegate::AuthCallback& callback);
 
   // Cancels all dialogs associated with this web_state.
   void CancelDialogs();
@@ -368,6 +378,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Mojo interface registry for this WebState.
   std::unique_ptr<service_manager::InterfaceRegistry> mojo_interface_registry_;
+
+  // Image Fetcher used to images.
+  std::unique_ptr<ImageDataFetcher> image_fetcher_;
 
   DISALLOW_COPY_AND_ASSIGN(WebStateImpl);
 };

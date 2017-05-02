@@ -83,6 +83,15 @@ class MockPasswordStoreObserver : public PasswordStore::Observer {
   MOCK_METHOD1(OnLoginsChanged, void(const PasswordStoreChangeList& changes));
 };
 
+class MockPasswordReuseDetectorConsumer : public PasswordReuseDetectorConsumer {
+ public:
+  MockPasswordReuseDetectorConsumer();
+  ~MockPasswordReuseDetectorConsumer() override;
+
+  MOCK_METHOD4(OnReuseFound,
+               void(const base::string16&, const std::string&, int, int));
+};
+
 }  // namespace password_manager
 
 #endif  // COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_TEST_UTILS_H_

@@ -11,7 +11,6 @@ source_set("dom_distiller") {
   ]
   deps = [
     "//base",
-    "//components/dom_distiller/core",
     "//components/dom_distiller/ios",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
@@ -19,6 +18,7 @@ source_set("dom_distiller") {
     "//ios/chrome/browser/browser_state",
     "//ios/web",
     "//ui/gfx",
+    "//url",
   ]
   public_deps = [
     "//components/dom_distiller/core",

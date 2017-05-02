@@ -38,9 +38,7 @@ AutomationManagerAura* AutomationManagerAura::GetInstance() {
 
 void AutomationManagerAura::Enable(BrowserContext* context) {
   enabled_ = true;
-  if (!current_tree_.get())
-    current_tree_.reset(new AXTreeSourceAura());
-  ResetSerializer();
+  Reset(false);
 
   SendEvent(context, current_tree_->GetRoot(), ui::AX_EVENT_LOAD_COMPLETE);
   views::AXAuraObjCache::GetInstance()->SetDelegate(this);
@@ -57,9 +55,7 @@ void AutomationManagerAura::Enable(BrowserContext* context) {
 
 void AutomationManagerAura::Disable() {
   enabled_ = false;
-
-  // Reset the serializer to save memory.
-  current_tree_serializer_->Reset();
+  Reset(true);
 }
 
 void AutomationManagerAura::HandleEvent(BrowserContext* context,
@@ -68,8 +64,9 @@ void AutomationManagerAura::HandleEvent(BrowserContext* context,
   if (!enabled_)
     return;
 
-  views::AXAuraObjWrapper* aura_obj =
-      views::AXAuraObjCache::GetInstance()->GetOrCreate(view);
+  views::AXAuraObjWrapper* aura_obj = view ?
+      views::AXAuraObjCache::GetInstance()->GetOrCreate(view) :
+      current_tree_->GetRoot();
   SendEvent(nullptr, aura_obj, event_type);
 }
 
@@ -92,7 +89,7 @@ void AutomationManagerAura::PerformAction(
     case ui::AX_ACTION_DO_DEFAULT:
       current_tree_->DoDefault(data.target_node_id);
       break;
-    case ui::AX_ACTION_SET_FOCUS:
+    case ui::AX_ACTION_FOCUS:
       current_tree_->Focus(data.target_node_id);
       break;
     case ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE:
@@ -115,7 +112,9 @@ void AutomationManagerAura::PerformAction(
     case ui::AX_ACTION_SET_SEQUENTIAL_FOCUS_NAVIGATION_STARTING_POINT:
       // Sent by ChromeVox but doesn't need to be handled by aura.
       break;
+    case ui::AX_ACTION_BLUR:
     case ui::AX_ACTION_DECREMENT:
+    case ui::AX_ACTION_GET_IMAGE_DATA:
     case ui::AX_ACTION_HIT_TEST:
     case ui::AX_ACTION_INCREMENT:
     case ui::AX_ACTION_REPLACE_SELECTED_TEXT:
@@ -148,9 +147,12 @@ AutomationManagerAura::AutomationManagerAura()
 AutomationManagerAura::~AutomationManagerAura() {
 }
 
-void AutomationManagerAura::ResetSerializer() {
-  current_tree_serializer_.reset(
-      new AuraAXTreeSerializer(current_tree_.get()));
+void AutomationManagerAura::Reset(bool reset_serializer) {
+  if (!current_tree_)
+    current_tree_.reset(new AXTreeSourceAura());
+  reset_serializer ? current_tree_serializer_.reset()
+                   : current_tree_serializer_.reset(
+                         new AuraAXTreeSerializer(current_tree_.get()));
 }
 
 void AutomationManagerAura::SendEvent(BrowserContext* context,

@@ -24,10 +24,6 @@ namespace base {
 class ListValue;
 }
 
-namespace gfx {
-class Rect;
-}
-
 namespace ui {
 class EventProcessor;
 }
@@ -46,7 +42,7 @@ class CoreOobeHandler : public BaseScreenHandler,
   class Delegate {
    public:
     // Called when current screen is changed.
-    virtual void OnCurrentScreenChanged(const std::string& screen) = 0;
+    virtual void OnCurrentScreenChanged(OobeScreen screen) = 0;
   };
 
   explicit CoreOobeHandler(OobeUI* oobe_ui);
@@ -123,6 +119,8 @@ class CoreOobeHandler : public BaseScreenHandler,
   void SetClientAreaSize(int width, int height) override;
   void ShowDeviceResetScreen() override;
   void ShowEnableDebuggingScreen() override;
+  void ShowActiveDirectoryPasswordChangeScreen(
+      const std::string& username) override;
 
   void InitDemoModeDetection() override;
   void StopDemoModeDetection() override;

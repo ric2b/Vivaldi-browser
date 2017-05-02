@@ -44,7 +44,7 @@
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/style/StyleInheritedData.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -196,6 +196,11 @@ void ElementRuleCollector::collectMatchingRules(
     collectMatchingRulesForList(
         matchRequest.ruleSet->shadowPseudoElementRules(pseudoId), cascadeOrder,
         matchRequest);
+    if (pseudoId == "-webkit-input-placeholder") {
+      collectMatchingRulesForList(
+          matchRequest.ruleSet->placeholderPseudoRules(), cascadeOrder,
+          matchRequest);
+    }
   }
 
   if (element.isVTTElement())
@@ -281,7 +286,7 @@ void ElementRuleCollector::appendCSSOMWrapperForRule(
   else
     cssRule = rule->createCSSOMWrapper();
   ASSERT(!parentStyleSheet || cssRule);
-  ensureRuleList()->rules().append(cssRule);
+  ensureRuleList()->rules().push_back(cssRule);
 }
 
 void ElementRuleCollector::sortAndTransferMatchedRules() {
@@ -292,7 +297,7 @@ void ElementRuleCollector::sortAndTransferMatchedRules() {
 
   if (m_mode == SelectorChecker::CollectingStyleRules) {
     for (unsigned i = 0; i < m_matchedRules.size(); ++i)
-      ensureStyleRuleList()->append(m_matchedRules[i].ruleData()->rule());
+      ensureStyleRuleList()->push_back(m_matchedRules[i].ruleData()->rule());
     return;
   }
 
@@ -337,7 +342,7 @@ void ElementRuleCollector::didMatchRule(
     if (m_style && ruleData.containsUncommonAttributeSelector())
       m_style->setUnique();
 
-    m_matchedRules.append(
+    m_matchedRules.push_back(
         MatchedRule(&ruleData, result.specificity, cascadeOrder,
                     matchRequest.styleSheetIndex, matchRequest.styleSheet));
   }

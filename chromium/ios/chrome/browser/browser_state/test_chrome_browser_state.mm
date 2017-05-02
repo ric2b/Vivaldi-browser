@@ -48,6 +48,10 @@
 #include "ios/web/public/web_thread.h"
 #include "net/url_request/url_request_test_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 std::unique_ptr<KeyedService> BuildHistoryService(web::BrowserState* context) {
   ios::ChromeBrowserState* browser_state =
@@ -174,8 +178,6 @@ void TestChromeBrowserState::Init() {
   // Normally this would happen during browser startup, but for tests we need to
   // trigger creation of BrowserState-related services.
   EnsureBrowserStateKeyedServiceFactoriesBuilt();
-  if (ios::GetChromeBrowserProvider())
-    ios::GetChromeBrowserProvider()->AssertBrowserContextKeyedFactoriesBuilt();
 
   if (prefs_) {
     // If user passed a custom PrefServiceSyncable, then leave |testing_prefs_|

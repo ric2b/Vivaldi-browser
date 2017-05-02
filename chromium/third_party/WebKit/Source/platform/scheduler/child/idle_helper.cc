@@ -66,7 +66,7 @@ void IdleHelper::Shutdown() {
   is_shutdown_ = true;
   weak_factory_.InvalidateWeakPtrs();
   // Belt & braces, might not be needed.
-  idle_queue_->SetQueueEnabled(false);
+  idle_queue_->InsertFence(TaskQueue::InsertFencePosition::BEGINNING_OF_TIME);
   helper_->RemoveTaskObserver(this);
 }
 
@@ -173,6 +173,9 @@ void IdleHelper::StartIdlePeriod(IdlePeriodState new_state,
   DCHECK_GT(idle_period_deadline, now);
   helper_->CheckOnValidThread();
   DCHECK(IsInIdlePeriod(new_state));
+
+  // Allow any ready delayed idle tasks to run.
+  idle_task_runner_->EnqueueReadyDelayedIdleTasks();
 
   base::TimeDelta idle_period_duration(idle_period_deadline - now);
   if (idle_period_duration <
@@ -319,6 +322,10 @@ void IdleHelper::DidProcessIdleTask() {
   if (IsInLongIdlePeriod(state_.idle_period_state())) {
     UpdateLongIdlePeriodStateAfterIdleTask();
   }
+}
+
+base::TimeTicks IdleHelper::NowTicks() {
+  return helper_->scheduler_tqm_delegate()->NowTicks();
 }
 
 // static

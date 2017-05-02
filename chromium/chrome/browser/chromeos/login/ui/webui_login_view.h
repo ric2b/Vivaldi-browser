@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
@@ -18,8 +19,7 @@
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace content {
 class WebUI;
@@ -43,10 +43,20 @@ class WebUILoginView : public views::View,
                        public ChromeWebModalDialogManagerDelegate,
                        public web_modal::WebContentsModalDialogHost {
  public:
+  struct WebViewSettings {
+    // If true, this will check for and consume a preloaded views::WebView
+    // instance.
+    bool check_for_preload = false;
+
+    // Title of the web contents. This will be shown in the task manager. If
+    // empty, the default webview title will be used.
+    base::string16 web_view_title;
+  };
+
   // Internal class name.
   static const char kViewClassName[];
 
-  WebUILoginView();
+  explicit WebUILoginView(const WebViewSettings& settings);
   ~WebUILoginView() override;
 
   // Initializes the webui login view.
@@ -105,6 +115,9 @@ class WebUILoginView : public views::View,
   }
 
  protected:
+  static void InitializeWebView(views::WebView* web_view,
+                                const base::string16& title);
+
   // Overridden from views::View:
   void Layout() override;
   void OnLocaleChanged() override;
@@ -116,8 +129,7 @@ class WebUILoginView : public views::View,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // WebView for rendering a webpage as a webui login.
-  views::WebView* webui_login_ = nullptr;
+  views::WebView* web_view();
 
  private:
   // Map type for the accelerator-to-identifier map.
@@ -148,6 +160,15 @@ class WebUILoginView : public views::View,
 
   content::NotificationRegistrar registrar_;
 
+  // WebView configuration options.
+  const WebViewSettings settings_;
+
+  // WebView for rendering a webpage as a webui login.
+  std::unique_ptr<views::WebView> webui_login_;
+
+  // True if the current webview instance (ie, GetWebUI()) has been reused.
+  bool is_reusing_webview_ = false;
+
   // Converts keyboard events on the WebContents to accelerators.
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
@@ -166,17 +187,6 @@ class WebUILoginView : public views::View,
 
   // True to forward keyboard event.
   bool forward_keyboard_event_ = true;
-
-  // A FocusTraversable for StatusAreaWidget that uses
-  // |status_area_widget_host_| as placeholder in WebUiLoginView's focus chain.
-  class StatusAreaFocusTraversable;
-  std::unique_ptr<StatusAreaFocusTraversable> status_area_focus_traversable_;
-  views::View* status_area_widget_host_ = nullptr;
-
-  // A FocusTraversable for WebUILoginView that loops back at the end of its
-  // focus chain.
-  class CycleFocusTraversable;
-  std::unique_ptr<CycleFocusTraversable> cycle_focus_traversable_;
 
   base::ObserverList<web_modal::ModalDialogHostObserver> observer_list_;
 

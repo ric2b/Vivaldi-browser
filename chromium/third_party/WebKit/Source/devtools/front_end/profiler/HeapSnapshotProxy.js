@@ -157,7 +157,7 @@ Profiler.HeapSnapshotWorkerProxy = class extends Common.Object {
         this._previousCallbacks.delete(callId);
     }
     var hasLongRunningCalls = !!this._previousCallbacks.size;
-    this.dispatchEventToListeners('wait', hasLongRunningCalls);
+    this.dispatchEventToListeners(Profiler.HeapSnapshotWorkerProxy.Events.Wait, hasLongRunningCalls);
     for (var callId of this._callbacks.keysArray())
       this._previousCallbacks.add(callId);
   }
@@ -191,6 +191,10 @@ Profiler.HeapSnapshotWorkerProxy = class extends Common.Object {
   _postMessage(message) {
     this._worker.postMessage(message);
   }
+};
+
+Profiler.HeapSnapshotWorkerProxy.Events = {
+  Wait: Symbol('Wait')
 };
 
 /**
@@ -330,13 +334,13 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
    */
   constructor(worker, objectId) {
     super(worker, objectId);
-    /** @type {?Profiler.HeapSnapshotCommon.StaticData} */
+    /** @type {?HeapSnapshotModel.StaticData} */
     this._staticData = null;
   }
 
   /**
-   * @param {!Profiler.HeapSnapshotCommon.SearchConfig} searchConfig
-   * @param {!Profiler.HeapSnapshotCommon.NodeFilter} filter
+   * @param {!HeapSnapshotModel.SearchConfig} searchConfig
+   * @param {!HeapSnapshotModel.NodeFilter} filter
    * @return {!Promise<!Array<number>>}
    */
   search(searchConfig, filter) {
@@ -344,8 +348,8 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
   }
 
   /**
-   * @param {!Profiler.HeapSnapshotCommon.NodeFilter} filter
-   * @param {function(!Object.<string, !Profiler.HeapSnapshotCommon.Aggregate>)} callback
+   * @param {!HeapSnapshotModel.NodeFilter} filter
+   * @param {function(!Object.<string, !HeapSnapshotModel.Aggregate>)} callback
    */
   aggregatesWithFilter(filter, callback) {
     this.callMethod(callback, 'aggregatesWithFilter', filter);
@@ -411,7 +415,7 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
 
   /**
    * @param {string} className
-   * @param {!Profiler.HeapSnapshotCommon.NodeFilter} nodeFilter
+   * @param {!HeapSnapshotModel.NodeFilter} nodeFilter
    * @return {?Profiler.HeapSnapshotProviderProxy}
    */
   createNodesProviderForClass(className, nodeFilter) {
@@ -425,7 +429,7 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
 
   /**
    * @param {number} nodeId
-   * @param {function(!Profiler.HeapSnapshotCommon.AllocationNodeCallers)} callback
+   * @param {function(!HeapSnapshotModel.AllocationNodeCallers)} callback
    */
   allocationNodeCallers(nodeId, callback) {
     this.callMethod(callback, 'allocationNodeCallers', nodeId);
@@ -433,7 +437,7 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
 
   /**
    * @param {number} nodeIndex
-   * @param {function(?Array.<!Profiler.HeapSnapshotCommon.AllocationStackFrame>)} callback
+   * @param {function(?Array.<!HeapSnapshotModel.AllocationStackFrame>)} callback
    */
   allocationStack(nodeIndex, callback) {
     this.callMethod(callback, 'allocationStack', nodeIndex);
@@ -456,7 +460,7 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
 
   updateStaticData(callback) {
     /**
-     * @param {!Profiler.HeapSnapshotCommon.StaticData} staticData
+     * @param {!HeapSnapshotModel.StaticData} staticData
      * @this {Profiler.HeapSnapshotProxy}
      */
     function dataReceived(staticData) {
@@ -467,14 +471,14 @@ Profiler.HeapSnapshotProxy = class extends Profiler.HeapSnapshotProxyObject {
   }
 
   /**
-   * @return {!Promise.<!Profiler.HeapSnapshotCommon.Statistics>}
+   * @return {!Promise.<!HeapSnapshotModel.Statistics>}
    */
   getStatistics() {
     return this._callMethodPromise('getStatistics');
   }
 
   /**
-   * @return {!Promise.<?Profiler.HeapSnapshotCommon.Samples>}
+   * @return {!Promise.<?HeapSnapshotModel.Samples>}
    */
   getSamples() {
     return this._callMethodPromise('getSamples');
@@ -534,7 +538,7 @@ Profiler.HeapSnapshotProviderProxy = class extends Profiler.HeapSnapshotProxyObj
    * @override
    * @param {number} startPosition
    * @param {number} endPosition
-   * @param {function(!Profiler.HeapSnapshotCommon.ItemsRange)} callback
+   * @param {function(!HeapSnapshotModel.ItemsRange)} callback
    */
   serializeItemsRange(startPosition, endPosition, callback) {
     this.callMethod(callback, 'serializeItemsRange', startPosition, endPosition);
@@ -542,7 +546,7 @@ Profiler.HeapSnapshotProviderProxy = class extends Profiler.HeapSnapshotProxyObj
 
   /**
    * @override
-   * @param {!Profiler.HeapSnapshotCommon.ComparatorConfig} comparator
+   * @param {!HeapSnapshotModel.ComparatorConfig} comparator
    * @return {!Promise<?>}
    */
   sortAndRewind(comparator) {

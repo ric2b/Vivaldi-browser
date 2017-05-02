@@ -77,6 +77,7 @@ vs-chromium-project.txt
 /build/linux/bin/eu-strip
 /build/linux/debian_*-sysroot/
 /build/linux/ubuntu_*-sysroot/
+/build/ios_files
 /build/mac_files
 /buildtools
 # The Chrome OS build creates a /c symlink due to http://crbug.com/54866.
@@ -191,6 +192,10 @@ vs-chromium-project.txt
 /ios/third_party/earl_grey/src
 /ios/third_party/fishhook/src
 /ios/third_party/gcdwebserver/src
+/ios/third_party/material_components_ios/src
+/ios/third_party/material_font_disk_loader_ios/src
+/ios/third_party/material_roboto_font_loader_ios/src
+/ios/third_party/material_sprited_animation_view_ios/src
 /ios/third_party/material_text_accessibility_ios/src
 /ios/third_party/ochamcrest/src
 /ios_internal
@@ -344,8 +349,10 @@ vs-chromium-project.txt
 /third_party/fontconfig/src
 /third_party/freetype-android/src
 /third_party/freetype2/src
+/third_party/gestures/gestures
 /third_party/gles2_conform
 /third_party/glslang/src
+/third_party/glslang-angle/src
 /third_party/gnu_binutils/
 /third_party/google_appengine_cloudstorage
 /third_party/google_toolbox_for_mac/src
@@ -355,7 +362,6 @@ vs-chromium-project.txt
 /third_party/gvr-android-sdk/libgvr_shim_static_arm64.a
 /third_party/gvr-android-sdk/src
 /third_party/gperf
-/third_party/grpc
 /third_party/guava/lib/*.jar
 /third_party/hamcrest/lib/*.jar
 /third_party/httpcomponents-client
@@ -377,6 +383,8 @@ vs-chromium-project.txt
 /third_party/leveldb
 /third_party/libc++-static/libc++.a
 /third_party/libaddressinput/src
+/third_party/libdrm/src
+/third_party/libevdev/src
 /third_party/libexif/sources
 /third_party/libFuzzer/src
 /third_party/libjingle/source
@@ -403,6 +411,11 @@ vs-chromium-project.txt
 /third_party/nacl_sdk_binaries/
 /third_party/netty-tcnative/src
 /third_party/netty4/src
+/third_party/node/linux
+/third_party/node/mac
+/third_party/node/node_modules
+/third_party/node/*.tar.gz
+/third_party/node/win
 /third_party/nss
 /third_party/objenesis/lib/*.jar
 /third_party/omaha/src/omaha
@@ -413,8 +426,6 @@ vs-chromium-project.txt
 /third_party/pdfium
 /third_party/pefile
 /third_party/perl
-/third_party/platformsdk_win7
-/third_party/platformsdk_win8
 /third_party/ppapi
 /third_party/psyco_win32
 /third_party/pthreads-win32
@@ -429,6 +440,7 @@ vs-chromium-project.txt
 /third_party/pywebsocket/src
 /third_party/re2/src
 /third_party/requests/src
+/third_party/retrolambda/*.jar
 /third_party/robolectric/lib/*.jar
 /third_party/robolectric/robolectric
 /third_party/scons-2.0.1
@@ -437,7 +449,9 @@ vs-chromium-project.txt
 /third_party/skia
 /third_party/smhasher/src
 /third_party/snappy/src
+/third_party/spirv-headers/src
 /third_party/SPIRV-Tools/src
+/third_party/spirv-tools-angle/src
 /third_party/sqlite4java/lib/**/*.dll
 /third_party/sqlite4java/lib/**/*.jar
 /third_party/sqlite4java/lib/**/*.jnilib
@@ -451,6 +465,7 @@ vs-chromium-project.txt
 /third_party/usrsctp/usrsctplib
 /third_party/v8-i18n
 /third_party/valgrind
+/third_party/vulkan-validation-layers/src
 /third_party/v4l2capture
 /third_party/visualmetrics
 /third_party/wayland/src
@@ -466,6 +481,7 @@ vs-chromium-project.txt
 /third_party/widevine/cdm/linux
 /third_party/widevine/cdm/mac
 /third_party/widevine/cdm/win
+/third_party/widevine/scripts
 /third_party/widevine/test/license_server
 /third_party/win_toolchain/.timestamps
 /third_party/win_toolchain/files

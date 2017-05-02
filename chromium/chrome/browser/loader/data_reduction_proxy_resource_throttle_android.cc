@@ -8,10 +8,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/profiles/profile_io_data.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/load_flags.h"
@@ -43,9 +43,10 @@ DataReductionProxyResourceThrottle::MaybeCreate(
     SafeBrowsingService* sb_service) {
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
   // Don't create the throttle if we can't handle the request.
-  if (io_data->IsOffTheRecord() || !io_data->IsDataReductionProxyEnabled() ||
+  if (io_data->IsOffTheRecord() || !io_data->data_reduction_proxy_io_data() ||
+      !io_data->data_reduction_proxy_io_data()->IsEnabled() ||
       request->url().SchemeIsCryptographic()) {
-    return NULL;
+    return nullptr;
   }
 
   return new DataReductionProxyResourceThrottle(request, resource_type,
@@ -79,14 +80,14 @@ void DataReductionProxyResourceThrottle::WillRedirectRequest(
     return;
 
   if (request_->load_flags() & net::LOAD_PREFETCH) {
-    controller()->Cancel();
+    Cancel();
     return;
   }
   const content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(request_);
 
   state_ = STATE_DISPLAYING_BLOCKING_PAGE;
-  SafeBrowsingUIManager::UnsafeResource unsafe_resource;
+  security_interstitials::UnsafeResource unsafe_resource;
   unsafe_resource.url = redirect_info.new_url;
   unsafe_resource.original_url = request_->original_url();
   unsafe_resource.redirect_urls = redirect_urls_;
@@ -118,7 +119,7 @@ const char* DataReductionProxyResourceThrottle::GetNameForLogging() const {
 void DataReductionProxyResourceThrottle::StartDisplayingBlockingPage(
     const base::WeakPtr<DataReductionProxyResourceThrottle>& throttle,
     scoped_refptr<SafeBrowsingUIManager> ui_manager,
-    const SafeBrowsingUIManager::UnsafeResource& resource) {
+    const security_interstitials::UnsafeResource& resource) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   content::WebContents* web_contents = resource.web_contents_getter.Run();
@@ -145,7 +146,7 @@ void DataReductionProxyResourceThrottle::OnBlockingPageComplete(bool proceed) {
   if (proceed)
     ResumeRequest();
   else
-    controller()->Cancel();
+    Cancel();
 }
 
 SBThreatType DataReductionProxyResourceThrottle::CheckUrl() {
@@ -176,5 +177,5 @@ void DataReductionProxyResourceThrottle::ResumeRequest() {
 
   // Inject the header before resuming the request.
   request_->SetExtraRequestHeaderByName(kUnsafeUrlProceedHeader, "1", true);
-  controller()->Resume();
+  Resume();
 }

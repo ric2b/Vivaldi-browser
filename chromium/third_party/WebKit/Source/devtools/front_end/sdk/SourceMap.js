@@ -31,12 +31,12 @@
 /**
  * @unrestricted
  */
-var SourceMapV3 = class {
+SDK.SourceMapV3 = class {
   constructor() {
     /** @type {number} */ this.version;
     /** @type {string|undefined} */ this.file;
     /** @type {!Array.<string>} */ this.sources;
-    /** @type {!Array.<!SourceMapV3.Section>|undefined} */ this.sections;
+    /** @type {!Array.<!SDK.SourceMapV3.Section>|undefined} */ this.sections;
     /** @type {string} */ this.mappings;
     /** @type {string|undefined} */ this.sourceRoot;
     /** @type {!Array.<string>|undefined} */ this.names;
@@ -46,17 +46,17 @@ var SourceMapV3 = class {
 /**
  * @unrestricted
  */
-SourceMapV3.Section = class {
+SDK.SourceMapV3.Section = class {
   constructor() {
-    /** @type {!SourceMapV3} */ this.map;
-    /** @type {!SourceMapV3.Offset} */ this.offset;
+    /** @type {!SDK.SourceMapV3} */ this.map;
+    /** @type {!SDK.SourceMapV3.Offset} */ this.offset;
   }
 };
 
 /**
  * @unrestricted
  */
-SourceMapV3.Offset = class {
+SDK.SourceMapV3.Offset = class {
   constructor() {
     /** @type {number} */ this.line;
     /** @type {number} */ this.column;
@@ -94,49 +94,49 @@ SDK.SourceMap.prototype = {
   /**
    * @return {string}
    */
-  compiledURL: function() {},
+  compiledURL() {},
 
   /**
    * @return {string}
    */
-  url: function() {},
+  url() {},
 
   /**
    * @return {!Array<string>}
    */
-  sourceURLs: function() {},
+  sourceURLs() {},
 
   /**
    * @param {string} sourceURL
    * @param {!Common.ResourceType} contentType
    * @return {!Common.ContentProvider}
    */
-  sourceContentProvider: function(sourceURL, contentType) {},
+  sourceContentProvider(sourceURL, contentType) {},
 
   /**
    * @param {string} sourceURL
    * @return {?string}
    */
-  embeddedContentByURL: function(sourceURL) {},
+  embeddedContentByURL(sourceURL) {},
 
   /**
    * @param {number} lineNumber in compiled resource
    * @param {number} columnNumber in compiled resource
    * @return {?SDK.SourceMapEntry}
    */
-  findEntry: function(lineNumber, columnNumber) {},
+  findEntry(lineNumber, columnNumber) {},
 
   /**
    * @return {boolean}
    */
-  editable: function() {},
+  editable() {},
 
   /**
    * @param {!Array<!Common.TextRange>} ranges
    * @param {!Array<string>} texts
    * @return {!Promise<?SDK.SourceMap.EditResult>}
    */
-  editCompiled: function(ranges, texts) {},
+  editCompiled(ranges, texts) {},
 };
 
 /**
@@ -166,7 +166,7 @@ SDK.SourceMapFactory.prototype = {
    * @param {!SDK.SourceMap} sourceMap
    * @return {!Promise<?SDK.SourceMap>}
    */
-  editableSourceMap: function(target, sourceMap) {},
+  editableSourceMap(target, sourceMap) {},
 };
 
 /**
@@ -179,7 +179,7 @@ SDK.TextSourceMap = class {
    * for format description.
    * @param {string} compiledURL
    * @param {string} sourceMappingURL
-   * @param {!SourceMapV3} payload
+   * @param {!SDK.SourceMapV3} payload
    */
   constructor(compiledURL, sourceMappingURL, payload) {
     if (!SDK.TextSourceMap._base64Map) {
@@ -225,7 +225,7 @@ SDK.TextSourceMap = class {
       if (content.slice(0, 3) === ')]}')
         content = content.substring(content.indexOf('\n'));
       try {
-        var payload = /** @type {!SourceMapV3} */ (JSON.parse(content));
+        var payload = /** @type {!SDK.SourceMapV3} */ (JSON.parse(content));
         var baseURL = sourceMapURL.startsWith('data:') ? compiledURL : sourceMapURL;
         callback(new SDK.TextSourceMap(compiledURL, baseURL, payload));
       } catch (e) {
@@ -399,7 +399,7 @@ SDK.TextSourceMap = class {
   }
 
   /**
-   * @param {function(!SourceMapV3, number, number)} callback
+   * @param {function(!SDK.SourceMapV3, number, number)} callback
    */
   _eachSection(callback) {
     if (!this._json.sections) {
@@ -411,7 +411,7 @@ SDK.TextSourceMap = class {
   }
 
   /**
-   * @param {!SourceMapV3} sourceMap
+   * @param {!SDK.SourceMapV3} sourceMap
    */
   _parseSources(sourceMap) {
     var sourcesList = [];
@@ -431,7 +431,7 @@ SDK.TextSourceMap = class {
   }
 
   /**
-   * @param {!SourceMapV3} map
+   * @param {!SDK.SourceMapV3} map
    * @param {number} lineNumber
    * @param {number} columnNumber
    */

@@ -4,6 +4,11 @@
 
 #include "components/arc/test/fake_intent_helper_instance.h"
 
+#include <utility>
+
+#include "base/bind.h"
+#include "base/threading/thread_task_runner_handle.h"
+
 namespace arc {
 
 FakeIntentHelperInstance::FakeIntentHelperInstance() {}
@@ -22,17 +27,39 @@ FakeIntentHelperInstance::Broadcast::Broadcast(const Broadcast& broadcast)
 
 FakeIntentHelperInstance::Broadcast::~Broadcast() {}
 
+FakeIntentHelperInstance::HandledIntent::HandledIntent(
+    mojom::IntentInfoPtr intent,
+    mojom::ActivityNamePtr activity)
+    : intent(std::move(intent)), activity(std::move(activity)) {}
+
+FakeIntentHelperInstance::HandledIntent::HandledIntent(HandledIntent&& other) =
+    default;
+
+FakeIntentHelperInstance::HandledIntent&
+FakeIntentHelperInstance::HandledIntent::operator=(HandledIntent&& other) =
+    default;
+
+FakeIntentHelperInstance::HandledIntent::~HandledIntent() = default;
+
+void FakeIntentHelperInstance::SetIntentHandlers(
+    const std::string& action,
+    std::vector<mojom::IntentHandlerInfoPtr> handlers) {
+  intent_handlers_[action] = std::move(handlers);
+}
+
 FakeIntentHelperInstance::~FakeIntentHelperInstance() {}
 
 void FakeIntentHelperInstance::AddPreferredPackage(
     const std::string& package_name) {}
 
-void FakeIntentHelperInstance::GetFileSize(
+void FakeIntentHelperInstance::GetFileSizeDeprecated(
     const std::string& url,
-    const GetFileSizeCallback& callback) {}
+    const GetFileSizeDeprecatedCallback& callback) {}
 
 void FakeIntentHelperInstance::HandleIntent(mojom::IntentInfoPtr intent,
-                                            mojom::ActivityNamePtr activity) {}
+                                            mojom::ActivityNamePtr activity) {
+  handled_intents_.emplace_back(std::move(intent), std::move(activity));
+}
 
 void FakeIntentHelperInstance::HandleUrl(const std::string& url,
                                          const std::string& package_name) {}
@@ -44,9 +71,9 @@ void FakeIntentHelperInstance::HandleUrlList(
 
 void FakeIntentHelperInstance::Init(mojom::IntentHelperHostPtr host_ptr) {}
 
-void FakeIntentHelperInstance::OpenFileToRead(
+void FakeIntentHelperInstance::OpenFileToReadDeprecated(
     const std::string& url,
-    const OpenFileToReadCallback& callback) {}
+    const OpenFileToReadDeprecatedCallback& callback) {}
 
 void FakeIntentHelperInstance::RequestActivityIcons(
     std::vector<mojom::ActivityNamePtr> activities,
@@ -55,7 +82,19 @@ void FakeIntentHelperInstance::RequestActivityIcons(
 
 void FakeIntentHelperInstance::RequestIntentHandlerList(
     mojom::IntentInfoPtr intent,
-    const RequestIntentHandlerListCallback& callback) {}
+    const RequestIntentHandlerListCallback& callback) {
+  std::vector<mojom::IntentHandlerInfoPtr> handlers;
+  const auto it = intent_handlers_.find(intent->action);
+  if (it != intent_handlers_.end()) {
+    handlers.reserve(it->second.size());
+    for (const auto& handler : it->second) {
+      handlers.emplace_back(handler.Clone());
+    }
+  }
+  // Post the reply to run asynchronously to match the real implementation.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, base::Passed(std::move(handlers))));
+}
 
 void FakeIntentHelperInstance::RequestUrlHandlerList(
     const std::string& url,

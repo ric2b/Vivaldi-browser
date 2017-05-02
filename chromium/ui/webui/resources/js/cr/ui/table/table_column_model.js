@@ -218,7 +218,5 @@ cr.define('cr.ui.table', function() {
     }
   };
 
-  return {
-    TableColumnModel: TableColumnModel
-  };
+  return {TableColumnModel: TableColumnModel};
 });

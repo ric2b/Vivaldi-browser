@@ -79,14 +79,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabSize) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "tab_size.html")) << message_;
 }
 
-// Flaky on linux: http://crbug.com/396364
-// Flaky on Mac: https://crbug.com/588827
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_TabUpdate DISABLED_TabUpdate
-#else
-#define MAYBE_TabUpdate TabUpdate
-#endif
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_TabUpdate) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabUpdate) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "update.html")) << message_;
 }
 
@@ -278,6 +271,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_GetViewsOfCreatedWindow) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, OnUpdatedDiscardedState) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "discarded.html")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabOpenerCraziness) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("tabs/tab_opener_id"));
 }
 
 // Adding a new test? Awesome. But API tests are the old hotness. The new

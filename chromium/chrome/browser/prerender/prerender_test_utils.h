@@ -31,11 +31,6 @@ namespace base {
 class FilePath;
 }  // namespace base
 
-namespace net {
-class URLRequest;
-class NetworkDelegate;
-}  // namespace net
-
 namespace prerender {
 
 namespace test_utils {
@@ -242,6 +237,29 @@ class DestructionWaiter {
   DISALLOW_COPY_AND_ASSIGN(DestructionWaiter);
 };
 
+// Wait until a PrerenderManager has seen a first contentful paint.
+class FirstContentfulPaintManagerWaiter : public PrerenderManagerObserver {
+ public:
+  // Create and return a pointer to a |FirstContentfulPaintManagerWaiter|. The
+  // instance is owned by the |PrerenderManager|.
+  static FirstContentfulPaintManagerWaiter* Create(PrerenderManager* manager);
+
+  ~FirstContentfulPaintManagerWaiter() override;
+
+  void OnFirstContentfulPaint() override;
+
+  // Wait for a first contentful paint to be seen by our PrerenderManager.
+  void Wait();
+
+ private:
+  FirstContentfulPaintManagerWaiter();
+
+  std::unique_ptr<base::RunLoop> waiter_;
+  bool saw_fcp_;
+
+  DISALLOW_COPY_AND_ASSIGN(FirstContentfulPaintManagerWaiter);
+};
+
 // PrerenderContentsFactory that uses TestPrerenderContents.
 class TestPrerenderContentsFactory : public PrerenderContents::Factory {
  public:
@@ -375,8 +393,22 @@ void CreateCountingInterceptorOnIO(
     const base::FilePath& file,
     const base::WeakPtr<RequestCounter>& counter);
 
+// When the |url| hits the net::URLRequestFilter (on the IO thread), executes
+// the |callback_io| providing the request to it, also pings the |counter| on UI
+// thread. Does not modify the behavior or the request job.
+void InterceptRequestAndCount(
+    const GURL& url,
+    RequestCounter* counter,
+    base::Callback<void(net::URLRequest*)> callback_io);
+
 // Makes |url| respond to requests with the contents of |file|.
 void CreateMockInterceptorOnIO(const GURL& url, const base::FilePath& file);
+
+// Makes |url| never respond on the first load, and then with the contents of
+// |file| afterwards. When the first load has been scheduled, runs |callback| on
+// the UI thread.
+void CreateHangingFirstRequestInterceptorOnIO(
+    const GURL& url, const base::FilePath& file, base::Closure callback);
 
 }  // namespace test_utils
 

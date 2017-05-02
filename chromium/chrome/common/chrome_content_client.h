@@ -15,8 +15,9 @@
 #include "build/build_config.h"
 #include "chrome/common/origin_trials/chrome_origin_trial_policy.h"
 #include "content/public/common/content_client.h"
+#include "ppapi/features/features.h"
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/common/pepper_plugin_info.h"
 #endif
 
@@ -51,7 +52,7 @@ class ChromeContentClient : public content::ContentClient {
       content::PepperPluginInfo::PPP_ShutdownModuleFunc shutdown_module);
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   static void SetPDFEntryFunctions(
       content::PepperPluginInfo::GetInterfaceFunc get_interface,
       content::PepperPluginInfo::PPP_InitializeModuleFunc initialize_module,
@@ -73,9 +74,7 @@ class ChromeContentClient : public content::ContentClient {
       std::vector<content::PepperPluginInfo>* plugins) override;
   void AddContentDecryptionModules(
       std::vector<content::CdmInfo>* cdms) override;
-  void AddAdditionalSchemes(std::vector<url::SchemeWithType>* standard_schemes,
-                            std::vector<url::SchemeWithType>* referrer_schemes,
-                            std::vector<std::string>* saveable_shemes) override;
+  void AddAdditionalSchemes(Schemes* schemes) override;
   std::string GetProduct() const override;
   std::string GetUserAgent() const override;
   base::string16 GetLocalizedString(int message_id) const override;
@@ -93,10 +92,6 @@ class ChromeContentClient : public content::ContentClient {
       int* sandbox_profile_resource_id) const override;
 #endif
 
-  void AddSecureSchemesAndOrigins(std::set<std::string>* schemes,
-                                  std::set<GURL>* origins) override;
-
-  void AddServiceWorkerSchemes(std::set<std::string>* schemes) override;
   bool AllowScriptExtensionForServiceWorker(const GURL& script_url) override;
 
   bool IsSupplementarySiteIsolationModeEnabled() override;

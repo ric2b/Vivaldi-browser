@@ -12,6 +12,10 @@
 #include "base/strings/sys_string_conversions.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 NSString* const kEligibleDomainsKey = @"EligibleDomains";
@@ -63,6 +67,12 @@ NSString* const kEligibleDomainsKey = @"EligibleDomains";
                                                    ofType:@"plist"
                                               inDirectory:@"gm-config/ANY"];
   NSDictionary* configData = [NSDictionary dictionaryWithContentsOfFile:path];
+  if (!configData) {
+    // The plist is not packaged with Chromium builds.  This is not an error, so
+    // simply return early, since no domains are eligible for geolocation.
+    return;
+  }
+
   NSArray* eligibleDomains = base::mac::ObjCCastStrict<NSArray>(
       [configData objectForKey:kEligibleDomainsKey]);
   if (eligibleDomains) {
@@ -74,6 +84,7 @@ NSString* const kEligibleDomainsKey = @"EligibleDomains";
       }
     }
   }
+  // Make sure that if a plist exists, it contains at least one eligible domain.
   DCHECK(!_eligibleDomains.empty());
 }
 

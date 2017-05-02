@@ -98,7 +98,9 @@ class RecyclableCompositorMac : public ui::CompositorObserver {
 
 RecyclableCompositorMac::RecyclableCompositorMac()
     : accelerated_widget_mac_(new ui::AcceleratedWidgetMac()),
-      compositor_(content::GetContextFactory(),
+      compositor_(content::GetContextFactoryPrivate()->AllocateFrameSinkId(),
+                  content::GetContextFactory(),
+                  content::GetContextFactoryPrivate(),
                   ui::WindowResizeHelperMac::Get()->task_runner()) {
   compositor_.SetAcceleratedWidget(
       accelerated_widget_mac_->accelerated_widget());
@@ -175,7 +177,7 @@ BrowserCompositorMac::BrowserCompositorMac(
   root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   delegated_frame_host_.reset(new DelegatedFrameHost(
-      factory->GetContextFactory()->AllocateFrameSinkId(), this));
+      factory->GetContextFactoryPrivate()->AllocateFrameSinkId(), this));
 
   SetRenderWidgetHostIsHidden(render_widget_host_is_hidden);
   SetNSViewAttachedToWindow(ns_view_attached_to_window);
@@ -270,8 +272,7 @@ void BrowserCompositorMac::SwapCompositorFrame(
     uint32_t compositor_frame_sink_id,
     cc::CompositorFrame frame) {
   // Compute the frame size based on the root render pass rect size.
-  cc::RenderPass* root_pass =
-      frame.delegated_frame_data->render_pass_list.back().get();
+  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
   float scale_factor = frame.metadata.device_scale_factor;
   gfx::Size pixel_size = root_pass->output_rect.size();
   gfx::Size dip_size = gfx::ConvertSizeToDIP(scale_factor, pixel_size);

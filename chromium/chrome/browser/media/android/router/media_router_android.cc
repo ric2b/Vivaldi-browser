@@ -16,7 +16,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
-#include "base/strings/stringprintf.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
@@ -101,11 +100,9 @@ void MediaRouterAndroid::CreateRoute(
   bool is_incognito = web_contents
       && web_contents->GetBrowserContext()->IsOffTheRecord();
 
-  MediaRouteRequest* request = new MediaRouteRequest(
-      MediaSource(source_id),
-      presentation_id,
-      callbacks);
-  int route_request_id = route_requests_.Add(request);
+  int route_request_id =
+      route_requests_.Add(base::MakeUnique<MediaRouteRequest>(
+          MediaSource(source_id), presentation_id, callbacks));
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> jsource_id =
@@ -159,11 +156,8 @@ void MediaRouterAndroid::JoinRoute(
   DVLOG(2) << "JoinRoute: " << source_id << ", " << presentation_id << ", "
            << origin.spec() << ", " << tab_id;
 
-  MediaRouteRequest* request = new MediaRouteRequest(
-      MediaSource(source_id),
-      presentation_id,
-      callbacks);
-  int request_id = route_requests_.Add(request);
+  int request_id = route_requests_.Add(base::MakeUnique<MediaRouteRequest>(
+      MediaSource(source_id), presentation_id, callbacks));
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> jsource_id =
@@ -190,7 +184,7 @@ void MediaRouterAndroid::SendRouteMessage(
     const std::string& message,
     const SendRouteMessageCallback& callback) {
   int callback_id = message_callbacks_.Add(
-      new SendRouteMessageCallback(callback));
+      base::MakeUnique<SendRouteMessageCallback>(callback));
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> jroute_id =
           base::android::ConvertUTF8ToJavaString(env, route_id);
@@ -204,8 +198,8 @@ void MediaRouterAndroid::SendRouteBinaryMessage(
     const MediaRoute::Id& route_id,
     std::unique_ptr<std::vector<uint8_t>> data,
     const SendRouteMessageCallback& callback) {
-  int callback_id =
-      message_callbacks_.Add(new SendRouteMessageCallback(callback));
+  int callback_id = message_callbacks_.Add(
+      base::MakeUnique<SendRouteMessageCallback>(callback));
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> jroute_id =
       base::android::ConvertUTF8ToJavaString(env, route_id);
@@ -215,7 +209,7 @@ void MediaRouterAndroid::SendRouteBinaryMessage(
                                            jbyte_array, callback_id);
 }
 
-void MediaRouterAndroid::AddIssue(const Issue& issue) {
+void MediaRouterAndroid::AddIssue(const IssueInfo& issue_info) {
   NOTIMPLEMENTED();
 }
 
@@ -245,11 +239,9 @@ void MediaRouterAndroid::DetachRoute(const MediaRoute::Id& route_id) {
 bool MediaRouterAndroid::RegisterMediaSinksObserver(
     MediaSinksObserver* observer) {
   const std::string& source_id = observer->source().id();
-  base::ObserverList<MediaSinksObserver>* observer_list =
-      sinks_observers_.get(source_id);
+  auto& observer_list = sinks_observers_[source_id];
   if (!observer_list) {
-    observer_list = new base::ObserverList<MediaSinksObserver>;
-    sinks_observers_.add(source_id, base::WrapUnique(observer_list));
+    observer_list = base::MakeUnique<base::ObserverList<MediaSinksObserver>>();
   } else {
     DCHECK(!observer_list->HasObserver(observer));
   }
@@ -265,16 +257,16 @@ bool MediaRouterAndroid::RegisterMediaSinksObserver(
 void MediaRouterAndroid::UnregisterMediaSinksObserver(
     MediaSinksObserver* observer) {
   const std::string& source_id = observer->source().id();
-  auto* observer_list = sinks_observers_.get(source_id);
-  if (!observer_list || !observer_list->HasObserver(observer))
+  auto it = sinks_observers_.find(source_id);
+  if (it == sinks_observers_.end() || !it->second->HasObserver(observer))
     return;
 
   // If we are removing the final observer for the source, then stop
   // observing sinks for it.
   // might_have_observers() is reliable here on the assumption that this call
   // is not inside the ObserverList iteration.
-  observer_list->RemoveObserver(observer);
-  if (!observer_list->might_have_observers()) {
+  it->second->RemoveObserver(observer);
+  if (!it->second->might_have_observers()) {
     sinks_observers_.erase(source_id);
     JNIEnv* env = base::android::AttachCurrentThread();
     ScopedJavaLocalRef<jstring> jsource_id =
@@ -311,10 +303,10 @@ void MediaRouterAndroid::UnregisterIssuesObserver(IssuesObserver* observer) {
 void MediaRouterAndroid::RegisterRouteMessageObserver(
     RouteMessageObserver* observer) {
   const MediaRoute::Id& route_id = observer->route_id();
-  auto* observer_list = message_observers_.get(route_id);
+  auto& observer_list = message_observers_[route_id];
   if (!observer_list) {
-    observer_list = new base::ObserverList<RouteMessageObserver>;
-    message_observers_.add(route_id, base::WrapUnique(observer_list));
+    observer_list =
+        base::MakeUnique<base::ObserverList<RouteMessageObserver>>();
   } else {
     DCHECK(!observer_list->HasObserver(observer));
   }
@@ -325,7 +317,7 @@ void MediaRouterAndroid::RegisterRouteMessageObserver(
 void MediaRouterAndroid::UnregisterRouteMessageObserver(
     RouteMessageObserver* observer) {
   const MediaRoute::Id& route_id = observer->route_id();
-  auto* observer_list = message_observers_.get(route_id);
+  auto* observer_list = message_observers_[route_id].get();
   DCHECK(observer_list->HasObserver(observer));
 
   observer_list->RemoveObserver(observer);
@@ -455,14 +447,14 @@ void MediaRouterAndroid::OnMessage(JNIEnv* env,
                                    const JavaParamRef<jstring>& jmedia_route_id,
                                    const JavaParamRef<jstring>& jmessage) {
   MediaRoute::Id route_id = ConvertJavaStringToUTF8(env, jmedia_route_id);
-  auto* observer_list = message_observers_.get(route_id);
-  if (!observer_list)
+  auto it = message_observers_.find(route_id);
+  if (it == message_observers_.end())
     return;
 
   std::vector<RouteMessage> messages(1);
   messages.front().type = RouteMessage::TEXT;
   messages.front().text = ConvertJavaStringToUTF8(env, jmessage);
-  for (auto& observer : *observer_list)
+  for (auto& observer : *it->second.get())
     observer.OnMessagesReceived(messages);
 }
 

@@ -12,7 +12,6 @@
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
-namespace devtools {
 
 namespace {
 unsigned s_last_stream_handle = 0;
@@ -21,7 +20,7 @@ unsigned s_last_stream_handle = 0;
 using Stream = DevToolsIOContext::Stream;
 
 Stream::Stream()
-    : base::RefCountedDeleteOnMessageLoop<Stream>(
+    : base::RefCountedDeleteOnSequence<Stream>(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)),
       handle_(base::UintToString(++s_last_stream_handle)),
       had_errors_(false),
@@ -140,5 +139,4 @@ void DevToolsIOContext::DiscardAllStreams() {
   return streams_.clear();
 }
 
-}  // namespace devtools
 }  // namespace content

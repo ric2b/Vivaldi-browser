@@ -12,22 +12,25 @@ source_set("gpu") {
   sources = [
     "gpu_main.cc",
     "gpu_main.h",
-    "gpu_service_internal.cc",
-    "gpu_service_internal.h",
+    "gpu_service.cc",
+    "gpu_service.h",
   ]
 
   defines = [ "NOTIMPLEMENTED_POLICY=5" ]
 
   deps = [
+    "//cc",
+    "//gpu/ipc:command_buffer",
     "//gpu/ipc/common",
     "//gpu/ipc/service",
     "//ipc",
     "//media/gpu/ipc/service",
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
-    "//services/ui/common:mus_common",
+    "//services/ui/common:server_gpu",
     "//services/ui/gpu/interfaces",
     "//services/ui/public/interfaces",
+    "//services/ui/surfaces",
     "//ui/gfx:memory_buffer",
     "//ui/gl/init",
   ]

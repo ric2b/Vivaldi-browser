@@ -24,12 +24,7 @@ namespace {
 // browser_theme_pack.cc.
 
 const SkColor kDefaultColorFrame = SkColorSetRGB(0xCC, 0xCC, 0xCC);
-#if defined(OS_MACOSX)
-// Used for theme fallback colors.
-const SkColor kDefaultColorFrameInactive = SkColorSetRGB(0xF6, 0xF6, 0xF6);
-#else
-const SkColor kDefaultColorFrameInactive = SkColorSetRGB(0xDC, 0xDC, 0xDC);
-#endif
+const SkColor kDefaultColorFrameInactive = SkColorSetRGB(0xF5, 0xF5, 0xF5);
 
 #if defined(OS_MACOSX)
 const SkColor kDefaultColorFrameIncognito =

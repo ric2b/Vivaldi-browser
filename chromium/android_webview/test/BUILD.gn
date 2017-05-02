@@ -52,6 +52,8 @@ android_apk("android_webview_apk") {
   _native_lib_file =
       rebase_path("$root_gen_dir/CHROME_VERSION.json", root_build_dir)
   native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+
+  enable_multidex = true
 }
 
 android_resources("android_webview_apk_resources") {
@@ -99,9 +101,12 @@ instrumentation_test_apk("android_webview_test_apk") {
   apk_under_test = ":android_webview_apk"
   android_manifest = "../javatests/AndroidManifest.xml"
   deps = [
+    "//android_webview:android_webview_crash_services_java",
     "//android_webview:android_webview_java",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//components/minidump_uploader:minidump_uploader_java",
+    "//components/minidump_uploader:minidump_uploader_javatests",
     "//components/policy/android:policy_java",
     "//components/policy/android:policy_java_test_support",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
@@ -111,6 +116,7 @@ instrumentation_test_apk("android_webview_test_apk") {
     "//device/geolocation:geolocation_java_test_support",
     "//net/android:net_java",
     "//net/android:net_java_test_support",
+    "//third_party/android_support_test_runner:runner_java",
     "//third_party/android_tools:legacy_http_javalib",
     "//ui/android:ui_java",
   ]
@@ -189,6 +195,7 @@ instrumentation_test_apk("android_webview_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/WebViewAsynchronousFindApisTest.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewFindApisTestBase.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewModalDialogOverrideTest.java",
+    "../javatests/src/org/chromium/android_webview/test/crash/MinidumpUploaderTest.java",
     "../javatests/src/org/chromium/android_webview/test/util/AwQuotaManagerBridgeTestUtil.java",
     "../javatests/src/org/chromium/android_webview/test/util/AwTestTouchUtils.java",
     "../javatests/src/org/chromium/android_webview/test/util/CommonResources.java",
@@ -210,6 +217,9 @@ instrumentation_test_apk("android_webview_test_apk") {
 test("android_webview_unittests") {
   # Tests do not require any data, but our dependencies pull a lot in.
   ignore_all_data_deps = true
+
+  # Dependencies (e.g. Play services) make the binary reach the dex limit.
+  enable_multidex = true
 
   deps = [
     ":android_webview_unittests_assets",
@@ -259,7 +269,6 @@ android_library("android_webview_unittests_java") {
   deps = [
     "//android_webview:android_webview_java",
     "//base:base_java",
-    "//base:base_java_test_support",
     "//content/public/test/android:content_java_test_support",
   ]
   java_files = [

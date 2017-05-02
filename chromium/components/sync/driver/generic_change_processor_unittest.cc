@@ -70,18 +70,18 @@ class MockSyncApiComponentFactory : public SyncApiComponentFactory {
       SyncService* sync_service,
       const RegisterDataTypesMethod& register_platform_types_method) override {}
   DataTypeManager* CreateDataTypeManager(
+      ModelTypeSet initial_types,
       const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
       const DataTypeController::TypeMap* controllers,
       const DataTypeEncryptionHandler* encryption_handler,
-      SyncBackendHost* backend,
+      ModelTypeConfigurer* configurer,
       DataTypeManagerObserver* observer) override {
     return nullptr;
   };
-  SyncBackendHost* CreateSyncBackendHost(
-      const std::string& name,
-      invalidation::InvalidationService* invalidator,
-      const base::WeakPtr<SyncPrefs>& sync_prefs,
-      const base::FilePath& sync_folder) override {
+  SyncEngine* CreateSyncEngine(const std::string& name,
+                               invalidation::InvalidationService* invalidator,
+                               const base::WeakPtr<SyncPrefs>& sync_prefs,
+                               const base::FilePath& sync_folder) override {
     return nullptr;
   }
   std::unique_ptr<LocalDeviceInfoProvider> CreateLocalDeviceInfoProvider()
@@ -107,6 +107,12 @@ class MockSyncApiComponentFactory : public SyncApiComponentFactory {
     // destroy it.
     mock_attachment_service_ = attachment_service.get();
     return std::move(attachment_service);
+  }
+
+  SyncApiComponentFactory::SyncComponents CreateNotesSyncComponents(
+      syncer::SyncService* profile_sync_service,
+      std::unique_ptr<syncer::DataTypeErrorHandler> error_handler)override {
+    return SyncApiComponentFactory::SyncComponents(nullptr, nullptr);
   }
 
   MockAttachmentService* GetMockAttachmentService() {

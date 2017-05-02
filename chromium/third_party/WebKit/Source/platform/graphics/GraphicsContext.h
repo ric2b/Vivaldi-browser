@@ -30,27 +30,26 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/fonts/Font.h"
+#include "platform/graphics/ColorBehavior.h"
 #include "platform/graphics/DashArray.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextState.h"
 #include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/skia/SkiaUtils.h"
+#include "third_party/skia/include/core/SkClipOp.h"
 #include "third_party/skia/include/core/SkMetaData.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
 #include <memory>
 
 class SkBitmap;
-class SkImage;
 class SkPaint;
 class SkPath;
 class SkPicture;
 class SkRRect;
-struct SkImageInfo;
 struct SkRect;
 
 namespace blink {
@@ -72,9 +71,11 @@ class PLATFORM_EXPORT GraphicsContext {
                           // the context from performance tests.
   };
 
-  explicit GraphicsContext(PaintController&,
-                           DisabledMode = NothingDisabled,
-                           SkMetaData* = 0);
+  explicit GraphicsContext(
+      PaintController&,
+      DisabledMode = NothingDisabled,
+      SkMetaData* = 0,
+      ColorBehavior = ColorBehavior::transformToGlobalTarget());
 
   ~GraphicsContext();
 
@@ -82,6 +83,7 @@ class PLATFORM_EXPORT GraphicsContext {
   const SkCanvas* canvas() const { return m_canvas; }
 
   PaintController& getPaintController() { return m_paintController; }
+  const ColorBehavior& getColorBehavior() const { return m_colorBehavior; }
 
   bool contextDisabled() const { return m_disabledState; }
 
@@ -89,7 +91,7 @@ class PLATFORM_EXPORT GraphicsContext {
   void save();
   void restore();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   unsigned saveCount() const;
 #endif
 
@@ -222,22 +224,22 @@ class PLATFORM_EXPORT GraphicsContext {
   void clip(const IntRect& rect) { clipRect(rect); }
   void clip(const FloatRect& rect) { clipRect(rect); }
   void clipRoundedRect(const FloatRoundedRect&,
-                       SkRegion::Op = SkRegion::kIntersect_Op,
+                       SkClipOp = SkClipOp::kIntersect,
                        AntiAliasingMode = AntiAliased);
   void clipOut(const IntRect& rect) {
-    clipRect(rect, NotAntiAliased, SkRegion::kDifference_Op);
+    clipRect(rect, NotAntiAliased, SkClipOp::kDifference);
   }
   void clipOut(const FloatRect& rect) {
-    clipRect(rect, NotAntiAliased, SkRegion::kDifference_Op);
+    clipRect(rect, NotAntiAliased, SkClipOp::kDifference);
   }
   void clipOut(const Path&);
   void clipOutRoundedRect(const FloatRoundedRect&);
   void clipPath(const SkPath&,
                 AntiAliasingMode = NotAntiAliased,
-                SkRegion::Op = SkRegion::kIntersect_Op);
+                SkClipOp = SkClipOp::kIntersect);
   void clipRect(const SkRect&,
                 AntiAliasingMode = NotAntiAliased,
-                SkRegion::Op = SkRegion::kIntersect_Op);
+                SkClipOp = SkClipOp::kIntersect);
 
   void drawText(const Font&, const TextRunPaintInfo&, const FloatPoint&);
   void drawText(const Font&,
@@ -261,7 +263,7 @@ class PLATFORM_EXPORT GraphicsContext {
                             int from = 0,
                             int to = -1);
 
-  void drawLineForText(const FloatPoint&, float width, bool printing);
+  void drawLineForText(const FloatPoint&, float width);
   enum DocumentMarkerLineStyle {
     DocumentMarkerSpellingLineStyle,
     DocumentMarkerGrammarLineStyle
@@ -399,7 +401,7 @@ class PLATFORM_EXPORT GraphicsContext {
   // SkCanvas wrappers.
   void clipRRect(const SkRRect&,
                  AntiAliasingMode = NotAntiAliased,
-                 SkRegion::Op = SkRegion::kIntersect_Op);
+                 SkClipOp = SkClipOp::kIntersect);
   void concat(const SkMatrix&);
 
   // Apply deferred paint state saves
@@ -411,7 +413,7 @@ class PLATFORM_EXPORT GraphicsContext {
       m_paintState->decrementSaveCount();
       ++m_paintStateIndex;
       if (m_paintStateStack.size() == m_paintStateIndex) {
-        m_paintStateStack.append(
+        m_paintStateStack.push_back(
             GraphicsContextState::createAndCopy(*m_paintState));
         m_paintState = m_paintStateStack[m_paintStateIndex].get();
       } else {
@@ -448,8 +450,10 @@ class PLATFORM_EXPORT GraphicsContext {
 
   SkMetaData m_metaData;
 
+  const ColorBehavior m_colorBehavior;
+
 #if DCHECK_IS_ON()
-  unsigned m_layerCount;
+  int m_layerCount;
   bool m_disableDestructionChecks;
   bool m_inDrawingRecorder;
 #endif

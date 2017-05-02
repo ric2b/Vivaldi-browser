@@ -5,9 +5,13 @@
  * @unrestricted
  */
 Accessibility.AXTreePane = class extends Accessibility.AccessibilitySubPane {
-  constructor() {
+  /**
+   * @param {!Accessibility.AccessibilitySidebarView} axSidebarView
+   */
+  constructor(axSidebarView) {
     super(Common.UIString('Accessibility Tree'));
 
+    this._axSidebarView = axSidebarView;
     this._treeOutline = this.createTreeOutline();
 
     this.element.classList.add('accessibility-computed');
@@ -77,6 +81,21 @@ Accessibility.AXTreePane = class extends Accessibility.AccessibilitySubPane {
   }
 
   /**
+   * @param {!Accessibility.AccessibilityNode} axNode
+   */
+  setSelectedNode(axNode) {
+    if (axNode.parentNode()) {
+      Common.Revealer.reveal(axNode.deferredDOMNode());
+    } else {
+      // Only set the node for the accessibility panel, not the Elements tree.
+      var axSidebarView = this._axSidebarView;
+      axNode.deferredDOMNode().resolve((node) => {
+        axSidebarView.setNode(node);
+      });
+    }
+  }
+
+  /**
    * @param {boolean} selectedByUser
    */
   setSelectedByUser(selectedByUser) {
@@ -137,14 +156,14 @@ Accessibility.InspectNodeButton = class {
    */
   _handleMouseDown(event) {
     this._treePane.setSelectedByUser(true);
-    Common.Revealer.reveal(this._axNode.deferredDOMNode());
+    this._treePane.setSelectedNode(this._axNode);
   }
 };
 
 /**
  * @unrestricted
  */
-Accessibility.AXNodeTreeElement = class extends TreeElement {
+Accessibility.AXNodeTreeElement = class extends UI.TreeElement {
   /**
    * @param {!Accessibility.AccessibilityNode} axNode
    * @param {!Accessibility.AXTreePane} treePane
@@ -176,6 +195,11 @@ Accessibility.AXNodeTreeElement = class extends TreeElement {
    */
   setInspected(inspected) {
     this._inspected = inspected;
+    if (this._inspected)
+      this.setTrailingIcons([UI.Icon.create('smallicon-thick-left-arrow')]);
+    else
+      this.setTrailingIcons([]);
+
     this.listItemElement.classList.toggle('inspected', this._inspected);
   }
 
@@ -200,7 +224,7 @@ Accessibility.AXNodeTreeElement = class extends TreeElement {
 
   inspectDOMNode() {
     this._treePane.setSelectedByUser(true);
-    Common.Revealer.reveal(this._axNode.deferredDOMNode());
+    this._treePane.setSelectedNode(this._axNode);
   }
 
   /**
@@ -211,28 +235,28 @@ Accessibility.AXNodeTreeElement = class extends TreeElement {
   }
 
   _update() {
-    this.listItemElement.removeChildren();
+    this.titleElement().removeChildren();
 
     if (this._axNode.ignored()) {
       this._appendIgnoredNodeElement();
     } else {
       this._appendRoleElement(this._axNode.role());
       if (this._axNode.name().value) {
-        this.listItemElement.createChild('span', 'separator').textContent = '\u00A0';
+        this.titleElement().createChild('span', 'separator').textContent = '\u00A0';
         this._appendNameElement(/** @type {string} */ (this._axNode.name().value));
       }
     }
 
     if (this._axNode.hasOnlyUnloadedChildren()) {
-      this.listItemElement.classList.add('children-unloaded');
+      this.titleElement().classList.add('children-unloaded');
       this.setExpandable(true);
     } else {
       this.setExpandable(!!this._axNode.numChildren());
     }
 
     if (!this._axNode.isDOMNode())
-      this.listItemElement.classList.add('no-dom-node');
-    this.listItemElement.appendChild(this._inspectNodeButton.element);
+      this.titleElement().classList.add('no-dom-node');
+    this.titleElement().appendChild(this._inspectNodeButton.element);
   }
 
   /**
@@ -265,7 +289,7 @@ Accessibility.AXNodeTreeElement = class extends TreeElement {
     var nameElement = createElement('span');
     nameElement.textContent = '"' + name + '"';
     nameElement.classList.add('ax-readable-string');
-    this.listItemElement.appendChild(nameElement);
+    this.titleElement().appendChild(nameElement);
   }
 
   /**
@@ -279,14 +303,14 @@ Accessibility.AXNodeTreeElement = class extends TreeElement {
     roleElement.classList.add(Accessibility.AXNodeTreeElement.RoleStyles[role.type]);
     roleElement.setTextContentTruncatedIfNeeded(role.value || '');
 
-    this.listItemElement.appendChild(roleElement);
+    this.titleElement().appendChild(roleElement);
   }
 
   _appendIgnoredNodeElement() {
     var ignoredNodeElement = createElementWithClass('span', 'monospace');
     ignoredNodeElement.textContent = Common.UIString('Ignored');
     ignoredNodeElement.classList.add('ax-tree-ignored-node');
-    this.listItemElement.appendChild(ignoredNodeElement);
+    this.titleElement().appendChild(ignoredNodeElement);
   }
 
   /**
@@ -357,9 +381,9 @@ Accessibility.AXNodeTreeParentElement = class extends Accessibility.AXNodeTreeEl
   onattach() {
     super.onattach();
     if (this._treePane.isExpanded(this._axNode.backendDOMNodeId()))
-      this._listItemNode.classList.add('siblings-expanded');
+      this.listItemElement.classList.add('siblings-expanded');
     if (this._axNode.numChildren() > 1)
-      this._listItemNode.insertBefore(this._expandSiblingsButton.element, this._inspectNodeButton.element);
+      this.titleElement().insertBefore(this._expandSiblingsButton.element, this._inspectNodeButton.element);
   }
 
   /**
@@ -386,7 +410,7 @@ Accessibility.AXNodeTreeParentElement = class extends Accessibility.AXNodeTreeEl
   }
 
   expandSiblings() {
-    this._listItemNode.classList.add('siblings-expanded');
+    this.listItemElement.classList.add('siblings-expanded');
     this.appendSiblings();
     this.expanded = true;
     this._partiallyExpanded = false;

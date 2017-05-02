@@ -40,13 +40,13 @@ DevToolsToggleAction DevToolsToggleAction::Show() {
 }
 
 // static
-DevToolsToggleAction DevToolsToggleAction::ShowConsole() {
-  return DevToolsToggleAction(kShowConsole);
+DevToolsToggleAction DevToolsToggleAction::ShowConsolePanel() {
+  return DevToolsToggleAction(kShowConsolePanel);
 }
 
 // static
-DevToolsToggleAction DevToolsToggleAction::ShowSecurityPanel() {
-  return DevToolsToggleAction(kShowSecurityPanel);
+DevToolsToggleAction DevToolsToggleAction::ShowElementsPanel() {
+  return DevToolsToggleAction(kShowElementsPanel);
 }
 
 // static

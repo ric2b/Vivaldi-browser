@@ -34,6 +34,7 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
+#include "core/dom/Modulator.h"
 #include "platform/InstanceCounters.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StringExtras.h"
@@ -46,10 +47,9 @@ V8PerContextData::V8PerContextData(v8::Local<v8::Context> context)
     : m_isolate(context->GetIsolate()),
       m_wrapperBoilerplates(m_isolate),
       m_constructorMap(m_isolate),
-      m_contextHolder(makeUnique<gin::ContextHolder>(m_isolate)),
+      m_contextHolder(WTF::makeUnique<gin::ContextHolder>(m_isolate)),
       m_context(m_isolate, context),
-      m_activityLogger(0),
-      m_compiledPrivateScript(m_isolate) {
+      m_activityLogger(nullptr) {
   m_contextHolder->SetContext(context);
 
   v8::Context::Scope contextScope(context);
@@ -77,7 +77,7 @@ V8PerContextData::~V8PerContextData() {
 
 std::unique_ptr<V8PerContextData> V8PerContextData::create(
     v8::Local<v8::Context> context) {
-  return wrapUnique(new V8PerContextData(context));
+  return WTF::wrapUnique(new V8PerContextData(context));
 }
 
 V8PerContextData* V8PerContextData::from(v8::Local<v8::Context> context) {
@@ -170,19 +170,33 @@ v8::Local<v8::Object> V8PerContextData::prototypeForType(
   return prototypeValue.As<v8::Object>();
 }
 
+bool V8PerContextData::getExistingConstructorAndPrototypeForType(
+    const WrapperTypeInfo* type,
+    v8::Local<v8::Object>* prototypeObject,
+    v8::Local<v8::Function>* interfaceObject) {
+  *interfaceObject = m_constructorMap.Get(type);
+  if (interfaceObject->IsEmpty()) {
+    *prototypeObject = v8::Local<v8::Object>();
+    return false;
+  }
+  *prototypeObject = prototypeForType(type);
+  DCHECK(!prototypeObject->IsEmpty());
+  return true;
+}
+
 void V8PerContextData::addCustomElementBinding(
     std::unique_ptr<V0CustomElementBinding> binding) {
-  m_customElementBindings.append(std::move(binding));
+  m_customElementBindings.push_back(std::move(binding));
 }
 
-v8::Local<v8::Value> V8PerContextData::compiledPrivateScript(String className) {
-  return m_compiledPrivateScript.Get(className);
+void V8PerContextData::setModulator(Modulator* modulator) {
+  DCHECK(!m_modulator);
+  DCHECK(modulator);
+  m_modulator = modulator;
 }
 
-void V8PerContextData::setCompiledPrivateScript(
-    String className,
-    v8::Local<v8::Value> compiledObject) {
-  m_compiledPrivateScript.Set(className, compiledObject);
+void V8PerContextData::clearModulator() {
+  m_modulator = nullptr;
 }
 
 }  // namespace blink

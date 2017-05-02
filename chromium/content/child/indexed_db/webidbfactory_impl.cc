@@ -4,12 +4,10 @@
 
 #include "content/child/indexed_db/webidbfactory_impl.h"
 
-#include "content/child/child_thread_impl.h"
+#include "base/memory/ptr_util.h"
 #include "content/child/indexed_db/indexed_db_callbacks_impl.h"
 #include "content/child/indexed_db/indexed_db_database_callbacks_impl.h"
 #include "content/child/storage_util.h"
-#include "content/child/thread_safe_sender.h"
-#include "content/public/child/worker_thread.h"
 #include "ipc/ipc_sync_channel.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -39,8 +37,7 @@ class WebIDBFactoryImpl::IOThreadHelper {
 
   void GetDatabaseNames(std::unique_ptr<IndexedDBCallbacksImpl> callbacks,
                         const url::Origin& origin);
-  void Open(int32_t worker_thread,
-            const base::string16& name,
+  void Open(const base::string16& name,
             int64_t version,
             int64_t transaction_id,
             std::unique_ptr<IndexedDBCallbacksImpl> callbacks,
@@ -59,10 +56,8 @@ class WebIDBFactoryImpl::IOThreadHelper {
 
 WebIDBFactoryImpl::WebIDBFactoryImpl(
     scoped_refptr<IPC::SyncMessageFilter> sync_message_filter,
-    scoped_refptr<ThreadSafeSender> thread_safe_sender,
     scoped_refptr<base::SingleThreadTaskRunner> io_runner)
     : io_helper_(new IOThreadHelper(std::move(sync_message_filter))),
-      thread_safe_sender_(std::move(thread_safe_sender)),
       io_runner_(std::move(io_runner)) {}
 
 WebIDBFactoryImpl::~WebIDBFactoryImpl() {
@@ -73,7 +68,7 @@ void WebIDBFactoryImpl::getDatabaseNames(WebIDBCallbacks* callbacks,
                                          const WebSecurityOrigin& origin) {
   auto callbacks_impl = base::MakeUnique<IndexedDBCallbacksImpl>(
       base::WrapUnique(callbacks), IndexedDBCallbacksImpl::kNoTransaction,
-      io_runner_, thread_safe_sender_);
+      nullptr, io_runner_);
   io_runner_->PostTask(FROM_HERE, base::Bind(&IOThreadHelper::GetDatabaseNames,
                                              base::Unretained(io_helper_),
                                              base::Passed(&callbacks_impl),
@@ -87,16 +82,15 @@ void WebIDBFactoryImpl::open(const WebString& name,
                              WebIDBDatabaseCallbacks* database_callbacks,
                              const WebSecurityOrigin& origin) {
   auto callbacks_impl = base::MakeUnique<IndexedDBCallbacksImpl>(
-      base::WrapUnique(callbacks), transaction_id, io_runner_,
-      thread_safe_sender_);
+      base::WrapUnique(callbacks), transaction_id, nullptr, io_runner_);
   auto database_callbacks_impl =
       base::MakeUnique<IndexedDBDatabaseCallbacksImpl>(
-          base::WrapUnique(database_callbacks), thread_safe_sender_);
+          base::WrapUnique(database_callbacks));
   io_runner_->PostTask(
       FROM_HERE,
       base::Bind(&IOThreadHelper::Open, base::Unretained(io_helper_),
-                 WorkerThread::GetCurrentId(), base::string16(name), version,
-                 transaction_id, base::Passed(&callbacks_impl),
+                 name.utf16(), version, transaction_id,
+                 base::Passed(&callbacks_impl),
                  base::Passed(&database_callbacks_impl), url::Origin(origin)));
 }
 
@@ -105,11 +99,11 @@ void WebIDBFactoryImpl::deleteDatabase(const WebString& name,
                                        const WebSecurityOrigin& origin) {
   auto callbacks_impl = base::MakeUnique<IndexedDBCallbacksImpl>(
       base::WrapUnique(callbacks), IndexedDBCallbacksImpl::kNoTransaction,
-      io_runner_, thread_safe_sender_);
+      nullptr, io_runner_);
   io_runner_->PostTask(
       FROM_HERE,
       base::Bind(&IOThreadHelper::DeleteDatabase, base::Unretained(io_helper_),
-                 base::string16(name), base::Passed(&callbacks_impl),
+                 name.utf16(), base::Passed(&callbacks_impl),
                  url::Origin(origin)));
 }
 
@@ -154,14 +148,13 @@ void WebIDBFactoryImpl::IOThreadHelper::GetDatabaseNames(
 }
 
 void WebIDBFactoryImpl::IOThreadHelper::Open(
-    int32_t worker_thread,
     const base::string16& name,
     int64_t version,
     int64_t transaction_id,
     std::unique_ptr<IndexedDBCallbacksImpl> callbacks,
     std::unique_ptr<IndexedDBDatabaseCallbacksImpl> database_callbacks,
     const url::Origin& origin) {
-  GetService()->Open(worker_thread, GetCallbacksProxy(std::move(callbacks)),
+  GetService()->Open(GetCallbacksProxy(std::move(callbacks)),
                      GetDatabaseCallbacksProxy(std::move(database_callbacks)),
                      origin, name, version, transaction_id);
 }

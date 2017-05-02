@@ -11,27 +11,8 @@
         display: none !important;
       }
 
-      button[is='paper-icon-button-light'] {
-        -webkit-margin-end: -8px;  /* Allow ripple to overlap the end. */
-        -webkit-margin-start: 16px;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-size: var(--settings-icon-size);
-        flex-shrink: 0;
-        height: var(--settings-icon-ripple-size);
-        width: var(--settings-icon-ripple-size);
-      }
-
       :host-context([dir=rtl]) button[is='paper-icon-button-light'] {
         transform: scaleX(-1);  /* Flip on the X axis (aka mirror). */
-      }
-
-      [actionable] button[is='paper-icon-button-light'].subpage-arrow {
-        background-image: url(images/arrow_right.svg);
-      }
-
-      [actionable] button[is='paper-icon-button-light'].icon-external {
-        background-image: url(images/open_in_new.svg);
       }
 
       :host-context([dir=rtl]) paper-icon-button[icon='settings:arrow-back'] {
@@ -71,44 +52,12 @@
         width: 31px;
       }
 
-      paper-dropdown-menu-light {
-        --iron-icon-fill-color: var(--paper-grey-600);
-        --paper-font-subhead: {
-          font-size: inherit;
-        };
-        --paper-dropdown-menu-input: {
-          border-bottom-color: var(--paper-grey-300);
-        };
-        /* Offsets the input's border-bottom. */
-        top: 1px;
-      }
-
-      iron-dropdown .dropdown-content,
-      paper-dropdown-menu-light paper-listbox {
+      iron-dropdown .dropdown-content {
         min-width: 128px;
         padding: 8px 0;
       }
 
-      .dropdown-item {
-        align-items: center;
-        background: none;
-        border: none;
-        box-sizing: border-box;
-        color: var(--paper-grey-800);
-        display: flex;
-        font: inherit;
-        min-height: 32px;
-        padding: 0 24px;
-        text-align: start;
-        width: 100%;
-      }
-
-      paper-dropdown-menu-light .dropdown-item.iron-selected {
-        font-weight: bold;
-      }
-
-      iron-dropdown .dropdown-item:focus,
-      paper-dropdown-menu-light .dropdown-item:focus {
+      iron-dropdown .dropdown-item:focus {
         @apply(--cr-selectable-focus);
       }
 
@@ -117,13 +66,11 @@
         box-shadow: 0 2px 6px var(--paper-grey-500);
       }
 
-      .dropdown-item:not([disabled]),
       iron-dropdown .dropdown-content paper-item {
         @apply(--settings-actionable);
       }
 
-      iron-dropdown .dropdown-content .dropdown-item[disabled],
-      cr-shared-menu .dropdown-item[disabled] {
+      iron-dropdown .dropdown-content .dropdown-item[disabled] {
         opacity: var(--settings-disabled-opacity);
       }
 
@@ -377,8 +324,7 @@
       }
 
       .settings-box paper-item iron-icon {
-        /* Same padding as paper-icon-button. */
-        padding: 8px;
+        padding: var(--cr-icon-padding);
       }
 
       /* Helper for a list frame to automatically avoid the separator line. */
@@ -391,13 +337,6 @@
             var(--checkbox-margin-start) +
             var(--checkbox-size) +
             var(--checkbox-spacing));
-      }
-
-      /* Keep the slider color consistent throughout the range. */
-      cr-slider.always-on {
-        --paper-slider-knob-start-border-color: var(--google-blue-700);
-        --paper-slider-knob-start-color: var(--google-blue-700);
-        --paper-slider-pin-start-color: var(--google-blue-700);
       }
 
       .favicon-image {

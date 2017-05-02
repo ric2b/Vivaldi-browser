@@ -35,6 +35,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
+#include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
@@ -54,11 +55,13 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/chromeos/policy/active_directory_policy_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
+#include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
+#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "components/user_manager/user_manager.h"
 #else
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
@@ -79,10 +82,11 @@ namespace {
 // Strings that map from PolicySource enum to i18n string keys and their IDs.
 // Their order has to follow the order of the policy::PolicySource enum.
 const PolicyStringMap kPolicySources[policy::POLICY_SOURCE_COUNT] = {
-  {"sourceEnterpriseDefault", IDS_POLICY_SOURCE_ENTERPRISE_DEFAULT},
-  {"sourceCloud", IDS_POLICY_SOURCE_CLOUD},
-  {"sourcePublicSessionOverride", IDS_POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE},
-  {"sourcePlatform", IDS_POLICY_SOURCE_PLATFORM},
+    {"sourceEnterpriseDefault", IDS_POLICY_SOURCE_ENTERPRISE_DEFAULT},
+    {"sourceCloud", IDS_POLICY_SOURCE_CLOUD},
+    {"sourceActiveDirectory", IDS_POLICY_SOURCE_ACTIVE_DIRECTORY},
+    {"sourcePublicSessionOverride", IDS_POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE},
+    {"sourcePlatform", IDS_POLICY_SOURCE_PLATFORM},
 };
 
 // Formats the association state indicated by |data|. If |data| is NULL, the
@@ -199,11 +203,13 @@ std::unique_ptr<base::Value> CopyAndConvert(const base::Value* value) {
 
 }  // namespace
 
-// An interface for querying the status of cloud policy.
-class CloudPolicyStatusProvider {
+// An interface for querying the status of a policy provider.  It surfaces
+// things like last fetch time or status of the backing store, but not the
+// actual policies themselves.
+class PolicyStatusProvider {
  public:
-  CloudPolicyStatusProvider();
-  virtual ~CloudPolicyStatusProvider();
+  PolicyStatusProvider();
+  virtual ~PolicyStatusProvider();
 
   // Sets a callback to invoke upon status changes.
   void SetStatusChangeCallback(const base::Closure& callback);
@@ -216,7 +222,7 @@ class CloudPolicyStatusProvider {
  private:
   base::Closure callback_;
 
-  DISALLOW_COPY_AND_ASSIGN(CloudPolicyStatusProvider);
+  DISALLOW_COPY_AND_ASSIGN(PolicyStatusProvider);
 };
 
 // Status provider implementation that pulls cloud policy status from a
@@ -224,7 +230,7 @@ class CloudPolicyStatusProvider {
 // changes on that CloudPolicyCore and reports them through the status change
 // callback.
 class CloudPolicyCoreStatusProvider
-    : public CloudPolicyStatusProvider,
+    : public PolicyStatusProvider,
       public policy::CloudPolicyStore::Observer {
  public:
   explicit CloudPolicyCoreStatusProvider(policy::CloudPolicyCore* core);
@@ -244,16 +250,16 @@ class CloudPolicyCoreStatusProvider
 };
 
 // A cloud policy status provider for user policy.
-class UserPolicyStatusProvider : public CloudPolicyCoreStatusProvider {
+class UserCloudPolicyStatusProvider : public CloudPolicyCoreStatusProvider {
  public:
-  explicit UserPolicyStatusProvider(policy::CloudPolicyCore* core);
-  ~UserPolicyStatusProvider() override;
+  explicit UserCloudPolicyStatusProvider(policy::CloudPolicyCore* core);
+  ~UserCloudPolicyStatusProvider() override;
 
   // CloudPolicyCoreStatusProvider implementation.
   void GetStatus(base::DictionaryValue* dict) override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(UserPolicyStatusProvider);
+  DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyStatusProvider);
 };
 
 #if defined(OS_CHROMEOS)
@@ -280,7 +286,7 @@ class DevicePolicyStatusProvider : public CloudPolicyCoreStatusProvider {
 // may go away any time behind the scenes, at which point the status message
 // text will indicate CloudPolicyStore::STATUS_BAD_STATE.
 class DeviceLocalAccountPolicyStatusProvider
-    : public CloudPolicyStatusProvider,
+    : public PolicyStatusProvider,
       public policy::DeviceLocalAccountPolicyService::Observer {
  public:
   DeviceLocalAccountPolicyStatusProvider(
@@ -288,7 +294,7 @@ class DeviceLocalAccountPolicyStatusProvider
       policy::DeviceLocalAccountPolicyService* service);
   ~DeviceLocalAccountPolicyStatusProvider() override;
 
-  // CloudPolicyStatusProvider implementation.
+  // PolicyStatusProvider implementation.
   void GetStatus(base::DictionaryValue* dict) override;
 
   // policy::DeviceLocalAccountPolicyService::Observer implementation.
@@ -301,23 +307,41 @@ class DeviceLocalAccountPolicyStatusProvider
 
   DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyStatusProvider);
 };
+
+// Provides status for any kind of Active Directory policy (device or user).
+class ActiveDirectoryPolicyStatusProvider
+    : public PolicyStatusProvider,
+      public policy::CloudPolicyStore::Observer {
+ public:
+  explicit ActiveDirectoryPolicyStatusProvider(policy::CloudPolicyStore* store);
+  ~ActiveDirectoryPolicyStatusProvider() override;
+
+  // PolicyStatusProvider implementation.
+  void GetStatus(base::DictionaryValue* dict) override;
+
+  // policy::CloudPolicyStore::Observer implementation.
+  void OnStoreLoaded(policy::CloudPolicyStore* store) override;
+  void OnStoreError(policy::CloudPolicyStore* store) override;
+
+ private:
+  policy::CloudPolicyStore* store_;
+
+  DISALLOW_COPY_AND_ASSIGN(ActiveDirectoryPolicyStatusProvider);
+};
 #endif
 
-CloudPolicyStatusProvider::CloudPolicyStatusProvider() {
-}
+PolicyStatusProvider::PolicyStatusProvider() {}
 
-CloudPolicyStatusProvider::~CloudPolicyStatusProvider() {
-}
+PolicyStatusProvider::~PolicyStatusProvider() {}
 
-void CloudPolicyStatusProvider::SetStatusChangeCallback(
+void PolicyStatusProvider::SetStatusChangeCallback(
     const base::Closure& callback) {
   callback_ = callback;
 }
 
-void CloudPolicyStatusProvider::GetStatus(base::DictionaryValue* dict) {
-}
+void PolicyStatusProvider::GetStatus(base::DictionaryValue* dict) {}
 
-void CloudPolicyStatusProvider::NotifyStatusChange() {
+void PolicyStatusProvider::NotifyStatusChange() {
   if (!callback_.is_null())
     callback_.Run();
 }
@@ -344,14 +368,13 @@ void CloudPolicyCoreStatusProvider::OnStoreError(
   NotifyStatusChange();
 }
 
-UserPolicyStatusProvider::UserPolicyStatusProvider(
-    policy::CloudPolicyCore* core) : CloudPolicyCoreStatusProvider(core) {
-}
+UserCloudPolicyStatusProvider::UserCloudPolicyStatusProvider(
+    policy::CloudPolicyCore* core)
+    : CloudPolicyCoreStatusProvider(core) {}
 
-UserPolicyStatusProvider::~UserPolicyStatusProvider() {
-}
+UserCloudPolicyStatusProvider::~UserCloudPolicyStatusProvider() {}
 
-void UserPolicyStatusProvider::GetStatus(base::DictionaryValue* dict) {
+void UserCloudPolicyStatusProvider::GetStatus(base::DictionaryValue* dict) {
   if (!core_->store()->is_managed())
     return;
   GetStatusFromCore(core_, dict);
@@ -414,7 +437,37 @@ void DeviceLocalAccountPolicyStatusProvider::OnPolicyUpdated(
 void DeviceLocalAccountPolicyStatusProvider::OnDeviceLocalAccountsChanged() {
   NotifyStatusChange();
 }
-#endif
+
+ActiveDirectoryPolicyStatusProvider::ActiveDirectoryPolicyStatusProvider(
+    policy::CloudPolicyStore* store)
+    : store_(store) {
+  store_->AddObserver(this);
+}
+
+ActiveDirectoryPolicyStatusProvider::~ActiveDirectoryPolicyStatusProvider() {
+  store_->RemoveObserver(this);
+}
+
+// TODO(tnagel): Provide more details and/or remove unused fields from UI.  See
+// https://crbug.com/664747.
+void ActiveDirectoryPolicyStatusProvider::GetStatus(
+    base::DictionaryValue* dict) {
+  base::string16 status =
+      policy::FormatStoreStatus(store_->status(), store_->validation_status());
+  dict->SetString("status", status);
+}
+
+void ActiveDirectoryPolicyStatusProvider::OnStoreLoaded(
+    policy::CloudPolicyStore* store) {
+  NotifyStatusChange();
+}
+
+void ActiveDirectoryPolicyStatusProvider::OnStoreError(
+    policy::CloudPolicyStore* store) {
+  NotifyStatusChange();
+}
+
+#endif  // defined(OS_CHROMEOS)
 
 PolicyUIHandler::PolicyUIHandler()
     : weak_factory_(this) {
@@ -468,42 +521,57 @@ void PolicyUIHandler::RegisterMessages() {
 #if defined(OS_CHROMEOS)
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (connector->IsEnterpriseManaged())
-    device_status_provider_.reset(new DevicePolicyStatusProvider(connector));
+  if (connector->IsEnterpriseManaged()) {
+    if (connector->GetDeviceActiveDirectoryPolicyManager()) {
+      device_status_provider_ =
+          base::MakeUnique<ActiveDirectoryPolicyStatusProvider>(
+              connector->GetDeviceActiveDirectoryPolicyManager()->store());
+    } else {
+      device_status_provider_ =
+          base::MakeUnique<DevicePolicyStatusProvider>(connector);
+    }
+  }
 
   const user_manager::UserManager* user_manager =
       user_manager::UserManager::Get();
-  if (user_manager->IsLoggedInAsPublicAccount()) {
-    policy::DeviceLocalAccountPolicyService* local_account_service =
-        connector->GetDeviceLocalAccountPolicyService();
-    if (local_account_service) {
-      user_status_provider_.reset(new DeviceLocalAccountPolicyStatusProvider(
-          user_manager->GetActiveUser()->GetAccountId().GetUserEmail(),
-          local_account_service));
-    }
-  } else {
-    policy::UserCloudPolicyManagerChromeOS* user_cloud_policy_manager =
-        policy::UserCloudPolicyManagerFactoryChromeOS::GetForProfile(
-            Profile::FromWebUI(web_ui()));
-    if (user_cloud_policy_manager) {
-      user_status_provider_.reset(
-          new UserPolicyStatusProvider(user_cloud_policy_manager->core()));
-    }
+  Profile* profile = Profile::FromWebUI(web_ui());
+  policy::DeviceLocalAccountPolicyService* local_account_service =
+      user_manager->IsLoggedInAsPublicAccount()
+          ? connector->GetDeviceLocalAccountPolicyService()
+          : nullptr;
+  policy::UserCloudPolicyManagerChromeOS* user_cloud_policy =
+      policy::UserPolicyManagerFactoryChromeOS::GetCloudPolicyManagerForProfile(
+          profile);
+  policy::ActiveDirectoryPolicyManager* active_directory_policy =
+      policy::UserPolicyManagerFactoryChromeOS::
+          GetActiveDirectoryPolicyManagerForProfile(profile);
+  if (local_account_service) {
+    user_status_provider_ =
+        base::MakeUnique<DeviceLocalAccountPolicyStatusProvider>(
+            user_manager->GetActiveUser()->GetAccountId().GetUserEmail(),
+            local_account_service);
+  } else if (user_cloud_policy) {
+    user_status_provider_ = base::MakeUnique<UserCloudPolicyStatusProvider>(
+        user_cloud_policy->core());
+  } else if (active_directory_policy) {
+    user_status_provider_ =
+        base::MakeUnique<ActiveDirectoryPolicyStatusProvider>(
+            active_directory_policy->store());
   }
 #else
   policy::UserCloudPolicyManager* user_cloud_policy_manager =
       policy::UserCloudPolicyManagerFactory::GetForBrowserContext(
           web_ui()->GetWebContents()->GetBrowserContext());
   if (user_cloud_policy_manager) {
-    user_status_provider_.reset(
-        new UserPolicyStatusProvider(user_cloud_policy_manager->core()));
+    user_status_provider_ = base::MakeUnique<UserCloudPolicyStatusProvider>(
+        user_cloud_policy_manager->core());
   }
 #endif
 
   if (!user_status_provider_.get())
-    user_status_provider_.reset(new CloudPolicyStatusProvider());
+    user_status_provider_ = base::MakeUnique<PolicyStatusProvider>();
   if (!device_status_provider_.get())
-    device_status_provider_.reset(new CloudPolicyStatusProvider());
+    device_status_provider_ = base::MakeUnique<PolicyStatusProvider>();
 
   base::Closure update_callback(base::Bind(&PolicyUIHandler::SendStatus,
                                            base::Unretained(this)));
@@ -730,14 +798,17 @@ void PolicyUIHandler::HandleReloadPolicies(const base::ListValue* args) {
   // service is not working properly.
   // TODO(binjin): evaluate and possibly remove this after invalidation
   // service is landed and tested. http://crbug.com/480982
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  policy::RemoteCommandsService* remote_commands_service =
-      connector->GetDeviceCloudPolicyManager()
-          ->core()
-          ->remote_commands_service();
-  if (remote_commands_service)
-    remote_commands_service->FetchRemoteCommands();
+  policy::CloudPolicyManager* manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+  // Active Directory management has no CloudPolicyManager.
+  if (manager) {
+    policy::RemoteCommandsService* remote_commands_service =
+        manager->core()->remote_commands_service();
+    if (remote_commands_service)
+      remote_commands_service->FetchRemoteCommands();
+  }
 #endif
   GetPolicyService()->RefreshPolicies(base::Bind(
       &PolicyUIHandler::OnRefreshPoliciesDone, weak_factory_.GetWeakPtr()));

@@ -139,7 +139,7 @@ static LayoutObject* nextInPreOrderAfterChildrenSkippingOutOfFlow(
   }
   if (!object)
     return nullptr;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // Make sure that we didn't stumble into an inner multicol container.
   for (LayoutObject* walker = object->parent(); walker && walker != flowThread;
        walker = walker->parent())
@@ -188,7 +188,7 @@ static LayoutObject* previousInPreOrderSkippingOutOfFlow(
   }
   if (!object || object == flowThread)
     return nullptr;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // Make sure that we didn't stumble into an inner multicol container.
   for (LayoutObject* walker = object->parent(); walker && walker != flowThread;
        walker = walker->parent())
@@ -365,6 +365,15 @@ bool LayoutMultiColumnFlowThread::isPageLogicalHeightKnown() const {
   return false;
 }
 
+bool LayoutMultiColumnFlowThread::mayHaveNonUniformPageLogicalHeight() const {
+  const LayoutMultiColumnSet* columnSet = firstMultiColumnSet();
+  if (!columnSet)
+    return false;
+  if (columnSet->nextSiblingMultiColumnSet())
+    return true;
+  return enclosingFragmentationContext();
+}
+
 LayoutSize LayoutMultiColumnFlowThread::flowThreadTranslationAtOffset(
     LayoutUnit offsetInFlowThread,
     PageBoundaryRule rule,
@@ -454,17 +463,19 @@ LayoutMultiColumnSet* LayoutMultiColumnFlowThread::columnSetAtBlockOffset(
     DCHECK(!m_columnSetsInvalidated);
     if (m_multiColumnSetList.isEmpty())
       return nullptr;
-    if (offset < LayoutUnit())
-      return m_multiColumnSetList.first();
+    if (offset < LayoutUnit()) {
+      columnSet = m_multiColumnSetList.first();
+    } else {
+      MultiColumnSetSearchAdapter adapter(offset);
+      m_multiColumnSetIntervalTree
+          .allOverlapsWithAdapter<MultiColumnSetSearchAdapter>(adapter);
 
-    MultiColumnSetSearchAdapter adapter(offset);
-    m_multiColumnSetIntervalTree
-        .allOverlapsWithAdapter<MultiColumnSetSearchAdapter>(adapter);
-
-    // If no set was found, the offset is in the flow thread overflow.
-    if (!adapter.result() && !m_multiColumnSetList.isEmpty())
-      return m_multiColumnSetList.last();
-    columnSet = adapter.result();
+      // If no set was found, the offset is in the flow thread overflow.
+      if (!adapter.result() && !m_multiColumnSetList.isEmpty())
+        columnSet = m_multiColumnSetList.last();
+      else
+        columnSet = adapter.result();
+    }
   }
   if (pageBoundaryRule == AssociateWithFormerPage && columnSet &&
       offset == columnSet->logicalTopInFlowThread()) {
@@ -474,7 +485,19 @@ LayoutMultiColumnSet* LayoutMultiColumnFlowThread::columnSetAtBlockOffset(
     // previous column set.
     if (LayoutMultiColumnSet* previousSet =
             columnSet->previousSiblingMultiColumnSet())
-      return previousSet;
+      columnSet = previousSet;
+  }
+  // Avoid returning zero-height column sets, if possible. We found a column set
+  // based on a flow thread coordinate. If multiple column sets share that
+  // coordinate (because we have zero-height column sets between column
+  // spanners, for instance), look for one that has a height.
+  for (LayoutMultiColumnSet* walker = columnSet; walker;
+       walker = walker->nextSiblingMultiColumnSet()) {
+    if (!walker->isPageLogicalHeightKnown())
+      continue;
+    if (walker->logicalTopInFlowThread() == offset)
+      return walker;
+    break;
   }
   return columnSet;
 }
@@ -485,6 +508,8 @@ void LayoutMultiColumnFlowThread::layoutColumns(
   // needed layout. Since contents of the multicol container are diverted to the
   // flow thread, the flow thread needs layout as well.
   layoutScope.setChildNeedsLayout(this);
+
+  calculateColumnHeightAvailable();
 
   if (FragmentationContext* enclosingFragmentationContext =
           this->enclosingFragmentationContext()) {
@@ -654,6 +679,30 @@ LayoutUnit LayoutMultiColumnFlowThread::remainingLogicalHeightAt(
     LayoutUnit blockOffset) {
   return pageRemainingLogicalHeightForOffset(blockOffset,
                                              AssociateWithLatterPage);
+}
+
+void LayoutMultiColumnFlowThread::calculateColumnHeightAvailable() {
+  // Calculate the non-auto content box height, or set it to 0 if it's auto. We
+  // need to know this before layout, so that we can figure out where to insert
+  // column breaks. We also treat LayoutView (which may be paginated, which uses
+  // the multicol implementation) as having a fixed height, since its height is
+  // deduced from the viewport height. We use computeLogicalHeight() to
+  // calculate the content box height. That method will clamp against max-height
+  // and min-height. Since we're now at the beginning of layout, and we don't
+  // know the actual height of the content yet, only call that method when
+  // height is definite, or we might fool ourselves into believing that columns
+  // have a definite height when they in fact don't.
+  LayoutBlockFlow* container = multiColumnBlockFlow();
+  LayoutUnit columnHeight;
+  if (container->hasDefiniteLogicalHeight() || container->isLayoutView()) {
+    LogicalExtentComputedValues computedValues;
+    container->computeLogicalHeight(LayoutUnit(), container->logicalTop(),
+                                    computedValues);
+    columnHeight = computedValues.m_extent -
+                   container->borderAndPaddingLogicalHeight() -
+                   container->scrollbarLogicalHeight();
+  }
+  setColumnHeightAvailable(std::max(columnHeight, LayoutUnit()));
 }
 
 void LayoutMultiColumnFlowThread::calculateColumnCountAndWidth(
@@ -883,7 +932,7 @@ void LayoutMultiColumnFlowThread::skipColumnSpanner(
 static bool shouldSkipInsertedOrRemovedChild(
     LayoutMultiColumnFlowThread* flowThread,
     const LayoutObject& child) {
-  if (child.isSVG() && !child.isSVGRoot()) {
+  if (child.isSVGChild()) {
     // Don't descend into SVG objects. What's in there is of no interest, and
     // there might even be a foreignObject there with column-span:all, which
     // doesn't apply to us.

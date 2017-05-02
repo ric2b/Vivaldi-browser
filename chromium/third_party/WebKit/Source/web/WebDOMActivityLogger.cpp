@@ -69,7 +69,7 @@ class DOMActivityLoggerContainer : public V8DOMActivityLogger {
                 const String* argv) override {
     Vector<WebString> webStringArgv;
     for (int i = 0; i < argc; i++)
-      webStringArgv.append(argv[i]);
+      webStringArgv.push_back(argv[i]);
     m_domActivityLogger->logEvent(WebString(eventName), argc,
                                   webStringArgv.data(), getURL(), getTitle());
   }
@@ -102,7 +102,7 @@ void setDOMActivityLogger(int worldId,
   DCHECK(logger);
   V8DOMActivityLogger::setActivityLogger(
       worldId, extensionId,
-      wrapUnique(new DOMActivityLoggerContainer(wrapUnique(logger))));
+      WTF::wrapUnique(new DOMActivityLoggerContainer(WTF::wrapUnique(logger))));
 }
 
 }  // namespace blink

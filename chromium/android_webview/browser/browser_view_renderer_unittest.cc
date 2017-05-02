@@ -12,6 +12,7 @@
 #include "android_webview/browser/render_thread_manager.h"
 #include "android_webview/browser/test/rendering_test.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/compositor_frame.h"
@@ -289,6 +290,54 @@ class CompositorNoFrameTest : public RenderingTest {
 };
 
 RENDERING_TEST_F(CompositorNoFrameTest);
+
+class ClientIsVisibleOnConstructionTest : public RenderingTest {
+  void SetUpTestHarness() override {
+    browser_view_renderer_.reset(
+        new BrowserViewRenderer(this, base::ThreadTaskRunnerHandle::Get()));
+  }
+
+  void StartTest() override {
+    EXPECT_FALSE(browser_view_renderer_->attached_to_window());
+    EXPECT_FALSE(browser_view_renderer_->window_visible_for_tests());
+    EXPECT_TRUE(browser_view_renderer_->IsClientVisible());
+    EndTest();
+  }
+};
+
+RENDERING_TEST_F(ClientIsVisibleOnConstructionTest);
+
+class ClientIsVisibleAfterAttachTest : public RenderingTest {
+  void StartTest() override {
+    EXPECT_TRUE(browser_view_renderer_->attached_to_window());
+    EXPECT_TRUE(browser_view_renderer_->window_visible_for_tests());
+
+    EXPECT_TRUE(browser_view_renderer_->IsClientVisible());
+    EndTest();
+  }
+};
+
+RENDERING_TEST_F(ClientIsVisibleAfterAttachTest);
+
+class ClientIsInvisibleAfterWindowGoneTest : public RenderingTest {
+  void StartTest() override {
+    browser_view_renderer_->SetWindowVisibility(false);
+    EXPECT_FALSE(browser_view_renderer_->IsClientVisible());
+    EndTest();
+  }
+};
+
+RENDERING_TEST_F(ClientIsInvisibleAfterWindowGoneTest);
+
+class ClientIsInvisibleAfterDetachTest : public RenderingTest {
+  void StartTest() override {
+    browser_view_renderer_->OnDetachedFromWindow();
+    EXPECT_FALSE(browser_view_renderer_->IsClientVisible());
+    EndTest();
+  }
+};
+
+RENDERING_TEST_F(ClientIsInvisibleAfterDetachTest);
 
 class ResourceRenderingTest : public RenderingTest {
  public:

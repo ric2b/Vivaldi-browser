@@ -41,6 +41,7 @@ Lai to pārslēgtu, nospiediet taustiņu kombināciju Shift+Alt.</translation>
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2122028596993374965">Apturēt “<ph name="TAB_NAME" />” apraidi uztvērējā “<ph name="RECEIVER_NAME" />”</translation>
 <translation id="2127372758936585790">Lādētājs ar mazu strāvas padevi</translation>
 <translation id="2204305834655267233">Tīkla informācija</translation>
 <translation id="2208323208084708176">Vienots darbvirsmas režīms</translation>
@@ -54,10 +55,8 @@ Lai to pārslēgtu, nospiediet taustiņu kombināciju Shift+Alt.</translation>
 <translation id="2429753432712299108">Bluetooth ierīce “<ph name="DEVICE_NAME" />” vēlas saņemt atļauju, lai izveidotu savienojumu pārī. Pirms piekrītat, lūdzu, pārliecinieties, vai ierīcē tiek parādīta šī ieejas atslēga: <ph name="PASSKEY" />.</translation>
 <translation id="2475982808118771221">Radās kļūda</translation>
 <translation id="2509468283778169019">Funkcija Caps Lock ir ieslēgta</translation>
-<translation id="252373100621549798">Nezināms displejs</translation>
 <translation id="2532589005999780174">Augsta kontrasta režīms</translation>
 <translation id="2562916301614567480">Privāts tīkls</translation>
-<translation id="2661637000095600270">Nevarēja spoguļot displejus, jo netika atrasta atbalstīta izšķirtspēja. Tā vietā tika aktivizēts paplašinātās darbvirsmas režīms. Noklikšķiniet, lai nosūtītu atsauksmju ziņojumu.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: notiek savienojuma izveide...</translation>
 <translation id="2700058918926273959">Atlikušais laiks līdz šīs sesijas beigām: <ph name="SESSION_TIME_REMAINING" />. Jūs tiksiet izrakstīts.</translation>
 <translation id="2727977024730340865">Pievienots lādētājs ar mazu strāvas padevi. Akumulatora uzlāde var nebūt uzticama.</translation>
@@ -114,7 +113,6 @@ Lai atceltu tā funkcionalitāti, nospiediet Meklēt vai Shift.</translation>
 <translation id="3846575436967432996">Tīkla informācija nav pieejama.</translation>
 <translation id="3866182280516392520">IPv6 adrese</translation>
 <translation id="3891340733213178823">Lai izrakstītos, divas reizes nospiediet taustiņu kombināciju Ctrl+Shift+Q.</translation>
-<translation id="3892641579809465218">Iekšējais displejs</translation>
 <translation id="3893630138897523026">ChromeVox (balss komentāri)</translation>
 <translation id="3899995891769452915">Balss ievade</translation>
 <translation id="3901991538546252627">Notiek savienojuma izveide ar <ph name="NAME" /></translation>
@@ -153,6 +151,7 @@ Lai atceltu tā funkcionalitāti, nospiediet Meklēt vai Shift.</translation>
 <translation id="5238774010593222950">Vairs nevar pierakstīties citā kontā.</translation>
 <translation id="532063867737390965">Administrators ir atspējojis šo tīkla iestatījumu.</translation>
 <translation id="5331975486040154427">USB-C ierīce (pieslēgvieta kreisajā pusē aizmugurē)</translation>
+<translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Visi pieejamie lietotāji jau ir pievienoti šai sesijai.</translation>
 <translation id="5507786745520522457">Iestatīt mobilos datus</translation>
 <translation id="5543001071567407895">Īsziņa</translation>
@@ -177,6 +176,7 @@ Lai to pārslēgtu, nospiediet taustiņu kombināciju Shift+Alt.</translation>
 <translation id="5978382165065462689">Ekrāna pārvaldības koplietošana, izmantojot attālo palīdzību.</translation>
 <translation id="5980301590375426705">Aizvērt viesa sesiju</translation>
 <translation id="6041154455840261787">Augsta kontrasta režīms iespējots. Vēlreiz nospiediet Meklēt+Shift+H, lai izslēgtu to.</translation>
+<translation id="6043212731627905357">Šis monitors nav saderīgs ar jūsu ierīci <ph name="DEVICE_TYPE" /> (monitors netiek atbalstīts).</translation>
 <translation id="6043994281159824495">Izrakstīties tagad</translation>
 <translation id="6047696787498798094">Pārslēdzoties uz citu lietotāju, ekrāna koplietošana tiks apturēta. Vai vēlaties turpināt?</translation>
 <translation id="6062360702481658777">Jūs tiksiet automātiski izrakstīts pēc šāda laika: <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -185,7 +185,6 @@ Lai to pārslēgtu, nospiediet taustiņu kombināciju Shift+Alt.</translation>
 <translation id="6144938890088808325">Palīdziet mums uzlabot Chromebook datorus</translation>
 <translation id="615957422585914272">Rādīt ekrāna tastatūru</translation>
 <translation id="6165508094623778733">Uzziniet vairāk</translation>
-<translation id="6203030746557259519">Virtuālais displejs</translation>
 <translation id="6248847161401822652">Lai izietu, divas reizes nospiediet taustiņu kombināciju Ctrl+Shift+Q.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: notiek aktivizēšana...</translation>
 <translation id="6297287540776456956">Izmantojiet skārienekrāna pildspalvu, lai atlasītu ekrāna daļu.</translation>
@@ -208,6 +207,7 @@ Lai to pārslēgtu, nospiediet taustiņu kombināciju Shift+Alt.</translation>
 <translation id="6700713906295497288">IME izvēlnes poga</translation>
 <translation id="6713285437468012787">Bluetooth ierīce “<ph name="DEVICE_NAME" />” ir savienota pārī un ir pieejama visiem lietotājiem. Lai pārtrauktu šo savienojumus, atveriet iestatījumus.</translation>
 <translation id="6785414152754474415">Akumulatora uzlādes līmenis: <ph name="PERCENTAGE" />%; uzlāde tiek turpināta.</translation>
+<translation id="6803622936009808957">Nevarēja spoguļot displejus, jo netika atrasta atbalstīta izšķirtspēja. Tā vietā tika aktivizēts paplašinātās darbvirsmas režīms.</translation>
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">Aktivizēt <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Pievienoties citam...</translation>
@@ -253,13 +253,14 @@ Lai atceltu tā funkcionalitāti, nospiediet Alt+Meklēt vai Shift.</translation
 <translation id="8000066093800657092">Nav tīkla</translation>
 <translation id="8054466585765276473">Notiek akumulatora darbības ilguma aprēķināšana.</translation>
 <translation id="8077816382010018681">Vieta ātrās atbloķēšanas funkcijas paziņojuma nosaukumam</translation>
+<translation id="8098591350844501178">Apturēt ekrāna apraidi uztvērējā “<ph name="RECEIVER_NAME" />”</translation>
 <translation id="8103386449138765447">Īsziņas: <ph name="MESSAGE_COUNT" /></translation>
 <translation id="8132793192354020517">Savienots ar <ph name="NAME" /></translation>
+<translation id="8180896103888046100">Apturēt apraidi nezināmā uztvērējā</translation>
 <translation id="8185286464235484130">Lūdzu, atbildiet uz dažiem jautājumiem, lai informētu mūs par pakalpojuma darbību.</translation>
 <translation id="8190698733819146287">Pielāgot valodas un ievadi...</translation>
 <translation id="8206859287963243715">Mobilais tālrunis</translation>
 <translation id="8308637677604853869">Iepriekšējā izvēlne</translation>
-<translation id="8356164830168736643">Aizvērt <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Iestatījumi</translation>
 <translation id="8454013096329229812">Wi-Fi tīkls ir ieslēgts.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: notiek atkārtota savienojuma izveide…</translation>
@@ -275,7 +276,6 @@ Lai atceltu tā funkcionalitāti, nospiediet Alt+Meklēt vai Shift.</translation
 <translation id="8878886163241303700">Notiek ekrāna izvēršana</translation>
 <translation id="8938800817013097409">USB-C ierīce (pieslēgvieta aizmugurē pa labi)</translation>
 <translation id="8940956008527784070">Akumulators gandrīz tukšs (<ph name="PERCENTAGE" />%)</translation>
-<translation id="9008540565042607572">Diemžēl monitoru nevar izmantot (tas netiek atbalstīts). Noklikšķiniet, lai nosūtītu atsauksmju ziņojumu.</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Tiek izmantots mikrofons.</translation>
 <translation id="9089416786594320554">Ievades metodes</translation>
@@ -285,5 +285,6 @@ Lai atceltu tā funkcionalitāti, nospiediet Alt+Meklēt vai Shift.</translation
 <translation id="923686485342484400">Lai izrakstītos, divas reizes nospiediet taustiņu kombināciju Ctrl+Shift+Q.</translation>
 <translation id="938582441709398163">Tastatūras pārklājums</translation>
 <translation id="939252827960237676">Neizdevās saglabāt ekrānuzņēmumu.</translation>
+<translation id="945522503751344254">Sūtīt atsauksmes</translation>
 <translation id="952992212772159698">Neaktivizēts</translation>
 </translationbundle>

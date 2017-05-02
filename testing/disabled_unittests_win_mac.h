@@ -7,6 +7,7 @@
 //    DISABLE(foo,baz)
 
   DISABLE(PipelineIntegrationTest, BasicPlaybackHi10P)
+  DISABLE(PipelineIntegrationTest, BasicPlayback_MediaSource_MP4_AudioOnly)
 
   // TODO: failing after Chromium 51 upgrade
   DISABLE_ALL(PlatformMediaPipelineIntegrationTest)

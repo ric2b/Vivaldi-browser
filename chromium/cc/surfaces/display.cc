@@ -34,7 +34,7 @@ Display::Display(SharedBitmapManager* bitmap_manager,
                  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
                  const RendererSettings& settings,
                  const FrameSinkId& frame_sink_id,
-                 std::unique_ptr<BeginFrameSource> begin_frame_source,
+                 BeginFrameSource* begin_frame_source,
                  std::unique_ptr<OutputSurface> output_surface,
                  std::unique_ptr<DisplayScheduler> scheduler,
                  std::unique_ptr<TextureMailboxDeleter> texture_mailbox_deleter)
@@ -42,15 +42,17 @@ Display::Display(SharedBitmapManager* bitmap_manager,
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       settings_(settings),
       frame_sink_id_(frame_sink_id),
-      begin_frame_source_(std::move(begin_frame_source)),
+      begin_frame_source_(begin_frame_source),
       output_surface_(std::move(output_surface)),
       scheduler_(std::move(scheduler)),
       texture_mailbox_deleter_(std::move(texture_mailbox_deleter)) {
   DCHECK(output_surface_);
   DCHECK_EQ(!scheduler_, !begin_frame_source_);
   DCHECK(frame_sink_id_.is_valid());
-  if (scheduler_)
+  if (scheduler_) {
     scheduler_->SetClient(this);
+    scheduler_->SetBeginFrameSource(begin_frame_source);
+  }
 }
 
 Display::~Display() {
@@ -59,7 +61,7 @@ Display::~Display() {
     if (auto* context = output_surface_->context_provider())
       context->SetLostContextCallback(base::Closure());
     if (begin_frame_source_)
-      surface_manager_->UnregisterBeginFrameSource(begin_frame_source_.get());
+      surface_manager_->UnregisterBeginFrameSource(begin_frame_source_);
     surface_manager_->RemoveObserver(this);
   }
   if (aggregator_) {
@@ -83,7 +85,7 @@ void Display::Initialize(DisplayClient* client,
   // This must be done in Initialize() so that the caller can delay this until
   // they are ready to receive a BeginFrameSource.
   if (begin_frame_source_) {
-    surface_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
+    surface_manager_->RegisterBeginFrameSource(begin_frame_source_,
                                                frame_sink_id_);
   }
 
@@ -217,8 +219,7 @@ void Display::InitializeRenderer() {
 
 void Display::UpdateRootSurfaceResourcesLocked() {
   Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
-  bool root_surface_resources_locked =
-      !surface || !surface->GetEligibleFrame().delegated_frame_data;
+  bool root_surface_resources_locked = !surface || !surface->HasFrame();
   if (scheduler_)
     scheduler_->SetRootSurfaceResourcesLocked(root_surface_resources_locked);
 }
@@ -245,7 +246,8 @@ bool Display::DrawAndSwap() {
   }
 
   CompositorFrame frame = aggregator_->Aggregate(current_surface_id_);
-  if (!frame.delegated_frame_data) {
+
+  if (frame.render_pass_list.empty()) {
     TRACE_EVENT_INSTANT0("cc", "Empty aggregated frame.",
                          TRACE_EVENT_SCOPE_THREAD);
     return false;
@@ -258,21 +260,19 @@ bool Display::DrawAndSwap() {
       surface->RunDrawCallbacks();
   }
 
-  DelegatedFrameData* frame_data = frame.delegated_frame_data.get();
-
   frame.metadata.latency_info.insert(frame.metadata.latency_info.end(),
                                      stored_latency_info_.begin(),
                                      stored_latency_info_.end());
   stored_latency_info_.clear();
   bool have_copy_requests = false;
-  for (const auto& pass : frame_data->render_pass_list) {
+  for (const auto& pass : frame.render_pass_list) {
     have_copy_requests |= !pass->copy_requests.empty();
   }
 
   gfx::Size surface_size;
   bool have_damage = false;
-  if (!frame_data->render_pass_list.empty()) {
-    RenderPass& last_render_pass = *frame_data->render_pass_list.back();
+  if (!frame.render_pass_list.empty()) {
+    RenderPass& last_render_pass = *frame.render_pass_list.back();
     if (last_render_pass.output_rect.size() != current_surface_size_ &&
         last_render_pass.damage_rect == last_render_pass.output_rect &&
         !current_surface_size_.IsEmpty()) {
@@ -299,7 +299,7 @@ bool Display::DrawAndSwap() {
     should_draw = false;
   }
 
-  client_->DisplayWillDrawAndSwap(should_draw, frame_data->render_pass_list);
+  client_->DisplayWillDrawAndSwap(should_draw, frame.render_pass_list);
 
   if (should_draw) {
     bool disable_image_filtering =
@@ -312,9 +312,8 @@ bool Display::DrawAndSwap() {
       DCHECK(!disable_image_filtering);
     }
 
-    renderer_->DecideRenderPassAllocationsForFrame(
-        frame_data->render_pass_list);
-    renderer_->DrawFrame(&frame_data->render_pass_list, device_scale_factor_,
+    renderer_->DecideRenderPassAllocationsForFrame(frame.render_pass_list);
+    renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
                          device_color_space_, current_surface_size_);
   } else {
     TRACE_EVENT_INSTANT0("cc", "Draw skipped.", TRACE_EVENT_SCOPE_THREAD);
@@ -375,9 +374,8 @@ void Display::OnSurfaceDamaged(const SurfaceId& surface_id, bool* changed) {
       aggregator_->previous_contained_surfaces().count(surface_id)) {
     Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
     if (surface) {
-      const CompositorFrame& current_frame = surface->GetEligibleFrame();
-      if (!current_frame.delegated_frame_data ||
-          current_frame.delegated_frame_data->resource_list.empty()) {
+      if (!surface->HasFrame() ||
+          surface->GetEligibleFrame().resource_list.empty()) {
         aggregator_->ReleaseResources(surface_id);
       }
     }
@@ -394,9 +392,7 @@ void Display::OnSurfaceDamaged(const SurfaceId& surface_id, bool* changed) {
     UpdateRootSurfaceResourcesLocked();
 }
 
-void Display::OnSurfaceCreated(const SurfaceId& surface_id,
-                               const gfx::Size& frame,
-                               float device_scale_factor) {}
+void Display::OnSurfaceCreated(const SurfaceInfo& surface_info) {}
 
 const SurfaceId& Display::CurrentSurfaceId() {
   return current_surface_id_;

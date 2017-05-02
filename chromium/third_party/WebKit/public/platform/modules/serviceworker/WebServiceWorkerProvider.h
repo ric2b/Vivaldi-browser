@@ -40,7 +40,6 @@
 namespace blink {
 
 class WebURL;
-class WebServiceWorker;
 class WebServiceWorkerProviderClient;
 struct WebServiceWorkerError;
 
@@ -60,21 +59,25 @@ class WebServiceWorkerProvider {
       WebCallbacks<std::unique_ptr<WebServiceWorkerRegistration::Handle>,
                    const WebServiceWorkerError&>;
 
-  // Each element's ownership is transferred.
-  using WebServiceWorkerGetRegistrationsCallbacks = WebCallbacks<
-      std::unique_ptr<WebVector<WebServiceWorkerRegistration::Handle*>>,
-      const WebServiceWorkerError&>;
+  using WebServiceWorkerRegistrationHandles =
+      WebVector<std::unique_ptr<WebServiceWorkerRegistration::Handle>>;
+  using WebServiceWorkerGetRegistrationsCallbacks =
+      WebCallbacks<std::unique_ptr<WebServiceWorkerRegistrationHandles>,
+                   const WebServiceWorkerError&>;
   using WebServiceWorkerGetRegistrationForReadyCallbacks =
       WebCallbacks<std::unique_ptr<WebServiceWorkerRegistration::Handle>, void>;
 
-  virtual void registerServiceWorker(const WebURL& pattern,
-                                     const WebURL& scriptUrl,
-                                     WebServiceWorkerRegistrationCallbacks*) {}
-  virtual void getRegistration(const WebURL& documentURL,
-                               WebServiceWorkerGetRegistrationCallbacks*) {}
-  virtual void getRegistrations(WebServiceWorkerGetRegistrationsCallbacks*) {}
+  virtual void registerServiceWorker(
+      const WebURL& pattern,
+      const WebURL& scriptUrl,
+      std::unique_ptr<WebServiceWorkerRegistrationCallbacks>) {}
+  virtual void getRegistration(
+      const WebURL& documentURL,
+      std::unique_ptr<WebServiceWorkerGetRegistrationCallbacks>) {}
+  virtual void getRegistrations(
+      std::unique_ptr<WebServiceWorkerGetRegistrationsCallbacks>) {}
   virtual void getRegistrationForReady(
-      WebServiceWorkerGetRegistrationForReadyCallbacks*) {}
+      std::unique_ptr<WebServiceWorkerGetRegistrationForReadyCallbacks>) {}
   virtual bool validateScopeAndScriptURL(const WebURL& scope,
                                          const WebURL& scriptURL,
                                          WebString* errorMessage) {

@@ -35,15 +35,10 @@ class ArcAppDeferredLauncherItemController : public LauncherItemController {
   // ash::ShelfItemDelegate
   ash::ShelfItemDelegate::PerformedAction ItemSelected(
       const ui::Event& event) override;
-  base::string16 GetTitle() override;
-  bool CanPin() const override;
   ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool ShouldShowTooltip() override;
   void Close() override;
 
   // LauncherItemController overrides:
-  bool IsVisible() const override;
   void Launch(ash::LaunchSource source, int event_flags) override;
   ash::ShelfItemDelegate::PerformedAction Activate(
       ash::LaunchSource source) override;

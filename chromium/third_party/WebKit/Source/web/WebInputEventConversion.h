@@ -31,67 +31,52 @@
 #ifndef WebInputEventConversion_h
 #define WebInputEventConversion_h
 
-#include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/PlatformTouchEvent.h"
-#include "platform/PlatformWheelEvent.h"
-#include "public/platform/WebGestureEvent.h"
+#include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebInputEvent.h"
+#include "public/platform/WebMouseWheelEvent.h"
 #include "web/WebExport.h"
 #include "wtf/Compiler.h"
+#include <vector>
 
 namespace blink {
 
-class GestureEvent;
 class KeyboardEvent;
 class MouseEvent;
 class LayoutItem;
 class TouchEvent;
+class WebGestureEvent;
 class WebMouseEvent;
-class WebMouseWheelEvent;
 class WebKeyboardEvent;
 class WebTouchEvent;
-class WebGestureEvent;
-class WheelEvent;
 class Widget;
 
 // These classes are used to convert from WebInputEvent subclasses to
 // corresponding WebCore events.
 
 class WEB_EXPORT PlatformMouseEventBuilder
-    : WTF_NON_EXPORTED_BASE(public PlatformMouseEvent) {
+    : NON_EXPORTED_BASE(public PlatformMouseEvent) {
  public:
   PlatformMouseEventBuilder(Widget*, const WebMouseEvent&);
 };
 
-class WEB_EXPORT PlatformWheelEventBuilder
-    : WTF_NON_EXPORTED_BASE(public PlatformWheelEvent) {
- public:
-  PlatformWheelEventBuilder(Widget*, const WebMouseWheelEvent&);
-};
-
-class WEB_EXPORT PlatformGestureEventBuilder
-    : WTF_NON_EXPORTED_BASE(public PlatformGestureEvent) {
- public:
-  PlatformGestureEventBuilder(Widget*, const WebGestureEvent&);
-};
-
 // Converts a WebTouchPoint to a PlatformTouchPoint.
 class WEB_EXPORT PlatformTouchPointBuilder
-    : WTF_NON_EXPORTED_BASE(public PlatformTouchPoint) {
+    : NON_EXPORTED_BASE(public PlatformTouchPoint) {
  public:
   PlatformTouchPointBuilder(Widget*, const WebTouchPoint&);
 };
 
 // Converts a WebTouchEvent to a PlatformTouchEvent.
 class WEB_EXPORT PlatformTouchEventBuilder
-    : WTF_NON_EXPORTED_BASE(public PlatformTouchEvent) {
+    : NON_EXPORTED_BASE(public PlatformTouchEvent) {
  public:
   PlatformTouchEventBuilder(Widget*, const WebTouchEvent&);
 };
 
 class WEB_EXPORT WebMouseEventBuilder
-    : WTF_NON_EXPORTED_BASE(public WebMouseEvent) {
+    : NON_EXPORTED_BASE(public WebMouseEvent) {
  public:
   // Converts a MouseEvent to a corresponding WebMouseEvent.
   // NOTE: This is only implemented for mousemove, mouseover, mouseout,
@@ -101,20 +86,12 @@ class WEB_EXPORT WebMouseEventBuilder
   WebMouseEventBuilder(const Widget*, const LayoutItem, const TouchEvent&);
 };
 
-// Converts a WheelEvent to a corresponding WebMouseWheelEvent.
-// If the event mapping fails, the event type will be set to Undefined.
-class WEB_EXPORT WebMouseWheelEventBuilder
-    : WTF_NON_EXPORTED_BASE(public WebMouseWheelEvent) {
- public:
-  WebMouseWheelEventBuilder(const Widget*, const LayoutItem, const WheelEvent&);
-};
-
 // Converts a KeyboardEvent to a corresponding WebKeyboardEvent.
 // NOTE: For KeyboardEvent, this is only implemented for keydown,
 // keyup, and keypress. If the event mapping fails, the event type will be set
 // to Undefined.
 class WEB_EXPORT WebKeyboardEventBuilder
-    : WTF_NON_EXPORTED_BASE(public WebKeyboardEvent) {
+    : NON_EXPORTED_BASE(public WebKeyboardEvent) {
  public:
   WebKeyboardEventBuilder(const KeyboardEvent&);
 };
@@ -123,18 +100,24 @@ class WEB_EXPORT WebKeyboardEventBuilder
 // NOTE: WebTouchEvents have a cap on the number of WebTouchPoints. Any points
 // exceeding that cap will be dropped.
 class WEB_EXPORT WebTouchEventBuilder
-    : WTF_NON_EXPORTED_BASE(public WebTouchEvent) {
+    : NON_EXPORTED_BASE(public WebTouchEvent) {
  public:
   WebTouchEventBuilder(const LayoutItem, const TouchEvent&);
 };
 
-// Converts GestureEvent to a corresponding WebGestureEvent.
-// NOTE: If event mapping fails, the type will be set to Undefined.
-class WEB_EXPORT WebGestureEventBuilder
-    : WTF_NON_EXPORTED_BASE(public WebGestureEvent) {
- public:
-  WebGestureEventBuilder(const LayoutItem, const GestureEvent&);
-};
+// Return a new transformed WebGestureEvent by applying the Widget's scale
+// and translation.
+WEB_EXPORT WebGestureEvent TransformWebGestureEvent(Widget*,
+                                                    const WebGestureEvent&);
+WEB_EXPORT WebMouseWheelEvent
+TransformWebMouseWheelEvent(Widget*, const WebMouseWheelEvent&);
+
+Vector<PlatformMouseEvent> WEB_EXPORT
+createPlatformMouseEventVector(Widget*,
+                               const std::vector<const WebInputEvent*>&);
+Vector<PlatformTouchEvent> WEB_EXPORT
+createPlatformTouchEventVector(Widget*,
+                               const std::vector<const WebInputEvent*>&);
 
 }  // namespace blink
 

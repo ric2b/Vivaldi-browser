@@ -15,14 +15,25 @@ class CharacterData;
 class ContainerNode;
 class Document;
 class Node;
+class NodeWithIndex;
 class SynchronousMutationObserver;
+class Text;
 
 class CORE_EXPORT SynchronousMutationNotifier
     : public LifecycleNotifier<Document, SynchronousMutationObserver> {
  public:
   // TODO(yosin): We will have |notifyXXX()| functions defined in
   // |SynchronousMutationObserver|.
-
+  void notifyChangeChildren(const ContainerNode&);
+  void notifyMergeTextNodes(const Text& mergedNode,
+                            const NodeWithIndex& nodeToBeRemovedWithIndex,
+                            unsigned oldLength);
+  void notifyMoveTreeToNewDocument(const Node&);
+  void notifySplitTextNode(const Text&);
+  void notifyUpdateCharacterData(CharacterData*,
+                                 unsigned offset,
+                                 unsigned oldLength,
+                                 unsigned newLength);
   void notifyNodeChildrenWillBeRemoved(ContainerNode&);
   void notifyNodeWillBeRemoved(Node&);
 

@@ -7,7 +7,7 @@ package org.chromium.net;
 import static org.chromium.base.CollectionUtil.newHashSet;
 
 import android.os.ConditionVariable;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.MetricsTestUtil.TestExecutor;
@@ -20,6 +20,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Test RequestFinishedInfo.Listener and the metrics information it provides.
@@ -206,8 +207,8 @@ public class RequestFinishedInfoTest extends CronetTestBase {
         assertTrue(requestInfo.getAnnotations().isEmpty());
         assertEquals(RequestFinishedInfo.FAILED, requestInfo.getFinishedReason());
         assertNotNull(requestInfo.getException());
-        assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
-                requestInfo.getException().getErrorCode());
+        assertEquals(NetworkException.ERROR_CONNECTION_REFUSED,
+                ((NetworkException) requestInfo.getException()).getErrorCode());
         RequestFinishedInfo.Metrics metrics = requestInfo.getMetrics();
         assertNotNull("RequestFinishedInfo.getMetrics() must not be null", metrics);
         // The failure is occasionally fast enough that time reported is 0, so just check for null
@@ -227,8 +228,8 @@ public class RequestFinishedInfoTest extends CronetTestBase {
                 metrics.getRequestEnd().before(endTime) || metrics.getRequestEnd().equals(endTime));
         // Entire request should take more than 0 ms
         assertTrue(metrics.getRequestEnd().getTime() - metrics.getRequestStart().getTime() > 0);
-        assertTrue(metrics.getSentBytesCount() == 0);
-        assertTrue(metrics.getReceivedBytesCount() == 0);
+        assertTrue(metrics.getSentByteCount() == 0);
+        assertTrue(metrics.getReceivedByteCount() == 0);
         mTestFramework.mCronetEngine.shutdown();
     }
 
@@ -292,6 +293,41 @@ public class RequestFinishedInfoTest extends CronetTestBase {
         mTestFramework.mCronetEngine.shutdown();
     }
 
+    private static class RejectAllTasksExecutor implements Executor {
+        @Override
+        public void execute(Runnable task) {
+            throw new RejectedExecutionException();
+        }
+    }
+
+    // Checks that CronetURLRequestAdapter::DestroyOnNetworkThread() doesn't crash when metrics
+    // collection is enabled and the URLRequest hasn't been created. See http://crbug.com/675629.
+    @SmallTest
+    @OnlyRunNativeCronet
+    @Feature({"Cronet"})
+    public void testExceptionInRequestStart() throws Exception {
+        mTestFramework = startCronetTestFramework();
+        // The listener in this test shouldn't get any tasks.
+        Executor executor = new RejectAllTasksExecutor();
+        TestRequestFinishedListener requestFinishedListener =
+                new TestRequestFinishedListener(executor);
+        mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        ExperimentalUrlRequest.Builder urlRequestBuilder =
+                mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                        mUrl, callback, callback.getExecutor());
+        // Empty headers are invalid and will cause start() to throw an exception.
+        UrlRequest request = urlRequestBuilder.addHeader("", "").build();
+        try {
+            request.start();
+            fail("UrlRequest.start() should throw IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertEquals("Invalid header =", e.getMessage());
+        }
+
+        mTestFramework.mCronetEngine.shutdown();
+    }
+
     @SmallTest
     @Feature({"Cronet"})
     public void testMetricsGetters() throws Exception {
@@ -309,13 +345,12 @@ public class RequestFinishedInfoTest extends CronetTestBase {
         long responseStart = 12;
         long requestEnd = 13;
         boolean socketReused = true;
-        long sentBytesCount = 14;
-        long receivedBytesCount = 15;
+        long sentByteCount = 14;
+        long receivedByteCount = 15;
         // Make sure nothing gets reordered inside the Metrics class
         RequestFinishedInfo.Metrics metrics = new CronetMetrics(requestStart, dnsStart, dnsEnd,
                 connectStart, connectEnd, sslStart, sslEnd, sendingStart, sendingEnd, pushStart,
-                pushEnd, responseStart, requestEnd, socketReused, sentBytesCount,
-                receivedBytesCount);
+                pushEnd, responseStart, requestEnd, socketReused, sentByteCount, receivedByteCount);
         assertEquals(new Date(requestStart), metrics.getRequestStart());
         // -1 timestamp should translate to null
         assertNull(metrics.getDnsEnd());
@@ -329,7 +364,7 @@ public class RequestFinishedInfoTest extends CronetTestBase {
         assertEquals(new Date(responseStart), metrics.getResponseStart());
         assertEquals(new Date(requestEnd), metrics.getRequestEnd());
         assertEquals(socketReused, metrics.getSocketReused());
-        assertEquals(sentBytesCount, (long) metrics.getSentBytesCount());
-        assertEquals(receivedBytesCount, (long) metrics.getReceivedBytesCount());
+        assertEquals(sentByteCount, (long) metrics.getSentByteCount());
+        assertEquals(receivedByteCount, (long) metrics.getReceivedByteCount());
     }
 }

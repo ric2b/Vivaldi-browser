@@ -17,9 +17,9 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/cpp/window_tree_client.h"
+#include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/views/controls/webview/webview.h"
-#include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -80,7 +80,16 @@ ViewImpl::ViewImpl(std::unique_ptr<service_manager::Connector> connector,
   registrar_.Add(this, content::NOTIFICATION_NAV_ENTRY_CHANGED,
                  content::Source<content::NavigationController>(controller));
 }
-ViewImpl::~ViewImpl() {}
+
+ViewImpl::~ViewImpl() {
+  DeleteTreeAndWidget();
+}
+
+void ViewImpl::DeleteTreeAndWidget() {
+  widget_.reset();
+  window_tree_host_.reset();
+  window_tree_client_.reset();
+}
 
 void ViewImpl::NavigateTo(const GURL& url) {
   web_view_->GetWebContents()->GetController().LoadURL(
@@ -99,11 +108,11 @@ void ViewImpl::NavigateToOffset(int offset) {
   web_view_->GetWebContents()->GetController().GoToOffset(offset);
 }
 
-void ViewImpl::Reload(bool skip_cache) {
-  if (skip_cache)
-    web_view_->GetWebContents()->GetController().Reload(true);
-  else
-    web_view_->GetWebContents()->GetController().ReloadBypassingCache(true);
+void ViewImpl::Reload(bool bypass_cache) {
+  web_view_->GetWebContents()->GetController().Reload(
+      bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                   : content::ReloadType::NORMAL,
+      true);
 }
 
 void ViewImpl::Stop() {
@@ -111,8 +120,8 @@ void ViewImpl::Stop() {
 }
 
 void ViewImpl::GetWindowTreeClient(ui::mojom::WindowTreeClientRequest request) {
-  window_tree_client_ =
-      base::MakeUnique<ui::WindowTreeClient>(this, nullptr, std::move(request));
+  window_tree_client_ = base::MakeUnique<aura::WindowTreeClient>(
+      connector_.get(), this, nullptr, std::move(request));
 }
 
 void ViewImpl::ShowInterstitial(const std::string& html) {
@@ -138,8 +147,8 @@ void ViewImpl::AddNewContents(content::WebContents* source,
                               bool* was_blocked) {
   mojom::ViewClientPtr client;
   mojom::ViewPtr view;
-  mojom::ViewRequest view_request = GetProxy(&view);
-  client_->ViewCreated(std::move(view), GetProxy(&client),
+  mojom::ViewRequest view_request(&view);
+  client_->ViewCreated(std::move(view), MakeRequest(&client),
                        disposition == WindowOpenDisposition::NEW_POPUP,
                        initial_rect, user_gesture);
 
@@ -258,29 +267,48 @@ void ViewImpl::Observe(int type,
   }
 }
 
-void ViewImpl::OnEmbed(ui::Window* root) {
+void ViewImpl::OnEmbed(
+    std::unique_ptr<aura::WindowTreeHostMus> window_tree_host) {
+  // TODO: Supplying a WindowTreeHostMus isn't particularly ideal in this case.
+  // In particular it would be nice if the WindowTreeClientDelegate could create
+  // its own WindowTreeHostMus, that way this code could directly create a
+  // DesktopWindowTreeTreeHostMus.
+  window_tree_host_ = std::move(window_tree_host);
   DCHECK(!widget_.get());
+  // TODO: fix this. The following won't work if multiple WindowTreeClients
+  // are used at the same time. The best fix is to have the ability to specify
+  // a WindowTreeClient when DesktopNativeWidgetAura is created so that it can
+  // create WindowPortMus with the correct client.
   widget_.reset(new views::Widget);
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = this;
-  params.native_widget = new views::NativeWidgetMus(
-      widget_.get(), root, ui::mojom::CompositorFrameSinkType::DEFAULT);
   widget_->Init(params);
   widget_->Show();
 }
 
-void ViewImpl::OnEmbedRootDestroyed(ui::Window* root) {
-  window_tree_client_.reset();
+void ViewImpl::OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) {
+  DCHECK_EQ(window_tree_host, window_tree_host_.get());
+  DeleteTreeAndWidget();
 }
 
-void ViewImpl::OnLostConnection(ui::WindowTreeClient* client) {
-  window_tree_client_.reset();
+void ViewImpl::OnLostConnection(aura::WindowTreeClient* client) {
+  DeleteTreeAndWidget();
 }
 
 void ViewImpl::OnPointerEventObserved(const ui::PointerEvent& event,
-                                      ui::Window* target) {}
+                                      aura::Window* target) {}
+
+aura::client::CaptureClient* ViewImpl::GetCaptureClient() {
+  // TODO: wire this up. This typically comes from WMState.
+  return nullptr;
+}
+
+aura::PropertyConverter* ViewImpl::GetPropertyConverter() {
+  // TODO: wire this up.
+  return nullptr;
+}
 
 views::View* ViewImpl::GetContentsView() {
   return web_view_;

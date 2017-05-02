@@ -12,8 +12,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
-#include "services/ui/common/event_matcher_util.h"
-#include "services/ui/surfaces/display_compositor.h"
+#include "services/ui/common/accelerator_util.h"
 #include "services/ui/ws/accelerator.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
@@ -80,7 +79,7 @@ class WindowManagerStateTest : public testing::Test {
                WindowTree** embed_tree,
                TestWindowTreeClient** embed_client_proxy) {
     mojom::WindowTreeClientPtr embed_client;
-    mojom::WindowTreeClientRequest client_request = GetProxy(&embed_client);
+    mojom::WindowTreeClientRequest client_request(&embed_client);
     ASSERT_TRUE(
         tree->Embed(embed_window_id, std::move(embed_client), embed_flags));
     TestWindowTreeClient* client =
@@ -232,6 +231,7 @@ TEST_F(WindowManagerStateTest, PreTargetConsumed) {
   {
     mojom::EventMatcherPtr matcher = ui::CreateKeyMatcher(
         ui::mojom::KeyboardCode::W, ui::mojom::kEventFlagControlDown);
+
     ASSERT_TRUE(window_manager_state()->event_dispatcher()->AddAccelerator(
         accelerator_id, std::move(matcher)));
   }
@@ -547,8 +547,10 @@ TEST_F(WindowManagerStateTest, PostAcceleratorForgotten) {
 // with no roots.
 TEST(WindowManagerStateShutdownTest, DestroyTreeBeforeDisplay) {
   WindowServerTestHelper ws_test_helper;
-  ws_test_helper.window_server_delegate()->CreateDisplays(1);
   WindowServer* window_server = ws_test_helper.window_server();
+  TestScreenManager screen_manager;
+  screen_manager.Init(window_server->display_manager());
+  screen_manager.AddDisplay();
   const UserId kUserId1 = "2";
   AddWindowManager(window_server, kUserId1);
   ASSERT_EQ(1u, window_server->display_manager()->displays().size());

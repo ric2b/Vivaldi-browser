@@ -27,10 +27,10 @@ namespace cc {
 class DamageTracker;
 class FilterOperations;
 class Occlusion;
-class RenderPassId;
 class RenderPassSink;
 class LayerImpl;
 class LayerIterator;
+class LayerTreeImpl;
 
 struct AppendQuadsData;
 
@@ -53,7 +53,7 @@ class CC_EXPORT RenderSurfaceImpl {
   }
   float draw_opacity() const { return draw_properties_.draw_opacity; }
 
-  SkXfermode::Mode BlendMode() const;
+  SkBlendMode BlendMode() const;
   bool UsesDefaultBlendMode() const;
 
   void SetNearestOcclusionImmuneAncestor(const RenderSurfaceImpl* surface) {
@@ -124,7 +124,7 @@ class CC_EXPORT RenderSurfaceImpl {
   LayerImplList& layer_list() { return layer_list_; }
   void ClearLayerLists();
 
-  int OwningLayerId() const;
+  int id() const { return stable_effect_id_; }
 
   LayerImpl* MaskLayer();
   bool HasMask() const;
@@ -143,30 +143,30 @@ class CC_EXPORT RenderSurfaceImpl {
   void NoteAncestorPropertyChanged();
 
   DamageTracker* damage_tracker() const { return damage_tracker_.get(); }
+  gfx::Rect GetDamageRect();
 
-  RenderPassId GetRenderPassId();
+  int GetRenderPassId();
 
   void AppendRenderPasses(RenderPassSink* pass_sink);
-  void AppendQuads(RenderPass* render_pass,
-                   const gfx::Transform& draw_transform,
-                   const Occlusion& occlusion_in_content_space,
-                   SkColor debug_border_color,
-                   float debug_border_width,
-                   LayerImpl* mask_layer,
-                   AppendQuadsData* append_quads_data,
-                   RenderPassId render_pass_id);
+  void AppendQuads(RenderPass* render_pass, AppendQuadsData* append_quads_data);
 
   int TransformTreeIndex() const;
   int ClipTreeIndex() const;
+
+  void set_effect_tree_index(int index) { effect_tree_index_ = index; }
   int EffectTreeIndex() const;
 
  private:
   void SetContentRect(const gfx::Rect& content_rect);
   gfx::Rect CalculateClippedAccumulatedContentRect();
+  gfx::Rect CalculateExpandedClipForFilters(
+      const gfx::Transform& target_to_surface);
 
   const EffectNode* OwningEffectNode() const;
 
-  LayerImpl* owning_layer_;
+  LayerTreeImpl* layer_tree_impl_;
+  int stable_effect_id_;
+  int effect_tree_index_;
 
   // Container for properties that render surfaces need to compute before they
   // can be drawn.

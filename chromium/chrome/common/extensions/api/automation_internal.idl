@@ -31,10 +31,15 @@ namespace automationInternal {
   enum ActionType {
     focus,
     doDefault,
+    getImageData,
     makeVisible,
+    resumeMedia,
     setAccessibilityFocus,
     setSequentialFocusNavigationStartingPoint,
     setSelection,
+    startDuckingMedia,
+    stopDuckingMedia,
+    suspendMedia,
     showContextMenu
   };
 
@@ -65,6 +70,12 @@ namespace automationInternal {
   dictionary EnableTabParams {
     long routingID;
     long? tabID;
+  };
+
+  // Arguments for the getImageData function.
+  dictionary GetImageDataParams {
+    long maxWidth;
+    long maxHeight;
   };
 
   // Returns the accessibility tree id of the web contents who's accessibility

@@ -9,25 +9,29 @@
 #include <utility>
 
 #include "base/ios/ios_util.h"
-#include "base/mac/scoped_nsobject.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/mac/scoped_nsobject.h"
 #import "base/test/ios/wait_util.h"
-#include "base/values.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
-#include "ios/web/navigation/crw_session_controller.h"
-#include "ios/web/navigation/crw_session_entry.h"
-#include "ios/web/navigation/navigation_item_impl.h"
+#import "ios/web/navigation/crw_session_controller.h"
+#import "ios/web/navigation/crw_session_entry.h"
+#import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/public/referrer.h"
-#import "ios/web/public/test/test_web_client.h"
-#include "ios/web/public/test/test_web_view_content_view.h"
+#import "ios/web/public/test/fakes/test_native_content.h"
+#import "ios/web/public/test/fakes/test_native_content_provider.h"
+#import "ios/web/public/test/fakes/test_web_client.h"
+#import "ios/web/public/test/fakes/test_web_state_delegate.h"
+#import "ios/web/public/test/fakes/test_web_view_content_view.h"
 #import "ios/web/public/web_state/crw_web_controller_observer.h"
 #import "ios/web/public/web_state/ui/crw_content_view.h"
+#import "ios/web/public/web_state/ui/crw_native_content.h"
+#import "ios/web/public/web_state/ui/crw_native_content_provider.h"
 #import "ios/web/public/web_state/ui/crw_web_view_content_view.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
+#include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/test/web_test_with_web_controller.h"
 #import "ios/web/test/wk_web_view_crash_utils.h"
-#include "ios/web/web_state/blocked_popup_info.h"
+#import "ios/web/web_state/blocked_popup_info.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
@@ -36,11 +40,11 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
+#import "testing/gtest_mac.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 #include "third_party/ocmock/ocmock_extensions.h"
-#include "ui/base/test/ios/ui_view_test_utils.h"
+#import "ui/base/test/ios/ui_view_test_utils.h"
 
 using web::NavigationManagerImpl;
 
@@ -70,63 +74,6 @@ using web::NavigationManagerImpl;
 // Stub implementation for CRWWebUserInterfaceDelegate protocol.
 @interface CRWWebUserInterfaceDelegateStub
     : OCMockComplexTypeHelper<CRWWebUserInterfaceDelegate>
-@end
-
-@implementation CRWWebUserInterfaceDelegateStub
-
-- (void)webController:(CRWWebController*)webController
-    runJavaScriptAlertPanelWithMessage:(NSString*)message
-                            requestURL:(const GURL&)requestURL
-                     completionHandler:(void (^)(void))completionHandler {
-  void (^stubBlock)(CRWWebController*, NSString*, const GURL&, id) =
-      [self blockForSelector:_cmd];
-  stubBlock(webController, message, requestURL, completionHandler);
-}
-
-- (void)webController:(CRWWebController*)webController
-    runJavaScriptConfirmPanelWithMessage:(NSString*)message
-                              requestURL:(const GURL&)requestURL
-                       completionHandler:(void (^)(BOOL))completionHandler {
-  void (^stubBlock)(CRWWebController*, NSString*, const GURL&, id) =
-      [self blockForSelector:_cmd];
-  stubBlock(webController, message, requestURL, completionHandler);
-}
-
-- (void)webController:(CRWWebController*)webController
-    runJavaScriptTextInputPanelWithPrompt:(NSString*)message
-                              defaultText:(NSString*)defaultText
-                               requestURL:(const GURL&)requestURL
-                        completionHandler:
-                            (void (^)(NSString* input))completionHandler {
-  void (^stubBlock)(CRWWebController*, NSString*, NSString*, const GURL&, id) =
-      [self blockForSelector:_cmd];
-  stubBlock(webController, message, defaultText, requestURL, completionHandler);
-}
-
-- (BOOL)respondsToSelector:(SEL)selector {
-  // OCMockComplexTypeHelper DCHECKs when respondsToSelector: is called for
-  // expected selector.
-  if (selector == @selector(webController:
-                      runJavaScriptAlertPanelWithMessage:
-                                              requestURL:
-                                       completionHandler:)) {
-    return YES;
-  }
-  if (selector == @selector(webController:
-                      runJavaScriptConfirmPanelWithMessage:
-                                                requestURL:
-                                         completionHandler:)) {
-    return YES;
-  }
-  if (selector == @selector(webController:
-                      runJavaScriptTextInputPanelWithPrompt:
-                                                defaultText:
-                                                 requestURL:
-                                          completionHandler:)) {
-    return YES;
-  }
-  return [super respondsToSelector:selector];
-}
 @end
 
 @implementation MockInteractionLoader {
@@ -200,34 +147,21 @@ typedef BOOL (^openExternalURLBlockType)(const GURL&);
 @interface CountingObserver : NSObject<CRWWebControllerObserver>
 
 @property(nonatomic, readonly) int pageLoadedCount;
-@property(nonatomic, readonly) int messageCount;
 @end
 
 @implementation CountingObserver
 @synthesize pageLoadedCount = _pageLoadedCount;
-@synthesize messageCount = _messageCount;
 
 - (void)pageLoaded:(CRWWebController*)webController {
   ++_pageLoadedCount;
-}
-
-- (BOOL)handleCommand:(const base::DictionaryValue&)command
-        webController:(CRWWebController*)webController
-    userIsInteracting:(BOOL)userIsInteracting
-            originURL:(const GURL&)originURL {
-  ++_messageCount;
-  return YES;
-}
-
-- (NSString*)commandPrefix {
-  return @"wctest";
 }
 
 @end
 
 namespace {
 
-NSString* kTestURLString = @"http://www.google.com/";
+const char kTestURLString[] = "http://www.google.com/";
+const char kTestAppSpecificURL[] = "testwebui://test/";
 
 // Returns true if the current device is a large iPhone (6 or 6+).
 bool IsIPhone6Or6Plus() {
@@ -324,7 +258,7 @@ class CRWWebControllerTest : public web::WebTestWithWebController {
     }
 
     [[result stub] backForwardList];
-    [[[result stub] andReturn:[NSURL URLWithString:kTestURLString]] URL];
+    [[[result stub] andReturn:[NSURL URLWithString:@(kTestURLString)]] URL];
     [[result stub] setNavigationDelegate:OCMOCK_ANY];
     [[result stub] setUIDelegate:OCMOCK_ANY];
     [[result stub] setFrame:ExpectedWebViewFrame()];
@@ -468,39 +402,37 @@ TEST_F(CRWWebControllerTest, SslCertError) {
 class CRWWebControllerPageDialogOpenPolicyTest
     : public web::WebTestWithWebController {
  protected:
+  CRWWebControllerPageDialogOpenPolicyTest()
+      : page_url_("https://chromium.test/") {}
   void SetUp() override {
     web::WebTestWithWebController::SetUp();
-    LoadHtml(@"<html><body></body></html>");
+    LoadHtml(@"<html><body></body></html>", page_url_);
     web_delegate_mock_.reset(
         [[OCMockObject mockForProtocol:@protocol(CRWWebDelegate)] retain]);
     [web_controller() setDelegate:web_delegate_mock_];
-    id ui_delegate_oc_mock =
-        [OCMockObject mockForProtocol:@protocol(CRWWebUserInterfaceDelegate)];
-    ui_delegate_mock_.reset([[CRWWebUserInterfaceDelegateStub alloc]
-        initWithRepresentedObject:ui_delegate_oc_mock]);
-    [web_controller() setUIDelegate:ui_delegate_mock_];
-    // Web Controller cancels all dialogs on |close|.
-    [[ui_delegate_mock_ stub] cancelDialogsForWebController:web_controller()];
+    web_state()->SetDelegate(&test_web_delegate_);
   }
   void TearDown() override {
     WaitForBackgroundTasks();
     EXPECT_OCMOCK_VERIFY(web_delegate_mock_);
-    EXPECT_OCMOCK_VERIFY(ui_delegate_mock_);
     [web_controller() setDelegate:nil];
-    [web_controller() setUIDelegate:nil];
+    web_state()->SetDelegate(nullptr);
 
     web::WebTestWithWebController::TearDown();
   }
-  // Returns CRWWebDelegate mock object.
   id web_delegate_mock() { return web_delegate_mock_; };
-  // Returns CRWWebUserInterfaceDelegate mock object.
-  id ui_delegate_mock() { return ui_delegate_mock_; };
+  web::TestJavaScriptDialogPresenter* js_dialog_presenter() {
+    return test_web_delegate_.GetTestJavaScriptDialogPresenter();
+  }
+  const std::vector<web::TestJavaScriptDialog>& requested_dialogs() {
+    return js_dialog_presenter()->requested_dialogs();
+  }
+  const GURL& page_url() { return page_url_; }
 
  private:
-  // Mocks CRWWebDelegate object.
+  web::TestWebStateDelegate test_web_delegate_;
   base::scoped_nsprotocol<id> web_delegate_mock_;
-  // Mocks CRWWebUserInterfaceDelegate object.
-  base::scoped_nsprotocol<id> ui_delegate_mock_;
+  GURL page_url_;
 };
 
 // Tests that window.alert dialog is suppressed for DIALOG_POLICY_SUPPRESS.
@@ -513,109 +445,98 @@ TEST_F(CRWWebControllerPageDialogOpenPolicyTest, SuppressAlert) {
 
 // Tests that window.alert dialog is shown for DIALOG_POLICY_ALLOW.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, AllowAlert) {
-  SEL selector = @selector(webController:
-      runJavaScriptAlertPanelWithMessage:
-                              requestURL:
-                       completionHandler:);
-  [ui_delegate_mock() onSelector:selector
-            callBlockExpectation:^(CRWWebController* controller,
-                                   NSString* message, const GURL& url,
-                                   ProceduralBlock completion_handler) {
-              EXPECT_NSEQ(web_controller(), controller);
-              EXPECT_NSEQ(@"test", message);
-              web::URLVerificationTrustLevel unused;
-              EXPECT_EQ([controller currentURLWithTrustLevel:&unused], url);
-              completion_handler();
-            }];
+  ASSERT_TRUE(requested_dialogs().empty());
 
   [web_controller() setShouldSuppressDialogs:NO];
   ExecuteJavaScript(@"alert('test')");
+
+  ASSERT_EQ(1U, requested_dialogs().size());
+  web::TestJavaScriptDialog dialog = requested_dialogs()[0];
+  EXPECT_EQ(web_state(), dialog.web_state);
+  EXPECT_EQ(page_url(), dialog.origin_url);
+  EXPECT_EQ(web::JAVASCRIPT_DIALOG_TYPE_ALERT, dialog.java_script_dialog_type);
+  EXPECT_NSEQ(@"test", dialog.message_text);
+  EXPECT_FALSE(dialog.default_prompt_text);
 };
 
 // Tests that window.confirm dialog is suppressed for DIALOG_POLICY_SUPPRESS.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, SuppressConfirm) {
+  ASSERT_TRUE(requested_dialogs().empty());
+
   [[web_delegate_mock() expect]
       webControllerDidSuppressDialog:web_controller()];
   [web_controller() setShouldSuppressDialogs:YES];
   EXPECT_NSEQ(@NO, ExecuteJavaScript(@"confirm('test')"));
+
+  ASSERT_TRUE(requested_dialogs().empty());
 };
 
 // Tests that window.confirm dialog is shown for DIALOG_POLICY_ALLOW and
 // it's result is true.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, AllowConfirmWithTrue) {
-  SEL selector = @selector(webController:
-      runJavaScriptConfirmPanelWithMessage:
-                                requestURL:
-                         completionHandler:);
-  [ui_delegate_mock()
-                onSelector:selector
-      callBlockExpectation:^(CRWWebController* controller, NSString* message,
-                             const GURL& url, id completion_handler) {
-        EXPECT_NSEQ(web_controller(), controller);
-        EXPECT_NSEQ(@"test", message);
-        web::URLVerificationTrustLevel unused;
-        EXPECT_EQ([controller currentURLWithTrustLevel:&unused], url);
-        void (^callable_block)(BOOL) = completion_handler;
-        callable_block(YES);
-      }];
+  ASSERT_TRUE(requested_dialogs().empty());
+
+  js_dialog_presenter()->set_callback_success_argument(true);
 
   [web_controller() setShouldSuppressDialogs:NO];
   EXPECT_NSEQ(@YES, ExecuteJavaScript(@"confirm('test')"));
+
+  ASSERT_EQ(1U, requested_dialogs().size());
+  web::TestJavaScriptDialog dialog = requested_dialogs()[0];
+  EXPECT_EQ(web_state(), dialog.web_state);
+  EXPECT_EQ(page_url(), dialog.origin_url);
+  EXPECT_EQ(web::JAVASCRIPT_DIALOG_TYPE_CONFIRM,
+            dialog.java_script_dialog_type);
+  EXPECT_NSEQ(@"test", dialog.message_text);
+  EXPECT_FALSE(dialog.default_prompt_text);
 }
 
 // Tests that window.confirm dialog is shown for DIALOG_POLICY_ALLOW and
 // it's result is false.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, AllowConfirmWithFalse) {
-  SEL selector = @selector(webController:
-      runJavaScriptConfirmPanelWithMessage:
-                                requestURL:
-                         completionHandler:);
-  [ui_delegate_mock()
-                onSelector:selector
-      callBlockExpectation:^(CRWWebController* controller, NSString* message,
-                             const GURL& url, id completion_handler) {
-        EXPECT_NSEQ(web_controller(), controller);
-        EXPECT_NSEQ(@"test", message);
-        web::URLVerificationTrustLevel unused;
-        EXPECT_EQ([controller currentURLWithTrustLevel:&unused], url);
-        void (^callable_block)(BOOL) = completion_handler;
-        callable_block(NO);
-      }];
+  ASSERT_TRUE(requested_dialogs().empty());
 
   [web_controller() setShouldSuppressDialogs:NO];
   EXPECT_NSEQ(@NO, ExecuteJavaScript(@"confirm('test')"));
+
+  ASSERT_EQ(1U, requested_dialogs().size());
+  web::TestJavaScriptDialog dialog = requested_dialogs()[0];
+  EXPECT_EQ(web_state(), dialog.web_state);
+  EXPECT_EQ(page_url(), dialog.origin_url);
+  EXPECT_EQ(web::JAVASCRIPT_DIALOG_TYPE_CONFIRM,
+            dialog.java_script_dialog_type);
+  EXPECT_NSEQ(@"test", dialog.message_text);
+  EXPECT_FALSE(dialog.default_prompt_text);
 }
 
 // Tests that window.prompt dialog is suppressed for DIALOG_POLICY_SUPPRESS.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, SuppressPrompt) {
+  ASSERT_TRUE(requested_dialogs().empty());
+
   [[web_delegate_mock() expect]
       webControllerDidSuppressDialog:web_controller()];
   [web_controller() setShouldSuppressDialogs:YES];
   EXPECT_EQ([NSNull null], ExecuteJavaScript(@"prompt('Yes?', 'No')"));
+
+  ASSERT_TRUE(requested_dialogs().empty());
 }
 
 // Tests that window.prompt dialog is shown for DIALOG_POLICY_ALLOW.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, AllowPrompt) {
-  SEL selector = @selector(webController:
-      runJavaScriptTextInputPanelWithPrompt:
-                                defaultText:
-                                 requestURL:
-                          completionHandler:);
-  [ui_delegate_mock() onSelector:selector
-            callBlockExpectation:^(CRWWebController* controller,
-                                   NSString* message, NSString* default_text,
-                                   const GURL& url, id completion_handler) {
-              EXPECT_NSEQ(web_controller(), controller);
-              EXPECT_NSEQ(@"Yes?", message);
-              EXPECT_NSEQ(@"No", default_text);
-              web::URLVerificationTrustLevel unused;
-              EXPECT_EQ([controller currentURLWithTrustLevel:&unused], url);
-              void (^callable_block)(NSString*) = completion_handler;
-              callable_block(@"Maybe");
-            }];
+  ASSERT_TRUE(requested_dialogs().empty());
+
+  js_dialog_presenter()->set_callback_user_input_argument(@"Maybe");
 
   [web_controller() setShouldSuppressDialogs:NO];
   EXPECT_NSEQ(@"Maybe", ExecuteJavaScript(@"prompt('Yes?', 'No')"));
+
+  ASSERT_EQ(1U, requested_dialogs().size());
+  web::TestJavaScriptDialog dialog = requested_dialogs()[0];
+  EXPECT_EQ(web_state(), dialog.web_state);
+  EXPECT_EQ(page_url(), dialog.origin_url);
+  EXPECT_EQ(web::JAVASCRIPT_DIALOG_TYPE_PROMPT, dialog.java_script_dialog_type);
+  EXPECT_NSEQ(@"Yes?", dialog.message_text);
+  EXPECT_NSEQ(@"No", dialog.default_prompt_text);
 }
 
 // Tests that geolocation dialog is suppressed for DIALOG_POLICY_SUPPRESS.
@@ -660,11 +581,11 @@ class CRWWebControllerPageScrollStateTest
   }
 };
 
-// TODO(iOS): Flaky on the bots. crbug/493427
+// TODO(crbug/493427): Flaky on the bots.
 TEST_F(CRWWebControllerPageScrollStateTest,
        FLAKY_SetPageDisplayStateWithUserScalableDisabled) {
 #if !TARGET_IPHONE_SIMULATOR
-  // TODO(crbug.com/453530): fails flakily on device, so skip it there.
+  // TODO(crbug.com/493427): fails flakily on device, so skip it there.
   return;
 #endif
   web::PageZoomState zoom_state(1.0, 5.0, 1.0);
@@ -692,9 +613,13 @@ TEST_F(CRWWebControllerPageScrollStateTest,
             web_controller().pageDisplayState.zoom_state());
 };
 
-// TODO(iOS): Flaky on the bots. crbug/493427
+// TODO(crbug/493427): Flaky on the bots.
 TEST_F(CRWWebControllerPageScrollStateTest,
        FLAKY_SetPageDisplayStateWithUserScalableEnabled) {
+#if !TARGET_IPHONE_SIMULATOR
+  // TODO(crbug.com/493427): fails flakily on device, so skip it there.
+  return;
+#endif
   web::PageZoomState zoom_state(1.0, 5.0, 1.0);
 
   LoadHtml(GetHTMLForZoomState(zoom_state, PAGE_SCALABILITY_ENABLED));
@@ -721,7 +646,7 @@ TEST_F(CRWWebControllerPageScrollStateTest,
                         final_zoom_state.minimum_zoom_scale());
 };
 
-// TODO(iOS): Flaky on the bots. crbug/493427
+// TODO(crbug/493427): Flaky on the bots.
 TEST_F(CRWWebControllerPageScrollStateTest, FLAKY_AtTop) {
   // This test fails on iPhone 6/6+; skip until it's fixed. crbug.com/453105
   if (IsIPhone6Or6Plus())
@@ -769,6 +694,54 @@ TEST_F(CRWWebControllerNavigationTest, GoToEntryWithoutDocumentChange) {
               session_controller.currentEntry);
 }
 
+// Tests that didShowPasswordInputOnHTTP updates the SSLStatus to indicate that
+// a password field has been displayed on an HTTP page.
+TEST_F(CRWWebControllerNavigationTest, HTTPPassword) {
+  LoadHtml(@"<html><body></body></html>", GURL("http://chromium.test"));
+  NavigationManagerImpl& nav_manager =
+      web_controller().webStateImpl->GetNavigationManagerImpl();
+  EXPECT_FALSE(nav_manager.GetLastCommittedItem()->GetSSL().content_status &
+               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+  [web_controller() didShowPasswordInputOnHTTP];
+  EXPECT_TRUE(nav_manager.GetLastCommittedItem()->GetSSL().content_status &
+              web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+}
+
+// Real WKWebView is required for CRWWebControllerFormActivityTest.
+typedef web::WebTestWithWebController CRWWebControllerFormActivityTest;
+
+// Tests that keyup event correctly delivered to WebStateObserver.
+TEST_F(CRWWebControllerFormActivityTest, KeyUpEvent) {
+  // Observes and verifies FormActivityRegistered call.
+  class FormActivityObserver : public web::WebStateObserver {
+   public:
+    explicit FormActivityObserver(web::WebState* web_state)
+        : web::WebStateObserver(web_state) {}
+    bool form_activity_registered() const { return form_activity_registered_; }
+    // WebStateObserver overrides:
+    void FormActivityRegistered(const std::string& form_name,
+                                const std::string& field_name,
+                                const std::string& type,
+                                const std::string& value,
+                                bool input_missing) override {
+      EXPECT_EQ("keyup", type);
+      EXPECT_FALSE(input_missing);
+      form_activity_registered_ = true;
+    }
+
+   private:
+    bool form_activity_registered_ = false;
+  };
+  FormActivityObserver form_activity_observer(web_state());
+  FormActivityObserver& form_activity_observer_ref(form_activity_observer);
+
+  LoadHtml(@"<p></p>");
+  ExecuteJavaScript(@"document.dispatchEvent(new KeyboardEvent('keyup'));");
+  base::test::ios::WaitUntilCondition(^{
+    return form_activity_observer_ref.form_activity_registered();
+  });
+}
+
 // Real WKWebView is required for CRWWebControllerJSExecutionTest.
 typedef web::WebTestWithWebController CRWWebControllerJSExecutionTest;
 
@@ -795,16 +768,16 @@ TEST_F(CRWWebControllerJSExecutionTest, WindowIdMissmatch) {
 }
 
 TEST_F(CRWWebControllerTest, WebUrlWithTrustLevel) {
-  [[[mockWebView_ stub] andReturn:[NSURL URLWithString:kTestURLString]] URL];
+  [[[mockWebView_ stub] andReturn:[NSURL URLWithString:@(kTestURLString)]] URL];
   [[[mockWebView_ stub] andReturnBool:NO] hasOnlySecureContent];
+  [[[mockWebView_ stub] andReturn:@""] title];
 
   // Stub out the injection process.
   [[mockWebView_ stub] evaluateJavaScript:OCMOCK_ANY
                         completionHandler:OCMOCK_ANY];
 
   // Simulate registering load request to avoid failing page load simulation.
-  [web_controller()
-      simulateLoadRequestWithURL:GURL([kTestURLString UTF8String])];
+  [web_controller() simulateLoadRequestWithURL:GURL(kTestURLString)];
   // Simulate a page load to trigger a URL update.
   [static_cast<id<WKNavigationDelegate>>(web_controller()) webView:mockWebView_
                                                didCommitNavigation:nil];
@@ -812,8 +785,77 @@ TEST_F(CRWWebControllerTest, WebUrlWithTrustLevel) {
   web::URLVerificationTrustLevel trust_level = web::kNone;
   GURL gurl = [web_controller() currentURLWithTrustLevel:&trust_level];
 
-  EXPECT_EQ(gurl, GURL(base::SysNSStringToUTF8(kTestURLString)));
+  EXPECT_EQ(gurl, GURL(kTestURLString));
   EXPECT_EQ(web::kAbsolute, trust_level);
+}
+
+// Test fixture for testing CRWWebController presenting native content.
+class CRWWebControllerNativeContentTest : public web::WebTestWithWebController {
+ protected:
+  void SetUp() override {
+    web::WebTestWithWebController::SetUp();
+    mock_native_provider_.reset([[TestNativeContentProvider alloc] init]);
+    [web_controller() setNativeProvider:mock_native_provider_];
+  }
+
+  void Load(const GURL& URL) {
+    NavigationManagerImpl& navigation_manager =
+        [web_controller() webStateImpl]->GetNavigationManagerImpl();
+    navigation_manager.InitializeSession(@"name", nil, NO, 0);
+    [navigation_manager.GetSessionController()
+          addPendingEntry:URL
+                 referrer:web::Referrer()
+               transition:ui::PAGE_TRANSITION_TYPED
+        rendererInitiated:NO];
+    [web_controller() loadCurrentURL];
+  }
+
+  base::scoped_nsobject<TestNativeContentProvider> mock_native_provider_;
+};
+
+// Tests WebState and NavigationManager correctly return native content URL.
+TEST_F(CRWWebControllerNativeContentTest, NativeContentURL) {
+  GURL url_to_load(kTestAppSpecificURL);
+  base::scoped_nsobject<TestNativeContent> content(
+      [[TestNativeContent alloc] initWithURL:url_to_load virtualURL:GURL()]);
+  [mock_native_provider_ setController:content forURL:url_to_load];
+  Load(url_to_load);
+  web::URLVerificationTrustLevel trust_level = web::kNone;
+  GURL gurl = [web_controller() currentURLWithTrustLevel:&trust_level];
+  EXPECT_EQ(gurl, url_to_load);
+  EXPECT_EQ(web::kAbsolute, trust_level);
+  EXPECT_EQ([web_controller() webState]->GetVisibleURL(), url_to_load);
+  NavigationManagerImpl& navigationManager =
+      [web_controller() webStateImpl]->GetNavigationManagerImpl();
+  EXPECT_EQ(navigationManager.GetVisibleItem()->GetURL(), url_to_load);
+  EXPECT_EQ(navigationManager.GetVisibleItem()->GetVirtualURL(), url_to_load);
+  EXPECT_EQ(navigationManager.GetLastCommittedItem()->GetURL(), url_to_load);
+  EXPECT_EQ(navigationManager.GetLastCommittedItem()->GetVirtualURL(),
+            url_to_load);
+}
+
+// Tests WebState and NavigationManager correctly return native content URL and
+// VirtualURL
+TEST_F(CRWWebControllerNativeContentTest, NativeContentVirtualURL) {
+  GURL url_to_load(kTestAppSpecificURL);
+  GURL virtual_url(kTestURLString);
+  base::scoped_nsobject<TestNativeContent> content([[TestNativeContent alloc]
+      initWithURL:virtual_url
+       virtualURL:virtual_url]);
+  [mock_native_provider_ setController:content forURL:url_to_load];
+  Load(url_to_load);
+  web::URLVerificationTrustLevel trust_level = web::kNone;
+  GURL gurl = [web_controller() currentURLWithTrustLevel:&trust_level];
+  EXPECT_EQ(gurl, virtual_url);
+  EXPECT_EQ(web::kAbsolute, trust_level);
+  EXPECT_EQ([web_controller() webState]->GetVisibleURL(), virtual_url);
+  NavigationManagerImpl& navigationManager =
+      [web_controller() webStateImpl]->GetNavigationManagerImpl();
+  EXPECT_EQ(navigationManager.GetVisibleItem()->GetURL(), url_to_load);
+  EXPECT_EQ(navigationManager.GetVisibleItem()->GetVirtualURL(), virtual_url);
+  EXPECT_EQ(navigationManager.GetLastCommittedItem()->GetURL(), url_to_load);
+  EXPECT_EQ(navigationManager.GetLastCommittedItem()->GetVirtualURL(),
+            virtual_url);
 }
 
 // A separate test class, as none of the |CRWUIWebViewWebControllerTest| setup
@@ -833,17 +875,6 @@ TEST_F(CRWWebControllerObserversTest, Observers) {
   EXPECT_EQ(0, [observer pageLoadedCount]);
   [web_controller() webStateImpl]->OnPageLoaded(GURL("http://test"), true);
   EXPECT_EQ(1, [observer pageLoadedCount]);
-
-  EXPECT_EQ(0, [observer messageCount]);
-  // Non-matching prefix.
-  EXPECT_FALSE([web_controller() webStateImpl]->OnScriptCommandReceived(
-      "a", base::DictionaryValue(), GURL("http://test"), true));
-  EXPECT_EQ(0, [observer messageCount]);
-  // Matching prefix.
-  EXPECT_TRUE([web_controller() webStateImpl]->OnScriptCommandReceived(
-      base::SysNSStringToUTF8([observer commandPrefix]) + ".foo",
-      base::DictionaryValue(), GURL("http://test"), true));
-  EXPECT_EQ(1, [observer messageCount]);
 
   [web_controller() removeObserver:observer];
   EXPECT_EQ(0u, [web_controller() observerCount]);
@@ -982,7 +1013,7 @@ class CRWWebControllerWebProcessTest : public web::WebTestWithWebController {
  protected:
   void SetUp() override {
     web::WebTestWithWebController::SetUp();
-    webView_.reset(web::CreateTerminatedWKWebView());
+    webView_.reset([web::BuildTerminatedWKWebView() retain]);
     base::scoped_nsobject<TestWebViewContentView> webViewContentView(
         [[TestWebViewContentView alloc]
             initWithMockWebView:webView_
@@ -992,18 +1023,31 @@ class CRWWebControllerWebProcessTest : public web::WebTestWithWebController {
   base::scoped_nsobject<WKWebView> webView_;
 };
 
-// Tests that -[CRWWebDelegate webControllerWebProcessDidCrash:] is called
-// when WKWebView web process has crashed.
+// Tests that WebStateDelegate::RenderProcessGone is called when WKWebView web
+// process has crashed.
 TEST_F(CRWWebControllerWebProcessTest, Crash) {
-  id delegate = [OCMockObject niceMockForProtocol:@protocol(CRWWebDelegate)];
-  [[delegate expect] webControllerWebProcessDidCrash:web_controller()];
+  // Observes and waits for RenderProcessGone call.
+  class RenderProcessGoneObserver : public web::WebStateObserver {
+   public:
+    explicit RenderProcessGoneObserver(web::WebState* web_state)
+        : web::WebStateObserver(web_state) {}
+    void WaitForRenderProcessGone() const {
+      base::test::ios::WaitUntilCondition(^{
+        return render_process_gone_;
+      });
+    }
+    // WebStateObserver overrides:
+    void RenderProcessGone() override { render_process_gone_ = true; }
 
-  [web_controller() setDelegate:delegate];
+   private:
+    bool render_process_gone_ = false;
+  };
+
+  RenderProcessGoneObserver observer(web_state());
   web::SimulateWKWebViewCrash(webView_);
+  observer.WaitForRenderProcessGone();
 
-  EXPECT_OCMOCK_VERIFY(delegate);
   EXPECT_FALSE([web_controller() isViewAlive]);
-  [web_controller() setDelegate:nil];
 };
 
 }  // namespace

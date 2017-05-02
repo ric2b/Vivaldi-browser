@@ -17,8 +17,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
@@ -70,7 +70,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         }
     }
 
-    private InfoBar getInfobarBlocking() throws InterruptedException {
+    private InfoBar getInfobarBlocking() {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -82,7 +82,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         return infoBars.get(0);
     }
 
-    private void waitForInfobarToClose() throws InterruptedException {
+    private void waitForInfobarToClose() {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {

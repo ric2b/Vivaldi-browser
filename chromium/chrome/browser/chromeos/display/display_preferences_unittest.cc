@@ -31,8 +31,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
-#include "ui/display/chromeos/display_configurator.h"
-#include "ui/display/manager/display_layout_builder.h"
+#include "ui/display/display_layout_builder.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 #include "ui/display/manager/display_layout_store.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_utilities.h"
@@ -51,6 +51,9 @@ const char kPositionKey[] = "position";
 const char kOffsetKey[] = "offset";
 const char kPlacementDisplayIdKey[] = "placement.display_id";
 const char kPlacementParentDisplayIdKey[] = "placement.parent_display_id";
+const char kTouchCalibrationWidth[] = "touch_calibration_width";
+const char kTouchCalibrationHeight[] = "touch_calibration_height";
+const char kTouchCalibrationPointPairs[] = "touch_calibration_point_pairs";
 
 // The mean acceleration due to gravity on Earth in m/s^2.
 const float kMeanGravity = -9.80665f;
@@ -265,16 +268,18 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   int64_t id2 = display_manager()->GetSecondaryDisplay().id();
   int64_t dummy_id = id2 + 1;
   ASSERT_NE(id1, dummy_id);
-  std::vector<ui::ColorCalibrationProfile> profiles;
-  profiles.push_back(ui::COLOR_PROFILE_STANDARD);
-  profiles.push_back(ui::COLOR_PROFILE_DYNAMIC);
-  profiles.push_back(ui::COLOR_PROFILE_MOVIE);
-  profiles.push_back(ui::COLOR_PROFILE_READING);
+  std::vector<display::ColorCalibrationProfile> profiles;
+  profiles.push_back(display::COLOR_PROFILE_STANDARD);
+  profiles.push_back(display::COLOR_PROFILE_DYNAMIC);
+  profiles.push_back(display::COLOR_PROFILE_MOVIE);
+  profiles.push_back(display::COLOR_PROFILE_READING);
   // Allows only |id1|.
   display::test::DisplayManagerTestApi(display_manager())
       .SetAvailableColorProfiles(id1, profiles);
-  display_manager()->SetColorCalibrationProfile(id1, ui::COLOR_PROFILE_DYNAMIC);
-  display_manager()->SetColorCalibrationProfile(id2, ui::COLOR_PROFILE_DYNAMIC);
+  display_manager()->SetColorCalibrationProfile(id1,
+                                                display::COLOR_PROFILE_DYNAMIC);
+  display_manager()->SetColorCalibrationProfile(id2,
+                                                display::COLOR_PROFILE_DYNAMIC);
 
   LoggedInAsUser();
 
@@ -306,6 +311,15 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
                   .SetDisplayUIScale(id1, 1.25f));
   EXPECT_FALSE(display::test::DisplayManagerTestApi(display_manager())
                    .SetDisplayUIScale(id2, 1.25f));
+
+  // Set touch calibration data for display |id2|.
+  display::TouchCalibrationData::CalibrationPointPairQuad point_pair_quad = {
+      {std::make_pair(gfx::Point(10, 10), gfx::Point(11, 12)),
+       std::make_pair(gfx::Point(190, 10), gfx::Point(195, 8)),
+       std::make_pair(gfx::Point(10, 90), gfx::Point(12, 94)),
+       std::make_pair(gfx::Point(190, 90), gfx::Point(189, 88))}};
+  gfx::Size touch_size(200, 150);
+  display_manager()->SetTouchCalibrationData(id2, point_pair_quad, touch_size);
 
   const base::DictionaryValue* displays =
       local_state()->GetDictionary(prefs::kSecondaryDisplays);
@@ -354,6 +368,11 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_EQ(12, bottom);
   EXPECT_EQ(13, right);
 
+  std::string touch_str;
+  EXPECT_FALSE(property->GetString(kTouchCalibrationPointPairs, &touch_str));
+  EXPECT_FALSE(property->GetInteger(kTouchCalibrationWidth, &width));
+  EXPECT_FALSE(property->GetInteger(kTouchCalibrationHeight, &height));
+
   std::string color_profile;
   EXPECT_TRUE(property->GetString("color_profile_name", &color_profile));
   EXPECT_EQ("dynamic", color_profile);
@@ -368,6 +387,25 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_FALSE(property->GetInteger("insets_left", &left));
   EXPECT_FALSE(property->GetInteger("insets_bottom", &bottom));
   EXPECT_FALSE(property->GetInteger("insets_right", &right));
+
+  display::TouchCalibrationData::CalibrationPointPairQuad stored_pair_quad;
+
+  EXPECT_TRUE(property->GetString(kTouchCalibrationPointPairs, &touch_str));
+  EXPECT_TRUE(ParseTouchCalibrationStringForTest(touch_str, &stored_pair_quad));
+
+  for (std::size_t row = 0; row < point_pair_quad.size(); row++) {
+    EXPECT_EQ(point_pair_quad[row].first.x(), stored_pair_quad[row].first.x());
+    EXPECT_EQ(point_pair_quad[row].first.y(), stored_pair_quad[row].first.y());
+    EXPECT_EQ(point_pair_quad[row].second.x(),
+              stored_pair_quad[row].second.x());
+    EXPECT_EQ(point_pair_quad[row].second.y(),
+              stored_pair_quad[row].second.y());
+  }
+  width = height = 0;
+  EXPECT_TRUE(property->GetInteger(kTouchCalibrationWidth, &width));
+  EXPECT_TRUE(property->GetInteger(kTouchCalibrationHeight, &height));
+  EXPECT_EQ(width, touch_size.width());
+  EXPECT_EQ(height, touch_size.height());
 
   // |id2| doesn't have the color_profile because it doesn't have 'dynamic' in
   // its available list.
@@ -473,7 +511,7 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   // Set new display's selected resolution.
   display_manager()->RegisterDisplayProperty(
       id2 + 1, display::Display::ROTATE_0, 1.0f, nullptr, gfx::Size(500, 400),
-      1.0f, ui::COLOR_PROFILE_STANDARD);
+      1.0f, display::COLOR_PROFILE_STANDARD, nullptr);
 
   UpdateDisplay("200x200*2, 600x500#600x500|500x400");
 
@@ -499,7 +537,7 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   // Set yet another new display's selected resolution.
   display_manager()->RegisterDisplayProperty(
       id2 + 1, display::Display::ROTATE_0, 1.0f, nullptr, gfx::Size(500, 400),
-      1.0f, ui::COLOR_PROFILE_STANDARD);
+      1.0f, display::COLOR_PROFILE_STANDARD, nullptr);
   // Disconnect 2nd display first to generate new id for external display.
   UpdateDisplay("200x200*2");
   UpdateDisplay("200x200*2, 500x400#600x500|500x400%60.0f");
@@ -653,21 +691,21 @@ TEST_F(DisplayPreferencesTest, RestoreColorProfiles) {
 
   // id1's available color profiles list is empty, means somehow the color
   // profile suport is temporary in trouble.
-  EXPECT_NE(ui::COLOR_PROFILE_DYNAMIC,
+  EXPECT_NE(display::COLOR_PROFILE_DYNAMIC,
             display_manager()->GetDisplayInfo(id1).color_profile());
 
   // Once the profile is supported, the color profile should be restored.
-  std::vector<ui::ColorCalibrationProfile> profiles;
-  profiles.push_back(ui::COLOR_PROFILE_STANDARD);
-  profiles.push_back(ui::COLOR_PROFILE_DYNAMIC);
-  profiles.push_back(ui::COLOR_PROFILE_MOVIE);
-  profiles.push_back(ui::COLOR_PROFILE_READING);
+  std::vector<display::ColorCalibrationProfile> profiles;
+  profiles.push_back(display::COLOR_PROFILE_STANDARD);
+  profiles.push_back(display::COLOR_PROFILE_DYNAMIC);
+  profiles.push_back(display::COLOR_PROFILE_MOVIE);
+  profiles.push_back(display::COLOR_PROFILE_READING);
   display::test::DisplayManagerTestApi(
       ash::Shell::GetInstance()->display_manager())
       .SetAvailableColorProfiles(id1, profiles);
 
   LoadDisplayPreferences(false);
-  EXPECT_EQ(ui::COLOR_PROFILE_DYNAMIC,
+  EXPECT_EQ(display::COLOR_PROFILE_DYNAMIC,
             display_manager()->GetDisplayInfo(id1).color_profile());
 }
 

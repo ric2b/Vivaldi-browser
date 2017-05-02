@@ -29,10 +29,6 @@ class FilePath;
 class SequencedTaskRunner;
 }
 
-namespace extensions {
-class ExtensionGCMAppHandlerTest;
-}
-
 namespace net {
 class URLRequestContextGetter;
 }
@@ -46,7 +42,7 @@ class GCMDelayedTaskController;
 
 // GCMDriver implementation for desktop and Chrome OS, using GCMClient.
 class GCMDriverDesktop : public GCMDriver,
-                         public InstanceIDHandler {
+                         protected InstanceIDHandler {
  public:
   GCMDriverDesktop(
       std::unique_ptr<GCMClientFactory> gcm_client_factory,

@@ -37,7 +37,6 @@
 #include "bindings/core/v8/V8ErrorEvent.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8GCController.h"
-#include "bindings/core/v8/V8History.h"
 #include "bindings/core/v8/V8IdleTaskRunner.h"
 #include "bindings/core/v8/V8Location.h"
 #include "bindings/core/v8/V8PerContextData.h"
@@ -49,11 +48,12 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
@@ -80,9 +80,6 @@ static Frame* findFrame(v8::Isolate* isolate,
       return 0;
     return V8Window::toImpl(windowWrapper)->frame();
   }
-
-  if (V8History::wrapperTypeInfo.equals(type))
-    return V8History::toImpl(host)->frame();
 
   if (V8Location::wrapperTypeInfo.equals(type))
     return V8Location::toImpl(host)->frame();
@@ -122,6 +119,35 @@ static String extractMessageForConsole(v8::Isolate* isolate,
   return emptyString();
 }
 
+namespace {
+MessageLevel MessageLevelFromNonFatalErrorLevel(int errorLevel) {
+  MessageLevel level = ErrorMessageLevel;
+  switch (errorLevel) {
+    case v8::Isolate::kMessageLog:
+      level = LogMessageLevel;
+      break;
+    case v8::Isolate::kMessageWarning:
+      level = WarningMessageLevel;
+      break;
+    case v8::Isolate::kMessageDebug:
+      level = DebugMessageLevel;
+      break;
+    case v8::Isolate::kMessageInfo:
+      level = InfoMessageLevel;
+      break;
+    case v8::Isolate::kMessageError:
+      level = InfoMessageLevel;
+      break;
+    default:
+      NOTREACHED();
+  }
+  return level;
+}
+
+const size_t kWasmWireBytesLimit = 1 << 12;
+
+}  // namespace
+
 void V8Initializer::messageHandlerInMainThread(v8::Local<v8::Message> message,
                                                v8::Local<v8::Value> data) {
   ASSERT(isMainThread());
@@ -139,6 +165,14 @@ void V8Initializer::messageHandlerInMainThread(v8::Local<v8::Message> message,
   std::unique_ptr<SourceLocation> location =
       SourceLocation::fromMessage(isolate, message, context);
 
+  if (message->ErrorLevel() != v8::Isolate::kMessageError) {
+    context->addConsoleMessage(ConsoleMessage::create(
+        JSMessageSource,
+        MessageLevelFromNonFatalErrorLevel(message->ErrorLevel()),
+        toCoreStringWithNullCheck(message->Get()), std::move(location)));
+    return;
+  }
+
   AccessControlStatus accessControlStatus = NotSharableCrossOrigin;
   if (message->IsOpaque())
     accessControlStatus = OpaqueResource;
@@ -153,32 +187,9 @@ void V8Initializer::messageHandlerInMainThread(v8::Local<v8::Message> message,
   if (!messageForConsole.isEmpty())
     event->setUnsanitizedMessage("Uncaught " + messageForConsole);
 
-  // This method might be called while we're creating a new context. In this
-  // case, we avoid storing the exception object, as we can't create a wrapper
-  // during context creation.
-  // FIXME: Can we even get here during initialization now that we bail out when
-  // GetEntered returns an empty handle?
-  if (context->isDocument()) {
-    LocalFrame* frame = toDocument(context)->frame();
-    if (frame && frame->script().existingWindowProxy(scriptState->world())) {
-      V8ErrorHandler::storeExceptionOnErrorEventWrapper(
-          scriptState, event, data, scriptState->context()->Global());
-    }
-  }
-
-  if (scriptState->world().isPrivateScriptIsolatedWorld()) {
-    // We allow a private script to dispatch error events even in a
-    // EventDispatchForbiddenScope scope.  Without having this ability, it's
-    // hard to debug the private script because syntax errors in the private
-    // script are not reported to console (the private script just crashes
-    // silently).  Allowing error events in private scripts is safe because
-    // error events don't propagate to other isolated worlds (which means that
-    // the error events won't fire any event listeners in user's scripts).
-    EventDispatchForbiddenScope::AllowUserAgentEvents allowUserAgentEvents;
-    context->dispatchErrorEvent(event, accessControlStatus);
-  } else {
-    context->dispatchErrorEvent(event, accessControlStatus);
-  }
+  V8ErrorHandler::storeExceptionOnErrorEventWrapper(
+      scriptState, event, data, scriptState->context()->Global());
+  context->dispatchErrorEvent(event, accessControlStatus);
 }
 
 namespace {
@@ -295,19 +306,9 @@ static void failedAccessCheckCallbackInMainThread(v8::Local<v8::Object> host,
                                                   v8::Local<v8::Value> data) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   Frame* target = findFrame(isolate, host, data);
-  if (!target)
-    return;
-  DOMWindow* targetWindow = target->domWindow();
-
   // FIXME: We should modify V8 to pass in more contextual information (context,
   // property, and object).
-  ExceptionState exceptionState(ExceptionState::UnknownContext, 0, 0,
-                                isolate->GetCurrentContext()->Global(),
-                                isolate);
-  exceptionState.throwSecurityError(
-      targetWindow->sanitizedCrossDomainAccessErrorMessage(
-          currentDOMWindow(isolate)),
-      targetWindow->crossDomainAccessErrorMessage(currentDOMWindow(isolate)));
+  BindingSecurity::failedAccessCheckFor(isolate, target);
 }
 
 static bool codeGenerationCheckCallbackInMainThread(
@@ -320,6 +321,48 @@ static bool codeGenerationCheckCallbackInMainThread(
                                ContentSecurityPolicy::WillThrowException);
   }
   return false;
+}
+
+static bool allowWasmCompileCallbackInMainThread(v8::Isolate* isolate,
+                                                 v8::Local<v8::Value> source,
+                                                 bool asPromise) {
+  // We allow async compilation irrespective of buffer size.
+  if (asPromise)
+    return true;
+  if (source->IsArrayBuffer() &&
+      v8::Local<v8::ArrayBuffer>::Cast(source)->ByteLength() >
+          kWasmWireBytesLimit) {
+    return false;
+  }
+  if (source->IsArrayBufferView() &&
+      v8::Local<v8::ArrayBufferView>::Cast(source)->ByteLength() >
+          kWasmWireBytesLimit) {
+    return false;
+  }
+  return true;
+}
+
+static bool allowWasmInstantiateCallbackInMainThread(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> source,
+    v8::MaybeLocal<v8::Value> ffi,
+    bool asPromise) {
+  // Async cases are allowed, regardless of the size of the
+  // wire bytes. Note that, for instantiation, we use the wire
+  // bytes size as a proxy for instantiation time. We may
+  // consider using the size of the ffi (nr of properties)
+  // instead, or, even more directly, number of imports.
+  if (asPromise)
+    return true;
+  // If it's not a promise, the source should be a wasm module
+  DCHECK(source->IsWebAssemblyCompiledModule());
+  v8::Local<v8::WasmCompiledModule> module =
+      v8::Local<v8::WasmCompiledModule>::Cast(source);
+  if (static_cast<size_t>(module->GetWasmWireBytes()->Length()) >
+      kWasmWireBytesLimit) {
+    return false;
+  }
+  return true;
 }
 
 static void initializeV8Common(v8::Isolate* isolate) {
@@ -367,7 +410,7 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
 }  // namespace
 
 static void adjustAmountOfExternalAllocatedMemory(int64_t diff) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   DEFINE_THREAD_SAFE_STATIC_LOCAL(int64_t, processTotal, new int64_t(0));
   DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
   {
@@ -394,22 +437,35 @@ void V8Initializer::initializeMainThread() {
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode,
                                  v8ExtrasMode, &arrayBufferAllocator);
 
-  v8::Isolate* isolate = V8PerIsolateData::initialize();
+  // NOTE: Some threads (namely utility threads) don't have a scheduler.
+  WebScheduler* scheduler = Platform::current()->currentThread()->scheduler();
+  // When timer task runner is used for PerIsolateData, GC tasks are getting
+  // throttled and memory usage goes up. For now we're using loading task queue
+  // to prevent this.
+  // TODO(altimin): Consider switching to timerTaskRunner here.
+  v8::Isolate* isolate = V8PerIsolateData::initialize(
+      scheduler ? scheduler->loadingTaskRunner()
+                : Platform::current()->currentThread()->getWebTaskRunner());
 
   initializeV8Common(isolate);
 
   isolate->SetOOMErrorHandler(reportOOMErrorInMainThread);
   isolate->SetFatalErrorHandler(reportFatalErrorInMainThread);
-  isolate->AddMessageListener(messageHandlerInMainThread);
+  isolate->AddMessageListenerWithErrorLevel(
+      messageHandlerInMainThread,
+      v8::Isolate::kMessageError | v8::Isolate::kMessageWarning |
+          v8::Isolate::kMessageInfo | v8::Isolate::kMessageDebug |
+          v8::Isolate::kMessageLog);
   isolate->SetFailedAccessCheckCallbackFunction(
       failedAccessCheckCallbackInMainThread);
   isolate->SetAllowCodeGenerationFromStringsCallback(
       codeGenerationCheckCallbackInMainThread);
-
+  isolate->SetAllowWasmCompileCallback(allowWasmCompileCallbackInMainThread);
+  isolate->SetAllowWasmInstantiateCallback(
+      allowWasmInstantiateCallbackInMainThread);
   if (RuntimeEnabledFeatures::v8IdleTasksEnabled()) {
-    WebScheduler* scheduler = Platform::current()->currentThread()->scheduler();
-    V8PerIsolateData::enableIdleTasks(isolate,
-                                      makeUnique<V8IdleTaskRunner>(scheduler));
+    V8PerIsolateData::enableIdleTasks(
+        isolate, WTF::makeUnique<V8IdleTaskRunner>(scheduler));
   }
 
   isolate->SetPromiseRejectCallback(promiseRejectHandlerInMainThread);
@@ -420,19 +476,14 @@ void V8Initializer::initializeMainThread() {
 
   ASSERT(ThreadState::mainThreadState());
   ThreadState::mainThreadState()->addInterruptor(
-      makeUnique<V8IsolateInterruptor>(isolate));
-  if (RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-    ThreadState::mainThreadState()->registerTraceDOMWrappers(
-        isolate, V8GCController::traceDOMWrappers,
-        ScriptWrappableVisitor::invalidateDeadObjectsInMarkingDeque,
-        ScriptWrappableVisitor::performCleanup);
-  } else {
-    ThreadState::mainThreadState()->registerTraceDOMWrappers(
-        isolate, V8GCController::traceDOMWrappers, nullptr, nullptr);
-  }
+      WTF::makeUnique<V8IsolateInterruptor>(isolate));
+  ThreadState::mainThreadState()->registerTraceDOMWrappers(
+      isolate, V8GCController::traceDOMWrappers,
+      ScriptWrappableVisitor::invalidateDeadObjectsInMarkingDeque,
+      ScriptWrappableVisitor::performCleanup);
 
   V8PerIsolateData::from(isolate)->setThreadDebugger(
-      makeUnique<MainThreadDebugger>(isolate));
+      WTF::makeUnique<MainThreadDebugger>(isolate));
 }
 
 void V8Initializer::shutdownMainThread() {
@@ -470,6 +521,15 @@ static void messageHandlerInWorker(v8::Local<v8::Message> message,
   ExecutionContext* context = scriptState->getExecutionContext();
   std::unique_ptr<SourceLocation> location =
       SourceLocation::fromMessage(isolate, message, context);
+
+  if (message->ErrorLevel() != v8::Isolate::kMessageError) {
+    context->addConsoleMessage(ConsoleMessage::create(
+        JSMessageSource,
+        MessageLevelFromNonFatalErrorLevel(message->ErrorLevel()),
+        toCoreStringWithNullCheck(message->Get()), std::move(location)));
+    return;
+  }
+
   ErrorEvent* event =
       ErrorEvent::create(toCoreStringWithNullCheck(message->Get()),
                          std::move(location), &scriptState->world());
@@ -502,7 +562,11 @@ NO_SANITIZE_ADDRESS
 void V8Initializer::initializeWorker(v8::Isolate* isolate) {
   initializeV8Common(isolate);
 
-  isolate->AddMessageListener(messageHandlerInWorker);
+  isolate->AddMessageListenerWithErrorLevel(
+      messageHandlerInWorker,
+      v8::Isolate::kMessageError | v8::Isolate::kMessageWarning |
+          v8::Isolate::kMessageInfo | v8::Isolate::kMessageDebug |
+          v8::Isolate::kMessageLog);
   isolate->SetFatalErrorHandler(reportFatalErrorInWorker);
 
   uint32_t here;

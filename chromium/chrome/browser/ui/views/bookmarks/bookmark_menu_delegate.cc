@@ -147,18 +147,9 @@ base::string16 BookmarkMenuDelegate::GetTooltipText(
   const BookmarkNode* node = i->second;
   if (node->is_url()) {
     const views::TooltipManager* tooltip_manager = parent_->GetTooltipManager();
-    base::string16 nickname;
-    base::string16 description;
-	base::Time created_time = node->date_added();
-    base::Time visited_time = node->date_visited();
-
-    nickname = node->GetNickName();
-    description = node->GetDescription();
-
     return BookmarkBarView::CreateToolTipForURLAndTitle(
         tooltip_manager->GetMaxWidth(screen_loc),
-        tooltip_manager->GetFontList(), node->url(), node->GetTitle(),
-        &nickname, &description, &created_time, &visited_time);
+        tooltip_manager->GetFontList(), node->url(), node->GetTitle());
   }
   return base::string16();
 }

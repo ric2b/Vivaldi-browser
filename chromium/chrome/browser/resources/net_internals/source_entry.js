@@ -31,8 +31,7 @@ var SourceEntry = (function() {
   SourceEntry.prototype = {
     update: function(logEntry) {
       // Only the last event should have the same type first event,
-      if (!this.isInactive_ &&
-          logEntry.phase == EventPhase.PHASE_END &&
+      if (!this.isInactive_ && logEntry.phase == EventPhase.PHASE_END &&
           logEntry.type == this.entries_[0].type) {
         this.isInactive_ = true;
       }
@@ -84,7 +83,13 @@ var SourceEntry = (function() {
         case EventSourceType.HTTP_STREAM_JOB:
           this.description_ = e.params.url;
           break;
+        // TODO(davidben): Remove CONNECT_JOB after M57 is released.
         case EventSourceType.CONNECT_JOB:
+        case EventSourceType.TRANSPORT_CONNECT_JOB:
+        case EventSourceType.SSL_CONNECT_JOB:
+        case EventSourceType.SOCKS_CONNECT_JOB:
+        case EventSourceType.HTTP_PROXY_CONNECT_JOB:
+        case EventSourceType.WEB_SOCKET_TRANSPORT_CONNECT_JOB:
           this.description_ = e.params.group_name;
           break;
         case EventSourceType.HOST_RESOLVER_IMPL_JOB:
@@ -180,8 +185,10 @@ var SourceEntry = (function() {
     /**
      * Returns the starting entry for this source. Conceptually this is the
      * first entry that was logged to this source. However, we skip over the
-     * TYPE_REQUEST_ALIVE entries which wrap TYPE_URL_REQUEST_START_JOB
-     * entries.
+     * TYPE_REQUEST_ALIVE entries without parameters which wrap
+     * TYPE_URL_REQUEST_START_JOB entries.  (TYPE_REQUEST_ALIVE may or may not
+     * have parameters depending on what version of Chromium they were
+     * generated from.)
      */
     getStartEntry_: function() {
       if (this.entries_.length < 1)
@@ -193,8 +200,7 @@ var SourceEntry = (function() {
       }
       if (this.entries_[0].source.type == EventSourceType.DOWNLOAD) {
         // If any rename occurred, use the last name
-        e = this.findLastLogEntryStartByType_(
-            EventType.DOWNLOAD_FILE_RENAMED);
+        e = this.findLastLogEntryStartByType_(EventType.DOWNLOAD_FILE_RENAMED);
         if (e != undefined)
           return e;
         // Otherwise, if the file was opened, use that name
@@ -337,10 +343,10 @@ var SourceEntry = (function() {
      */
     createTablePrinter: function() {
       return createLogEntryTablePrinter(
-          this.entries_,
-          SourceTracker.getInstance().getPrivacyStripping(),
+          this.entries_, SourceTracker.getInstance().getPrivacyStripping(),
           SourceTracker.getInstance().getUseRelativeTimes() ?
-              timeutil.getBaseTime() : 0,
+              timeutil.getBaseTime() :
+              0,
           Constants.clientInfo.numericDate);
     },
   };

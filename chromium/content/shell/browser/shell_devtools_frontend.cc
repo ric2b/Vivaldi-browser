@@ -200,7 +200,7 @@ void ShellDevToolsFrontend::SetPreferences(const std::string& json) {
   if (!parsed || !parsed->GetAsDictionary(&dict))
     return;
   for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
-    if (!it.value().IsType(base::Value::TYPE_STRING))
+    if (!it.value().IsType(base::Value::Type::STRING))
       continue;
     preferences_.SetWithoutPathExpansion(it.key(), it.value().CreateDeepCopy());
   }
@@ -373,6 +373,7 @@ void ShellDevToolsFrontend::SendMessageAck(int request_id,
 
 void ShellDevToolsFrontend::AgentHostClosed(
     DevToolsAgentHost* agent_host, bool replaced) {
+  agent_host_ = nullptr;
   frontend_shell_->Close();
 }
 

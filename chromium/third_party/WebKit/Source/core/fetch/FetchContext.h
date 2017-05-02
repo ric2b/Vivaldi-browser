@@ -38,21 +38,30 @@
 #include "core/fetch/Resource.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
+#include "platform/network/ResourceRequest.h"
+#include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
 
 namespace blink {
 
+class ClientHintsPreferences;
 class KURL;
 class MHTMLArchive;
 class ResourceError;
 class ResourceResponse;
-class ResourceRequest;
 class ResourceTimingInfo;
 class WebTaskRunner;
 enum class WebCachePolicy;
 
 enum FetchResourceType { FetchMainResource, FetchSubresource };
 
+// The FetchContext is an interface for performing context specific processing
+// in response to events in the ResourceFetcher. The ResourceFetcher or its job
+// class, ResourceLoader, may call the methods on a FetchContext.
+//
+// Any processing that depends on core/ components outside core/fetch/ should
+// be implemented on a subclass of this interface, and then exposed to the
+// ResourceFetcher via this interface.
 class CORE_EXPORT FetchContext
     : public GarbageCollectedFinalized<FetchContext> {
   WTF_MAKE_NONCOPYABLE(FetchContext);
@@ -66,9 +75,6 @@ class CORE_EXPORT FetchContext
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
   virtual bool isLiveContext() { return false; }
-  virtual void countClientHintsDPR() {}
-  virtual void countClientHintsResourceWidth() {}
-  virtual void countClientHintsViewportWidth() {}
 
   virtual void addAdditionalRequestHeaders(ResourceRequest&, FetchResourceType);
   virtual CachePolicy getCachePolicy() const;
@@ -101,8 +107,9 @@ class CORE_EXPORT FetchContext
                                           Resource*);
   virtual void dispatchDidReceiveData(unsigned long identifier,
                                       const char* data,
-                                      int dataLength,
-                                      int encodedDataLength);
+                                      int dataLength);
+  virtual void dispatchDidReceiveEncodedData(unsigned long identifier,
+                                             int encodedDataLength);
   virtual void dispatchDidDownloadData(unsigned long identifier,
                                        int dataLength,
                                        int encodedDataLength);
@@ -111,31 +118,38 @@ class CORE_EXPORT FetchContext
                                         int64_t encodedDataLength);
   virtual void dispatchDidFail(unsigned long identifier,
                                const ResourceError&,
+                               int64_t encodedDataLength,
                                bool isInternalRequest);
 
   virtual bool shouldLoadNewResource(Resource::Type) const { return false; }
   // Called when a resource load is first requested, which may not be when the
   // load actually begins.
+  // TODO(toyoshim): Consider to use enum. See https://crbug.com/675883.
   virtual void willStartLoadingResource(unsigned long identifier,
                                         ResourceRequest&,
-                                        Resource::Type);
+                                        Resource::Type,
+                                        const AtomicString& fetchInitiatorName,
+                                        bool forPreload);
   virtual void didLoadResource(Resource*);
 
   virtual void addResourceTiming(const ResourceTimingInfo&);
   virtual bool allowImage(bool, const KURL&) const { return false; }
-  virtual bool canRequest(Resource::Type,
-                          const ResourceRequest&,
-                          const KURL&,
-                          const ResourceLoaderOptions&,
-                          bool forPreload,
-                          FetchRequest::OriginRestriction) const {
-    return false;
+  // TODO(toyoshim): Consider to use enum. See https://crbug.com/675883.
+  virtual ResourceRequestBlockedReason canRequest(
+      Resource::Type,
+      const ResourceRequest&,
+      const KURL&,
+      const ResourceLoaderOptions&,
+      bool forPreload,
+      FetchRequest::OriginRestriction) const {
+    return ResourceRequestBlockedReason::Other;
   }
-  virtual bool allowResponse(Resource::Type,
-                             const ResourceRequest&,
-                             const KURL&,
-                             const ResourceLoaderOptions&) const {
-    return false;
+  virtual ResourceRequestBlockedReason allowResponse(
+      Resource::Type,
+      const ResourceRequest&,
+      const KURL&,
+      const ResourceLoaderOptions&) const {
+    return ResourceRequestBlockedReason::Other;
   }
 
   virtual bool isControlledByServiceWorker() const { return false; }
@@ -152,10 +166,17 @@ class CORE_EXPORT FetchContext
   virtual void addConsoleMessage(const String&,
                                  LogMessageType = LogErrorMessage) const;
   virtual SecurityOrigin* getSecurityOrigin() const { return nullptr; }
-  virtual void modifyRequestForCSP(ResourceRequest&);
-  virtual void addClientHintsIfNecessary(FetchRequest&);
-  virtual void addCSPHeaderIfNecessary(Resource::Type, FetchRequest&);
-  virtual void populateRequestData(ResourceRequest&);
+
+  // Populates the ResourceRequest using the given values and information
+  // stored in the FetchContext implementation. Used by ResourceFetcher to
+  // prepare a ResourceRequest instance at the start of resource loading.
+  virtual void populateResourceRequest(Resource::Type,
+                                       const ClientHintsPreferences&,
+                                       const FetchRequest::ResourceWidth&,
+                                       ResourceRequest&);
+  // Sets the first party for cookies and requestor origin using information
+  // stored in the FetchContext implementation.
+  virtual void setFirstPartyCookieAndRequestorOrigin(ResourceRequest&);
 
   virtual MHTMLArchive* archive() const { return nullptr; }
 
@@ -164,7 +185,7 @@ class CORE_EXPORT FetchContext
     return priority;
   }
 
-  virtual WebTaskRunner* loadingTaskRunner() const { return nullptr; }
+  virtual RefPtr<WebTaskRunner> loadingTaskRunner() const { return nullptr; }
 
  protected:
   FetchContext() {}

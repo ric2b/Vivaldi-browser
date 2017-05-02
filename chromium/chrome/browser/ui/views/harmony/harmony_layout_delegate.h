@@ -9,6 +9,9 @@
 
 class HarmonyLayoutDelegate : public LayoutDelegate {
  public:
+  // The Harmony layout unit. All distances are in terms of this unit.
+  static const int kHarmonyLayoutUnit = 16;
+
   HarmonyLayoutDelegate() {}
   ~HarmonyLayoutDelegate() override {}
 
@@ -17,7 +20,10 @@ class HarmonyLayoutDelegate : public LayoutDelegate {
 
   // views::LayoutDelegate:
   int GetLayoutDistance(LayoutDistanceType type) const override;
+  views::GridLayout::Alignment GetControlLabelGridAlignment() const override;
   bool UseExtraDialogPadding() const override;
+  bool IsHarmonyMode() const override;
+  int GetDialogPreferredWidth(DialogWidthType type) const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HarmonyLayoutDelegate);

@@ -32,8 +32,8 @@
 
 namespace blink {
 
-SelectionEditor::SelectionEditor(FrameSelection& frameSelection)
-    : m_frameSelection(frameSelection), m_observingVisibleSelection(false) {
+SelectionEditor::SelectionEditor(LocalFrame& frame)
+    : m_frame(frame), m_observingVisibleSelection(false) {
   clearVisibleSelection();
 }
 
@@ -56,10 +56,6 @@ void SelectionEditor::dispose() {
 const Document& SelectionEditor::document() const {
   DCHECK(m_document);
   return *m_document;
-}
-
-LocalFrame* SelectionEditor::frame() const {
-  return m_frameSelection->frame();
 }
 
 template <>
@@ -170,7 +166,7 @@ void SelectionEditor::updateIfNeeded() {
 
 DEFINE_TRACE(SelectionEditor) {
   visitor->trace(m_document);
-  visitor->trace(m_frameSelection);
+  visitor->trace(m_frame);
   visitor->trace(m_selection);
   visitor->trace(m_selectionInFlatTree);
   visitor->trace(m_logicalRange);

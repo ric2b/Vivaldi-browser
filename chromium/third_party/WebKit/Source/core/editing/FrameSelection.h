@@ -45,6 +45,7 @@
 namespace blink {
 
 class CharacterData;
+class DisplayItemClient;
 class LayoutBlock;
 class LocalFrame;
 class FrameCaret;
@@ -70,7 +71,7 @@ class CORE_EXPORT FrameSelection final
   WTF_MAKE_NONCOPYABLE(FrameSelection);
 
  public:
-  static FrameSelection* create(LocalFrame* frame) {
+  static FrameSelection* create(LocalFrame& frame) {
     return new FrameSelection(frame);
   }
   ~FrameSelection();
@@ -214,11 +215,10 @@ class CORE_EXPORT FrameSelection final
   void didMergeTextNodes(const Text& oldNode, unsigned offset);
   void didSplitTextNode(const Text& oldNode);
 
+  void didLayout();
   bool isAppearanceDirty() const;
   void commitAppearanceIfNeeded(LayoutView&);
-  void updateAppearance();
   void setCaretVisible(bool caretIsVisible);
-  bool isCaretBoundsDirty() const;
   void setCaretRectNeedsUpdate();
   void scheduleVisualUpdate() const;
   void invalidateCaretRect(bool forceInvalidation = false);
@@ -268,6 +268,7 @@ class CORE_EXPORT FrameSelection final
       RevealExtentOption = DoNotRevealExtent);
   void setSelectionFromNone();
 
+  void updateAppearance();
   bool shouldShowBlockCursor() const;
   void setShouldShowBlockCursor(bool);
 
@@ -286,7 +287,10 @@ class CORE_EXPORT FrameSelection final
   FRIEND_TEST_ALL_PREFIXES(PaintControllerPaintTestForSlimmingPaintV1AndV2,
                            FullDocumentPaintingWithCaret);
 
-  explicit FrameSelection(LocalFrame*);
+  explicit FrameSelection(LocalFrame&);
+
+  // For |PaintControllerPaintTestForSlimmingPaintV1AndV2|.
+  const DisplayItemClient& caretDisplayItemClientForTesting() const;
 
   // Note: We have |selectionInFlatTree()| for unit tests, we should
   // use |visibleSelection<EditingInFlatTreeStrategy>()|.

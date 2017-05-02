@@ -143,7 +143,7 @@ static void makePresentationAttributeCacheKey(
     // Disallow caching.
     if (attr.name() == backgroundAttr)
       return;
-    result.attributesAndValues.append(
+    result.attributesAndValues.push_back(
         std::make_pair(attr.localName().impl(), attr.value()));
   }
   if (result.attributesAndValues.isEmpty())
@@ -192,7 +192,7 @@ StylePropertySet* computePresentationAttributeStyle(Element& element) {
     cacheCleaner.didHitPresentationAttributeCache();
   } else {
     style = MutableStylePropertySet::create(
-        element.isSVGElement() ? SVGAttributeMode : HTMLAttributeMode);
+        element.isSVGElement() ? SVGAttributeMode : HTMLStandardMode);
     AttributeCollection attributes = element.attributesWithoutUpdate();
     for (const Attribute& attr : attributes)
       element.collectStyleForPresentationAttribute(

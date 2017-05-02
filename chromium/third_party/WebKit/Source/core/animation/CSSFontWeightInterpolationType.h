@@ -17,11 +17,11 @@ class CSSFontWeightInterpolationType : public CSSInterpolationType {
     DCHECK_EQ(cssProperty(), CSSPropertyFontWeight);
   }
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const StyleResolverState&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   InterpolationValue createFontWeightValue(FontWeight) const;

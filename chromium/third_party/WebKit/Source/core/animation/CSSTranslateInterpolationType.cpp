@@ -21,7 +21,7 @@ class InheritedTranslateChecker : public InterpolationType::ConversionChecker {
 
   static std::unique_ptr<InheritedTranslateChecker> create(
       PassRefPtr<TranslateTransformOperation> inheritedTranslate) {
-    return wrapUnique(
+    return WTF::wrapUnique(
         new InheritedTranslateChecker(std::move(inheritedTranslate)));
   }
 
@@ -102,7 +102,7 @@ InterpolationValue CSSTranslateInterpolationType::maybeConvertInherit(
     ConversionCheckers& conversionCheckers) const {
   TranslateTransformOperation* inheritedTranslate =
       state.parentStyle()->translate();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedTranslateChecker::create(inheritedTranslate));
   return convertTranslateOperation(inheritedTranslate,
                                    state.parentStyle()->effectiveZoom());
@@ -137,20 +137,20 @@ InterpolationValue CSSTranslateInterpolationType::maybeConvertValue(
   return InterpolationValue(std::move(result));
 }
 
-InterpolationValue CSSTranslateInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return convertTranslateOperation(
-      environment.state().style()->translate(),
-      environment.state().style()->effectiveZoom());
+InterpolationValue
+CSSTranslateInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  return convertTranslateOperation(state.style()->translate(),
+                                   state.style()->effectiveZoom());
 }
 
-void CSSTranslateInterpolationType::apply(
+void CSSTranslateInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue*,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   const InterpolableList& list = toInterpolableList(interpolableValue);
   const CSSToLengthConversionData& conversionData =
-      environment.state().cssToLengthConversionData();
+      state.cssToLengthConversionData();
   Length x = LengthInterpolationFunctions::createLength(
       *list.get(TranslateX), nullptr, conversionData, ValueRangeAll);
   Length y = LengthInterpolationFunctions::createLength(
@@ -163,7 +163,7 @@ void CSSTranslateInterpolationType::apply(
   if (!x.isZero() || !y.isZero() || z != 0)
     result = TranslateTransformOperation::create(
         x, y, z, TransformOperation::Translate3D);
-  environment.state().style()->setTranslate(result.release());
+  state.style()->setTranslate(std::move(result));
 }
 
 }  // namespace blink

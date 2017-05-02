@@ -20,19 +20,17 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/browser_sync/browser_sync_switches.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/ssl_config/ssl_config_prefs.h"
 #include "components/ssl_config/ssl_config_switches.h"
+#include "components/sync/base/pref_names.h"
 #include "content/public/common/content_switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
-
-#if defined(OS_ANDROID)
-#include "chrome/browser/android/preferences/command_line_pref_store_android.h"
-#endif
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/chromeos_switches.h"
@@ -55,6 +53,7 @@ const CommandLinePrefStore::SwitchToPreferenceMapEntry
 const CommandLinePrefStore::SwitchToPreferenceMapEntry
     ChromeCommandLinePrefStore::path_switch_map_[] = {
       { switches::kDiskCacheDir, prefs::kDiskCacheDir },
+      { switches::kLocalSyncBackendDir, syncer::prefs::kLocalSyncBackendDir },
 };
 
 const CommandLinePrefStore::BooleanSwitchToPreferenceMapEntry
@@ -79,6 +78,8 @@ const CommandLinePrefStore::BooleanSwitchToPreferenceMapEntry
          prefs::kUnifiedDesktopEnabledByDefault, true},
 #endif
         {switches::kUnsafePacUrl, prefs::kPacHttpsUrlStrippingEnabled, false},
+        {switches::kEnableLocalSyncBackend,
+         syncer::prefs::kEnableLocalSyncBackend, true},
 };
 
 const CommandLinePrefStore::SwitchToPreferenceMapEntry
@@ -118,9 +119,6 @@ void ChromeCommandLinePrefStore::ApplySimpleSwitches() {
   ApplyPathSwitches(path_switch_map_, arraysize(path_switch_map_));
   ApplyIntegerSwitches(integer_switch_map_, arraysize(integer_switch_map_));
   ApplyBooleanSwitches(boolean_switch_map_, arraysize(boolean_switch_map_));
-#if defined(OS_ANDROID)
-  ::android::ApplyBlimpSwitches(this);
-#endif
 }
 
 void ChromeCommandLinePrefStore::ApplyProxyMode() {

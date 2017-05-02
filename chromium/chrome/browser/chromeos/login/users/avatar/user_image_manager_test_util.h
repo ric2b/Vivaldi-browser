@@ -13,8 +13,6 @@
 #include "base/run_loop.h"
 #include "chrome/browser/image_decoder.h"
 
-class SKBitmap;
-
 namespace base {
 class FilePath;
 }
@@ -28,6 +26,8 @@ namespace test {
 
 extern const char kUserAvatarImage1RelativePath[];
 extern const char kUserAvatarImage2RelativePath[];
+// Points to a png file with transparent pixels.
+extern const char kUserAvatarImage3RelativePath[];
 
 // Returns |true| if the two given images are pixel-for-pixel identical.
 bool AreImagesEqual(const gfx::ImageSkia& first, const gfx::ImageSkia& second);

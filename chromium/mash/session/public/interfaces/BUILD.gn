@@ -4,8 +4,8 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-mojom("interfaces") {
+mojom("constants") {
   sources = [
-    "session.mojom",
+    "constants.mojom",
   ]
 }

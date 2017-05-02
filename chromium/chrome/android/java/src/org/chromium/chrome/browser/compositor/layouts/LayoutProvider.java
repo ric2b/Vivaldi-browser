@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.compositor.layouts;
 
-import android.graphics.Rect;
 import android.graphics.RectF;
 
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -29,13 +28,7 @@ public interface LayoutProvider {
      * @param rect RectF instance to be used to store the result and return. If null, it uses a new
      *             RectF instance.
      */
-    void getViewportDp(RectF rect);
-
-    /**
-     * @param rect Rect instance to be used to store the result and return. If null, it uses a new
-     *             Rect instance.
-     */
-    void getViewportPixel(Rect rect);
+    void getViewportPixel(RectF rect);
 
     /**
      * @return The manager in charge of handling fullscreen changes.
@@ -46,7 +39,6 @@ public interface LayoutProvider {
      * Build a {@link SceneLayer} for the active layout if it hasn't already been built, and update
      * it and return it.
      *
-     * @param viewport          A viewport in which to display content.
      * @param layerTitleCache   A layer title cache.
      * @param tabContentManager A tab content manager.
      * @param resourceManager   A resource manager.
@@ -54,7 +46,7 @@ public interface LayoutProvider {
      * @return                  A {@link SceneLayer} that represents the content for this
      *                          {@link Layout}.
      */
-    SceneLayer getUpdatedActiveSceneLayer(Rect viewport, LayerTitleCache layerTitleCache,
+    SceneLayer getUpdatedActiveSceneLayer(LayerTitleCache layerTitleCache,
             TabContentManager tabContentManager, ResourceManager resourceManager,
             ChromeFullscreenManager fullscreenManager);
 }

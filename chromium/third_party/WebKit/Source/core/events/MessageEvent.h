@@ -37,7 +37,7 @@
 #include "core/events/EventTarget.h"
 #include "core/events/MessageEventInit.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/DOMWindow.h"
+#include "wtf/Compiler.h"
 #include <memory>
 
 namespace blink {
@@ -98,7 +98,7 @@ class CORE_EXPORT MessageEvent final : public Event {
                         ScriptValue data,
                         const String& origin,
                         const String& lastEventId,
-                        DOMWindow* source,
+                        EventTarget* source,
                         MessagePortArray*);
   void initMessageEvent(const AtomicString& type,
                         bool canBubble,
@@ -106,7 +106,7 @@ class CORE_EXPORT MessageEvent final : public Event {
                         PassRefPtr<SerializedScriptValue> data,
                         const String& origin,
                         const String& lastEventId,
-                        DOMWindow* source,
+                        EventTarget* source,
                         MessagePortArray*);
 
   const String& origin() const { return m_origin; }
@@ -159,10 +159,10 @@ class CORE_EXPORT MessageEvent final : public Event {
 
   DECLARE_VIRTUAL_TRACE();
 
-  v8::Local<v8::Object> associateWithWrapper(
+  WARN_UNUSED_RESULT v8::Local<v8::Object> associateWithWrapper(
       v8::Isolate*,
       const WrapperTypeInfo*,
-      v8::Local<v8::Object> wrapper) override WARN_UNUSED_RETURN;
+      v8::Local<v8::Object> wrapper) override;
 
  private:
   MessageEvent();

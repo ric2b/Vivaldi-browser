@@ -236,6 +236,10 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       read_lock_fences_enabled(false),
       has_shared_bitmap_id(false),
       is_overlay_candidate(false),
+#if defined(OS_ANDROID)
+      is_backed_by_surface_texture(false),
+      wants_promotion_hint(false),
+#endif
       read_lock_fence(nullptr),
       size(size),
       origin(origin),
@@ -248,7 +252,8 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       type(type),
       usage(gfx::BufferUsage::GPU_READ_CPU_READ_WRITE),
       format(format),
-      shared_bitmap(nullptr) {}
+      shared_bitmap(nullptr) {
+}
 
 ResourceProvider::Resource::Resource(uint8_t* pixels,
                                      SharedBitmap* bitmap,
@@ -272,6 +277,10 @@ ResourceProvider::Resource::Resource(uint8_t* pixels,
       read_lock_fences_enabled(false),
       has_shared_bitmap_id(!!bitmap),
       is_overlay_candidate(false),
+#if defined(OS_ANDROID)
+      is_backed_by_surface_texture(false),
+      wants_promotion_hint(false),
+#endif
       read_lock_fence(nullptr),
       size(size),
       origin(origin),
@@ -310,6 +319,10 @@ ResourceProvider::Resource::Resource(const SharedBitmapId& bitmap_id,
       read_lock_fences_enabled(false),
       has_shared_bitmap_id(true),
       is_overlay_candidate(false),
+#if defined(OS_ANDROID)
+      is_backed_by_surface_texture(false),
+      wants_promotion_hint(false),
+#endif
       read_lock_fence(nullptr),
       size(size),
       origin(origin),
@@ -322,7 +335,8 @@ ResourceProvider::Resource::Resource(const SharedBitmapId& bitmap_id,
       type(RESOURCE_TYPE_BITMAP),
       format(RGBA_8888),
       shared_bitmap_id(bitmap_id),
-      shared_bitmap(nullptr) {}
+      shared_bitmap(nullptr) {
+}
 
 ResourceProvider::Resource::Resource(Resource&& other) = default;
 
@@ -687,6 +701,13 @@ ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
                  base::Owned(release_callback_impl.release()));
   resource->read_lock_fences_enabled = read_lock_fences_enabled;
   resource->is_overlay_candidate = mailbox.is_overlay_candidate();
+#if defined(OS_ANDROID)
+  resource->is_backed_by_surface_texture =
+      mailbox.is_backed_by_surface_texture();
+  resource->wants_promotion_hint = mailbox.wants_promotion_hint();
+  if (resource->wants_promotion_hint)
+    wants_promotion_hints_set_.insert(id);
+#endif
   resource->color_space = mailbox.color_space();
 
   return id;
@@ -722,6 +743,13 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
   TRACE_EVENT0("cc", "ResourceProvider::DeleteResourceInternal");
   Resource* resource = &it->second;
   DCHECK(resource->exported_count == 0 || style != NORMAL);
+
+#if defined(OS_ANDROID)
+  // If this resource was interested in promotion hints, then remove it from
+  // the set of resources that we'll notify.
+  if (resource->wants_promotion_hint)
+    wants_promotion_hints_set_.erase(it->first);
+#endif
 
   // Exported resources are lost on shutdown.
   bool exported_resource_lost =
@@ -814,6 +842,11 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
     resource->gpu_memory_buffer.reset();
   }
   resources_.erase(it);
+}
+
+void ResourceProvider::FlushPendingDeletions() const {
+  if (auto* gl = ContextGL())
+    gl->ShallowFlushCHROMIUM();
 }
 
 ResourceProvider::ResourceType ResourceProvider::GetResourceType(
@@ -1048,6 +1081,21 @@ bool ResourceProvider::IsOverlayCandidate(ResourceId id) {
   return resource->is_overlay_candidate;
 }
 
+#if defined(OS_ANDROID)
+bool ResourceProvider::IsBackedBySurfaceTexture(ResourceId id) {
+  Resource* resource = GetResource(id);
+  return resource->is_backed_by_surface_texture;
+}
+
+bool ResourceProvider::WantsPromotionHint(ResourceId id) {
+  return wants_promotion_hints_set_.count(id) > 0;
+}
+
+size_t ResourceProvider::CountPromotionHintRequestsForTesting() {
+  return wants_promotion_hints_set_.size();
+}
+#endif
+
 void ResourceProvider::UnlockForWrite(Resource* resource) {
   DCHECK(resource->locked_for_write);
   DCHECK_EQ(resource->exported_count, 0);
@@ -1159,6 +1207,7 @@ ResourceProvider::ScopedSkSurfaceProvider::ScopedSkSurfaceProvider(
     bool use_mailbox,
     bool use_distance_field_text,
     bool can_use_lcd_text,
+    bool ignore_color_space,
     int msaa_sample_count)
     : texture_provider_(context_provider->ContextGL(),
                         resource_lock,
@@ -1185,7 +1234,8 @@ ResourceProvider::ScopedSkSurfaceProvider::ScopedSkSurfaceProvider(
         SkSurfaceProps(flags, SkSurfaceProps::kLegacyFontHost_InitType);
   }
   sk_surface_ = SkSurface::MakeFromBackendTextureAsRenderTarget(
-      context_provider->GrContext(), desc, resource_lock->sk_color_space(),
+      context_provider->GrContext(), desc,
+      ignore_color_space ? nullptr : resource_lock->sk_color_space(),
       &surface_props);
 }
 
@@ -1260,8 +1310,9 @@ ResourceProvider::ScopedWriteLockSoftware::ScopedWriteLockSoftware(
     ResourceProvider* resource_provider,
     ResourceId resource_id)
     : resource_provider_(resource_provider), resource_id_(resource_id) {
-  resource_provider->PopulateSkBitmapWithResource(
-      &sk_bitmap_, resource_provider->LockForWrite(resource_id));
+  Resource* resource = resource_provider->LockForWrite(resource_id);
+  resource_provider->PopulateSkBitmapWithResource(&sk_bitmap_, resource);
+  sk_color_space_ = resource_provider->GetResourceSkColorSpace(resource);
   DCHECK(valid());
 }
 
@@ -1314,7 +1365,7 @@ gfx::GpuMemoryBuffer*
 ResourceProvider::ScopedWriteLockGpuMemoryBuffer::GetGpuMemoryBuffer() {
   if (!gpu_memory_buffer_) {
     gpu_memory_buffer_ =
-        resource_provider_->gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
+        resource_provider_->gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
             size_, BufferFormat(format_), usage_, gpu::kNullSurfaceHandle);
   }
   return gpu_memory_buffer_.get();
@@ -1532,6 +1583,12 @@ void ResourceProvider::ReceiveFromChild(
                                            it->mailbox_holder.texture_target));
       resource->read_lock_fences_enabled = it->read_lock_fences_enabled;
       resource->is_overlay_candidate = it->is_overlay_candidate;
+#if defined(OS_ANDROID)
+      resource->is_backed_by_surface_texture = it->is_backed_by_surface_texture;
+      resource->wants_promotion_hint = it->wants_promotion_hint;
+      if (resource->wants_promotion_hint)
+        wants_promotion_hints_set_.insert(local_id);
+#endif
       resource->color_space = it->color_space;
     }
     resource->child_id = child;
@@ -1620,6 +1677,38 @@ void ResourceProvider::ReceiveReturnsFromParent(
   }
 }
 
+#if defined(OS_ANDROID)
+void ResourceProvider::SendPromotionHints(
+    const OverlayCandidateList::PromotionHintInfoMap& promotion_hints) {
+  GLES2Interface* gl = ContextGL();
+  if (!gl)
+    return;
+
+  for (const auto& id : wants_promotion_hints_set_) {
+    const ResourceMap::iterator it = resources_.find(id);
+    if (it == resources_.end())
+      continue;
+
+    if (it->second.marked_for_deletion)
+      continue;
+
+    const Resource* resource = LockForRead(id);
+    DCHECK(resource->wants_promotion_hint);
+
+    // Insist that this is backed by a GPU texture.
+    if (IsGpuResourceType(resource->type)) {
+      DCHECK(resource->gl_id);
+      auto iter = promotion_hints.find(id);
+      bool promotable = iter != promotion_hints.end();
+      gl->OverlayPromotionHintCHROMIUM(resource->gl_id, promotable,
+                                       promotable ? iter->second.x() : 0,
+                                       promotable ? iter->second.y() : 0);
+    }
+    UnlockForRead(id);
+  }
+}
+#endif
+
 void ResourceProvider::CreateMailboxAndBindResource(
     gpu::gles2::GLES2Interface* gl,
     Resource* resource) {
@@ -1659,6 +1748,10 @@ void ResourceProvider::TransferResource(Resource* source,
   resource->size = source->size;
   resource->read_lock_fences_enabled = source->read_lock_fences_enabled;
   resource->is_overlay_candidate = source->is_overlay_candidate;
+#if defined(OS_ANDROID)
+  resource->is_backed_by_surface_texture = source->is_backed_by_surface_texture;
+  resource->wants_promotion_hint = source->wants_promotion_hint;
+#endif
   resource->color_space = source->color_space;
 
   if (source->type == RESOURCE_TYPE_BITMAP) {
@@ -1872,7 +1965,7 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
   gl->BindTexture(resource->target, resource->gl_id);
   if (resource->type == RESOURCE_TYPE_GPU_MEMORY_BUFFER) {
     resource->gpu_memory_buffer =
-        gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
+        gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
             size, BufferFormat(format), resource->usage,
             gpu::kNullSurfaceHandle);
     if (resource->gpu_memory_buffer && enable_color_correct_rendering_) {

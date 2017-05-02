@@ -4,10 +4,11 @@
 
 #include "net/tools/quic/quic_client_base.h"
 
-#include "base/strings/string_number_conversions.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_text_utils.h"
 
 using base::StringPiece;
 using base::StringToInt;
@@ -68,7 +69,7 @@ void QuicClientBase::OnClose(QuicSpdyStream* stream) {
     auto status = response_headers.find(":status");
     if (status == response_headers.end() ||
         !StringToInt(status->second, &latest_response_code_)) {
-      LOG(ERROR) << "Invalid response headers";
+      QUIC_LOG(ERROR) << "Invalid response headers";
     }
     latest_response_headers_ = response_headers.DebugString();
     latest_response_header_block_ = response_headers.Clone();
@@ -115,7 +116,8 @@ bool QuicClientBase::Connect() {
     while (EncryptionBeingEstablished()) {
       WaitForEvents();
     }
-    if (FLAGS_enable_quic_stateless_reject_support && connected()) {
+    if (FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support &&
+        connected()) {
       // Resend any previously queued data.
       ResendSavedData();
     }
@@ -269,16 +271,16 @@ bool QuicClientBase::WaitForEvents() {
   DCHECK(session() != nullptr);
   if (!connected() &&
       session()->error() == QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
-    DCHECK(FLAGS_enable_quic_stateless_reject_support);
-    DVLOG(1) << "Detected stateless reject while waiting for events.  "
-             << "Attempting to reconnect.";
+    DCHECK(FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support);
+    QUIC_DLOG(INFO) << "Detected stateless reject while waiting for events.  "
+                    << "Attempting to reconnect.";
     Connect();
   }
 
   return session()->num_active_requests() != 0;
 }
 
-bool QuicClientBase::MigrateSocket(const IPAddress& new_host) {
+bool QuicClientBase::MigrateSocket(const QuicIpAddress& new_host) {
   if (!connected()) {
     return false;
   }
@@ -307,12 +309,16 @@ void QuicClientBase::WaitForStreamToClose(QuicStreamId id) {
   }
 }
 
-void QuicClientBase::WaitForCryptoHandshakeConfirmed() {
+bool QuicClientBase::WaitForCryptoHandshakeConfirmed() {
   DCHECK(connected());
 
   while (connected() && !session_->IsCryptoHandshakeConfirmed()) {
     WaitForEvents();
   }
+
+  // If the handshake fails due to a timeout, the connection will be closed.
+  QUIC_LOG_IF(ERROR, !connected()) << "Handshake with server failed.";
+  return connected();
 }
 
 bool QuicClientBase::connected() const {
@@ -388,7 +394,7 @@ QuicConnectionId QuicClientBase::GenerateNewConnectionId() {
 void QuicClientBase::MaybeAddDataToResend(const SpdyHeaderBlock& headers,
                                           StringPiece body,
                                           bool fin) {
-  if (!FLAGS_enable_quic_stateless_reject_support) {
+  if (!FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support) {
     return;
   }
 

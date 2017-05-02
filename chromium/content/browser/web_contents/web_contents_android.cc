@@ -14,6 +14,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/content_view_core_impl.h"
@@ -23,6 +24,7 @@
 #include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/web_contents/web_contents_view_android.h"
 #include "content/common/devtools_messages.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
@@ -37,7 +39,7 @@
 #include "jni/WebContentsImpl_jni.h"
 #include "net/android/network_library.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/gfx/android/device_display_info.h"
+#include "ui/android/overscroll_refresh_handler.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -561,9 +563,10 @@ void WebContentsAndroid::PostMessageToFrame(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& jframe_name,
     const JavaParamRef<jstring>& jmessage,
+    const JavaParamRef<jstring>& jsource_origin,
     const JavaParamRef<jstring>& jtarget_origin,
     const JavaParamRef<jintArray>& jsent_ports) {
-  base::string16 source_origin;
+  base::string16 source_origin(ConvertJavaStringToUTF16(env, jsource_origin));
   base::string16 target_origin(ConvertJavaStringToUTF16(env, jtarget_origin));
   base::string16 message(ConvertJavaStringToUTF16(env, jmessage));
   std::vector<int> ports;
@@ -616,6 +619,17 @@ ScopedJavaLocalRef<jstring> WebContentsAndroid::GetEncoding(
                                                 web_contents_->GetEncoding());
 }
 
+void WebContentsAndroid::SetOverscrollRefreshHandler(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jobject>& overscroll_refresh_handler) {
+  WebContentsViewAndroid* view =
+      static_cast<WebContentsViewAndroid*>(web_contents_->GetView());
+  view->SetOverscrollRefreshHandler(
+      base::MakeUnique<ui::OverscrollRefreshHandler>(
+          overscroll_refresh_handler));
+}
+
 void WebContentsAndroid::GetContentBitmap(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -627,11 +641,10 @@ void WebContentsAndroid::GetContentBitmap(
     jfloat width,
     jfloat height) {
   RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
-  const ReadbackRequestCallback result_callback =
-      base::Bind(&WebContentsAndroid::OnFinishGetContentBitmap,
-                 weak_factory_.GetWeakPtr(),
-                 base::Owned(new ScopedJavaGlobalRef<jobject>(env, obj)),
-                 base::Owned(new ScopedJavaGlobalRef<jobject>(env, jcallback)));
+  const ReadbackRequestCallback result_callback = base::Bind(
+      &WebContentsAndroid::OnFinishGetContentBitmap, weak_factory_.GetWeakPtr(),
+      ScopedJavaGlobalRef<jobject>(env, obj),
+      ScopedJavaGlobalRef<jobject>(env, jcallback));
   SkColorType pref_color_type = gfx::ConvertToSkiaColorType(color_type);
   if (!view || pref_color_type == kUnknown_SkColorType) {
     result_callback.Run(SkBitmap(), READBACK_FAILED);
@@ -665,10 +678,8 @@ int WebContentsAndroid::DownloadImage(
       url, is_fav_icon, max_bitmap_size, bypass_cache,
       base::Bind(&WebContentsAndroid::OnFinishDownloadImage,
                  weak_factory_.GetWeakPtr(),
-                 base::Owned(new ScopedJavaGlobalRef<jobject>(
-                     env, obj)),
-                 base::Owned(new ScopedJavaGlobalRef<jobject>(
-                     env, jcallback))));
+                 ScopedJavaGlobalRef<jobject>(env, obj),
+                 ScopedJavaGlobalRef<jobject>(env, jcallback)));
 }
 
 void WebContentsAndroid::DismissTextHandles(
@@ -680,21 +691,21 @@ void WebContentsAndroid::DismissTextHandles(
 }
 
 void WebContentsAndroid::OnFinishGetContentBitmap(
-    ScopedJavaGlobalRef<jobject>* obj,
-    ScopedJavaGlobalRef<jobject>* callback,
+    const JavaRef<jobject>& obj,
+    const JavaRef<jobject>& callback,
     const SkBitmap& bitmap,
     ReadbackResponse response) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (response == READBACK_SUCCESS)
     java_bitmap = gfx::ConvertToJavaBitmap(&bitmap);
-  Java_WebContentsImpl_onGetContentBitmapFinished(env, *obj, *callback,
+  Java_WebContentsImpl_onGetContentBitmapFinished(env, obj, callback,
                                                   java_bitmap, response);
 }
 
 void WebContentsAndroid::OnFinishDownloadImage(
-    base::android::ScopedJavaGlobalRef<jobject>* obj,
-    base::android::ScopedJavaGlobalRef<jobject>* callback,
+    const JavaRef<jobject>& obj,
+    const JavaRef<jobject>& callback,
     int id,
     int http_status_code,
     const GURL& url,
@@ -720,7 +731,7 @@ void WebContentsAndroid::OnFinishDownloadImage(
                                                 size.height());
   }
   Java_WebContentsImpl_onDownloadImageFinished(
-      env, *obj, *callback, id, http_status_code, jurl, jbitmaps, jsizes);
+      env, obj, callback, id, http_status_code, jurl, jbitmaps, jsizes);
 }
 
 void WebContentsAndroid::SetMediaSession(

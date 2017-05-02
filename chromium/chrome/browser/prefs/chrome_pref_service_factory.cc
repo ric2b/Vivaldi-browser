@@ -47,7 +47,6 @@
 #include "components/prefs/pref_store.h"
 #include "components/prefs/pref_value_store.h"
 #include "components/search_engines/default_search_manager.h"
-#include "components/search_engines/default_search_pref_migration.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/sync/base/model_type.h"
@@ -59,6 +58,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/features/features.h"
+#include "rlz/features/features.h"
 #include "sql/error_delegate_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -72,9 +72,9 @@
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 #include "rlz/lib/machine_id.h"
-#endif  // defined(ENABLE_RLZ)
+#endif  // BUILDFLAG(ENABLE_RLZ)
 #endif  // defined(OS_WIN)
 
 using content::BrowserContext;
@@ -142,24 +142,6 @@ const PrefHashFilter::TrackedPreferenceMetadata kTrackedPrefs[] = {
   },
   {
     7, prefs::kSearchProviderOverrides,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    8, prefs::kDefaultSearchProviderSearchURL,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    9, prefs::kDefaultSearchProviderKeyword,
-    PrefHashFilter::ENFORCE_ON_LOAD,
-    PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
-    PrefHashFilter::VALUE_IMPERSONAL
-  },
-  {
-    10, prefs::kDefaultSearchProviderName,
     PrefHashFilter::ENFORCE_ON_LOAD,
     PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
     PrefHashFilter::VALUE_IMPERSONAL
@@ -399,7 +381,7 @@ void HandleReadError(const base::FilePath& pref_filename,
 std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
     const base::FilePath& profile_path) {
   std::string device_id;
-#if defined(OS_WIN) && defined(ENABLE_RLZ)
+#if defined(OS_WIN) && BUILDFLAG(ENABLE_RLZ)
   // This is used by
   // chrome/browser/extensions/api/music_manager_private/device_id_win.cc
   // but that API is private (http://crbug.com/276485) and other platforms are
@@ -516,8 +498,6 @@ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
                  async);
   std::unique_ptr<sync_preferences::PrefServiceSyncable> pref_service =
       factory.CreateSyncable(pref_registry.get());
-
-  ConfigureDefaultSearchPrefMigrationToDictionaryValue(pref_service.get());
 
   return pref_service;
 }

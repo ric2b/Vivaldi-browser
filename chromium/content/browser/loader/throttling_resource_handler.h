@@ -7,10 +7,14 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <vector>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "content/browser/loader/layered_resource_handler.h"
-#include "content/public/browser/resource_controller.h"
+#include "content/common/content_export.h"
+#include "content/public/browser/resource_throttle.h"
 #include "net/url_request/redirect_info.h"
 #include "url/gurl.h"
 
@@ -20,17 +24,17 @@ class URLRequest;
 
 namespace content {
 
-class ResourceThrottle;
 struct ResourceResponse;
 
 // Used to apply a list of ResourceThrottle instances to an URLRequest.
-class ThrottlingResourceHandler : public LayeredResourceHandler,
-                                  public ResourceController {
+class CONTENT_EXPORT ThrottlingResourceHandler
+    : public LayeredResourceHandler,
+      public ResourceThrottle::Delegate {
  public:
-  // Takes ownership of the ResourceThrottle instances.
-  ThrottlingResourceHandler(std::unique_ptr<ResourceHandler> next_handler,
-                            net::URLRequest* request,
-                            ScopedVector<ResourceThrottle> throttles);
+  ThrottlingResourceHandler(
+      std::unique_ptr<ResourceHandler> next_handler,
+      net::URLRequest* request,
+      std::vector<std::unique_ptr<ResourceThrottle>> throttles);
   ~ThrottlingResourceHandler() override;
 
   // LayeredResourceHandler overrides:
@@ -43,7 +47,7 @@ class ThrottlingResourceHandler : public LayeredResourceHandler,
                          bool ask_for_target) override;
   bool OnWillStart(const GURL& url, bool* defer) override;
 
-  // ResourceController implementation:
+  // ResourceThrottle::Delegate implementation:
   void Cancel() override;
   void CancelAndIgnore() override;
   void CancelWithError(int error_code) override;
@@ -56,7 +60,7 @@ class ThrottlingResourceHandler : public LayeredResourceHandler,
 
   // Called when the throttle at |throttle_index| defers a request.  Logs the
   // name of the throttle that delayed the request.
-  void OnRequestDefered(int throttle_index);
+  void OnRequestDeferred(int throttle_index);
 
   enum DeferredStage {
     DEFERRED_NONE,
@@ -66,7 +70,7 @@ class ThrottlingResourceHandler : public LayeredResourceHandler,
   };
   DeferredStage deferred_stage_;
 
-  ScopedVector<ResourceThrottle> throttles_;
+  std::vector<std::unique_ptr<ResourceThrottle>> throttles_;
   size_t next_index_;
 
   GURL deferred_url_;
@@ -74,6 +78,8 @@ class ThrottlingResourceHandler : public LayeredResourceHandler,
   scoped_refptr<ResourceResponse> deferred_response_;
 
   bool cancelled_by_resource_throttle_;
+
+  DISALLOW_COPY_AND_ASSIGN(ThrottlingResourceHandler);
 };
 
 }  // namespace content

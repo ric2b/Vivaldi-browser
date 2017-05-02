@@ -15,11 +15,13 @@
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "net/base/net_errors.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 
 class AccountId;
 
 namespace chromeos {
 
+class Key;
 class SigninScreenHandler;
 class SigninScreenHandlerDelegate;
 
@@ -96,6 +98,13 @@ class GaiaScreenHandler : public BaseScreenHandler,
                            const std::string& password,
                            bool using_saml);
 
+  void HandleCompleteAdAuthentication(const std::string& username,
+                                      const std::string& password);
+
+  void HandleCompleteAdPasswordChange(const std::string& username,
+                                      const std::string& old_password,
+                                      const std::string& new_password);
+
   void HandleUsingSAMLAPI();
   void HandleScrapedPasswordCount(int password_count);
   void HandleScrapedPasswordVerificationFailed();
@@ -126,6 +135,17 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // Kick off DNS cache flushing.
   void StartClearingDnsCache();
   void OnDnsCleared();
+
+  // Callback for AuthPolicyClient.
+  void DoAdAuth(const std::string& username,
+                const Key& key,
+                authpolicy::ErrorType error,
+                const std::string& uid);
+
+  // Callback for writing password into pipe.
+  void OnPasswordPipeReady(const std::string& username,
+                           const Key& key,
+                           base::ScopedFD password_fd);
 
   // Show sign-in screen for the given credentials.
   void ShowSigninScreenForTest(const std::string& username,
@@ -179,7 +199,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // Returns user canonical e-mail. Finds already used account alias, if
   // user has already signed in.
   AccountId GetAccountId(const std::string& authenticated_email,
-                         const std::string& gaia_id) const;
+                         const std::string& id,
+                         const AccountType& account_type) const;
 
   bool offline_login_is_active() const { return offline_login_is_active_; }
   void set_offline_login_is_active(bool offline_login_is_active) {

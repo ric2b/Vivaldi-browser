@@ -75,6 +75,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "chromeos/dbus/upstart_client.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/network/network_state.h"
@@ -92,7 +93,9 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/service_manager_connection.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
@@ -265,6 +268,7 @@ SigninScreenHandler::SigninScreenHandler(
                              ->CapsLockIsEnabled()),
       proxy_auth_dialog_reload_times_(kMaxGaiaReloadForProxyAuthDialog),
       gaia_screen_handler_(gaia_screen_handler),
+      touch_view_binding_(this),
       histogram_helper_(new ErrorScreensHistogramHelper("Signin")),
       weak_factory_(this) {
   DCHECK(network_state_informer_.get());
@@ -291,12 +295,11 @@ SigninScreenHandler::SigninScreenHandler(
   if (keyboard)
     keyboard->AddObserver(this);
 
-  if (!chrome::IsRunningInMash()) {
-    max_mode_delegate_.reset(new TouchViewControllerDelegate());
-    max_mode_delegate_->AddObserver(this);
-  } else {
-    NOTIMPLEMENTED();
-  }
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash_util::GetAshServiceName(), &touch_view_manager_ptr_);
+  touch_view_manager_ptr_->AddObserver(
+      touch_view_binding_.CreateInterfacePtrAndBind());
 }
 
 SigninScreenHandler::~SigninScreenHandler() {
@@ -313,10 +316,6 @@ SigninScreenHandler::~SigninScreenHandler() {
   if (delegate_)
     delegate_->SetWebUIHandler(nullptr);
   network_state_informer_->RemoveObserver(this);
-  if (max_mode_delegate_) {
-    max_mode_delegate_->RemoveObserver(this);
-    max_mode_delegate_.reset(nullptr);
-  }
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
   proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(EmptyAccountId());
 }
@@ -519,6 +518,14 @@ void SigninScreenHandler::DeclareLocalizedValues(
                IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_CONTINUE);
   builder->Add("unrecoverableCryptohomeErrorRecreatingProfile",
                IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_WAIT_MESSAGE);
+
+  builder->Add("adEnterOldPasswordHint", IDS_AD_PASSWORD_CHANGE_OLD_PASSWORD);
+  builder->Add("adEnterNewPasswordHint", IDS_AD_PASSWORD_CHANGE_NEW_PASSWORD);
+  builder->Add("adRepeatNewPasswordHint",
+               IDS_AD_PASSWORD_CHANGE_REPEAT_NEW_PASSWORD);
+  builder->Add("adPasswordChangeMessage", IDS_AD_PASSWORD_CHANGE_MESSAGE);
+  builder->Add("adOldPasswordError", IDS_AD_PASSWORD_CHANGE_INVALID_PASSWORD);
+  builder->Add("adNewPasswordError", IDS_AD_PASSWORD_CHANGE_PASSWORDS_MISMATCH);
 }
 
 void SigninScreenHandler::RegisterMessages() {
@@ -894,12 +901,22 @@ void SigninScreenHandler::ReloadGaia(bool force_reload) {
 }
 
 void SigninScreenHandler::Initialize() {
-  // If delegate_ is nullptr here (e.g. WebUIScreenLocker has been destroyed),
-  // don't do anything, just return.
-  if (!delegate_)
-    return;
+  // Preload PIN keyboard if any of the users can authenticate via PIN.
+  if (user_manager::UserManager::IsInitialized()) {
+    for (user_manager::User* user :
+         user_manager::UserManager::Get()->GetLoggedInUsers()) {
 
-  if (show_on_init_) {
+      chromeos::PinStorage* pin_storage =
+          chromeos::PinStorageFactory::GetForUser(user);
+      if (pin_storage && pin_storage->IsPinAuthenticationAvailable()) {
+        CallJS("cr.ui.Oobe.preloadPinKeyboard");
+        break;
+      }
+    }
+  }
+
+  // |delegate_| is null when we are preloading the lock screen.
+  if (delegate_ && show_on_init_) {
     show_on_init_ = false;
     ShowImpl();
   }
@@ -1066,12 +1083,9 @@ void SigninScreenHandler::SuspendDone(const base::TimeDelta& sleep_duration) {
   }
 }
 
-void SigninScreenHandler::OnMaximizeModeStarted() {
-  CallJS("login.AccountPickerScreen.setTouchViewState", true);
-}
-
-void SigninScreenHandler::OnMaximizeModeEnded() {
-  CallJS("login.AccountPickerScreen.setTouchViewState", false);
+void SigninScreenHandler::OnTouchViewToggled(bool enabled) {
+  touch_view_enabled_ = enabled;
+  CallJS("login.AccountPickerScreen.setTouchViewState", enabled);
 }
 
 bool SigninScreenHandler::ShouldLoadGaia() const {
@@ -1120,7 +1134,7 @@ void SigninScreenHandler::HandleShowSupervisedUserCreationScreen() {
     return;
   }
   LoginDisplayHost::default_host()->StartWizard(
-      WizardController::kSupervisedUserCreationScreenName);
+      OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW);
 }
 
 void SigninScreenHandler::HandleLaunchPublicSession(
@@ -1198,13 +1212,17 @@ void SigninScreenHandler::HandleToggleEnrollmentScreen() {
 }
 
 void SigninScreenHandler::HandleToggleEnrollmentAd() {
+  // TODO(rsorokin): Cleanup enrollment flow for Active Directory. (see
+  // crbug.com/668491).
   if (chrome::GetChannel() == version_info::Channel::BETA ||
       chrome::GetChannel() == version_info::Channel::STABLE) {
     return;
   }
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       chromeos::switches::kEnableAd);
-  HandleToggleEnrollmentScreen();
+  chromeos::DBusThreadManager::Get()
+      ->GetUpstartClient()
+      ->StartAuthPolicyService();
 }
 
 void SigninScreenHandler::HandleToggleEnableDebuggingScreen() {
@@ -1424,10 +1442,7 @@ void SigninScreenHandler::HandleLaunchArcKioskApp(
 }
 
 void SigninScreenHandler::HandleGetTouchViewState() {
-  if (max_mode_delegate_) {
-    CallJS("login.AccountPickerScreen.setTouchViewState",
-           max_mode_delegate_->IsMaximizeModeEnabled());
-  }
+  CallJS("login.AccountPickerScreen.setTouchViewState", touch_view_enabled_);
 }
 
 void SigninScreenHandler::HandleLogRemoveUserWarningShown() {

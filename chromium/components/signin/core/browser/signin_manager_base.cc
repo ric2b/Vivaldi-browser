@@ -227,6 +227,10 @@ bool SigninManagerBase::AuthInProgress() const {
   return false;
 }
 
+void SigninManagerBase::SignOut(
+      signin_metrics::ProfileSignout signout_source_metric,
+      signin_metrics::SignoutDelete signout_delete_metric){}
+
 void SigninManagerBase::Shutdown() {}
 
 void SigninManagerBase::AddObserver(Observer* observer) {

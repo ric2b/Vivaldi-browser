@@ -2660,7 +2660,11 @@ GLenum WebGLImageConversion::computeImageSizeInBytes(
   }
 
   unsigned padding = 0;
-  unsigned residual = checkedValue.ValueOrDie() % params.alignment;
+  CheckedNumeric<uint32_t> checkedResidual = checkedValue % params.alignment;
+  if (!checkedResidual.IsValid()) {
+    return GL_INVALID_VALUE;
+  }
+  unsigned residual = checkedResidual.ValueOrDie();
   if (residual) {
     padding = params.alignment - residual;
     checkedValue += padding;
@@ -2675,7 +2679,7 @@ GLenum WebGLImageConversion::computeImageSizeInBytes(
   rows += height;
   if (!rows.IsValid())
     return GL_INVALID_VALUE;
-  checkedValue *= (rows.ValueOrDie() - 1);
+  checkedValue *= (rows - 1);
   // Last row is not affected by ROW_LENGTH parameter.
   checkedValue += lastRowSize;
   if (!checkedValue.IsValid())
@@ -2735,7 +2739,10 @@ void WebGLImageConversion::ImageExtractor::extractImage(bool premultiplyAlpha,
   if (!m_image)
     return;
 
-  sk_sp<SkImage> skiaImage = m_image->imageForCurrentFrame();
+  // TODO(ccameron): WebGL should operate in sRGB.
+  // https://crbug.com/672299
+  sk_sp<SkImage> skiaImage =
+      m_image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   SkImageInfo info = skiaImage ? SkImageInfo::MakeN32Premul(m_image->width(),
                                                             m_image->height())
                                : SkImageInfo::MakeUnknown();
@@ -2747,8 +2754,8 @@ void WebGLImageConversion::ImageExtractor::extractImage(bool premultiplyAlpha,
     // Attempt to get raw unpremultiplied image data.
     std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
         m_image->data(), true, ImageDecoder::AlphaNotPremultiplied,
-        ignoreColorSpace ? ImageDecoder::ColorSpaceIgnored
-                         : ImageDecoder::ColorSpaceApplied));
+        ignoreColorSpace ? ColorBehavior::ignore()
+                         : ColorBehavior::transformToGlobalTarget()));
     if (!decoder || !decoder->frameCount())
       return;
     ImageFrame* frame = decoder->frameBufferAtIndex(0);
@@ -2914,14 +2921,10 @@ bool WebGLImageConversion::packImageData(Image* image,
     return false;
   data.resize(packedSize);
 
-  if (!packPixels(reinterpret_cast<const uint8_t*>(pixels), sourceFormat,
-                  sourceImageWidth, sourceImageHeight, sourceImageSubRectangle,
-                  depth, sourceUnpackAlignment, unpackImageHeight, format, type,
-                  alphaOp, data.data(), flipY))
-    return false;
-  if (ImageObserver* observer = image->getImageObserver())
-    observer->didDraw(image);
-  return true;
+  return packPixels(
+      reinterpret_cast<const uint8_t*>(pixels), sourceFormat, sourceImageWidth,
+      sourceImageHeight, sourceImageSubRectangle, depth, sourceUnpackAlignment,
+      unpackImageHeight, format, type, alphaOp, data.data(), flipY);
 }
 
 bool WebGLImageConversion::extractImageData(

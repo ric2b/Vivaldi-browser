@@ -3,6 +3,7 @@ package org.chromium.devtools.compiler;
 import com.google.common.collect.Lists;
 import com.google.common.io.Resources;
 import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.Compiler;
 
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
@@ -186,32 +187,37 @@ public class Runner {
         }
 
         @Override
-        protected CompilerOptions createOptions() {
-            CompilerOptions options = super.createOptions();
-            options.setIdeMode(true);
-            options.setReportMissingOverride(CheckLevel.ERROR);
-            return options;
-        }
-
-        @Override
         protected void setRunOptions(CompilerOptions options)
                 throws FlagUsageException, IOException {
             super.setRunOptions(options);
             options.setCodingConvention(new DevToolsCodingConvention());
         }
 
-        int execute() {
-            int result = 0;
-            int runs = 1;
-            try {
-                for (int i = 0; i < runs && result == 0; i++) {
-                    result = doRun();
+        @Override
+        protected Compiler createCompiler() {
+            Compiler compiler = new Compiler();
+            final LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+            PrintStreamErrorManager errorManager =
+                    new PrintStreamErrorManager(formatter, getErrorPrintStream()) {
+                @Override
+                public void report(CheckLevel level, JSError error) {
+                    String text = formatter.formatError(error);
+                    if (text.indexOf("access on a struct") == -1 || text.indexOf("Symbol") == -1)
+                        super.report(level, error);
                 }
+            };
+            errorManager.setSummaryDetailLevel(3);
+            compiler.setErrorManager(errorManager);
+            return compiler;
+        }
+
+        int execute() {
+            try {
+                return doRun();
             } catch (Throwable t) {
                 t.printStackTrace();
-                result = -2;
+                return -2;
             }
-            return result;
         }
     }
 

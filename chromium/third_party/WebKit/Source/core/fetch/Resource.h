@@ -28,28 +28,29 @@
 #include "core/fetch/CachedMetadataHandler.h"
 #include "core/fetch/IntegrityMetadata.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "core/fetch/ResourceStatus.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/SharedBuffer.h"
 #include "platform/Timer.h"
+#include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
-#include "platform/tracing/web_process_memory_dump.h"
 #include "public/platform/WebDataConsumerHandle.h"
 #include "wtf/Allocator.h"
 #include "wtf/AutoReset.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/HashSet.h"
+#include "wtf/text/AtomicString.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
 
 namespace blink {
 
-struct FetchInitiatorInfo;
-class CachedMetadata;
 class FetchRequest;
 class ResourceClient;
+class ResourceFetcher;
 class ResourceTimingInfo;
 class ResourceLoader;
 class SecurityOrigin;
@@ -80,23 +81,32 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
     TextTrack,
     ImportResource,
     Media,  // Audio or video file requested by a HTML5 media element
-    Manifest
+    Manifest,
+    Mock  // Only for testing
   };
-  static const int kLastResourceType = Manifest + 1;
+  static const int kLastResourceType = Mock + 1;
 
-  enum Status {
-    NotStarted,
-    Pending,  // load in progress
-    Cached,   // load completed successfully
-    LoadError,
-    DecodeError
-  };
+  using Status = ResourceStatus;
+
+  // TODO(hiroshige): Remove the following declarations.
+  static constexpr Status NotStarted = ResourceStatus::NotStarted;
+  static constexpr Status Pending = ResourceStatus::Pending;
+  static constexpr Status Cached = ResourceStatus::Cached;
+  static constexpr Status LoadError = ResourceStatus::LoadError;
+  static constexpr Status DecodeError = ResourceStatus::DecodeError;
 
   // Whether a resource client for a preload should mark the preload as
   // referenced.
   enum PreloadReferencePolicy {
     MarkAsReferenced,
     DontMarkAsReferenced,
+  };
+
+  // Used by reloadIfLoFiOrPlaceholderImage().
+  enum ReloadLoFiOrPlaceholderPolicy {
+    kReloadIfNeeded,
+    kReloadAlwaysWithExistingCachePolicy,
+    kReloadAlways,
   };
 
   virtual ~Resource();
@@ -204,11 +214,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void finish(double finishTime);
   void finish() { finish(0.0); }
 
-  // FIXME: Remove the stringless variant once all the callsites' error messages
-  // are updated.
   bool passesAccessControlCheck(SecurityOrigin*) const;
-  bool passesAccessControlCheck(SecurityOrigin*,
-                                String& errorDescription) const;
 
   virtual PassRefPtr<const SharedBuffer> resourceBuffer() const {
     return m_data;
@@ -300,6 +306,9 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   double loadFinishTime() const { return m_loadFinishTime; }
 
+  void setEncodedDataLength(int64_t value) {
+    m_response.setEncodedDataLength(value);
+  }
   void addToEncodedBodyLength(int value) {
     m_response.addToEncodedBodyLength(value);
   }
@@ -328,15 +337,21 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void onMemoryDump(WebMemoryDumpLevelOfDetail,
                             WebProcessMemoryDump*) const;
 
-  static const char* resourceTypeToString(Type, const FetchInitiatorInfo&);
+  // If this Resource is ImageResource and has the Lo-Fi response headers or is
+  // a placeholder, reload the full original image with the Lo-Fi state set to
+  // off and optionally bypassing the cache.
+  virtual void reloadIfLoFiOrPlaceholderImage(ResourceFetcher*,
+                                              ReloadLoFiOrPlaceholderPolicy) {}
+
+  static const char* resourceTypeToString(
+      Type,
+      const AtomicString& fetchInitiatorName);
 
  protected:
   Resource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
 
   virtual void checkNotify();
 
-  enum class MarkFinishedOption { ShouldMarkFinished, DoNotMarkFinished };
-  void notifyClientsInternal(MarkFinishedOption);
   void markClientFinished(ResourceClient*);
 
   virtual bool hasClientsOrObservers() const {
@@ -383,12 +398,9 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   const HeapHashCountedSet<WeakMember<ResourceClient>>& clients() const {
     return m_clients;
   }
-  DataBufferingPolicy dataBufferingPolicy() const {
-    return m_options.dataBufferingPolicy;
-  }
 
   void setCachePolicyBypassingCache();
-  void setLoFiStateOff();
+  void setPreviewsStateNoTransform();
   void clearRangeRequestHeader();
 
   SharedBuffer* data() const { return m_data.get(); }
@@ -398,6 +410,12 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
    public:
     ProhibitAddRemoveClientInScope(Resource* resource)
         : AutoReset(&resource->m_isAddRemoveClientProhibited, true) {}
+  };
+
+  class RevalidationStartForbiddenScope : public AutoReset<bool> {
+   public:
+    RevalidationStartForbiddenScope(Resource* resource)
+        : AutoReset(&resource->m_isRevalidationStartForbidden, true) {}
   };
 
  private:
@@ -451,6 +469,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   bool m_isRevalidating;
   bool m_isAlive;
   bool m_isAddRemoveClientProhibited;
+  bool m_isRevalidationStartForbidden = false;
 
   ResourceIntegrityDisposition m_integrityDisposition;
   IntegrityMetadataSet m_integrityMetadata;
@@ -466,7 +485,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   double m_responseTimestamp;
 
-  Timer<Resource> m_cancelTimer;
+  TaskRunnerTimer<Resource> m_cancelTimer;
 
   ResourceRequest m_resourceRequest;
   Member<ResourceLoader> m_loader;

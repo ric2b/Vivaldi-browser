@@ -27,52 +27,73 @@ class NotesLoadDetails;
 
 class Notes_Node : public ui::TreeNode<Notes_Node> {
  public:
-  enum Type { NOTE, FOLDER, TRASH };
+  enum Type { NOTE, FOLDER, OTHER, TRASH };
+
+  static const int64_t kInvalidSyncTransactionVersion;
 
   explicit Notes_Node(int64_t id);
   ~Notes_Node() override;
 
-  base::Value *WriteJSON() const;
-  bool ReadJSON(base::DictionaryValue &input);
+  base::Value *Encode(NotesCodec *checksummer,
+      const std::vector<const Notes_Node *> *extra_nodes=NULL) const;
+  bool Decode(const base::DictionaryValue &input, int64_t &max_node_id,
+              NotesCodec *checksummer);
 
   void SetType(Type type) { type_ = type; }
-  bool is_folder() const { return type_ == FOLDER || type_ == TRASH; }
+  Type type() const {return type_;}
+  bool is_folder() const { return type_ == FOLDER || type_ == TRASH ||
+                              type_ == OTHER; }
+  bool is_note() const {return type_ == NOTE;}
+  bool is_other() const {return type_ == OTHER;}
   bool is_trash() const { return type_ == TRASH; }
 
-  // Get the unique id for this Node.
+  // Returns an unique id for this node.
+  // For notes nodes that are managed by the notes model, the IDs are
+  // persisted across sessions.
   int64_t id() const { return id_; }
   void set_id(int64_t id) { id_ = id; }
 
   // Get the creation time for the node.
-  base::Time GetCreationTime() { return creation_time_; }
+  base::Time GetCreationTime() const { return creation_time_; }
   base::string16 GetFilename() { return filename_; }
 
-  const base::string16 &GetSubject() const { return subject_; }
   const base::string16 &GetContent() const { return content_; }
 
   const GURL &GetURL() const { return url_; }
 
-  const Notes_attachment &GetIcon() const { return note_icon_; }
-
   const Notes_attachment &GetAttachment(int index) const {
     return attachments_[index];
   }
-  const std::vector<Notes_attachment> GetAttachments() { return attachments_; }
+  const std::vector<Notes_attachment> &GetAttachments() const {
+    return attachments_;
+  }
   void SetContent(const base::string16 &content) { content_ = content; }
   void SetURL(const GURL &url) { url_ = url; }
   void SetCreationTime(const base::Time creation_time) {
     creation_time_ = creation_time;
   }
 
-  void SetIcon(const Notes_attachment &icon) { note_icon_ = icon; }
   void AddAttachment(const Notes_attachment &attachment) {
     attachments_.push_back(attachment);
+  }
+  void SetAttachments(const Notes_attachments &attachments) {
+    attachments_ = attachments;
   }
   void DeleteAttachment(int index) {
     attachments_.erase(attachments_.begin() + index);
   }
 
+  void set_sync_transaction_version(int64_t sync_transaction_version) {
+    sync_transaction_version_ = sync_transaction_version;
+  }
+  int64_t sync_transaction_version() const {
+    return sync_transaction_version_;
+  }
+
+
  private:
+  friend class Notes_Model;
+
   // Type of node, folder or note.
   Type type_;
   // Filename of attached content.
@@ -81,8 +102,6 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   base::Time creation_time_;
   // Time of modification.
   base::Time modified_time_;
-  // Note subject or title.
-  base::string16 subject_;
   // Actual note text.
   base::string16 content_;
   // Attached URL.
@@ -94,6 +113,9 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
 
   // The unique identifier for this node.
   int64_t id_;
+
+  // The sync transaction version. Defaults to kInvalidSyncTransactionVersion.
+  int64_t sync_transaction_version_;
 
   DISALLOW_COPY_AND_ASSIGN(Notes_Node);
 };

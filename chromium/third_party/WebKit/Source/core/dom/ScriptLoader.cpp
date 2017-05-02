@@ -50,10 +50,10 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/svg/SVGScriptElement.h"
-#include "platform/MIMETypeRegistry.h"
+#include "platform/WebFrameScheduler.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebCachePolicy.h"
-#include "public/platform/WebFrameScheduler.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringHash.h"
@@ -91,7 +91,7 @@ DEFINE_TRACE(ScriptLoader) {
   visitor->trace(m_element);
   visitor->trace(m_resource);
   visitor->trace(m_pendingScript);
-  ScriptResourceClient::trace(visitor);
+  PendingScriptClient::trace(visitor);
 }
 
 void ScriptLoader::setFetchDocWrittenScriptDeferIdle() {
@@ -291,7 +291,7 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
     m_asyncExecType = ScriptRunner::InOrder;
     contextDocument->scriptRunner()->queueScriptForExecution(this,
                                                              m_asyncExecType);
-    // Note that watchForLoad can immediately call notifyFinished.
+    // Note that watchForLoad can immediately call pendingScriptFinished.
     m_pendingScript->watchForLoad(this);
   } else if (client->hasSourceAttribute()) {
     m_pendingScript = PendingScript::create(m_element, m_resource.get());
@@ -306,7 +306,7 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition,
     }
     contextDocument->scriptRunner()->queueScriptForExecution(this,
                                                              m_asyncExecType);
-    // Note that watchForLoad can immediately call notifyFinished.
+    // Note that watchForLoad can immediately call pendingScriptFinished.
     m_pendingScript->watchForLoad(this);
   } else {
     // Reset line numbering for nested writes.
@@ -347,10 +347,8 @@ bool ScriptLoader::fetchScript(const String& sourceUrl,
                                           crossOrigin);
     request.setCharset(scriptCharset());
 
-    if (ContentSecurityPolicy::isNonceableElement(m_element.get())) {
-      request.setContentSecurityPolicyNonce(
-          m_element->fastGetAttribute(HTMLNames::nonceAttr));
-    }
+    if (ContentSecurityPolicy::isNonceableElement(m_element.get()))
+      request.setContentSecurityPolicyNonce(client()->nonce());
 
     request.setParserDisposition(isParserInserted() ? ParserInserted
                                                     : NotParserInserted);
@@ -465,8 +463,8 @@ bool ScriptLoader::doExecuteScript(const ScriptSourceCode& sourceCode) {
 
   AtomicString nonce =
       ContentSecurityPolicy::isNonceableElement(m_element.get())
-          ? m_element->fastGetAttribute(HTMLNames::nonceAttr)
-          : AtomicString();
+          ? client()->nonce()
+          : nullAtom;
   if (!m_isExternalScript &&
       (!shouldBypassMainWorldCSP &&
        !csp->allowInlineScript(m_element, elementDocument->url(), nonce,
@@ -552,6 +550,10 @@ bool ScriptLoader::doExecuteScript(const ScriptSourceCode& sourceCode) {
     contextDocument->popCurrentScript();
   }
 
+  // "Number used _once_", so, clear it out after execution.
+  if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled())
+    client()->clearNonce();
+
   return true;
 }
 
@@ -561,8 +563,7 @@ void ScriptLoader::execute() {
   DCHECK(m_pendingScript->resource());
   bool errorOccurred = false;
   ScriptSourceCode source = m_pendingScript->getSource(KURL(), errorOccurred);
-  Element* element = m_pendingScript->releaseElementAndClear();
-  ALLOW_UNUSED_LOCAL(element);
+  m_pendingScript->dispose();
   if (errorOccurred) {
     dispatchErrorEvent();
   } else if (!m_resource->wasCanceled()) {
@@ -574,8 +575,9 @@ void ScriptLoader::execute() {
   m_resource = nullptr;
 }
 
-void ScriptLoader::notifyFinished(Resource* resource) {
+void ScriptLoader::pendingScriptFinished(PendingScript* pendingScript) {
   DCHECK(!m_willBeParserExecuted);
+  DCHECK_EQ(m_pendingScript, pendingScript);
 
   // We do not need this script in the memory cache. The primary goals of
   // sending this fetch request are to let the third party server know
@@ -583,7 +585,7 @@ void ScriptLoader::notifyFinished(Resource* resource) {
   // cache for subsequent uses.
   if (m_documentWriteIntervention ==
       DocumentWriteIntervention::FetchDocWrittenScriptDeferIdle) {
-    memoryCache()->remove(resource);
+    memoryCache()->remove(m_pendingScript->resource());
     m_pendingScript->stopWatchingForLoad();
     return;
   }
@@ -596,7 +598,7 @@ void ScriptLoader::notifyFinished(Resource* resource) {
     return;
   }
 
-  DCHECK_EQ(resource, m_resource);
+  DCHECK_EQ(pendingScript->resource(), m_resource);
 
   if (m_resource->errorOccurred()) {
     contextDocument->scriptRunner()->notifyScriptLoadError(this,

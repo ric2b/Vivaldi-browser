@@ -20,8 +20,7 @@ TestDataReductionProxyParams::TestDataReductionProxyParams(
     int flags, unsigned int has_definitions)
     : DataReductionProxyParams(flags, false),
       has_definitions_(has_definitions) {
-  init_result_ = Init(flags & DataReductionProxyParams::kAllowed,
-                      flags & DataReductionProxyParams::kFallbackAllowed);
+  init_result_ = Init();
   }
 
 bool TestDataReductionProxyParams::init_result() const {
@@ -29,8 +28,8 @@ bool TestDataReductionProxyParams::init_result() const {
 }
 
 void TestDataReductionProxyParams::SetProxiesForHttp(
-    const std::vector<net::ProxyServer>& proxies) {
-  proxies_for_http_ = proxies;
+    const std::vector<DataReductionProxyServer>& proxies) {
+  SetProxiesForHttpForTesting(proxies);
 }
 // Test values to replace the values specified in preprocessor defines.
 std::string TestDataReductionProxyParams::DefaultOrigin() {

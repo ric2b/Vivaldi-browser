@@ -57,22 +57,23 @@ void ObjectPaintInvalidator::objectWillBeDestroyed(const LayoutObject& object) {
     locationInBackingMap().remove(&object);
 }
 
-// TODO(trchen): Use std::function<void, LayoutObject&> when available.
-template <typename LayoutObjectTraversalFunctor>
-void traverseNonCompositingDescendantsInPaintOrder(
+using LayoutObjectTraversalFunctor = std::function<void(const LayoutObject&)>;
+
+static void traverseNonCompositingDescendantsInPaintOrder(
     const LayoutObject&,
     const LayoutObjectTraversalFunctor&);
 
-template <typename LayoutObjectTraversalFunctor>
-void traverseNonCompositingDescendantsBelongingToAncestorPaintInvalidationContainer(
+static void
+traverseNonCompositingDescendantsBelongingToAncestorPaintInvalidationContainer(
     const LayoutObject& object,
     const LayoutObjectTraversalFunctor& functor) {
-  // |object| is a paint invalidation container but is not a stacking context,
-  // so the paint invalidation container of stacked descendants don't belong to
-  // |object| but belong to an ancestor. This function traverses all such
-  // descendants.
+  // |object| is a paint invalidation container, but is not a stacking context
+  // or is a non-block, so the paint invalidation container of stacked
+  // descendants may not belong to |object| but belong to an ancestor. This
+  // function traverses all such descendants. See Case 1a and Case 2 below for
+  // details.
   DCHECK(object.isPaintInvalidationContainer() &&
-         !object.styleRef().isStackingContext());
+         (!object.styleRef().isStackingContext() || !object.isLayoutBlock()));
 
   LayoutObject* descendant = object.nextInPreOrder(&object);
   while (descendant) {
@@ -82,28 +83,45 @@ void traverseNonCompositingDescendantsBelongingToAncestorPaintInvalidationContai
       // invalidation container in the same situation as |object|, or its paint
       // invalidation container is in such situation. Keep searching until a
       // stacked layer is found.
-      descendant = descendant->nextInPreOrder(&object);
+      if (!object.isLayoutBlock() && descendant->isFloating()) {
+        // Case 1a (rare): However, if the descendant is a floating object below
+        // a composited non-block object, the subtree may belong to an ancestor
+        // in paint order, thus recur into the subtree. Note that for
+        // performance, we don't check whether the floating object's container
+        // is above or under |object|, so we may traverse more than expected.
+        // Example:
+        // <span id="object" class="position: relative; will-change: transform">
+        //   <div id="descendant" class="float: left"></div>"
+        // </span>
+        traverseNonCompositingDescendantsInPaintOrder(*descendant, functor);
+        descendant = descendant->nextInPreOrderAfterChildren(&object);
+      } else {
+        descendant = descendant->nextInPreOrder(&object);
+      }
     } else if (!descendant->isPaintInvalidationContainer()) {
       // Case 2: The descendant is stacked and is not composited.
       // The invalidation container of its subtree is our ancestor,
       // thus recur into the subtree.
       traverseNonCompositingDescendantsInPaintOrder(*descendant, functor);
       descendant = descendant->nextInPreOrderAfterChildren(&object);
-    } else if (descendant->styleRef().isStackingContext()) {
+    } else if (descendant->styleRef().isStackingContext() &&
+               descendant->isLayoutBlock()) {
       // Case 3: The descendant is an invalidation container and is a stacking
       // context.  No objects in the subtree can have invalidation container
       // outside of it, thus skip the whole subtree.
+      // This excludes non-block because there might be floating objects under
+      // the descendant belonging to some ancestor in paint order (Case 1a).
       descendant = descendant->nextInPreOrderAfterChildren(&object);
     } else {
       // Case 4: The descendant is an invalidation container but not a stacking
-      // context.  This is the same situation as |object|, thus keep searching.
+      // context, or the descendant is a non-block stacking context.
+      // This is the same situation as |object|, thus keep searching.
       descendant = descendant->nextInPreOrder(&object);
     }
   }
 }
 
-template <typename LayoutObjectTraversalFunctor>
-void traverseNonCompositingDescendantsInPaintOrder(
+static void traverseNonCompositingDescendantsInPaintOrder(
     const LayoutObject& object,
     const LayoutObjectTraversalFunctor& functor) {
   functor(object);
@@ -112,18 +130,33 @@ void traverseNonCompositingDescendantsInPaintOrder(
     if (!descendant->isPaintInvalidationContainer()) {
       functor(*descendant);
       descendant = descendant->nextInPreOrder(&object);
-    } else if (descendant->styleRef().isStackingContext()) {
+    } else if (descendant->styleRef().isStackingContext() &&
+               descendant->isLayoutBlock()) {
       // The descendant is an invalidation container and is a stacking context.
       // No objects in the subtree can have invalidation container outside of
       // it, thus skip the whole subtree.
+      // This excludes non-blocks because there might be floating objects under
+      // the descendant belonging to some ancestor in paint order (Case 1a).
       descendant = descendant->nextInPreOrderAfterChildren(&object);
     } else {
-      // If a paint invalidation container is not a stacking context,
-      // some of its descendants may belong to the parent container.
+      // If a paint invalidation container is not a stacking context, or the
+      // descendant is a non-block stacking context, some of its descendants may
+      // belong to the parent container.
       traverseNonCompositingDescendantsBelongingToAncestorPaintInvalidationContainer(
           *descendant, functor);
       descendant = descendant->nextInPreOrderAfterChildren(&object);
     }
+  }
+}
+
+static void setPaintingLayerNeedsRepaintDuringTraverse(
+    const LayoutObject& object) {
+  if (object.hasLayer() &&
+      toLayoutBoxModelObject(object).hasSelfPaintingLayer()) {
+    toLayoutBoxModelObject(object).layer()->setNeedsRepaint();
+  } else if (object.isFloating() && object.parent() &&
+             !object.parent()->isLayoutBlock()) {
+    object.paintingLayer()->setNeedsRepaint();
   }
 }
 
@@ -137,9 +170,7 @@ void ObjectPaintInvalidator::
   slowSetPaintingLayerNeedsRepaint();
   traverseNonCompositingDescendantsInPaintOrder(
       m_object, [reason](const LayoutObject& object) {
-        if (object.hasLayer() &&
-            toLayoutBoxModelObject(object).hasSelfPaintingLayer())
-          toLayoutBoxModelObject(object).layer()->setNeedsRepaint();
+        setPaintingLayerNeedsRepaintDuringTraverse(object);
         object.invalidateDisplayItemClients(reason);
       });
 }
@@ -177,10 +208,10 @@ void ObjectPaintInvalidator::
   // share the same paintInvalidationContainer.
   const LayoutBoxModelObject& paintInvalidationContainer =
       m_object.containerForPaintInvalidation();
+  slowSetPaintingLayerNeedsRepaint();
   traverseNonCompositingDescendantsInPaintOrder(
       m_object, [&paintInvalidationContainer](const LayoutObject& object) {
-        if (object.hasLayer())
-          toLayoutBoxModelObject(object).layer()->setNeedsRepaint();
+        setPaintingLayerNeedsRepaintDuringTraverse(object);
         ObjectPaintInvalidator(object).invalidatePaintOfPreviousVisualRect(
             paintInvalidationContainer, PaintInvalidationSubtree);
       });
@@ -286,20 +317,14 @@ void ObjectPaintInvalidator::setBackingNeedsPaintInvalidationInRect(
     layer.compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(
         rect, reason, m_object);
   } else if (paintInvalidationContainer.usesCompositedScrolling()) {
-    if (layer.compositedLayerMapping()
-            ->backgroundPaintsOntoScrollingContentsLayer()) {
-      // TODO(flackr): Get a correct rect in the context of the scrolling
-      // contents layer to update rather than updating the entire rect.
-      const LayoutRect& scrollingContentsRect =
-          toLayoutBox(m_object).layoutOverflowRect();
+    DCHECK(m_object == paintInvalidationContainer);
+    if (reason == PaintInvalidationBackgroundOnScrollingContentsLayer) {
       layer.compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(
-          scrollingContentsRect, reason, m_object);
-      layer.setNeedsRepaint();
-      invalidateDisplayItemClient(
-          *layer.compositedLayerMapping()->scrollingContentsLayer(), reason);
+          rect, reason, m_object);
+    } else {
+      layer.compositedLayerMapping()->setNonScrollingContentsNeedDisplayInRect(
+          rect, reason, m_object);
     }
-    layer.compositedLayerMapping()->setNonScrollingContentsNeedDisplayInRect(
-        rect, reason, m_object);
   } else {
     // Otherwise invalidate everything.
     layer.compositedLayerMapping()->setContentsNeedDisplayInRect(rect, reason,
@@ -345,14 +370,16 @@ void ObjectPaintInvalidator::invalidatePaintUsingContainer(
 
   // This conditional handles situations where non-rooted (and hence
   // non-composited) frames are painted, such as SVG images.
-  if (!paintInvalidationContainer.isPaintInvalidationContainer())
+  if (!paintInvalidationContainer.isPaintInvalidationContainer()) {
     invalidatePaintRectangleOnWindow(paintInvalidationContainer,
                                      enclosingIntRect(dirtyRect));
+  }
 
   if (paintInvalidationContainer.view()->usesCompositing() &&
-      paintInvalidationContainer.isPaintInvalidationContainer())
+      paintInvalidationContainer.isPaintInvalidationContainer()) {
     setBackingNeedsPaintInvalidationInRect(paintInvalidationContainer,
                                            dirtyRect, invalidationReason);
+  }
 }
 
 LayoutRect ObjectPaintInvalidator::invalidatePaintRectangle(
@@ -432,6 +459,7 @@ void ObjectPaintInvalidatorWithContext::fullyInvalidatePaint(
                                 newVisualRect, reason);
 }
 
+DISABLE_CFI_PERF
 PaintInvalidationReason
 ObjectPaintInvalidatorWithContext::computePaintInvalidationReason() {
   // This is before any early return to ensure the background obscuration status
@@ -488,8 +516,9 @@ ObjectPaintInvalidatorWithContext::computePaintInvalidationReason() {
 
   // Incremental invalidation is only applicable to LayoutBoxes. Return
   // PaintInvalidationIncremental no matter if oldVisualRect and newVisualRect
-  // are equal
-  // because a LayoutBox may need paint invalidation if its border box changes.
+  // are equal because a LayoutBox may need paint invalidation if its border box
+  // changes. BoxPaintInvalidator may also override this reason with a full
+  // paint invalidation reason if needed.
   if (m_object.isBox())
     return PaintInvalidationIncremental;
 
@@ -499,6 +528,7 @@ ObjectPaintInvalidatorWithContext::computePaintInvalidationReason() {
   return PaintInvalidationNone;
 }
 
+DISABLE_CFI_PERF
 void ObjectPaintInvalidatorWithContext::invalidateSelectionIfNeeded(
     PaintInvalidationReason reason) {
   // Update selection rect when we are doing full invalidation (in case that the
@@ -532,6 +562,7 @@ void ObjectPaintInvalidatorWithContext::invalidateSelectionIfNeeded(
   }
 }
 
+DISABLE_CFI_PERF
 PaintInvalidationReason
 ObjectPaintInvalidatorWithContext::invalidatePaintIfNeededWithComputedReason(
     PaintInvalidationReason reason) {
@@ -546,21 +577,14 @@ ObjectPaintInvalidatorWithContext::invalidatePaintIfNeededWithComputedReason(
       // for paint offset mutation, but incurs no pixel difference (i.e. bounds
       // stay the same) so no rect-based invalidation is issued. See
       // crbug.com/508383 and crbug.com/515977.
-      if (m_context.forcedSubtreeInvalidationFlags &
-          PaintInvalidatorContext::ForcedSubtreeInvalidationChecking) {
-        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-          if (m_context.oldPaintOffset != m_context.newPaintOffset) {
-            reason = PaintInvalidationLocationChange;
-            break;
-          }
-        } else {
-          // For SPv1, we conservatively assume the object changed paint offset
-          // except for non-root SVG whose paint offset is always zero.
-          if (!m_object.isSVG() || m_object.isSVGRoot()) {
-            reason = PaintInvalidationLocationChange;
-            break;
-          }
-        }
+      if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+          (m_context.forcedSubtreeInvalidationFlags &
+           PaintInvalidatorContext::ForcedSubtreeInvalidationChecking) &&
+          !m_object.isSVGChild()) {
+        // For SPv1, we conservatively assume the object changed paint offset
+        // except for non-root SVG whose paint offset is always zero.
+        reason = PaintInvalidationLocationChange;
+        break;
       }
 
       if (m_object.isSVG() &&

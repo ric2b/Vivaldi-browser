@@ -74,16 +74,24 @@ void MusThreadProxy::DispatchObserversFromDrmThread() {
 
 void MusThreadProxy::RunObservers() {
   DCHECK(on_window_server_thread_.CalledOnValidThread());
-  for (GpuThreadObserver& observer : gpu_thread_observers_)
+  for (GpuThreadObserver& observer : gpu_thread_observers_) {
+    // TODO(rjkroege): This needs to be different when gpu process split
+    // happens.
+    observer.OnGpuProcessLaunched();
     observer.OnGpuThreadReady();
+  }
 }
 
 void MusThreadProxy::AddGpuThreadObserver(GpuThreadObserver* observer) {
   DCHECK(on_window_server_thread_.CalledOnValidThread());
 
   gpu_thread_observers_.AddObserver(observer);
-  if (IsConnected())
+  if (IsConnected()) {
+    // TODO(rjkroege): This needs to be different when gpu process split
+    // happens.
+    observer->OnGpuProcessLaunched();
     observer->OnGpuThreadReady();
+  }
 }
 
 void MusThreadProxy::RemoveGpuThreadObserver(GpuThreadObserver* observer) {
@@ -282,7 +290,8 @@ bool MusThreadProxy::GpuGetHDCPState(int64_t display_id) {
   return true;
 }
 
-bool MusThreadProxy::GpuSetHDCPState(int64_t display_id, HDCPState state) {
+bool MusThreadProxy::GpuSetHDCPState(int64_t display_id,
+                                     display::HDCPState state) {
   DCHECK(on_window_server_thread_.CalledOnValidThread());
   DCHECK(drm_thread_->IsRunning());
   auto callback = base::Bind(&MusThreadProxy::GpuSetHDCPStateCallback,
@@ -296,8 +305,8 @@ bool MusThreadProxy::GpuSetHDCPState(int64_t display_id, HDCPState state) {
 
 bool MusThreadProxy::GpuSetColorCorrection(
     int64_t id,
-    const std::vector<GammaRampRGBEntry>& degamma_lut,
-    const std::vector<GammaRampRGBEntry>& gamma_lut,
+    const std::vector<display::GammaRampRGBEntry>& degamma_lut,
+    const std::vector<display::GammaRampRGBEntry>& gamma_lut,
     const std::vector<float>& correction_matrix) {
   DCHECK(drm_thread_->IsRunning());
   DCHECK(on_window_server_thread_.CalledOnValidThread());
@@ -345,7 +354,7 @@ void MusThreadProxy::GpuRelinquishDisplayControlCallback(bool success) const {
 
 void MusThreadProxy::GpuGetHDCPStateCallback(int64_t display_id,
                                              bool success,
-                                             HDCPState state) const {
+                                             display::HDCPState state) const {
   DCHECK(on_window_server_thread_.CalledOnValidThread());
   display_manager_->GpuReceivedHDCPState(display_id, success, state);
 }

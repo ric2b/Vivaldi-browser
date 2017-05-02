@@ -15,6 +15,8 @@
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_frontend_host.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -24,6 +26,7 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "storage/browser/fileapi/file_system_context.h"
 #include "third_party/WebKit/public/public_features.h"
 
 using content::BrowserThread;
@@ -277,6 +280,10 @@ void DevToolsDataSource::OnURLFetchComplete(const net::URLFetcher* source) {
 // static
 GURL DevToolsUI::GetProxyURL(const std::string& frontend_url) {
   GURL url(frontend_url);
+  if (url.scheme() == content::kChromeDevToolsScheme &&
+      url.host() == chrome::kChromeUIDevToolsHost)
+    return GURL();
+
   if (!url.is_valid() || url.host() != kRemoteFrontendDomain)
     return GURL(kFallbackFrontendURL);
   return GURL(base::StringPrintf("%s://%s/%s/%s",
@@ -302,6 +309,13 @@ DevToolsUI::DevToolsUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile,
       new DevToolsDataSource(profile->GetRequestContext()));
+
+  if (!profile->IsOffTheRecord())
+    return;
+  GURL url = web_ui->GetWebContents()->GetVisibleURL();
+  GURL site = content::SiteInstance::GetSiteForURL(profile, url);
+  content::BrowserContext::GetStoragePartitionForSite(profile, site)->
+      GetFileSystemContext()->EnableTemporaryFileSystemInIncognito();
 }
 
 DevToolsUI::~DevToolsUI() {

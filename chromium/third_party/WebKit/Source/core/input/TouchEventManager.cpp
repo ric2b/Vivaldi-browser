@@ -86,7 +86,7 @@ class ChangedTouches final {
 
 }  // namespace
 
-TouchEventManager::TouchEventManager(LocalFrame* frame) : m_frame(frame) {
+TouchEventManager::TouchEventManager(LocalFrame& frame) : m_frame(frame) {
   clear();
 }
 
@@ -206,8 +206,8 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
           m_frame->isMainFrame()) {
         // Record the disposition and latency of touch starts and first touch
         // moves before and after the page is fully loaded respectively.
-        int64_t latencyInMicros = static_cast<int64_t>(
-            (monotonicallyIncreasingTime() - event.timestamp()) * 1000000.0);
+        int64_t latencyInMicros =
+            (TimeTicks::Now() - event.timestamp()).InMicroseconds();
         if (event.cancelable()) {
           if (m_frame->document()->isLoadCompleted()) {
             DEFINE_STATIC_LOCAL(EnumerationHistogram,
@@ -490,6 +490,7 @@ class CurrentEventHolder {
 WebInputEventResult TouchEventManager::handleTouchEvent(
     const PlatformTouchEvent& event,
     HeapVector<TouchInfo>& touchInfos) {
+
   // Track the current event for the scope of this function.
   CurrentEventHolder holder(m_currentEvent, event.type());
 

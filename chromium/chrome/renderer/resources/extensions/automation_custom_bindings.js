@@ -93,6 +93,14 @@ automationUtil.updateFocusedNode = function() {
   automationUtil.focusedNode = automationUtil.getFocus();
 };
 
+/**
+ * Updates the focus on blur.
+ */
+automationUtil.updateFocusedNodeOnBlur = function() {
+  var focus = automationUtil.getFocus();
+  automationUtil.focusedNode = focus ? focus.root : null;
+};
+
 automation.registerCustomHook(function(bindingsAPI) {
   var apiFunctions = bindingsAPI.apiFunctions;
 
@@ -278,16 +286,20 @@ automationInternal.onAccessibilityEvent.addListener(function(eventParams) {
   var id = eventParams.treeID;
   var targetTree = AutomationRootNode.getOrCreate(id);
 
-  // Work around an issue where Chrome sends us 'blur' events on the
-  // root node when nothing has focus, we need to treat those as focus
-  // events but otherwise not handle blur events specially.
   var isFocusEvent = false;
   if (eventParams.eventType == schema.EventType.focus) {
     isFocusEvent = true;
   } else if (eventParams.eventType == schema.EventType.blur) {
+    // Work around an issue where Chrome sends us 'blur' events on the
+    // root node when nothing has focus, we need to treat those as focus
+    // events but otherwise not handle blur events specially.
     var node = privates(targetTree).impl.get(eventParams.targetID);
     if (node == node.root)
-      isFocusEvent = true;
+      automationUtil.updateFocusedNodeOnBlur();
+  } else if (eventParams.eventType == schema.EventType.mediaStartedPlaying ||
+      eventParams.eventType == schema.EventType.mediaStoppedPlaying) {
+    // These events are global to the tree.
+    eventParams.targetID = privates(targetTree).impl.id;
   }
 
   // When we get a focus event, ignore the actual event target, and instead

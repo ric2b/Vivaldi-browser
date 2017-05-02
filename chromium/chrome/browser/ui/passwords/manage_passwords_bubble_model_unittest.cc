@@ -35,11 +35,8 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using password_bubble_experiment::kBrandingExperimentName;
 using password_bubble_experiment::kChromeSignInPasswordPromoExperimentName;
 using password_bubble_experiment::kChromeSignInPasswordPromoThresholdParam;
-using password_bubble_experiment::kSmartLockBrandingGroupName;
-using password_bubble_experiment::kSmartLockBrandingSavePromptOnlyGroupName;
 using ::testing::AnyNumber;
 using ::testing::Return;
 using ::testing::ReturnRef;
@@ -47,24 +44,27 @@ using ::testing::_;
 
 namespace {
 
-const char kFakeGroup[] = "FakeGroup";
-const char kSignInPromoCountTilNoThanksMetric[] =
+constexpr char kFakeGroup[] = "FakeGroup";
+constexpr char kSignInPromoCountTilNoThanksMetric[] =
     "PasswordManager.SignInPromoCountTilNoThanks";
-const char kSignInPromoCountTilSignInMetric[] =
+constexpr char kSignInPromoCountTilSignInMetric[] =
     "PasswordManager.SignInPromoCountTilSignIn";
-const char kSignInPromoDismissalCountMetric[] =
+constexpr char kSignInPromoDismissalCountMetric[] =
     "PasswordManager.SignInPromoDismissalCount";
-const char kSignInPromoDismissalReasonMetric[] = "PasswordManager.SignInPromo";
-const char kSiteOrigin[] = "http://example.com/login";
-const char kUsername[] = "Admin";
-const char kUIDismissalReasonMetric[] = "PasswordManager.UIDismissalReason";
+constexpr char kSignInPromoDismissalReasonMetric[] =
+    "PasswordManager.SignInPromo";
+constexpr char kSiteOrigin[] = "http://example.com/login";
+constexpr char kUsername[] = "Admin";
+constexpr char kUIDismissalReasonMetric[] = "PasswordManager.UIDismissalReason";
 
 class TestSyncService : public browser_sync::ProfileSyncServiceMock {
  public:
+  enum class SyncedTypes { ALL, NONE };
+
   explicit TestSyncService(Profile* profile)
       : browser_sync::ProfileSyncServiceMock(
             CreateProfileSyncServiceParamsForTest(profile)),
-        smartlock_enabled_(false) {}
+        synced_types_(SyncedTypes::NONE) {}
   ~TestSyncService() override {}
 
   // FakeSyncService:
@@ -72,8 +72,14 @@ class TestSyncService : public browser_sync::ProfileSyncServiceMock {
   bool IsSyncAllowed() const override { return true; }
   bool IsSyncActive() const override { return true; }
   syncer::ModelTypeSet GetActiveDataTypes() const override {
-    return smartlock_enabled_ ? syncer::ModelTypeSet::All()
-                              : syncer::ModelTypeSet();
+    switch (synced_types_) {
+      case SyncedTypes::ALL:
+        return syncer::ModelTypeSet::All();
+      case SyncedTypes::NONE:
+        return syncer::ModelTypeSet();
+    }
+    NOTREACHED();
+    return syncer::ModelTypeSet();
   }
   bool CanSyncStart() const override { return true; }
   syncer::ModelTypeSet GetPreferredDataTypes() const override {
@@ -81,12 +87,12 @@ class TestSyncService : public browser_sync::ProfileSyncServiceMock {
   }
   bool IsUsingSecondaryPassphrase() const override { return false; }
 
-  void set_smartlock_enabled(bool smartlock_enabled) {
-    smartlock_enabled_ = smartlock_enabled;
+  void set_synced_types(SyncedTypes synced_types) {
+    synced_types_ = synced_types;
   }
 
  private:
-  bool smartlock_enabled_;
+  SyncedTypes synced_types_;
 };
 
 std::unique_ptr<KeyedService> TestingSyncFactoryFunction(
@@ -110,6 +116,16 @@ class ManagePasswordsBubbleModelTest : public ::testing::Test {
         password_manager::BuildPasswordStore<
             content::BrowserContext,
             testing::StrictMock<password_manager::MockPasswordStore>>);
+#if !defined(OS_MACOSX)
+    // TODO(crbug.com/668155): Remove conditional compilation when
+    // PasswordReuseDetector initialization will be implemented for Mac.
+    // The call of FillAutofillableLogins is caused by a posted task for an
+    // initialization of PasswordReuseDetector in the call of
+    // BuildPasswordStore() in the previous code. There is no thread race since
+    // unit tests run in one thread, and any post task will be executed after
+    // finishing the current function.
+    EXPECT_CALL(*GetStore(), FillAutofillableLogins(_));
+#endif
   }
 
   void TearDown() override {
@@ -258,6 +274,7 @@ TEST_F(ManagePasswordsBubbleModelTest, CloseWithoutInteraction) {
   stats.dismissal_count++;
   stats.update_time = now;
   EXPECT_CALL(*GetStore(), AddSiteStatsImpl(stats));
+  EXPECT_CALL(*controller(), OnNoInteraction());
   EXPECT_CALL(*controller(), SavePassword()).Times(0);
   EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
   DestroyModelExpectReason(
@@ -320,46 +337,6 @@ TEST_F(ManagePasswordsBubbleModelTest, ClickUpdate) {
   DestroyModel();
 }
 
-TEST_F(ManagePasswordsBubbleModelTest, ShowSmartLockWarmWelcome) {
-  TestSyncService* sync_service = static_cast<TestSyncService*>(
-      ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-          profile(), &TestingSyncFactoryFunction));
-  sync_service->set_smartlock_enabled(true);
-  base::FieldTrialList::CreateFieldTrial(kBrandingExperimentName,
-                                         kSmartLockBrandingGroupName);
-
-  PretendPasswordWaiting();
-
-  EXPECT_TRUE(model()->ShouldShowGoogleSmartLockWelcome());
-  EXPECT_CALL(*GetStore(), AddSiteStatsImpl(_));
-  DestroyModel();
-  PretendPasswordWaiting();
-
-  EXPECT_FALSE(model()->ShouldShowGoogleSmartLockWelcome());
-  EXPECT_TRUE(prefs()->GetBoolean(
-      password_manager::prefs::kWasSavePrompFirstRunExperienceShown));
-}
-
-TEST_F(ManagePasswordsBubbleModelTest, OmitSmartLockWarmWelcome) {
-  TestSyncService* sync_service = static_cast<TestSyncService*>(
-      ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-          profile(), &TestingSyncFactoryFunction));
-  sync_service->set_smartlock_enabled(false);
-  base::FieldTrialList::CreateFieldTrial(kBrandingExperimentName,
-                                         kSmartLockBrandingGroupName);
-
-  PretendPasswordWaiting();
-
-  EXPECT_FALSE(model()->ShouldShowGoogleSmartLockWelcome());
-  EXPECT_CALL(*GetStore(), AddSiteStatsImpl(_));
-  DestroyModel();
-  PretendPasswordWaiting();
-
-  EXPECT_FALSE(model()->ShouldShowGoogleSmartLockWelcome());
-  EXPECT_FALSE(prefs()->GetBoolean(
-      password_manager::prefs::kWasSavePrompFirstRunExperienceShown));
-}
-
 TEST_F(ManagePasswordsBubbleModelTest, OnBrandLinkClicked) {
   PretendPasswordWaiting();
 
@@ -374,7 +351,7 @@ TEST_F(ManagePasswordsBubbleModelTest, SuppressSignInPromo) {
   EXPECT_CALL(*controller(), SavePassword());
   model()->OnSaveClicked();
 
-  EXPECT_FALSE(model()->ReplaceToShowSignInPromoIfNeeded());
+  EXPECT_FALSE(model()->ReplaceToShowPromotionIfNeeded());
   DestroyModel();
   histogram_tester.ExpectTotalCount(kSignInPromoDismissalReasonMetric, 0);
   histogram_tester.ExpectTotalCount(kSignInPromoCountTilSignInMetric, 0);
@@ -394,7 +371,7 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoOK) {
   EXPECT_CALL(*controller(), SavePassword());
   model()->OnSaveClicked();
 
-  EXPECT_TRUE(model()->ReplaceToShowSignInPromoIfNeeded());
+  EXPECT_TRUE(model()->ReplaceToShowPromotionIfNeeded());
   EXPECT_CALL(*controller(), NavigateToChromeSignIn());
   model()->OnSignInToChromeClicked();
   DestroyModel();
@@ -423,7 +400,7 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoCancel) {
   EXPECT_CALL(*controller(), SavePassword());
   model()->OnSaveClicked();
 
-  EXPECT_TRUE(model()->ReplaceToShowSignInPromoIfNeeded());
+  EXPECT_TRUE(model()->ReplaceToShowPromotionIfNeeded());
   model()->OnSkipSignInClicked();
   DestroyModel();
   histogram_tester.ExpectUniqueSample(
@@ -451,7 +428,7 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoDismiss) {
   EXPECT_CALL(*controller(), SavePassword());
   model()->OnSaveClicked();
 
-  EXPECT_TRUE(model()->ReplaceToShowSignInPromoIfNeeded());
+  EXPECT_TRUE(model()->ReplaceToShowPromotionIfNeeded());
   DestroyModel();
   histogram_tester.ExpectUniqueSample(
       kUIDismissalReasonMetric,
@@ -468,11 +445,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoDismiss) {
 
 namespace {
 
-enum class SmartLockStatus { ENABLE, DISABLE };
-
 struct TitleTestCase {
-  const char* experiment_group;
-  SmartLockStatus smartlock_status;
+  TestSyncService::SyncedTypes synced_types;
   const char* expected_title;
 };
 
@@ -487,12 +461,7 @@ TEST_P(ManagePasswordsBubbleModelTitleTest, BrandedTitleOnSaving) {
   TestSyncService* sync_service = static_cast<TestSyncService*>(
       ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
           profile(), &TestingSyncFactoryFunction));
-  sync_service->set_smartlock_enabled(test_case.smartlock_status ==
-                                      SmartLockStatus::ENABLE);
-  if (test_case.experiment_group) {
-    base::FieldTrialList::CreateFieldTrial(kBrandingExperimentName,
-                                           test_case.experiment_group);
-  }
+  sync_service->set_synced_types(test_case.synced_types);
 
   PretendPasswordWaiting();
   EXPECT_THAT(base::UTF16ToUTF8(model()->title()),
@@ -504,17 +473,9 @@ namespace {
 // Below, "Chrom" is the common prefix of Chromium and Google Chrome. Ideally,
 // we would use the localised strings, but ResourceBundle does not get
 // initialised for this unittest.
-const TitleTestCase kTitleTestCases[] = {
-    {kSmartLockBrandingGroupName, SmartLockStatus::ENABLE, "Google Smart Lock"},
-    {kSmartLockBrandingSavePromptOnlyGroupName, SmartLockStatus::ENABLE,
-     "Google Smart Lock"},
-    {nullptr, SmartLockStatus::ENABLE, "Vivaldi"},
-    {"Default", SmartLockStatus::ENABLE, "Vivaldi"},
-    {kSmartLockBrandingGroupName, SmartLockStatus::DISABLE, "Vivaldi"},
-    {kSmartLockBrandingSavePromptOnlyGroupName, SmartLockStatus::DISABLE,
-     "Vivaldi"},
-    {"Default", SmartLockStatus::DISABLE, "Vivaldi"},
-    {nullptr, SmartLockStatus::DISABLE, "Vivaldi"},
+constexpr TitleTestCase kTitleTestCases[] = {
+    {TestSyncService::SyncedTypes::ALL, "Google Smart Lock"},
+    {TestSyncService::SyncedTypes::NONE, "Vivaldi"},
 };
 
 }  // namespace
@@ -523,67 +484,24 @@ INSTANTIATE_TEST_CASE_P(Default,
                         ManagePasswordsBubbleModelTitleTest,
                         ::testing::ValuesIn(kTitleTestCases));
 
-namespace {
-
-enum class ManageLinkTarget { EXTERNAL_PASSWORD_MANAGER, SETTINGS_PAGE };
-
-struct ManageLinkTestCase {
-  const char* experiment_group;
-  SmartLockStatus smartlock_status;
-  ManageLinkTarget expected_target;
-};
-
-}  // namespace
-
 class ManagePasswordsBubbleModelManageLinkTest
     : public ManagePasswordsBubbleModelTest,
-      public ::testing::WithParamInterface<ManageLinkTestCase> {};
+      public ::testing::WithParamInterface<TestSyncService::SyncedTypes> {};
 
 TEST_P(ManagePasswordsBubbleModelManageLinkTest, OnManageLinkClicked) {
-  ManageLinkTestCase test_case = GetParam();
   TestSyncService* sync_service = static_cast<TestSyncService*>(
       ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
           profile(), &TestingSyncFactoryFunction));
-  sync_service->set_smartlock_enabled(test_case.smartlock_status ==
-                                      SmartLockStatus::ENABLE);
-  if (test_case.experiment_group) {
-    base::FieldTrialList::CreateFieldTrial(kBrandingExperimentName,
-                                           test_case.experiment_group);
-  }
+  sync_service->set_synced_types(GetParam());
 
   PretendManagingPasswords();
 
-  switch (test_case.expected_target) {
-    case ManageLinkTarget::EXTERNAL_PASSWORD_MANAGER:
-      EXPECT_CALL(*controller(), NavigateToExternalPasswordManager());
-      break;
-    case ManageLinkTarget::SETTINGS_PAGE:
-      EXPECT_CALL(*controller(), NavigateToPasswordManagerSettingsPage());
-      break;
-  }
+  EXPECT_CALL(*controller(), NavigateToPasswordManagerSettingsPage());
 
   model()->OnManageLinkClicked();
 }
 
-namespace {
-
-const ManageLinkTestCase kManageLinkTestCases[] = {
-    {kSmartLockBrandingGroupName, SmartLockStatus::ENABLE,
-     ManageLinkTarget::EXTERNAL_PASSWORD_MANAGER},
-    {kSmartLockBrandingSavePromptOnlyGroupName, SmartLockStatus::ENABLE,
-     ManageLinkTarget::SETTINGS_PAGE},
-    {nullptr, SmartLockStatus::ENABLE, ManageLinkTarget::SETTINGS_PAGE},
-    {"Default", SmartLockStatus::ENABLE, ManageLinkTarget::SETTINGS_PAGE},
-    {kSmartLockBrandingGroupName, SmartLockStatus::DISABLE,
-     ManageLinkTarget::SETTINGS_PAGE},
-    {kSmartLockBrandingSavePromptOnlyGroupName, SmartLockStatus::DISABLE,
-     ManageLinkTarget::SETTINGS_PAGE},
-    {nullptr, SmartLockStatus::DISABLE, ManageLinkTarget::SETTINGS_PAGE},
-    {"Default", SmartLockStatus::DISABLE, ManageLinkTarget::SETTINGS_PAGE},
-};
-
-}  // namespace
-
 INSTANTIATE_TEST_CASE_P(Default,
                         ManagePasswordsBubbleModelManageLinkTest,
-                        ::testing::ValuesIn(kManageLinkTestCases));
+                        ::testing::Values(TestSyncService::SyncedTypes::ALL,
+                                          TestSyncService::SyncedTypes::NONE));

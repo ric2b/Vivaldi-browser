@@ -9,7 +9,6 @@
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/ScrollbarThemeMock.h"
-#include "platform/testing/TestingPlatformSupport.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -34,14 +33,14 @@ class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
   MOCK_CONST_METHOD1(scrollSize, int(ScrollbarOrientation));
   MOCK_CONST_METHOD0(isScrollCornerVisible, bool());
   MOCK_CONST_METHOD0(scrollCornerRect, IntRect());
-  MOCK_CONST_METHOD0(horizontalScrollbar, Scrollbar*());
-  MOCK_CONST_METHOD0(verticalScrollbar, Scrollbar*());
   MOCK_CONST_METHOD0(enclosingScrollableArea, ScrollableArea*());
   MOCK_CONST_METHOD1(visibleContentRect, IntRect(IncludeScrollbarsInRect));
   MOCK_CONST_METHOD0(contentsSize, IntSize());
   MOCK_CONST_METHOD0(scrollableAreaBoundingBox, IntRect());
   MOCK_CONST_METHOD0(layerForHorizontalScrollbar, GraphicsLayer*());
   MOCK_CONST_METHOD0(layerForVerticalScrollbar, GraphicsLayer*());
+  MOCK_CONST_METHOD0(horizontalScrollbar, Scrollbar*());
+  MOCK_CONST_METHOD0(verticalScrollbar, Scrollbar*());
 
   bool userInputScrollable(ScrollbarOrientation) const override { return true; }
   bool scrollbarsCanBeActive() const override { return true; }
@@ -68,32 +67,18 @@ class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
 
   DEFINE_INLINE_VIRTUAL_TRACE() { ScrollableArea::trace(visitor); }
 
+ protected:
+  explicit MockScrollableArea() : m_maximumScrollOffset(ScrollOffset(0, 100)) {}
+  explicit MockScrollableArea(const ScrollOffset& offset)
+      : m_maximumScrollOffset(offset) {}
+
  private:
   void setMaximumScrollOffset(const ScrollOffset& maximumScrollOffset) {
     m_maximumScrollOffset = maximumScrollOffset;
   }
 
-  explicit MockScrollableArea() : m_maximumScrollOffset(ScrollOffset(0, 100)) {}
-
   ScrollOffset m_scrollOffset;
   ScrollOffset m_maximumScrollOffset;
-};
-
-class ScrollbarTestSuite : public testing::Test {
- public:
-  ScrollbarTestSuite() {}
-
-  void SetUp() override {
-    TestingPlatformSupport::Config config;
-    config.compositorSupport = Platform::current()->compositorSupport();
-    m_fakePlatform =
-        makeUnique<TestingPlatformSupportWithMockScheduler>(config);
-  }
-
-  void TearDown() override { m_fakePlatform = nullptr; }
-
- private:
-  std::unique_ptr<TestingPlatformSupportWithMockScheduler> m_fakePlatform;
 };
 
 }  // namespace blink

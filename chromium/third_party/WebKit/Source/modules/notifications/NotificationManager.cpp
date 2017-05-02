@@ -28,7 +28,7 @@ NotificationManager* NotificationManager::from(
   NotificationManager* manager = static_cast<NotificationManager*>(
       Supplement<ExecutionContext>::from(executionContext, supplementName()));
   if (!manager) {
-    manager = new NotificationManager(executionContext);
+    manager = new NotificationManager();
     Supplement<ExecutionContext>::provideTo(*executionContext, supplementName(),
                                             manager);
   }
@@ -41,20 +41,20 @@ const char* NotificationManager::supplementName() {
   return "NotificationManager";
 }
 
-NotificationManager::NotificationManager(ExecutionContext* executionContext)
-    : ContextLifecycleObserver(executionContext) {}
+NotificationManager::NotificationManager() {}
 
 NotificationManager::~NotificationManager() {}
 
-mojom::blink::PermissionStatus NotificationManager::permissionStatus() {
-  if (!m_notificationService)
+mojom::blink::PermissionStatus NotificationManager::permissionStatus(
+    ExecutionContext* executionContext) {
+  if (!m_notificationService) {
     Platform::current()->interfaceProvider()->getInterface(
-        mojo::GetProxy(&m_notificationService));
+        mojo::MakeRequest(&m_notificationService));
+  }
 
   mojom::blink::PermissionStatus permissionStatus;
   const bool result = m_notificationService->GetPermissionStatus(
-      getExecutionContext()->getSecurityOrigin()->toString(),
-      &permissionStatus);
+      executionContext->getSecurityOrigin()->toString(), &permissionStatus);
   DCHECK(result);
 
   return permissionStatus;
@@ -66,7 +66,8 @@ ScriptPromise NotificationManager::requestPermission(
   ExecutionContext* context = scriptState->getExecutionContext();
 
   if (!m_permissionService) {
-    connectToPermissionService(context, mojo::GetProxy(&m_permissionService));
+    connectToPermissionService(context,
+                               mojo::MakeRequest(&m_permissionService));
     m_permissionService.set_connection_error_handler(convertToBaseCallback(
         WTF::bind(&NotificationManager::onPermissionServiceConnectionError,
                   wrapWeakPersistent(this))));
@@ -85,11 +86,6 @@ ScriptPromise NotificationManager::requestPermission(
                     wrapPersistent(deprecatedCallback))));
 
   return promise;
-}
-
-void NotificationManager::contextDestroyed() {
-  m_notificationService.reset();
-  m_permissionService.reset();
 }
 
 void NotificationManager::onPermissionRequestComplete(
@@ -112,7 +108,6 @@ void NotificationManager::onPermissionServiceConnectionError() {
 }
 
 DEFINE_TRACE(NotificationManager) {
-  ContextLifecycleObserver::trace(visitor);
   Supplement<ExecutionContext>::trace(visitor);
 }
 

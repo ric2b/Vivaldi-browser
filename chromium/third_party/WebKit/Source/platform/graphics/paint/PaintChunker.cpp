@@ -38,10 +38,10 @@ bool PaintChunker::incrementDisplayItemIndex(const DisplayItem& item) {
     // properties created by a LayoutObject/FrameView, or be set to a non-null
     // root node. If these DCHECKs are hit we are missing a call to update the
     // properties. See: ScopedPaintChunkProperties.
-    DCHECK(m_currentProperties.transform);
-    DCHECK(m_currentProperties.clip);
-    DCHECK(m_currentProperties.effect);
-    DCHECK(m_currentProperties.scroll);
+    DCHECK(m_currentProperties.propertyTreeState.transform());
+    DCHECK(m_currentProperties.propertyTreeState.clip());
+    DCHECK(m_currentProperties.propertyTreeState.effect());
+    DCHECK(m_currentProperties.propertyTreeState.scroll());
   }
 #endif
 
@@ -67,15 +67,15 @@ bool PaintChunker::incrementDisplayItemIndex(const DisplayItem& item) {
   if (m_chunks.isEmpty()) {
     PaintChunk newChunk(0, 1, newChunkId ? &*newChunkId : nullptr,
                         m_currentProperties);
-    m_chunks.append(newChunk);
-    m_chunkBehavior.append(behavior);
+    m_chunks.push_back(newChunk);
+    m_chunkBehavior.push_back(behavior);
     return true;
   }
 
-  auto& lastChunk = m_chunks.last();
+  auto& lastChunk = m_chunks.back();
   bool canContinueChunk = m_currentProperties == lastChunk.properties &&
                           behavior != RequiresSeparateChunk &&
-                          m_chunkBehavior.last() != RequiresSeparateChunk;
+                          m_chunkBehavior.back() != RequiresSeparateChunk;
   if (canContinueChunk) {
     lastChunk.endIndex++;
     return false;
@@ -83,8 +83,8 @@ bool PaintChunker::incrementDisplayItemIndex(const DisplayItem& item) {
 
   PaintChunk newChunk(lastChunk.endIndex, lastChunk.endIndex + 1,
                       newChunkId ? &*newChunkId : nullptr, m_currentProperties);
-  m_chunks.append(newChunk);
-  m_chunkBehavior.append(behavior);
+  m_chunks.push_back(newChunk);
+  m_chunkBehavior.push_back(behavior);
   return true;
 }
 
@@ -92,7 +92,7 @@ bool PaintChunker::decrementDisplayItemIndex() {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
   DCHECK(!m_chunks.isEmpty());
 
-  auto& lastChunk = m_chunks.last();
+  auto& lastChunk = m_chunks.back();
   if ((lastChunk.endIndex - lastChunk.beginIndex) > 1) {
     lastChunk.endIndex--;
     return false;

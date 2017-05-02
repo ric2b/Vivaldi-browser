@@ -193,7 +193,7 @@ var Runtime = class {
    * @param {boolean} appendSourceURL
    * @return {!Promise<undefined>}
    */
-  static loadResourceIntoCache(url, appendSourceURL) {
+  static _loadResourceIntoCache(url, appendSourceURL) {
     return Runtime.loadResourcePromise(url).then(
         cacheResource.bind(this, url), cacheResource.bind(this, url, undefined));
 
@@ -324,6 +324,13 @@ var Runtime = class {
    */
   static queryParam(name) {
     return Runtime._queryParamsObject[name] || null;
+  }
+
+  /**
+   * @return {string}
+   */
+  static queryParamsString() {
+    return location.search;
   }
 
   /**
@@ -753,7 +760,7 @@ Runtime.Module = class {
     var promises = [];
     for (var i = 0; i < resources.length; ++i) {
       var url = this._modularizeURL(resources[i]);
-      promises.push(Runtime.loadResourceIntoCache(url, true));
+      promises.push(Runtime._loadResourceIntoCache(url, true));
     }
     return Promise.all(promises).then(undefined);
   }
@@ -765,16 +772,19 @@ Runtime.Module = class {
     if (!this._descriptor.scripts || !this._descriptor.scripts.length)
       return Promise.resolve();
 
-    // Module namespaces.
-    var namespace = this._name.replace('_lazy', '');
     // the namespace keyword confuses clang-format
+    // NOTE: Update scripts/special_case_namespaces.json if you add a special cased namespace
     // clang-format off
-    if (namespace === 'sdk' || namespace === 'ui')
-      namespace = namespace.toUpperCase();
-    // clang-format on
-    namespace = namespace.split('_').map(a => a.substring(0, 1).toUpperCase() + a.substring(1)).join('');
+    // Module namespaces.
+    const specialCases = {
+      'sdk': 'SDK',
+      'ui': 'UI',
+      'perf_ui': 'PerfUI',
+      'css_tracker': 'CSSTracker'
+    };
+    var namespace = specialCases[this._name] || this._name.split('_').map(a => a.substring(0, 1).toUpperCase() + a.substring(1)).join('');
     self[namespace] = self[namespace] || {};
-
+    // clang-format on
     return Runtime._loadScriptsPromise(this._descriptor.scripts.map(this._modularizeURL, this), this._remoteBase());
   }
 
@@ -1067,7 +1077,7 @@ Runtime.Experiment = class {
 
 {
   (function parseQueryParameters() {
-    var queryParams = location.search;
+    var queryParams = Runtime.queryParamsString();
     if (!queryParams)
       return;
     var params = queryParams.substring(1).split('&');
@@ -1106,18 +1116,18 @@ ServicePort.prototype = {
    * @param {function(string)} messageHandler
    * @param {function(string)} closeHandler
    */
-  setHandlers: function(messageHandler, closeHandler) {},
+  setHandlers(messageHandler, closeHandler) {},
 
   /**
    * @param {string} message
    * @return {!Promise<boolean>}
    */
-  send: function(message) {},
+  send(message) {},
 
   /**
    * @return {!Promise<boolean>}
    */
-  close: function() {}
+  close() {}
 };
 
 /** @type {!Runtime} */

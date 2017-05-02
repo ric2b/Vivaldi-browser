@@ -5,6 +5,7 @@
 #include "cc/trees/layer_tree_host.h"
 
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -1287,6 +1288,12 @@ class ThreadCheckingInputHandlerClient : public InputHandlerClient {
     }
   }
 
+  void DeliverInputForBeginFrame() override {
+    if (!task_runner_->BelongsToCurrentThread()) {
+      ADD_FAILURE() << "DeliverInputForBeginFrame called on wrong thread";
+    }
+  }
+
  private:
   base::SingleThreadTaskRunner* task_runner_;
   bool* received_stop_flinging_;
@@ -1821,6 +1828,7 @@ class MockInputHandlerClient : public InputHandlerClient {
       float page_scale_factor,
       float min_page_scale_factor,
       float max_page_scale_factor) override {}
+  void DeliverInputForBeginFrame() override {}
 };
 
 // This is a regression test, see crbug.com/639046.

@@ -294,7 +294,7 @@ std::unique_ptr<base::Value> URLRequest::GetStateAsValue() const {
   if (!load_state.param.empty())
     dict->SetString("load_state_param", load_state.param);
   if (!blocked_by_.empty())
-    dict->SetString("delegate_info", blocked_by_);
+    dict->SetString("delegate_blocked_by", blocked_by_);
 
   dict->SetString("method", method_);
   dict->SetBoolean("has_upload", has_upload());
@@ -335,8 +335,9 @@ void URLRequest::LogBlockedBy(const char* blocked_by) {
   blocked_by_ = blocked_by;
   use_blocked_by_as_load_param_ = false;
 
-  net_log_.BeginEvent(NetLogEventType::DELEGATE_INFO,
-                      NetLog::StringCallback("delegate_info", &blocked_by_));
+  net_log_.BeginEvent(
+      NetLogEventType::DELEGATE_INFO,
+      NetLog::StringCallback("delegate_blocked_by", &blocked_by_));
 }
 
 void URLRequest::LogAndReportBlockedBy(const char* source) {
@@ -579,12 +580,15 @@ URLRequest::URLRequest(const GURL& url,
                                           base::Unretained(this))),
       has_notified_completion_(false),
       received_response_content_length_(0),
-      creation_time_(base::TimeTicks::Now()) {
+      creation_time_(base::TimeTicks::Now()),
+      raw_header_size_(0) {
   // Sanity check out environment.
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
 
   context->url_requests()->insert(this);
-  net_log_.BeginEvent(NetLogEventType::REQUEST_ALIVE);
+  net_log_.BeginEvent(
+      NetLogEventType::REQUEST_ALIVE,
+      base::Bind(&NetLogURLRequestConstructorCallback, &url, priority_));
 }
 
 void URLRequest::BeforeRequestComplete(int error) {
@@ -627,7 +631,6 @@ void URLRequest::StartJob(URLRequestJob* job) {
   net_log_.BeginEvent(
       NetLogEventType::URL_REQUEST_START_JOB,
       base::Bind(&NetLogURLRequestStartCallback, &url(), &method_, load_flags_,
-                 priority_,
                  upload_data_stream_ ? upload_data_stream_->identifier() : -1));
 
   job_.reset(job);
@@ -762,14 +765,14 @@ int URLRequest::Read(IOBuffer* dest, int dest_size) {
   }
 
   int rv = job_->Read(dest, dest_size);
-  if (rv == ERR_IO_PENDING)
+  if (rv == ERR_IO_PENDING) {
     set_status(URLRequestStatus::FromError(ERR_IO_PENDING));
+  } else if (rv <= 0) {
+    NotifyRequestCompleted();
+  }
 
   // If rv is not 0 or actual bytes read, the status cannot be success.
   DCHECK(rv >= 0 || status_.status() != URLRequestStatus::SUCCESS);
-
-  if (rv == 0 && status_.is_success())
-    NotifyRequestCompleted();
   return rv;
 }
 
@@ -1024,12 +1027,11 @@ void URLRequest::SetPriority(RequestPriority priority) {
     return;
 
   priority_ = priority;
-  if (job_.get()) {
-    net_log_.AddEvent(
-        NetLogEventType::URL_REQUEST_SET_PRIORITY,
-        NetLog::StringCallback("priority", RequestPriorityToString(priority_)));
+  net_log_.AddEvent(
+      NetLogEventType::URL_REQUEST_SET_PRIORITY,
+      NetLog::StringCallback("priority", RequestPriorityToString(priority_)));
+  if (job_.get())
     job_->SetPriority(priority_);
-  }
 }
 
 void URLRequest::NotifyAuthRequired(AuthChallengeInfo* auth_info) {

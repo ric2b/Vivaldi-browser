@@ -205,22 +205,47 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
 void ScriptContext::SafeCallFunction(const v8::Local<v8::Function>& function,
                                      int argc,
                                      v8::Local<v8::Value> argv[]) {
+  SafeCallFunction(function, argc, argv,
+                   ScriptInjectionCallback::CompleteCallback());
+}
+
+void ScriptContext::SafeCallFunction(
+    const v8::Local<v8::Function>& function,
+    int argc,
+    v8::Local<v8::Value> argv[],
+    const ScriptInjectionCallback::CompleteCallback& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   v8::HandleScope handle_scope(isolate());
   v8::Context::Scope scope(v8_context());
   v8::MicrotasksScope microtasks(isolate(),
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Local<v8::Object> global = v8_context()->Global();
   if (web_frame_) {
+    ScriptInjectionCallback* wrapper_callback = nullptr;
+    if (!callback.is_null()) {
+      // ScriptInjectionCallback manages its own lifetime.
+      wrapper_callback = new ScriptInjectionCallback(callback);
+    }
     web_frame_->requestExecuteV8Function(v8_context(), function, global, argc,
-                                         argv, nullptr);
+                                         argv, wrapper_callback);
   } else {
     // TODO(devlin): This probably isn't safe.
-    function->Call(global, argc, argv);
+    v8::Local<v8::Value> result = function->Call(global, argc, argv);
+    if (!callback.is_null()) {
+      std::vector<v8::Local<v8::Value>> results(1, result);
+      callback.Run(results);
+    }
   }
 }
 
 Feature::Availability ScriptContext::GetAvailability(
     const std::string& api_name) {
+  return GetAvailability(api_name, CheckAliasStatus::ALLOWED);
+}
+
+Feature::Availability ScriptContext::GetAvailability(
+    const std::string& api_name,
+    CheckAliasStatus check_alias) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (base::StartsWith(api_name, "test", base::CompareCase::SENSITIVE)) {
     bool allowed = base::CommandLine::ForCurrentProcess()->
@@ -239,8 +264,8 @@ Feature::Availability ScriptContext::GetAvailability(
       (api_name == "runtime.connect" || api_name == "runtime.sendMessage")) {
     extension = NULL;
   }
-  return ExtensionAPI::GetSharedInstance()->IsAvailable(api_name, extension,
-                                                        context_type_, url());
+  return ExtensionAPI::GetSharedInstance()->IsAvailable(
+      api_name, extension, context_type_, url(), check_alias);
 }
 
 void ScriptContext::DispatchEvent(const char* event_name,
@@ -265,14 +290,15 @@ std::string ScriptContext::GetEffectiveContextTypeDescription() const {
   return GetContextTypeDescriptionString(effective_context_type_);
 }
 
-bool ScriptContext::IsAnyFeatureAvailableToContext(const Feature& api) {
+bool ScriptContext::IsAnyFeatureAvailableToContext(
+    const Feature& api,
+    CheckAliasStatus check_alias) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // TODO(lazyboy): Decide what we should do for SERVICE_WORKER_CONTEXT.
-  GURL url = context_type() == Feature::SERVICE_WORKER_CONTEXT
-                 ? url_
-                 : GetDataSourceURLForFrame(web_frame());
+  // TODO(lazyboy): Decide what we should do for SERVICE_WORKER_CONTEXT, where
+  // web_frame() is null.
+  GURL url = web_frame() ? GetDataSourceURLForFrame(web_frame()) : url_;
   return ExtensionAPI::GetSharedInstance()->IsAnyFeatureAvailableToContext(
-      api, extension(), context_type(), url);
+      api, extension(), context_type(), url, check_alias);
 }
 
 // static
@@ -288,7 +314,7 @@ GURL ScriptContext::GetDataSourceURLForFrame(const blink::WebFrame* frame) {
   blink::WebDataSource* data_source = frame->provisionalDataSource()
                                           ? frame->provisionalDataSource()
                                           : frame->dataSource();
-  return data_source ? GURL(data_source->request().url()) : GURL();
+  return data_source ? GURL(data_source->getRequest().url()) : GURL();
 }
 
 // static
@@ -299,9 +325,9 @@ GURL ScriptContext::GetAccessCheckedFrameURL(const blink::WebFrame* frame) {
                                             ? frame->provisionalDataSource()
                                             : frame->dataSource();
     if (data_source &&
-        frame->getSecurityOrigin().canAccess(
-            blink::WebSecurityOrigin::create(data_source->request().url()))) {
-      return GURL(data_source->request().url());
+        frame->getSecurityOrigin().canAccess(blink::WebSecurityOrigin::create(
+            data_source->getRequest().url()))) {
+      return GURL(data_source->getRequest().url());
     }
   }
   return GURL(weburl);

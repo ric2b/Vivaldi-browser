@@ -64,6 +64,8 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Cross-origin access mode
   CORSMode cors_mode() const { return cors_mode_; }
 
+  const std::string& mime_type() const { return mime_type_; }
+
   // Are HTTP range requests supported?
   bool range_supported() const { return range_supported_; }
 
@@ -109,6 +111,7 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   void set_length(int64_t length);
   void set_cacheable(bool cacheable);
   void set_valid_until(base::Time valid_until);
+  void set_mime_type(std::string mime_type);
   void set_range_supported();
   void set_last_modified(base::Time last_modified);
   void set_etag(const std::string& etag);
@@ -169,6 +172,8 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
 
   // Length of resource this url points to. (in bytes)
   int64_t length_;
+
+  std::string mime_type_;
 
   // Does the server support ranges?
   bool range_supported_;

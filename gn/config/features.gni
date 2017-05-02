@@ -5,6 +5,9 @@ declare_args() {
   enable_disabled_unit_tests = false
 
   enable_permanently_disabled_unit_tests = 0
+
+  # Opera media extensions
+  system_proprietary_codecs = is_win || is_mac
 }
 
 # Locales about to be added, but not ready

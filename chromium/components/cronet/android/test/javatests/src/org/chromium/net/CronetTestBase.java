@@ -10,6 +10,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.PathUtils;
 import org.chromium.net.impl.CronetEngineBase;
 import org.chromium.net.impl.JavaCronetEngine;
+import org.chromium.net.impl.JavaCronetProvider;
 import org.chromium.net.impl.UserAgent;
 
 import java.lang.annotation.ElementType;
@@ -34,7 +35,9 @@ public class CronetTestBase extends AndroidTestCase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        System.loadLibrary("cronet_tests");
         ContextUtils.initApplicationContext(getContext().getApplicationContext());
+        ContextUtils.initApplicationContextForNative();
         PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
         CronetTestFramework.prepareTestStorage(getContext());
     }
@@ -130,10 +133,8 @@ public class CronetTestBase extends AndroidTestCase {
                 super.runTest();
                 if (!method.isAnnotationPresent(OnlyRunNativeCronet.class)) {
                     if (mCronetTestFramework != null) {
-                        ExperimentalCronetEngine.Builder builder =
-                                new ExperimentalCronetEngine.Builder(getContext());
+                        ExperimentalCronetEngine.Builder builder = createJavaEngineBuilder();
                         builder.setUserAgent(UserAgent.from(getContext()));
-                        builder.enableLegacyMode(true);
                         mCronetTestFramework.mCronetEngine = (CronetEngineBase) builder.build();
                         // Make sure that the instantiated engine is JavaCronetEngine.
                         assert mCronetTestFramework.mCronetEngine.getClass()
@@ -150,7 +151,17 @@ public class CronetTestBase extends AndroidTestCase {
         }
     }
 
-    void assertResponseEquals(UrlResponseInfo expected, UrlResponseInfo actual) {
+    /**
+     * Creates and returns {@link ExperimentalCronetEngine.Builder} that creates
+     * Java (platform) based {@link CronetEngine.Builder}.
+     *
+     * @return the {@code CronetEngine.Builder} that builds Java-based {@code Cronet engine}.
+     */
+    ExperimentalCronetEngine.Builder createJavaEngineBuilder() {
+        return (ExperimentalCronetEngine.Builder) new JavaCronetProvider(mContext).createBuilder();
+    }
+
+    public void assertResponseEquals(UrlResponseInfo expected, UrlResponseInfo actual) {
         assertEquals(expected.getAllHeaders(), actual.getAllHeaders());
         assertEquals(expected.getAllHeadersAsList(), actual.getAllHeadersAsList());
         assertEquals(expected.getHttpStatusCode(), actual.getHttpStatusCode());
@@ -159,14 +170,14 @@ public class CronetTestBase extends AndroidTestCase {
         assertEquals(expected.getUrl(), actual.getUrl());
         // Transferred bytes and proxy server are not supported in pure java
         if (!(mCronetTestFramework.mCronetEngine instanceof JavaCronetEngine)) {
-            assertEquals(expected.getReceivedBytesCount(), actual.getReceivedBytesCount());
+            assertEquals(expected.getReceivedByteCount(), actual.getReceivedByteCount());
             assertEquals(expected.getProxyServer(), actual.getProxyServer());
             // This is a place where behavior intentionally differs between native and java
             assertEquals(expected.getNegotiatedProtocol(), actual.getNegotiatedProtocol());
         }
     }
 
-    static void assertContains(String expectedSubstring, String actualString) {
+    public static void assertContains(String expectedSubstring, String actualString) {
         assertNotNull(actualString);
         if (!actualString.contains(expectedSubstring)) {
             fail("String [" + actualString + "] doesn't contain substring [" + expectedSubstring

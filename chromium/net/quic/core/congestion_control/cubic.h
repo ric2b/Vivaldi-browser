@@ -5,21 +5,25 @@
 // Cubic algorithm, helper class to TCP cubic.
 // For details see http://netsrv.csc.ncsu.edu/export/cubic_a_new_tcp_2008.pdf.
 
-#ifndef NET_QUIC_CONGESTION_CONTROL_CUBIC_H_
-#define NET_QUIC_CONGESTION_CONTROL_CUBIC_H_
+#ifndef NET_QUIC_CORE_CONGESTION_CONTROL_CUBIC_H_
+#define NET_QUIC_CORE_CONGESTION_CONTROL_CUBIC_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_bandwidth.h"
-#include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_connection_stats.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_clock.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
-class NET_EXPORT_PRIVATE Cubic {
+namespace test {
+class CubicTest;
+}  // namespace test
+
+class QUIC_EXPORT_PRIVATE Cubic {
  public:
   explicit Cubic(const QuicClock* clock);
 
@@ -34,25 +38,43 @@ class NET_EXPORT_PRIVATE Cubic {
   QuicPacketCount CongestionWindowAfterPacketLoss(QuicPacketCount current);
 
   // Compute a new congestion window to use after a received ACK.
-  // Returns the new congestion window in packets. The new congestion window
-  // follows a cubic function that depends on the time passed since last
-  // packet loss.
+  // Returns the new congestion window in packets. The new congestion
+  // window follows a cubic function that depends on the time passed
+  // since last packet loss.
   QuicPacketCount CongestionWindowAfterAck(QuicPacketCount current,
-                                           QuicTime::Delta delay_min);
+                                           QuicTime::Delta delay_min,
+                                           QuicTime event_time);
 
   // Call on ack arrival when sender is unable to use the available congestion
   // window. Resets Cubic state during quiescence.
   void OnApplicationLimited();
 
+  // If true, enable the fix for the convex-mode signing bug.  See
+  // b/32170105 for more information about the bug.
+  // TODO(jokulik):  Remove once the fix is enabled by default.
+  void SetFixConvexMode(bool fix_convex_mode);
+
+  // If true, enable the fix for scaling BetaLastMax for n-nonnection
+  // emulation.  See b/33272010 for more information about the bug.
+  // TODO(jokulik):  Remove once the fix is enabled by default.
+  void SetFixBetaLastMax(bool fix_bet_last_max);
+
  private:
+  friend class test::CubicTest;
+
   static const QuicTime::Delta MaxCubicTimeInterval() {
     return QuicTime::Delta::FromMilliseconds(30);
   }
 
-  // Compute the TCP Cubic alpha and beta based on the current number of
-  // connections.
+  // Compute the TCP Cubic alpha, beta, and beta-last-max based on the
+  // current number of connections.
   float Alpha() const;
   float Beta() const;
+  float BetaLastMax() const;
+
+  QuicByteCount last_max_congestion_window() const {
+    return last_max_congestion_window_;
+  }
 
   const QuicClock* clock_;
 
@@ -97,9 +119,17 @@ class NET_EXPORT_PRIVATE Cubic {
   // Last congestion window in packets computed by cubic function.
   QuicPacketCount last_target_congestion_window_;
 
+  // Fix convex mode for cubic.
+  // TODO(jokulik):  Remove once the cubic convex experiment is done.
+  bool fix_convex_mode_;
+
+  // Fix beta last max for n-connection-emulation.
+  // TODO(jokulik):  Remove once the corresponding experiment is done.
+  bool fix_beta_last_max_;
+
   DISALLOW_COPY_AND_ASSIGN(Cubic);
 };
 
 }  // namespace net
 
-#endif  // NET_QUIC_CONGESTION_CONTROL_CUBIC_H_
+#endif  // NET_QUIC_CORE_CONGESTION_CONTROL_CUBIC_H_

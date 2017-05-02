@@ -4,13 +4,32 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import org.chromium.base.Callback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+
+import java.util.List;
 
 /**
  * A tree interface to allow the New Tab Page RecyclerView to delegate to other components.
  */
 interface TreeNode {
     /**
+     * Initialize the node (and any children underneath it). This method should be called after the
+     * node has been added to the tree, i.e. when it is in the list of its parent's children.
+     * The node may notify its parent about changes that happen during initialization.
+     */
+    void setParent(NodeParent parent);
+
+    /**
+     * Detaches the node from the parent so that changes in the node are no longer notified to the
+     * parent. This is needed when the parent removes this node from its children.
+     */
+    void detach();
+
+    /**
+     * Returns the number of items under this subtree. This method may be called
+     * before initialization.
+     *
      * @return The number of items under this subtree.
      * @see android.support.v7.widget.RecyclerView.Adapter#getItemCount()
      */
@@ -25,12 +44,13 @@ interface TreeNode {
     int getItemViewType(int position);
 
     /**
-     * Display the data at {@code position} under this subtree.
+     * Display the data at {@code position} under this subtree, making a partial update based on
+     * the {@code payload} data.
      * @param holder The view holder that should be updated.
      * @param position The position of the item under this subtree.
-     * @see android.support.v7.widget.RecyclerView.Adapter#onBindViewHolder
+     * @see android.support.v7.widget.RecyclerView.Adapter#onBindViewHolder(ViewHolder, int, List)
      */
-    void onBindViewHolder(NewTabPageViewHolder holder, final int position);
+    void onBindViewHolder(NewTabPageViewHolder holder, int position, List<Object> payloads);
 
     /**
      * @param position The position to query.
@@ -38,6 +58,14 @@ interface TreeNode {
      * an article.
      */
     SnippetArticle getSuggestionAt(int position);
+
+    /**
+     * Dismiss the item at the given {@code position}.
+     * @param position The position of the item to be dismissed.
+     * @param itemRemovedCallback Should be called with the title of the dismissed item, to announce
+     * it for accessibility purposes.
+     */
+    public void dismissItem(int position, Callback<String> itemRemovedCallback);
 
     /**
      * The dismiss sibling is an item that should be dismissed at the same time as the provided

@@ -10,13 +10,13 @@
 #include <memory>
 #include <numeric>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/cpu.h"
 #include "base/files/file.h"
 #include "base/json/json_reader.h"
@@ -148,16 +148,16 @@ class NaClPluginInstance {
   uint64_t pexe_size;
 };
 
-typedef base::ScopedPtrHashMap<PP_Instance, std::unique_ptr<NaClPluginInstance>>
+typedef std::unordered_map<PP_Instance, std::unique_ptr<NaClPluginInstance>>
     InstanceMap;
 base::LazyInstance<InstanceMap> g_instance_map = LAZY_INSTANCE_INITIALIZER;
 
 NaClPluginInstance* GetNaClPluginInstance(PP_Instance instance) {
   InstanceMap& map = g_instance_map.Get();
-  InstanceMap::iterator iter = map.find(instance);
+  auto iter = map.find(instance);
   if (iter == map.end())
     return NULL;
-  return iter->second;
+  return iter->second.get();
 }
 
 NexeLoadManager* GetNexeLoadManager(PP_Instance instance) {
@@ -494,7 +494,9 @@ void PPBNaClPrivate::LaunchSelLdr(
     // Even on error, some FDs/handles may be passed to here.
     // We must release those resources.
     // See also nacl_process_host.cc.
-    base::SharedMemory::CloseHandle(launch_result.crash_info_shmem_handle);
+    if (base::SharedMemory::IsHandleValid(
+            launch_result.crash_info_shmem_handle))
+      base::SharedMemory::CloseHandle(launch_result.crash_info_shmem_handle);
 
     if (PP_ToBool(main_service_runtime)) {
       load_manager->ReportLoadError(PP_NACL_ERROR_SEL_LDR_LAUNCH,
@@ -539,8 +541,11 @@ void PPBNaClPrivate::LaunchSelLdr(
     bool is_helper_nexe = !PP_ToBool(main_service_runtime);
     std::unique_ptr<TrustedPluginChannel> trusted_plugin_channel(
         new TrustedPluginChannel(
-            load_manager, launch_result.trusted_ipc_channel_handle,
-            content::RenderThread::Get()->GetShutdownEvent(), is_helper_nexe));
+            load_manager,
+            mojo::MakeRequest<mojom::NaClRendererHost>(
+                mojo::ScopedMessagePipeHandle(
+                    launch_result.trusted_ipc_channel_handle.mojo_handle)),
+            is_helper_nexe));
     load_manager->set_trusted_plugin_channel(std::move(trusted_plugin_channel));
   } else {
     PostPPCompletionCallback(callback, PP_ERROR_FAILED);
@@ -862,23 +867,23 @@ void PPBNaClPrivate::ReportLoadError(PP_Instance instance,
 // static
 void PPBNaClPrivate::InstanceCreated(PP_Instance instance) {
   InstanceMap& map = g_instance_map.Get();
-  CHECK(!ContainsKey(map, instance));  // Sanity check.
+  CHECK(map.find(instance) == map.end());  // Sanity check.
   std::unique_ptr<NaClPluginInstance> new_instance(
       new NaClPluginInstance(instance));
-  map.add(instance, std::move(new_instance));
+  map[instance] = std::move(new_instance);
 }
 
 // static
 void PPBNaClPrivate::InstanceDestroyed(PP_Instance instance) {
   InstanceMap& map = g_instance_map.Get();
-  InstanceMap::iterator iter = map.find(instance);
+  auto iter = map.find(instance);
   CHECK(iter != map.end());
   // The erase may call NexeLoadManager's destructor prior to removing it from
   // the map. In that case, it is possible for the trusted Plugin to re-enter
   // the NexeLoadManager (e.g., by calling ReportLoadError). Passing out the
   // NexeLoadManager to a local scoped_ptr just ensures that its entry is gone
   // from the map prior to the destructor being invoked.
-  std::unique_ptr<NaClPluginInstance> temp(map.take(instance));
+  std::unique_ptr<NaClPluginInstance> temp = std::move(iter->second);
   map.erase(iter);
 }
 
@@ -1104,7 +1109,7 @@ bool CreateJsonManifest(PP_Instance instance,
       PP_ToBool(NaClDebugEnabledForURL(manifest_url.c_str()))));
   JsonManifest::ErrorInfo error_info;
   if (j->Init(manifest_data.c_str(), &error_info)) {
-    GetNaClPluginInstance(instance)->json_manifest.reset(j.release());
+    GetNaClPluginInstance(instance)->json_manifest = std::move(j);
     return true;
   }
   load_manager->ReportLoadError(error_info.error, error_info.string);
@@ -1615,10 +1620,16 @@ class PexeDownloader : public blink::WebAssociatedURLLoaderClient {
     url_loader_->setDefersLoading(true);
 
     std::string etag = response.httpHeaderField("etag").utf8();
+
+    // Parse the "last-modified" date string. An invalid string will result
+    // in a base::Time value of 0, which is supported by the only user of
+    // the |CacheInfo::last_modified| field (see
+    // pnacl::PnaclTranslationCache::GetKey()).
     std::string last_modified =
         response.httpHeaderField("last-modified").utf8();
     base::Time last_modified_time;
-    base::Time::FromString(last_modified.c_str(), &last_modified_time);
+    ignore_result(
+        base::Time::FromString(last_modified.c_str(), &last_modified_time));
 
     bool has_no_store_header = false;
     std::string cache_control =

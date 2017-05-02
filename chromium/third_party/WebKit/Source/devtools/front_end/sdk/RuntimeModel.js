@@ -96,11 +96,6 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
    * @param {!Protocol.Runtime.ExecutionContextDescription} context
    */
   _executionContextCreated(context) {
-    // The private script context should be hidden behind an experiment.
-    if (context.name === SDK.RuntimeModel._privateScript && !context.origin &&
-        !Runtime.experiments.isEnabled('privateScriptInspection'))
-      return;
-
     var data = context.auxData || {isDefault: true};
     var executionContext = new SDK.ExecutionContext(
         this.target(), context.id, context.name, context.origin, data['isDefault'], data['frameId']);
@@ -336,8 +331,6 @@ SDK.RuntimeModel.Events = {
   ExecutionContextOrderChanged: Symbol('ExecutionContextOrderChanged')
 };
 
-SDK.RuntimeModel._privateScript = 'private script';
-
 /**
  * @implements {Protocol.RuntimeDispatcher}
  * @unrestricted
@@ -391,12 +384,7 @@ SDK.RuntimeDispatcher = class {
    * @param {number} exceptionId
    */
   exceptionRevoked(reason, exceptionId) {
-    var consoleMessage = new SDK.ConsoleMessage(
-        this._runtimeModel.target(), SDK.ConsoleMessage.MessageSource.JS, SDK.ConsoleMessage.MessageLevel.RevokedError,
-        reason, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-        undefined);
-    consoleMessage.setRevokedExceptionId(exceptionId);
-    this._runtimeModel.target().consoleModel.addMessage(consoleMessage);
+    this._runtimeModel.target().consoleModel.revokeException(exceptionId);
   }
 
   /**
@@ -797,73 +785,5 @@ SDK.EventListener = class extends SDK.SDKObject {
    */
   isNormalListenerType() {
     return this._listenerType === 'normal';
-  }
-};
-
-/**
- * @unrestricted
- */
-SDK.RuntimeModel.CallFrame = class extends SDK.SDKObject {
-  /**
-   * @param {!SDK.Target} target
-   * @param {!Protocol.Runtime.CallFrame} payload
-   */
-  constructor(target, payload) {
-    super(target);
-
-    this.functionName = payload.functionName;
-    this.scriptId = payload.scriptId;
-    this.lineNumber = payload.lineNumber;
-    this.columnNumber = payload.columnNumber;
-    this.url = payload.url;
-  }
-};
-
-/**
- * @unrestricted
- */
-SDK.RuntimeModel.StackTrace = class extends SDK.SDKObject {
-  /**
-   * @param {!SDK.Target} target
-   * @param {!Protocol.Runtime.StackTrace} payload
-   */
-  constructor(target, payload) {
-    super(target);
-    this.description = payload.description;
-    this.callFrames = payload.callFrames.map(callFrame => new SDK.RuntimeModel.CallFrame(target, callFrame));
-  }
-
-  /**
-   * @param {!SDK.Target} target
-   * @param {!Protocol.Runtime.StackTrace} payload
-   * @return {!Array<!SDK.RuntimeModel.StackTrace>}
-   */
-  static fromPayload(target, payload) {
-    var stackTraces = [];
-    var stackTrace = SDK.RuntimeModel.StackTrace._cleanRedundantFrames(payload);
-    while (stackTrace) {
-      stackTraces.push(new SDK.RuntimeModel.StackTrace(target, stackTrace));
-      stackTrace = stackTrace.parent;
-    }
-    return stackTraces;
-  }
-
-  /**
-   * @param {!Protocol.Runtime.StackTrace} asyncStackTrace
-   * @return {!Protocol.Runtime.StackTrace}
-   */
-  static _cleanRedundantFrames(asyncStackTrace) {
-    var stack = asyncStackTrace;
-    var previous = null;
-    while (stack) {
-      if (stack.description === 'async function' && stack.callFrames.length)
-        stack.callFrames.shift();
-      if (previous && !stack.callFrames.length)
-        previous.parent = stack.parent;
-      else
-        previous = stack;
-      stack = stack.parent;
-    }
-    return asyncStackTrace;
   }
 };

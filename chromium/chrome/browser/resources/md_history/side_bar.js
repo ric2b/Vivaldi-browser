@@ -8,12 +8,12 @@ Polymer({
   behaviors: [Polymer.IronA11yKeysBehavior],
 
   properties: {
-    selectedPage: {type: String, notify: true},
+    selectedPage: {
+      type: String,
+      notify: true,
+    },
 
     showFooter: Boolean,
-
-    // If true, the sidebar is contained within an app-drawer.
-    drawer: {type: Boolean, reflectToAttribute: true},
   },
 
   keyBindings: {
@@ -31,7 +31,9 @@ Polymer({
   /**
    * @private
    */
-  onSelectorActivate_: function() { this.fire('history-close-drawer'); },
+  onSelectorActivate_: function() {
+    this.fire('history-close-drawer');
+  },
 
   /**
    * Relocates the user to the clear browsing data section of the settings page.
@@ -42,7 +44,7 @@ Polymer({
     var browserService = md_history.BrowserService.getInstance();
     browserService.recordAction('InitClearBrowsingData');
     browserService.openClearBrowsingData();
-    /** @type {PaperRippleElement} */(this.$['cbd-ripple']).upAction();
+    /** @type {PaperRippleElement} */ (this.$['cbd-ripple']).upAction();
     e.preventDefault();
   },
 

@@ -6,11 +6,16 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/threading/thread.h"
+#include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/cpp/gpu/gpu.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/event_matcher.mojom.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/env.h"
-#include "ui/aura/mus/gpu_service.h"
 #include "ui/aura/mus/mus_context_factory.h"
 #include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/aura/mus/property_converter.h"
@@ -21,16 +26,95 @@
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/clipboard_mus.h"
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
+#include "ui/views/mus/pointer_watcher_event_router.h"
 #include "ui/views/mus/screen_mus.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/wm_state.h"
+
+// Widget::InitParams::Type must match that of ui::mojom::WindowType.
+#define WINDOW_TYPES_MATCH(NAME)                                      \
+  static_assert(                                                      \
+      static_cast<int32_t>(views::Widget::InitParams::TYPE_##NAME) == \
+          static_cast<int32_t>(ui::mojom::WindowType::NAME),          \
+      "Window type constants must match")
+
+WINDOW_TYPES_MATCH(WINDOW);
+WINDOW_TYPES_MATCH(PANEL);
+WINDOW_TYPES_MATCH(WINDOW_FRAMELESS);
+WINDOW_TYPES_MATCH(CONTROL);
+WINDOW_TYPES_MATCH(POPUP);
+WINDOW_TYPES_MATCH(MENU);
+WINDOW_TYPES_MATCH(TOOLTIP);
+WINDOW_TYPES_MATCH(BUBBLE);
+WINDOW_TYPES_MATCH(DRAG);
+// ui::mojom::WindowType::UNKNOWN does not correspond to a value in
+// Widget::InitParams::Type.
 
 namespace views {
 
 // static
 MusClient* MusClient::instance_ = nullptr;
+
+MusClient::MusClient(service_manager::Connector* connector,
+                     const service_manager::Identity& identity,
+                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+                     bool create_wm_state)
+    : identity_(identity) {
+  DCHECK(!instance_);
+  DCHECK(aura::Env::GetInstance());
+  instance_ = this;
+
+  if (!io_task_runner) {
+    io_thread_ = base::MakeUnique<base::Thread>("IOThread");
+    base::Thread::Options thread_options(base::MessageLoop::TYPE_IO, 0);
+    thread_options.priority = base::ThreadPriority::NORMAL;
+    CHECK(io_thread_->StartWithOptions(thread_options));
+    io_task_runner = io_thread_->task_runner();
+  }
+
+  // TODO(msw): Avoid this... use some default value? Allow clients to extend?
+  property_converter_ = base::MakeUnique<aura::PropertyConverter>();
+
+  if (create_wm_state)
+    wm_state_ = base::MakeUnique<wm::WMState>();
+
+  discardable_memory::mojom::DiscardableSharedMemoryManagerPtr manager_ptr;
+  connector->BindInterface(ui::mojom::kServiceName, &manager_ptr);
+
+  discardable_shared_memory_manager_ = base::MakeUnique<
+      discardable_memory::ClientDiscardableSharedMemoryManager>(
+      std::move(manager_ptr), io_task_runner);
+  base::DiscardableMemoryAllocator::SetInstance(
+      discardable_shared_memory_manager_.get());
+
+  gpu_ = ui::Gpu::Create(connector, std::move(io_task_runner));
+  compositor_context_factory_ =
+      base::MakeUnique<aura::MusContextFactory>(gpu_.get());
+  aura::Env::GetInstance()->set_context_factory(
+      compositor_context_factory_.get());
+  window_tree_client_ =
+      base::MakeUnique<aura::WindowTreeClient>(connector, this);
+  aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_.get());
+  window_tree_client_->ConnectViaWindowTreeFactory();
+
+  pointer_watcher_event_router_ =
+      base::MakeUnique<PointerWatcherEventRouter>(window_tree_client_.get());
+
+  screen_ = base::MakeUnique<ScreenMus>(this);
+  screen_->Init(connector);
+
+  std::unique_ptr<ClipboardMus> clipboard = base::MakeUnique<ClipboardMus>();
+  clipboard->Init(connector);
+  ui::Clipboard::SetClipboardForCurrentThread(std::move(clipboard));
+
+  ui::OSExchangeDataProviderFactory::SetFactory(this);
+
+  ViewsDelegate::GetInstance()->set_native_widget_factory(
+      base::Bind(&MusClient::CreateNativeWidget, base::Unretained(this)));
+}
 
 MusClient::~MusClient() {
   // ~WindowTreeClient calls back to us (we're its delegate), destroy it while
@@ -38,15 +122,17 @@ MusClient::~MusClient() {
   window_tree_client_.reset();
   ui::OSExchangeDataProviderFactory::SetFactory(nullptr);
   ui::Clipboard::DestroyClipboardForCurrentThread();
-  gpu_service_.reset();
+  gpu_.reset();
 
   if (ViewsDelegate::GetInstance()) {
     ViewsDelegate::GetInstance()->set_native_widget_factory(
         ViewsDelegate::NativeWidgetFactory());
   }
 
+  base::DiscardableMemoryAllocator::SetInstance(nullptr);
   DCHECK_EQ(instance_, this);
   instance_ = nullptr;
+  DCHECK(aura::Env::GetInstance());
 }
 
 // static
@@ -55,6 +141,63 @@ bool MusClient::ShouldCreateDesktopNativeWidgetAura(
   // TYPE_CONTROL and child widgets require a NativeWidgetAura.
   return init_params.type != Widget::InitParams::TYPE_CONTROL &&
          !init_params.child;
+}
+
+// static
+std::map<std::string, std::vector<uint8_t>>
+MusClient::ConfigurePropertiesFromParams(
+    const Widget::InitParams& init_params) {
+  using PrimitiveType = aura::PropertyConverter::PrimitiveType;
+  std::map<std::string, std::vector<uint8_t>> properties =
+      init_params.mus_properties;
+
+  // Widget::InitParams::Type matches ui::mojom::WindowType.
+  properties[ui::mojom::WindowManager::kWindowType_InitProperty] =
+      mojo::ConvertTo<std::vector<uint8_t>>(
+          static_cast<int32_t>(init_params.type));
+
+  if (!init_params.bounds.IsEmpty()) {
+    properties[ui::mojom::WindowManager::kBounds_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(init_params.bounds);
+  }
+
+  if (!init_params.name.empty()) {
+    properties[ui::mojom::WindowManager::kName_Property] =
+        mojo::ConvertTo<std::vector<uint8_t>>(init_params.name);
+  }
+
+  properties[ui::mojom::WindowManager::kAlwaysOnTop_Property] =
+      mojo::ConvertTo<std::vector<uint8_t>>(
+          static_cast<PrimitiveType>(init_params.keep_on_top));
+
+  if (!Widget::RequiresNonClientView(init_params.type))
+    return properties;
+
+  if (init_params.delegate) {
+    if (properties.count(ui::mojom::WindowManager::kResizeBehavior_Property) ==
+        0) {
+      properties[ui::mojom::WindowManager::kResizeBehavior_Property] =
+          mojo::ConvertTo<std::vector<uint8_t>>(static_cast<PrimitiveType>(
+              init_params.delegate->GetResizeBehavior()));
+    }
+
+    // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
+    gfx::ImageSkia app_icon = init_params.delegate->GetWindowAppIcon();
+    SkBitmap app_bitmap = app_icon.GetRepresentation(1.f).sk_bitmap();
+    if (!app_bitmap.isNull()) {
+      properties[ui::mojom::WindowManager::kAppIcon_Property] =
+          mojo::ConvertTo<std::vector<uint8_t>>(app_bitmap);
+    }
+    // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
+    gfx::ImageSkia window_icon = init_params.delegate->GetWindowIcon();
+    SkBitmap window_bitmap = window_icon.GetRepresentation(1.f).sk_bitmap();
+    if (!window_bitmap.isNull()) {
+      properties[ui::mojom::WindowManager::kWindowIcon_Property] =
+          mojo::ConvertTo<std::vector<uint8_t>>(window_bitmap);
+    }
+  }
+
+  return properties;
 }
 
 NativeWidget* MusClient::CreateNativeWidget(
@@ -71,47 +214,21 @@ NativeWidget* MusClient::CreateNativeWidget(
     native_widget->SetDesktopWindowTreeHost(
         base::WrapUnique(init_params.desktop_window_tree_host));
   } else {
+    std::map<std::string, std::vector<uint8_t>> mus_properties =
+        ConfigurePropertiesFromParams(init_params);
     native_widget->SetDesktopWindowTreeHost(
         base::MakeUnique<DesktopWindowTreeHostMus>(delegate, native_widget,
-                                                   init_params));
+                                                   &mus_properties));
   }
   return native_widget;
 }
 
-MusClient::MusClient(service_manager::Connector* connector,
-                     const service_manager::Identity& identity,
-                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
-    : connector_(connector), identity_(identity) {
-  DCHECK(!instance_);
-  instance_ = this;
-  // TODO(msw): Avoid this... use some default value? Allow clients to extend?
-  property_converter_ = base::MakeUnique<aura::PropertyConverter>();
+void MusClient::AddObserver(MusClientObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
 
-  wm_state_ = base::MakeUnique<wm::WMState>();
-
-  gpu_service_ = aura::GpuService::Create(connector, std::move(io_task_runner));
-  compositor_context_factory_ =
-      base::MakeUnique<aura::MusContextFactory>(gpu_service_.get());
-  aura::Env::GetInstance()->set_context_factory(
-      compositor_context_factory_.get());
-  window_tree_client_ =
-      base::MakeUnique<aura::WindowTreeClient>(this, nullptr, nullptr);
-  aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_.get());
-  window_tree_client_->ConnectViaWindowTreeFactory(connector_);
-
-  // TODO: wire up PointerWatcherEventRouter. http://crbug.com/663526.
-
-  screen_ = base::MakeUnique<ScreenMus>(this);
-  screen_->Init(connector);
-
-  std::unique_ptr<ClipboardMus> clipboard = base::MakeUnique<ClipboardMus>();
-  clipboard->Init(connector);
-  ui::Clipboard::SetClipboardForCurrentThread(std::move(clipboard));
-
-  ui::OSExchangeDataProviderFactory::SetFactory(this);
-
-  ViewsDelegate::GetInstance()->set_native_widget_factory(
-      base::Bind(&MusClient::CreateNativeWidget, base::Unretained(this)));
+void MusClient::RemoveObserver(MusClientObserver* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 void MusClient::OnEmbed(
@@ -121,21 +238,20 @@ void MusClient::OnEmbed(
 
 void MusClient::OnLostConnection(aura::WindowTreeClient* client) {}
 
-void MusClient::OnEmbedRootDestroyed(aura::Window* root) {
-  // Not called for MusClient as WindowTreeClient isn't created by
-  // way of an Embed().
-  NOTREACHED();
+void MusClient::OnEmbedRootDestroyed(
+    aura::WindowTreeHostMus* window_tree_host) {
+  static_cast<DesktopWindowTreeHostMus*>(window_tree_host)
+      ->ServerDestroyedWindow();
 }
 
 void MusClient::OnPointerEventObserved(const ui::PointerEvent& event,
                                        aura::Window* target) {
-  // TODO: wire up PointerWatcherEventRouter. http://crbug.com/663526.
-  NOTIMPLEMENTED();
+  pointer_watcher_event_router_->OnPointerEventObserved(event, target);
 }
 
 void MusClient::OnWindowManagerFrameValuesChanged() {
-  // TODO: wire up client area. http://crbug.com/663525.
-  NOTIMPLEMENTED();
+  for (auto& observer : observer_list_)
+    observer.OnWindowManagerFrameValuesChanged();
 }
 
 aura::client::CaptureClient* MusClient::GetCaptureClient() {
@@ -146,10 +262,6 @@ aura::PropertyConverter* MusClient::GetPropertyConverter() {
   return property_converter_.get();
 }
 
-gfx::Point MusClient::GetCursorScreenPoint() {
-  return window_tree_client_->GetCursorScreenPoint();
-}
-
 aura::Window* MusClient::GetWindowAtScreenPoint(const gfx::Point& point) {
   for (aura::Window* root : window_tree_client_->GetRoots()) {
     aura::WindowTreeHost* window_tree_host = root->GetHost();
@@ -157,7 +269,7 @@ aura::Window* MusClient::GetWindowAtScreenPoint(const gfx::Point& point) {
       continue;
     // TODO: this likely gets z-order wrong. http://crbug.com/663606.
     gfx::Point relative_point(point);
-    window_tree_host->ConvertPointFromNativeScreen(&relative_point);
+    window_tree_host->ConvertScreenInPixelsToDIP(&relative_point);
     if (gfx::Rect(root->bounds().size()).Contains(relative_point))
       return root->GetTopWindowContainingPoint(relative_point);
   }

@@ -29,7 +29,7 @@
 /**
  * @implements {UI.Searchable}
  * @implements {SDK.TargetManager.Observer}
- * @implements {UI.ViewportControl.Provider}
+ * @implements {Console.ConsoleViewportProvider}
  * @unrestricted
  */
 Console.ConsoleView = class extends UI.VBox {
@@ -80,7 +80,7 @@ Console.ConsoleView = class extends UI.VBox {
     this._filterBar.show(this._contentsElement);
     this._filter.addFilters(this._filterBar);
 
-    this._viewport = new UI.ViewportControl(this);
+    this._viewport = new Console.ConsoleViewport(this);
     this._viewport.setStickToBottom(true);
     this._viewport.contentElement().classList.add('console-group', 'console-group-messages');
     this._contentsElement.appendChild(this._viewport.element);
@@ -103,6 +103,8 @@ Console.ConsoleView = class extends UI.VBox {
     this._currentGroup = this._topGroup;
 
     this._promptElement = this._messagesElement.createChild('div', 'source-code');
+    var promptIcon = UI.Icon.create('smallicon-text-prompt', 'console-prompt-icon');
+    this._promptElement.appendChild(promptIcon);
     this._promptElement.id = 'console-prompt';
     this._promptElement.addEventListener('input', this._promptInput.bind(this), false);
 
@@ -148,8 +150,6 @@ Console.ConsoleView = class extends UI.VBox {
     this._registerWithMessageSink();
     SDK.targetManager.observeTargets(this);
 
-    this._initConsoleMessages();
-
     UI.context.addFlavorChangeListener(SDK.ExecutionContext, this._executionContextChanged, this);
 
     this._messagesElement.addEventListener('mousedown', this._updateStickToBottomOnMouseDown.bind(this), false);
@@ -190,14 +190,14 @@ Console.ConsoleView = class extends UI.VBox {
     this._prompt.setAddCompletionsFromHistory(this._consoleHistoryAutocompleteSetting.get());
   }
 
-  _initConsoleMessages() {
-    var mainTarget = SDK.targetManager.mainTarget();
-    var resourceTreeModel = mainTarget && SDK.ResourceTreeModel.fromTarget(mainTarget);
-    var resourcesLoaded = !resourceTreeModel || resourceTreeModel.cachedResourcesLoaded();
-    if (!mainTarget || !resourcesLoaded) {
-      SDK.targetManager.addModelListener(
-          SDK.ResourceTreeModel, SDK.ResourceTreeModel.Events.CachedResourcesLoaded, this._onResourceTreeModelLoaded,
-          this);
+  /**
+   * @param {!SDK.Target} target
+   */
+  _initConsoleMessages(target) {
+    var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(target);
+    if (resourceTreeModel && !resourceTreeModel.cachedResourcesLoaded()) {
+      resourceTreeModel.addEventListener(
+          SDK.ResourceTreeModel.Events.CachedResourcesLoaded, this._onResourceTreeModelLoaded, this);
       return;
     }
     this._fetchMultitargetMessages();
@@ -207,12 +207,9 @@ Console.ConsoleView = class extends UI.VBox {
    * @param {!Common.Event} event
    */
   _onResourceTreeModelLoaded(event) {
-    var resourceTreeModel = event.target;
-    if (resourceTreeModel.target() !== SDK.targetManager.mainTarget())
-      return;
-    SDK.targetManager.removeModelListener(
-        SDK.ResourceTreeModel, SDK.ResourceTreeModel.Events.CachedResourcesLoaded, this._onResourceTreeModelLoaded,
-        this);
+    var resourceTreeModel = /** @type {!SDK.ResourceTreeModel} */ (event.data);
+    resourceTreeModel.removeEventListener(
+        SDK.ResourceTreeModel.Events.CachedResourcesLoaded, this._onResourceTreeModelLoaded, this);
     this._fetchMultitargetMessages();
   }
 
@@ -239,7 +236,7 @@ Console.ConsoleView = class extends UI.VBox {
   /**
    * @override
    * @param {number} index
-   * @return {?UI.ViewportElement}
+   * @return {?Console.ConsoleViewportElement}
    */
   itemElement(index) {
     return this._visibleViewMessages[index];
@@ -267,6 +264,8 @@ Console.ConsoleView = class extends UI.VBox {
    * @param {!SDK.Target} target
    */
   targetAdded(target) {
+    if (target === SDK.targetManager.mainTarget())
+      this._initConsoleMessages(target);
     this._viewport.invalidate();
     this._updateAllMessagesCheckbox();
   }
@@ -569,9 +568,6 @@ Console.ConsoleView = class extends UI.VBox {
   }
 
   _handleContextMenuEvent(event) {
-    if (event.target.enclosingNodeOrSelfWithNodeName('a'))
-      return;
-
     var contextMenu = new UI.ContextMenu(event);
     if (event.target.isSelfOrDescendant(this._promptElement)) {
       contextMenu.show();
@@ -665,15 +661,13 @@ Console.ConsoleView = class extends UI.VBox {
         progressIndicator.done();
         return;
       }
-      var lines = [];
+      var messageContents = [];
       for (var i = 0; i < chunkSize && i + messageIndex < this.itemCount(); ++i) {
         var message = this.itemElement(messageIndex + i);
-        var messageContent = message.contentElement().deepTextContent();
-        for (var j = 0; j < message.repeatCount(); ++j)
-          lines.push(messageContent);
+        messageContents.push(message.toExportString());
       }
       messageIndex += i;
-      stream.write(lines.join('\n') + '\n', writeNextChunk.bind(this));
+      stream.write(messageContents.join('\n') + '\n', writeNextChunk.bind(this));
       progressIndicator.setWorked(messageIndex);
     }
   }
@@ -740,7 +734,7 @@ Console.ConsoleView = class extends UI.VBox {
     this._shortcuts = {};
 
     var shortcut = UI.KeyboardShortcut;
-    var section = Components.shortcutsScreen.section(Common.UIString('Console'));
+    var section = UI.shortcutsScreen.section(Common.UIString('Console'));
 
     var shortcutL = shortcut.makeDescriptor('l', UI.KeyboardShortcut.Modifiers.Ctrl);
     var keys = [shortcutL];
@@ -1074,8 +1068,7 @@ Console.ConsoleViewFilter = class extends Common.Object {
       {name: SDK.ConsoleMessage.MessageLevel.Warning, label: Common.UIString('Warnings')},
       {name: SDK.ConsoleMessage.MessageLevel.Info, label: Common.UIString('Info')},
       {name: SDK.ConsoleMessage.MessageLevel.Log, label: Common.UIString('Logs')},
-      {name: SDK.ConsoleMessage.MessageLevel.Debug, label: Common.UIString('Debug')},
-      {name: SDK.ConsoleMessage.MessageLevel.RevokedError, label: Common.UIString('Handled')}
+      {name: SDK.ConsoleMessage.MessageLevel.Debug, label: Common.UIString('Debug')}
     ];
     this._levelFilterUI = new UI.NamedBitSetFilterUI(levels, this._messageLevelFiltersSetting);
     this._levelFilterUI.addEventListener(UI.FilterUI.Events.FilterChanged, this._filterChanged, this);
@@ -1208,6 +1201,9 @@ Console.ConsoleCommand = class extends Console.ConsoleViewMessage {
   contentElement() {
     if (!this._contentElement) {
       this._contentElement = createElementWithClass('div', 'console-user-command');
+      var icon = UI.Icon.create('smallicon-user-command', 'command-result-icon');
+      this._contentElement.appendChild(icon);
+
       this._contentElement.message = this;
 
       this._formattedCommand = createElementWithClass('span', 'source-code');
@@ -1256,6 +1252,10 @@ Console.ConsoleCommandResult = class extends Console.ConsoleViewMessage {
   contentElement() {
     var element = super.contentElement();
     element.classList.add('console-user-command-result');
+    if (this.consoleMessage().level === SDK.ConsoleMessage.MessageLevel.Log) {
+      var icon = UI.Icon.create('smallicon-command-result', 'command-result-icon');
+      element.insertBefore(icon, element.firstChild);
+    }
     this.updateTimestamp(false);
     return element;
   }

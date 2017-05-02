@@ -110,21 +110,10 @@ bool ImageFrame::setSizeAndColorSpace(int newWidth,
   // otherwise.
   DCHECK(!width() && !height());
 
-  // The image must specify a color space.
-  // TODO(ccameron): This should be set unconditionally, but specifying a
-  // non-renderable SkColorSpace results in errors.
-  // https://bugs.chromium.org/p/skia/issues/detail?id=5907
-  if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled()) {
-    DCHECK(colorSpace);
-    m_colorSpace = std::move(colorSpace);
-  } else {
-    DCHECK(!colorSpace);
-  }
-
   m_bitmap.setInfo(SkImageInfo::MakeN32(
       newWidth, newHeight,
       m_premultiplyAlpha ? kPremul_SkAlphaType : kUnpremul_SkAlphaType,
-      m_colorSpace));
+      std::move(colorSpace)));
   if (!m_bitmap.tryAllocPixels(m_allocator, 0))
     return false;
 
@@ -199,6 +188,15 @@ static uint32_t blendSrcOverDstNonPremultiplied(uint32_t src, uint32_t dst) {
                                 dstFactorA, scale);
 
   return SkPackARGB32NoCheck(blendA, blendR, blendG, blendB);
+}
+
+void ImageFrame::blendRGBARaw(PixelData* dest,
+                              unsigned r,
+                              unsigned g,
+                              unsigned b,
+                              unsigned a) {
+  *dest =
+      blendSrcOverDstNonPremultiplied(SkPackARGB32NoCheck(a, r, g, b), *dest);
 }
 
 void ImageFrame::blendSrcOverDstRaw(PixelData* src, PixelData dst) {

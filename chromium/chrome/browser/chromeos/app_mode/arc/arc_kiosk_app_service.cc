@@ -11,13 +11,39 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/notification_blocker.h"
 
 namespace chromeos {
 
+// Blocks all notifications for ARC++ Kiosk
+class ArcKioskNotificationBlocker : public message_center::NotificationBlocker {
+ public:
+  ArcKioskNotificationBlocker()
+      : message_center::NotificationBlocker(
+            message_center::MessageCenter::Get()) {
+    NotifyBlockingStateChanged();
+  }
+
+  ~ArcKioskNotificationBlocker() override {}
+
+ private:
+  bool ShouldShowNotification(
+      const message_center::Notification& notification) const override {
+    return false;
+  }
+
+  bool ShouldShowNotificationAsPopup(
+      const message_center::Notification& notification) const override {
+    return false;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ArcKioskNotificationBlocker);
+};
+
 // static
-ArcKioskAppService* ArcKioskAppService::Create(Profile* profile,
-                                               ArcAppListPrefs* prefs) {
-  return new ArcKioskAppService(profile, prefs);
+ArcKioskAppService* ArcKioskAppService::Create(Profile* profile) {
+  return new ArcKioskAppService(profile);
 }
 
 // static
@@ -25,13 +51,26 @@ ArcKioskAppService* ArcKioskAppService::Get(content::BrowserContext* context) {
   return ArcKioskAppServiceFactory::GetForBrowserContext(context);
 }
 
+void ArcKioskAppService::SetDelegate(Delegate* delegate) {
+  delegate_ = delegate;
+}
+
+void ArcKioskAppService::Shutdown() {
+  ArcAppListPrefs::Get(profile_)->RemoveObserver(this);
+  app_manager_->RemoveObserver(this);
+}
+
 void ArcKioskAppService::OnAppRegistered(
     const std::string& app_id,
     const ArcAppListPrefs::AppInfo& app_info) {
+  if (!app_id_.empty() && app_id != app_id_)
+    return;
   PreconditionsChanged();
 }
 
 void ArcKioskAppService::OnAppReadyChanged(const std::string& id, bool ready) {
+  if (!app_id_.empty() && id != app_id_)
+    return;
   PreconditionsChanged();
 }
 
@@ -52,6 +91,8 @@ void ArcKioskAppService::OnTaskCreated(int32_t task_id,
   if (app_info_ && package_name == app_info_->package_name &&
       activity == app_info_->activity) {
     task_id_ = task_id;
+    if (delegate_)
+      delegate_->OnAppStarted();
   }
 }
 
@@ -65,14 +106,26 @@ void ArcKioskAppService::OnTaskDestroyed(int32_t task_id) {
   }
 }
 
-ArcKioskAppService::ArcKioskAppService(Profile* profile, ArcAppListPrefs* prefs)
-    : profile_(profile), prefs_(prefs) {
-  if (prefs_)
-    prefs_->AddObserver(this);
+void ArcKioskAppService::OnMaintenanceSessionCreated() {
+  maintenance_session_running_ = true;
+  PreconditionsChanged();
+}
+
+void ArcKioskAppService::OnMaintenanceSessionFinished() {
+  maintenance_session_running_ = false;
+  PreconditionsChanged();
+}
+
+void ArcKioskAppService::OnAppWindowLaunched() {
+  if (delegate_)
+    delegate_->OnAppWindowLaunched();
+}
+
+ArcKioskAppService::ArcKioskAppService(Profile* profile) : profile_(profile) {
+  ArcAppListPrefs::Get(profile_)->AddObserver(this);
   app_manager_ = ArcKioskAppManager::Get();
-  if (app_manager_) {
-    app_manager_->AddObserver(this);
-  }
+  DCHECK(app_manager_);
+  app_manager_->AddObserver(this);
   pref_change_registrar_.reset(new PrefChangeRegistrar());
   pref_change_registrar_->Init(profile_->GetPrefs());
   // Try to start/stop kiosk app on policy compliance state change.
@@ -80,25 +133,23 @@ ArcKioskAppService::ArcKioskAppService(Profile* profile, ArcAppListPrefs* prefs)
       prefs::kArcPolicyCompliant,
       base::Bind(&ArcKioskAppService::PreconditionsChanged,
                  base::Unretained(this)));
+  notification_blocker_.reset(new ArcKioskNotificationBlocker());
   PreconditionsChanged();
 }
 
-ArcKioskAppService::~ArcKioskAppService() {
-  if (prefs_)
-    prefs_->RemoveObserver(this);
-  if (app_manager_)
-    app_manager_->RemoveObserver(this);
-}
+ArcKioskAppService::~ArcKioskAppService() = default;
 
 void ArcKioskAppService::PreconditionsChanged() {
   app_id_ = GetAppId();
   if (app_id_.empty())
     return;
-  app_info_ = prefs_->GetApp(app_id_);
+  app_info_ = ArcAppListPrefs::Get(profile_)->GetApp(app_id_);
   if (app_info_ && app_info_->ready &&
-      profile_->GetPrefs()->GetBoolean(prefs::kArcPolicyCompliant)) {
+      profile_->GetPrefs()->GetBoolean(prefs::kArcPolicyCompliant) &&
+      !maintenance_session_running_) {
     if (!app_launcher_)
-      app_launcher_.reset(new ArcKioskAppLauncher(profile_, prefs_, app_id_));
+      app_launcher_ = base::MakeUnique<ArcKioskAppLauncher>(
+          profile_, ArcAppListPrefs::Get(profile_), app_id_, this);
   } else if (task_id_ != -1) {
     arc::CloseTask(task_id_);
   }
@@ -111,7 +162,8 @@ std::string ArcKioskAppService::GetAppId() {
   if (!app)
     return std::string();
   std::unordered_set<std::string> app_ids =
-      prefs_->GetAppsForPackage(app->app_info().package_name());
+      ArcAppListPrefs::Get(profile_)->GetAppsForPackage(
+          app->app_info().package_name());
   if (app_ids.empty())
     return std::string();
   // TODO(poromov@): Choose appropriate app id to launch. See

@@ -55,20 +55,17 @@ enum WebIDBCursorDirection {
   WebIDBCursorDirectionNextNoDuplicate = 1,
   WebIDBCursorDirectionPrev = 2,
   WebIDBCursorDirectionPrevNoDuplicate = 3,
-  WebIDBCursorDirectionLast = WebIDBCursorDirectionPrevNoDuplicate
 };
 
 enum WebIDBTaskType {
   WebIDBTaskTypeNormal = 0,
   WebIDBTaskTypePreemptive,
-  WebIDBTaskTypeLast = WebIDBTaskTypePreemptive
 };
 
 enum WebIDBPutMode {
   WebIDBPutModeAddOrUpdate,
   WebIDBPutModeAddOnly,
   WebIDBPutModeCursorUpdate,
-  WebIDBPutModeLast = WebIDBPutModeCursorUpdate
 };
 
 enum WebIDBOperationType {
@@ -77,14 +74,12 @@ enum WebIDBOperationType {
   WebIDBDelete,
   WebIDBClear,
   WebIDBOperationTypeCount,
-  WebIDBOperationTypeLast = WebIDBClear
 };
 
 enum WebIDBTransactionMode {
   WebIDBTransactionModeReadOnly = 0,
   WebIDBTransactionModeReadWrite,
   WebIDBTransactionModeVersionChange,
-  WebIDBTransactionModeLast = WebIDBTransactionModeVersionChange
 };
 
 }  // namespace blink

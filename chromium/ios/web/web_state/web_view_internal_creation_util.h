@@ -8,6 +8,8 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <WebKit/WebKit.h>
 
+@protocol CRWContextMenuDelegate;
+
 // This file is a collection of functions that vend web views.
 namespace web {
 class BrowserState;
@@ -21,19 +23,26 @@ class BrowserState;
 // 3) The WKProcessPool of the configuration is the same as the WKProcessPool
 //    of the WKWebViewConfiguration associated with |browser_state|.
 //
-// Note: Callers are responsible for releasing the returned WKWebView.
-WKWebView* CreateWKWebView(CGRect frame,
-                           WKWebViewConfiguration* configuration,
-                           BrowserState* browser_state,
-                           BOOL use_desktop_user_agent) NS_RETURNS_RETAINED;
+WKWebView* BuildWKWebView(CGRect frame,
+                          WKWebViewConfiguration* configuration,
+                          BrowserState* browser_state,
+                          BOOL use_desktop_user_agent,
+                          id<CRWContextMenuDelegate> context_menu_delegate);
 
 // Creates and returns a new WKWebView for displaying regular web content.
 // The preconditions for the creation of a WKWebView are the same as the
 // previous method.
-// Note: Callers are responsible for releasing the returned WKWebView.
-WKWebView* CreateWKWebView(CGRect frame,
-                           WKWebViewConfiguration* configuration,
-                           BrowserState* browser_state) NS_RETURNS_RETAINED;
+WKWebView* BuildWKWebView(CGRect frame,
+                          WKWebViewConfiguration* configuration,
+                          BrowserState* browser_state,
+                          BOOL use_desktop_user_agent);
+
+// Creates and returns a new WKWebView for displaying regular web content.
+// The preconditions for the creation of a WKWebView are the same as the
+// previous method.
+WKWebView* BuildWKWebView(CGRect frame,
+                          WKWebViewConfiguration* configuration,
+                          BrowserState* browser_state);
 
 }  // namespace web
 

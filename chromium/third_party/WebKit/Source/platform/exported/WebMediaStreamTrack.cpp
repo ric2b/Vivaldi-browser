@@ -91,6 +91,11 @@ bool WebMediaStreamTrack::isMuted() const {
   return m_private->muted();
 }
 
+WebMediaStreamTrack::ContentHintType WebMediaStreamTrack::contentHint() const {
+  DCHECK(!m_private.isNull());
+  return m_private->contentHint();
+}
+
 WebString WebMediaStreamTrack::id() const {
   ASSERT(!m_private.isNull());
   return m_private->id();
@@ -112,7 +117,7 @@ void WebMediaStreamTrack::setTrackData(TrackData* extraData) {
   ASSERT(!m_private.isNull());
 
   m_private->setTrackData(
-      wrapUnique(new TrackDataContainer(wrapUnique(extraData))));
+      WTF::wrapUnique(new TrackDataContainer(WTF::wrapUnique(extraData))));
 }
 
 void WebMediaStreamTrack::setSourceProvider(WebAudioSourceProvider* provider) {

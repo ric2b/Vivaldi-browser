@@ -6,7 +6,7 @@
 #define ASH_COMMON_SESSION_SESSION_STATE_DELEGATE_H_
 
 #include "ash/ash_export.h"
-#include "ash/common/session/session_types.h"
+#include "ash/public/cpp/session_types.h"
 #include "components/session_manager/session_manager_types.h"
 
 class AccountId;
@@ -25,18 +25,14 @@ class SessionStateObserver;
 class WmWindow;
 
 // Delegate for checking and modifying the session state.
+// DEPRECATED in favor of SessionController/SessionControllerClient for mash.
+// TODO(xiyuan): Remove this when SessionController etc are ready.
 class ASH_EXPORT SessionStateDelegate {
  public:
   // Defines the cycle direction for |CycleActiveUser|.
   enum CycleUser {
     CYCLE_TO_NEXT_USER = 0,  // Cycle to the next user.
     CYCLE_TO_PREVIOUS_USER,  // Cycle to the previous user.
-  };
-
-  enum AddUserError {
-    ADD_USER_ERROR_NOT_ALLOWED_PRIMARY_USER = 0,
-    ADD_USER_ERROR_OUT_OF_USERS,
-    ADD_USER_ERROR_MAXIMUM_USERS_REACHED,
   };
 
   virtual ~SessionStateDelegate() {}
@@ -48,10 +44,8 @@ class ASH_EXPORT SessionStateDelegate {
   // no session in progress or no active user.
   virtual int NumberOfLoggedInUsers() const = 0;
 
-  // Returns true if there is possible to add more users to multiprofile
-  // session. Error is stored in |error| if it is not NULL and function
-  // returned false.
-  virtual bool CanAddUserToMultiProfile(AddUserError* error) const;
+  // Gets the policy of adding a user session to ash.
+  virtual AddUserSessionPolicy GetAddUserSessionPolicy() const;
 
   // Returns |true| if the session has been fully started for the active user.
   // When a user becomes active, the profile and browser UI are not immediately

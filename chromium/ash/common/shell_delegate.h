@@ -14,11 +14,6 @@
 
 class GURL;
 
-namespace app_list {
-class AppListPresenter;
-class AppListViewDelegate;
-}
-
 namespace gfx {
 class Image;
 }
@@ -35,15 +30,10 @@ namespace ui {
 class MenuModel;
 }
 
-namespace views {
-class Widget;
-}
-
 namespace ash {
 
 class AccessibilityDelegate;
 class GPUSupport;
-class MediaDelegate;
 class PaletteDelegate;
 class SessionStateDelegate;
 class ShelfDelegate;
@@ -99,11 +89,7 @@ class ASH_EXPORT ShellDelegate {
   // Opens the |url| in a new browser tab.
   virtual void OpenUrlFromArc(const GURL& url) = 0;
 
-  // Get the AppListPresenter. Ownership stays with Chrome.
-  virtual app_list::AppListPresenter* GetAppListPresenter() = 0;
-
-  // Creates a new ShelfDelegate. Shell takes ownership of the returned
-  // value.
+  // Creates a new ShelfDelegate. Shell takes ownership of the returned value.
   virtual ShelfDelegate* CreateShelfDelegate(ShelfModel* model) = 0;
 
   // Creates a system-tray delegate. Shell takes ownership of the delegate.
@@ -117,9 +103,6 @@ class ASH_EXPORT ShellDelegate {
 
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
-
-  // Creates a media delegate. Shell takes ownership of the delegate.
-  virtual MediaDelegate* CreateMediaDelegate() = 0;
 
   virtual std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() = 0;
 
@@ -138,9 +121,21 @@ class ASH_EXPORT ShellDelegate {
 
   virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
 
-  // Toggles the status of the touchpad / touchscreen on or off.
+  // If |use_local_state| is true, returns the touchscreen status from local
+  // state, otherwise from user prefs.
+  virtual bool IsTouchscreenEnabledInPrefs(bool use_local_state) const = 0;
+
+  // Sets the status of touchscreen to |enabled| in prefs. If |use_local_state|,
+  // pref is set in local state, otherwise in user prefs.
+  virtual void SetTouchscreenEnabledInPrefs(bool enabled,
+                                            bool use_local_state) = 0;
+
+  // Updates the enabled/disabled status of the touchscreen from prefs. Enabled
+  // if both local state and user prefs are enabled, otherwise disabled.
+  virtual void UpdateTouchscreenStatusFromPrefs() = 0;
+
+  // Toggles the status of touchpad between enabled and disabled.
   virtual void ToggleTouchpad() {}
-  virtual void ToggleTouchscreen() {}
 };
 
 }  // namespace ash

@@ -123,7 +123,7 @@ void PpapiDecryptor::SetServerCertificate(
 }
 
 void PpapiDecryptor::CreateSessionAndGenerateRequest(
-    SessionType session_type,
+    media::CdmSessionType session_type,
     media::EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     std::unique_ptr<media::NewSessionCdmPromise> promise) {
@@ -141,7 +141,7 @@ void PpapiDecryptor::CreateSessionAndGenerateRequest(
 }
 
 void PpapiDecryptor::LoadSession(
-    SessionType session_type,
+    media::CdmSessionType session_type,
     const std::string& session_id,
     std::unique_ptr<media::NewSessionCdmPromise> promise) {
   DVLOG(2) << __func__;
@@ -205,7 +205,8 @@ media::CdmContext* PpapiDecryptor::GetCdmContext() {
 }
 
 media::Decryptor* PpapiDecryptor::GetDecryptor() {
-  return this;
+  base::AutoLock auto_lock(lock_);
+  return had_fatal_plugin_error_ ? nullptr : this;
 }
 
 int PpapiDecryptor::GetCdmId() const {
@@ -416,9 +417,8 @@ void PpapiDecryptor::OnSessionKeysChange(const std::string& session_id,
                               std::move(keys_info));
 }
 
-void PpapiDecryptor::OnSessionExpirationUpdate(
-    const std::string& session_id,
-    const base::Time& new_expiry_time) {
+void PpapiDecryptor::OnSessionExpirationUpdate(const std::string& session_id,
+                                               base::Time new_expiry_time) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   session_expiration_update_cb_.Run(session_id, new_expiry_time);
 }
@@ -437,8 +437,12 @@ void PpapiDecryptor::AttemptToResumePlayback() {
 }
 
 void PpapiDecryptor::OnFatalPluginError() {
+  DVLOG(1) << __func__;
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   pepper_cdm_wrapper_.reset();
+
+  base::AutoLock auto_lock(lock_);
+  had_fatal_plugin_error_ = true;
 }
 
 ContentDecryptorDelegate* PpapiDecryptor::CdmDelegate() {

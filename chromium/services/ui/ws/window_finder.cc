@@ -23,10 +23,7 @@ bool IsValidWindowForEvents(ServerWindow* window) {
   // is valid as we assume the window manager will likely get the event in this
   // case.
   return compositor_frame_sink_manager &&
-         (compositor_frame_sink_manager->HasCompositorFrameSinkOfType(
-              mojom::CompositorFrameSinkType::DEFAULT) ||
-          compositor_frame_sink_manager->HasCompositorFrameSinkOfType(
-              mojom::CompositorFrameSinkType::UNDERLAY));
+         compositor_frame_sink_manager->HasCompositorFrameSink();
 }
 
 ServerWindow* FindDeepestVisibleWindowForEvents(ServerWindow* window,
@@ -35,31 +32,31 @@ ServerWindow* FindDeepestVisibleWindowForEvents(ServerWindow* window,
     return nullptr;
 
   const ServerWindow::Windows& children = window->children();
+  const gfx::Point original_location = *location;
   for (ServerWindow* child : base::Reversed(children)) {
     if (!child->visible() || !child->can_accept_events())
       continue;
 
     // TODO(sky): support transform.
-    gfx::Point child_location(location->x() - child->bounds().x(),
-                              location->y() - child->bounds().y());
+    gfx::Point location_in_child(original_location.x() - child->bounds().x(),
+                                 original_location.y() - child->bounds().y());
     gfx::Rect child_bounds(child->bounds().size());
     child_bounds.Inset(-child->extended_hit_test_region().left(),
                        -child->extended_hit_test_region().top(),
                        -child->extended_hit_test_region().right(),
                        -child->extended_hit_test_region().bottom());
-    if (!child_bounds.Contains(child_location))
+    if (!child_bounds.Contains(location_in_child) ||
+        (child->hit_test_mask() &&
+         !child->hit_test_mask()->Contains(location_in_child))) {
       continue;
+    }
 
-    if (child->hit_test_mask() &&
-        !child->hit_test_mask()->Contains(child_location))
-      continue;
-
-    *location = child_location;
+    *location = location_in_child;
     ServerWindow* result = FindDeepestVisibleWindowForEvents(child, location);
-    if (IsValidWindowForEvents(result))
+    if (result)
       return result;
   }
-  return window;
+  return IsValidWindowForEvents(window) ? window : nullptr;
 }
 
 gfx::Transform GetTransformToWindow(ServerWindow* window) {

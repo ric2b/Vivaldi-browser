@@ -38,7 +38,8 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/url_formatter/elide_url.h"
@@ -50,6 +51,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/origin_util.h"
+#include "ppapi/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -62,8 +64,6 @@ using content_settings::SETTING_SOURCE_USER;
 using content_settings::SETTING_SOURCE_NONE;
 
 namespace {
-
-const int kAllowButtonIndex = 0;
 
 // These states must match the order of appearance of the radio buttons
 // in the XIB file for the Mac port.
@@ -104,6 +104,8 @@ const content::MediaStreamDevice& GetMediaDeviceById(
 }
 
 }  // namespace
+
+const int ContentSettingBubbleModel::kAllowButtonIndex = 0;
 
 // ContentSettingSimpleBubbleModel ---------------------------------------------
 
@@ -187,6 +189,11 @@ void ContentSettingSimpleBubbleModel::OnManageLinkClicked() {
   if (content_type() == CONTENT_SETTINGS_TYPE_PLUGINS) {
     content_settings::RecordPluginsAction(
         content_settings::PLUGINS_ACTION_CLICKED_MANAGE_PLUGIN_BLOCKING);
+  }
+
+  if (content_type() == CONTENT_SETTINGS_TYPE_POPUPS) {
+    content_settings::RecordPopupsAction(
+        content_settings::POPUPS_ACTION_CLICKED_MANAGE_POPUPS_BLOCKING);
   }
 }
 
@@ -338,8 +345,8 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
   if (content_type() == CONTENT_SETTINGS_TYPE_COOKIES) {
     content_settings::CookieSettings* cookie_settings =
         CookieSettingsFactory::GetForProfile(profile()).get();
-    setting = cookie_settings->GetCookieSetting(
-        url, url, true, &setting_source);
+    cookie_settings->GetCookieSetting(url, url, &setting_source, nullptr,
+                                      &setting);
   } else {
     SettingInfo info;
     HostContentSettingsMap* map =
@@ -358,7 +365,11 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
     block_setting_ = setting;
   }
 
-  set_radio_group_enabled(setting_source == SETTING_SOURCE_USER);
+  const auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
+  // Prevent creation of content settings for illegal urls like about:blank
+  bool is_valid = map->CanSetNarrowestContentSetting(url, url, content_type());
+
+  set_radio_group_enabled(is_valid && setting_source == SETTING_SOURCE_USER);
 
   selected_item_ = radio_group.default_item;
   set_radio_group(radio_group);
@@ -523,7 +534,7 @@ void ContentSettingPluginBubbleModel::RunPluginsOnPage() {
   // settings bubble is visible.
   if (!web_contents())
     return;
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // TODO(bauerb): We should send the identifiers of blocked plugins here.
   ChromePluginServiceFilter::GetInstance()->AuthorizeAllPlugins(
       web_contents(), true, std::string());
@@ -540,7 +551,7 @@ class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup {
   ContentSettingPopupBubbleModel(Delegate* delegate,
                                  WebContents* web_contents,
                                  Profile* profile);
-  ~ContentSettingPopupBubbleModel() override {}
+  ~ContentSettingPopupBubbleModel() override;
 
  private:
   void OnListItemClicked(int index) override;
@@ -576,12 +587,26 @@ ContentSettingPopupBubbleModel::ContentSettingPopupBubbleModel(
                         title, true, blocked_popup.first);
     add_list_item(popup_item);
   }
+  content_settings::RecordPopupsAction(
+      content_settings::POPUPS_ACTION_DISPLAYED_BUBBLE);
 }
 
 void ContentSettingPopupBubbleModel::OnListItemClicked(int index) {
   if (web_contents()) {
     auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents());
     helper->ShowBlockedPopup(item_id_from_item_index(index));
+
+    content_settings::RecordPopupsAction(
+        content_settings::POPUPS_ACTION_CLICKED_LIST_ITEM_CLICKED);
+  }
+}
+
+ContentSettingPopupBubbleModel::~ContentSettingPopupBubbleModel(){
+  // User selected to always allow pop-ups from.
+  if (settings_changed() && selected_item() == kAllowButtonIndex) {
+    // Increases the counter.
+    content_settings::RecordPopupsAction(
+        content_settings::POPUPS_ACTION_SELECTED_ALWAYS_ALLOW_POPUPS_FROM);
   }
 }
 

@@ -5,11 +5,13 @@
 #ifndef DEVICE_BLUETOOTH_ADAPTER_H_
 #define DEVICE_BLUETOOTH_ADAPTER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/public/interfaces/adapter.mojom.h"
 #include "device/bluetooth/public/interfaces/device.mojom.h"
 
@@ -26,21 +28,44 @@ class Adapter : public mojom::Adapter,
   ~Adapter() override;
 
   // mojom::Adapter overrides:
-  void GetInfo(const GetInfoCallback& callback) override;
-  void GetDevice(const std::string& address,
-                 const GetDeviceCallback& callback) override;
+  void ConnectToDevice(const std::string& address,
+                       const ConnectToDeviceCallback& callback) override;
   void GetDevices(const GetDevicesCallback& callback) override;
+  void GetInfo(const GetInfoCallback& callback) override;
   void SetClient(mojom::AdapterClientPtr client) override;
+  void StartDiscoverySession(
+      const StartDiscoverySessionCallback& callback) override;
 
   // device::BluetoothAdapter::Observer overrides:
+  void AdapterPresentChanged(device::BluetoothAdapter* adapter,
+                             bool present) override;
+  void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
+                             bool powered) override;
+  void AdapterDiscoverableChanged(device::BluetoothAdapter* adapter,
+                                  bool discoverable) override;
+  void AdapterDiscoveringChanged(device::BluetoothAdapter* adapter,
+                                 bool discovering) override;
   void DeviceAdded(device::BluetoothAdapter* adapter,
                    device::BluetoothDevice* device) override;
-  void DeviceRemoved(device::BluetoothAdapter* adapter,
-                     device::BluetoothDevice* device) override;
   void DeviceChanged(device::BluetoothAdapter* adapter,
+                     device::BluetoothDevice* device) override;
+  void DeviceRemoved(device::BluetoothAdapter* adapter,
                      device::BluetoothDevice* device) override;
 
  private:
+  void OnGattConnected(
+      const ConnectToDeviceCallback& callback,
+      std::unique_ptr<device::BluetoothGattConnection> connection);
+
+  void OnConnectError(const ConnectToDeviceCallback& callback,
+                      device::BluetoothDevice::ConnectErrorCode error_code);
+
+  void OnStartDiscoverySession(
+      const StartDiscoverySessionCallback& callback,
+      std::unique_ptr<device::BluetoothDiscoverySession> session);
+
+  void OnDiscoverySessionError(const StartDiscoverySessionCallback& callback);
+
   // The current Bluetooth adapter.
   scoped_refptr<device::BluetoothAdapter> adapter_;
 

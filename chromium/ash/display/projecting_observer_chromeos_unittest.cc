@@ -4,7 +4,9 @@
 
 #include "ash/display/projecting_observer_chromeos.h"
 
-#include "base/memory/scoped_vector.h"
+#include <memory>
+#include <vector>
+
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/fake_display_snapshot.h"
@@ -12,19 +14,19 @@
 namespace ash {
 namespace {
 
-std::unique_ptr<ui::DisplaySnapshot> CreateInternalSnapshot() {
+std::unique_ptr<display::DisplaySnapshot> CreateInternalSnapshot() {
   return display::FakeDisplaySnapshot::Builder()
       .SetId(123)
       .SetNativeMode(gfx::Size(1024, 768))
-      .SetType(ui::DISPLAY_CONNECTION_TYPE_INTERNAL)
+      .SetType(display::DISPLAY_CONNECTION_TYPE_INTERNAL)
       .Build();
 }
 
-std::unique_ptr<ui::DisplaySnapshot> CreateVGASnapshot() {
+std::unique_ptr<display::DisplaySnapshot> CreateVGASnapshot() {
   return display::FakeDisplaySnapshot::Builder()
       .SetId(456)
       .SetNativeMode(gfx::Size(1024, 768))
-      .SetType(ui::DISPLAY_CONNECTION_TYPE_VGA)
+      .SetType(display::DISPLAY_CONNECTION_TYPE_VGA)
       .Build();
 }
 
@@ -42,39 +44,47 @@ class ProjectingObserverTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(ProjectingObserverTest);
 };
 
+display::DisplayConfigurator::DisplayStateList GetPointers(
+    const std::vector<std::unique_ptr<display::DisplaySnapshot>>& displays) {
+  display::DisplayConfigurator::DisplayStateList result;
+  for (const auto& display : displays)
+    result.push_back(display.get());
+  return result;
+}
+
 }  // namespace
 
 TEST_F(ProjectingObserverTest, CheckNoDisplay) {
-  ScopedVector<ui::DisplaySnapshot> displays;
-  observer_.OnDisplayModeChanged(displays.get());
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   EXPECT_EQ(1, fake_power_client_.num_set_is_projecting_calls());
   EXPECT_FALSE(fake_power_client_.is_projecting());
 }
 
 TEST_F(ProjectingObserverTest, CheckWithoutInternalDisplay) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateVGASnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   EXPECT_EQ(1, fake_power_client_.num_set_is_projecting_calls());
   EXPECT_FALSE(fake_power_client_.is_projecting());
 }
 
 TEST_F(ProjectingObserverTest, CheckWithInternalDisplay) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateInternalSnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   EXPECT_EQ(1, fake_power_client_.num_set_is_projecting_calls());
   EXPECT_FALSE(fake_power_client_.is_projecting());
 }
 
 TEST_F(ProjectingObserverTest, CheckWithTwoVGADisplays) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateVGASnapshot());
   displays.push_back(CreateVGASnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   EXPECT_EQ(1, fake_power_client_.num_set_is_projecting_calls());
   // We need at least 1 internal display to set projecting to on.
@@ -82,19 +92,19 @@ TEST_F(ProjectingObserverTest, CheckWithTwoVGADisplays) {
 }
 
 TEST_F(ProjectingObserverTest, CheckWithInternalAndVGADisplays) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateInternalSnapshot());
   displays.push_back(CreateVGASnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   EXPECT_EQ(1, fake_power_client_.num_set_is_projecting_calls());
   EXPECT_TRUE(fake_power_client_.is_projecting());
 }
 
 TEST_F(ProjectingObserverTest, CheckWithVGADisplayAndOneCastingSession) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateVGASnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   observer_.OnCastingSessionStartedOrStopped(true);
 
@@ -104,9 +114,9 @@ TEST_F(ProjectingObserverTest, CheckWithVGADisplayAndOneCastingSession) {
 }
 
 TEST_F(ProjectingObserverTest, CheckWithInternalDisplayAndOneCastingSession) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateInternalSnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   observer_.OnCastingSessionStartedOrStopped(true);
 
@@ -115,9 +125,9 @@ TEST_F(ProjectingObserverTest, CheckWithInternalDisplayAndOneCastingSession) {
 }
 
 TEST_F(ProjectingObserverTest, CheckProjectingAfterClosingACastingSession) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateInternalSnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   observer_.OnCastingSessionStartedOrStopped(true);
   observer_.OnCastingSessionStartedOrStopped(true);
@@ -133,9 +143,9 @@ TEST_F(ProjectingObserverTest, CheckProjectingAfterClosingACastingSession) {
 
 TEST_F(ProjectingObserverTest,
        CheckStopProjectingAfterClosingAllCastingSessions) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateInternalSnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   observer_.OnCastingSessionStartedOrStopped(true);
   observer_.OnCastingSessionStartedOrStopped(false);
@@ -146,14 +156,14 @@ TEST_F(ProjectingObserverTest,
 
 TEST_F(ProjectingObserverTest,
        CheckStopProjectingAfterDisconnectingSecondOutput) {
-  ScopedVector<ui::DisplaySnapshot> displays;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> displays;
   displays.push_back(CreateInternalSnapshot());
   displays.push_back(CreateVGASnapshot());
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   // Remove VGA output.
   displays.erase(displays.begin() + 1);
-  observer_.OnDisplayModeChanged(displays.get());
+  observer_.OnDisplayModeChanged(GetPointers(displays));
 
   EXPECT_EQ(2, fake_power_client_.num_set_is_projecting_calls());
   EXPECT_FALSE(fake_power_client_.is_projecting());

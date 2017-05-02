@@ -20,7 +20,9 @@
 
 namespace chromeos {
 
-// Brokers access to the installation-time attributes on Chrome OS.
+// Brokers access to the installation-time attributes on Chrome OS.  When
+// initialized with kInstallAttributesFileName, the attributes are fully trusted
+// (signature has been verified by lockbox-cache).
 class InstallAttributes {
  public:
   // InstallAttributes status codes.  Do not change the numeric ids or the
@@ -50,10 +52,11 @@ class InstallAttributes {
   explicit InstallAttributes(CryptohomeClient* cryptohome_client);
   ~InstallAttributes();
 
-  // Tries to read install attributes from the cache file which is created early
-  // during the boot process.  The cache file is used to work around slow
-  // cryptohome startup, which takes a while to register its D-Bus interface.
-  // (See http://crosbug.com/37367 for background on this.)
+  // Tries to read install attributes from |cache_file| to work around slow
+  // cryptohome startup which takes a while to register its D-Bus interface.
+  // (See http://crosbug.com/37367 for background on this.)  When called with
+  // kInstallAttributesFileName (created early during the boot process by
+  // lockbox-cache) the install attributes are fully trusted.
   void Init(const base::FilePath& cache_file);
 
   // Makes sure the local caches for enterprise-related install attributes are
@@ -74,8 +77,14 @@ class InstallAttributes {
                   const std::string& device_id,
                   const LockResultCallback& callback);
 
-  // Checks whether this is an enterprise device.
-  bool IsEnterpriseDevice() const;
+  // Checks whether this devices is under any kind of enterprise management.
+  bool IsEnterpriseManaged() const;
+
+  // Checks whether this is a cloud (DM server) managed enterprise device.
+  bool IsCloudManaged() const;
+
+  // Checks whether this is an Active Directory managed enterprise device.
+  bool IsActiveDirectoryManaged() const;
 
   // Checks whether this is a consumer kiosk enabled device.
   bool IsConsumerKioskDeviceWithAutoLaunch();

@@ -37,6 +37,9 @@
 namespace base {
 class FilePath;
 class SequencedTaskRunner;
+namespace trace_event {
+class ProcessMemoryDump;
+}
 }
 
 namespace crypto {
@@ -107,13 +110,18 @@ class SSLClientSocketImpl : public SSLClientSocket,
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
-  bool WasNpnNegotiated() const override;
+  bool WasAlpnNegotiated() const override;
   NextProto GetNegotiatedProtocol() const override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
   int64_t GetTotalReceivedBytes() const override;
+  void DumpMemoryStats(SocketMemoryStats* stats) const override;
+
+  // Dumps memory allocation stats. |pmd| is the browser process memory dump.
+  static void DumpSSLClientSessionMemoryStats(
+      base::trace_event::ProcessMemoryDump* pmd);
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -267,19 +275,11 @@ class SSLClientSocketImpl : public SSLClientSocket,
   std::unique_ptr<PeerCertificateChain> server_cert_chain_;
   scoped_refptr<X509Certificate> server_cert_;
   CertVerifyResult server_cert_verify_result_;
-  std::string ocsp_response_;
   bool completed_connect_;
 
   // Set when Read() or Write() successfully reads or writes data to or from the
   // network.
   bool was_ever_used_;
-
-  // List of DER-encoded X.509 DistinguishedName of certificate authorities
-  // allowed by the server.
-  std::vector<std::string> cert_authorities_;
-  // List of SSLClientCertType values for client certificates allowed by the
-  // server.
-  std::vector<SSLClientCertType> cert_key_types_;
 
   CertVerifier* const cert_verifier_;
   std::unique_ptr<CertVerifier::Request> cert_verifier_request_;
@@ -306,6 +306,7 @@ class SSLClientSocketImpl : public SSLClientSocket,
   // session cache. i.e. sessions created with one value will not attempt to
   // resume on the socket with a different value.
   const std::string ssl_session_cache_shard_;
+  int ssl_session_cache_lookup_count_;
 
   enum State {
     STATE_NONE,

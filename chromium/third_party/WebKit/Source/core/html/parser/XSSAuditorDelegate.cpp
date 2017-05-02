@@ -35,6 +35,7 @@
 #include "core/loader/PingLoader.h"
 #include "platform/json/JSONValues.h"
 #include "platform/network/EncodedFormData.h"
+#include "platform/network/ResourceError.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -114,7 +115,7 @@ void XSSAuditorDelegate::didBlockScript(const XSSInfo& xssInfo) {
   if (xssInfo.m_didBlockEntirePage)
     frameLoader.stopAllLoaders();
 
-  if (!m_didSendNotifications) {
+  if (!m_didSendNotifications && frameLoader.client()) {
     m_didSendNotifications = true;
 
     frameLoader.client()->didDetectXSS(m_document->url(),
@@ -126,8 +127,10 @@ void XSSAuditorDelegate::didBlockScript(const XSSInfo& xssInfo) {
                                       PingLoader::XSSAuditorViolationReport);
   }
 
-  if (xssInfo.m_didBlockEntirePage)
-    m_document->frame()->navigationScheduler().schedulePageBlock(m_document);
+  if (xssInfo.m_didBlockEntirePage) {
+    m_document->frame()->navigationScheduler().schedulePageBlock(
+        m_document, ResourceError::BLOCKED_BY_XSS_AUDITOR);
+  }
 }
 
 }  // namespace blink

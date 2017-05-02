@@ -32,7 +32,8 @@ class SitePerProcessPaymentsBrowserTest : public InProcessBrowserTest {
     // HTTPS server only serves a valid cert for localhost, so this is needed
     // to load pages from other hosts without an error.
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
-    command_line->AppendSwitch("enable-experimental-web-platform-features");
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
     // Append --site-per-process flag.
     content::IsolateAllSitesForTesting(command_line);
   }
@@ -43,7 +44,7 @@ class SitePerProcessPaymentsBrowserTest : public InProcessBrowserTest {
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(https_server_->InitializeAndListen());
     content::SetupCrossSiteRedirector(https_server_.get());
-    https_server_->ServeFilesFromSourceDirectory("chrome/test/data");
+    https_server_->ServeFilesFromSourceDirectory("chrome/test/data/payments");
     https_server_->StartAcceptingConnections();
   }
 

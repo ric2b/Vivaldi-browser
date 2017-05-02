@@ -32,8 +32,8 @@
 
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
-#include "core/css/CSSShadowValue.h"
 #include "core/css/CSSURIValue.h"
+#include "core/css/resolver/StyleBuilderConverter.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/frame/UseCounter.h"
 
@@ -135,7 +135,7 @@ FilterOperations FilterOperationResolver::createFilterOperations(
       const CSSURIValue& urlValue = toCSSURIValue(*currValue);
       SVGElementProxy& elementProxy =
           state.elementStyleResources().cachedOrPendingFromValue(urlValue);
-      operations.operations().append(
+      operations.operations().push_back(
           ReferenceFilterOperation::create(urlValue.value(), elementProxy));
       continue;
     }
@@ -161,7 +161,7 @@ FilterOperations FilterOperationResolver::createFilterOperations(
             amount /= 100;
         }
 
-        operations.operations().append(
+        operations.operations().push_back(
             BasicColorMatrixFilterOperation::create(amount, operationType));
         break;
       }
@@ -170,7 +170,7 @@ FilterOperations FilterOperationResolver::createFilterOperations(
         if (filterValue->length() == 1)
           angle = firstValue->computeDegrees();
 
-        operations.operations().append(
+        operations.operations().push_back(
             BasicColorMatrixFilterOperation::create(angle, operationType));
         break;
       }
@@ -186,7 +186,7 @@ FilterOperations FilterOperationResolver::createFilterOperations(
             amount /= 100;
         }
 
-        operations.operations().append(
+        operations.operations().push_back(
             BasicComponentTransferFilterOperation::create(amount,
                                                           operationType));
         break;
@@ -195,23 +195,18 @@ FilterOperations FilterOperationResolver::createFilterOperations(
         Length stdDeviation = Length(0, Fixed);
         if (filterValue->length() >= 1)
           stdDeviation = firstValue->convertToLength(conversionData);
-        operations.operations().append(
+        operations.operations().push_back(
             BlurFilterOperation::create(stdDeviation));
         break;
       }
       case CSSValueDropShadow: {
-        const CSSShadowValue& item = toCSSShadowValue(filterValue->item(0));
-        IntPoint location(item.x->computeLength<int>(conversionData),
-                          item.y->computeLength<int>(conversionData));
-        int blur =
-            item.blur ? item.blur->computeLength<int>(conversionData) : 0;
-        Color shadowColor = Color::black;
-        if (item.color)
-          shadowColor = state.document().textLinkColors().colorFromCSSValue(
-              *item.color, state.style()->color());
-
-        operations.operations().append(
-            DropShadowFilterOperation::create(location, blur, shadowColor));
+        ShadowData shadow =
+            StyleBuilderConverter::convertShadow(state, filterValue->item(0));
+        // TODO(fs): Resolve 'currentcolor' when constructing the filter chain.
+        if (shadow.color().isCurrentColor())
+          shadow.overrideColor(state.style()->color());
+        operations.operations().push_back(
+            DropShadowFilterOperation::create(shadow));
         break;
       }
       default:

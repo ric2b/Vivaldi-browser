@@ -140,7 +140,7 @@ class EnterpriseEnrollmentTest : public LoginManagerTest {
   void ShowEnrollmentScreen() {
     LoginDisplayHost* host = LoginDisplayHost::default_host();
     ASSERT_TRUE(host != nullptr);
-    host->StartWizard(WizardController::kEnrollmentScreenName);
+    host->StartWizard(OobeScreen::SCREEN_OOBE_ENROLLMENT);
     OobeScreenWaiter(OobeScreen::SCREEN_OOBE_ENROLLMENT).Wait();
     ASSERT_TRUE(enrollment_screen() != nullptr);
     ASSERT_TRUE(WizardController::default_controller() != nullptr);
@@ -181,7 +181,7 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
   ShowEnrollmentScreen();
 
   enrollment_screen()->OnEnrollmentError(policy::EnrollmentStatus::ForStatus(
-      policy::EnrollmentStatus::STATUS_REGISTRATION_FAILED));
+      policy::EnrollmentStatus::REGISTRATION_FAILED));
   ExecutePendingJavaScript();
 
   // Verify that the error page is displayed.

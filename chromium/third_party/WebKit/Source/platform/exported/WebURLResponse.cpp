@@ -60,7 +60,7 @@ class ExtraDataContainer : public ResourceResponse::ExtraData {
 
  private:
   explicit ExtraDataContainer(WebURLResponse::ExtraData* extraData)
-      : m_extraData(wrapUnique(extraData)) {}
+      : m_extraData(WTF::wrapUnique(extraData)) {}
 
   std::unique_ptr<WebURLResponse::ExtraData> m_extraData;
 };
@@ -139,7 +139,7 @@ WebURLLoadTiming WebURLResponse::loadTiming() {
 void WebURLResponse::setLoadTiming(const WebURLLoadTiming& timing) {
   RefPtr<ResourceLoadTiming> loadTiming =
       PassRefPtr<ResourceLoadTiming>(timing);
-  m_resourceResponse->setResourceLoadTiming(loadTiming.release());
+  m_resourceResponse->setResourceLoadTiming(std::move(loadTiming));
 }
 
 WebHTTPLoadInfo WebURLResponse::httpLoadInfo() {
@@ -279,17 +279,18 @@ void WebURLResponse::setSecurityStyle(WebSecurityStyle securityStyle) {
 
 void WebURLResponse::setSecurityDetails(
     const WebSecurityDetails& webSecurityDetails) {
-  blink::ResourceResponse::SignedCertificateTimestampList sctList;
-  for (const auto& iter : webSecurityDetails.sctList)
-    sctList.append(
-        static_cast<blink::ResourceResponse::SignedCertificateTimestamp>(iter));
+  ResourceResponse::SignedCertificateTimestampList sctList;
+  for (const auto& iter : webSecurityDetails.sctList) {
+    sctList.push_back(
+        static_cast<ResourceResponse::SignedCertificateTimestamp>(iter));
+  }
   Vector<String> sanList;
   sanList.append(webSecurityDetails.sanList.data(),
                  webSecurityDetails.sanList.size());
   Vector<AtomicString> certificate;
   for (const auto& iter : webSecurityDetails.certificate) {
     AtomicString cert = iter;
-    certificate.append(cert);
+    certificate.push_back(cert);
   }
   m_resourceResponse->setSecurityDetails(
       webSecurityDetails.protocol, webSecurityDetails.keyExchange,
@@ -373,12 +374,16 @@ void WebURLResponse::setServiceWorkerResponseType(
   m_resourceResponse->setServiceWorkerResponseType(value);
 }
 
-WebURL WebURLResponse::originalURLViaServiceWorker() const {
-  return m_resourceResponse->originalURLViaServiceWorker();
+void WebURLResponse::setURLListViaServiceWorker(
+    const WebVector<WebURL>& urlListViaServiceWorker) {
+  Vector<KURL> urlList(urlListViaServiceWorker.size());
+  std::transform(urlListViaServiceWorker.begin(), urlListViaServiceWorker.end(),
+                 urlList.begin(), [](const WebURL& url) { return url; });
+  m_resourceResponse->setURLListViaServiceWorker(urlList);
 }
 
-void WebURLResponse::setOriginalURLViaServiceWorker(const WebURL& url) {
-  m_resourceResponse->setOriginalURLViaServiceWorker(url);
+WebURL WebURLResponse::originalURLViaServiceWorker() const {
+  return m_resourceResponse->originalURLViaServiceWorker();
 }
 
 void WebURLResponse::setMultipartBoundary(const char* bytes, size_t size) {
@@ -399,6 +404,14 @@ void WebURLResponse::setCorsExposedHeaderNames(
   Vector<String> exposedHeaderNames;
   exposedHeaderNames.append(headerNames.data(), headerNames.size());
   m_resourceResponse->setCorsExposedHeaderNames(exposedHeaderNames);
+}
+
+bool WebURLResponse::didServiceWorkerNavigationPreload() const {
+  return m_resourceResponse->didServiceWorkerNavigationPreload();
+}
+
+void WebURLResponse::setDidServiceWorkerNavigationPreload(bool value) {
+  m_resourceResponse->setDidServiceWorkerNavigationPreload(value);
 }
 
 WebString WebURLResponse::downloadFilePath() const {
@@ -429,8 +442,8 @@ long long WebURLResponse::encodedDataLengthForTesting() const {
   return m_resourceResponse->encodedDataLength();
 }
 
-void WebURLResponse::addToEncodedDataLength(long long length) {
-  m_resourceResponse->addToEncodedDataLength(length);
+void WebURLResponse::setEncodedDataLength(long long length) {
+  m_resourceResponse->setEncodedDataLength(length);
 }
 
 long long WebURLResponse::encodedBodyLengthForTesting() const {

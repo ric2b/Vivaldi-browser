@@ -10,27 +10,41 @@ source_set("mash") {
     "mash_runner.h",
   ]
   deps = [
-    "//ash/resources",
     "//base:i18n",
     "//components/tracing:startup_tracing",
     "//content/public/common",
     "//mash/package",
+    "//mash/session/public/interfaces:constants",
     "//services/catalog/public/interfaces",
     "//services/service_manager",
     "//services/service_manager/background:lib",
     "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp/standalone_service",
     "//services/service_manager/public/interfaces",
     "//services/service_manager/runner:init",
     "//services/service_manager/runner/common",
-    "//services/service_manager/runner/host:child_process_base",
     "//services/service_manager/runner/host:lib",
+    "//services/service_manager/standalone",
     "//url",
   ]
   data_deps = [
-    ":browser_manifest",
     ":mash_manifest",
     "//chrome/app:service_manifests",
   ]
+
+  if (is_chromeos) {
+    sources += [
+      "mash_crash_reporter_client.cc",
+      "mash_crash_reporter_client.h",
+    ]
+    deps += [
+      "//ash/resources",
+      "//components/crash/content/app",
+      "//components/crash/core/common",
+      "//components/upload_list",
+      "//components/version_info:generate_version_info",
+    ]
+  }
 
   if (is_linux && !is_android) {
     deps += [ "//components/font_service:lib" ]
@@ -42,7 +56,6 @@ service_manifest("mash_manifest") {
   source = "chrome_mash_manifest.json"
   deps = [
     "//ash/autoclick/mus:manifest",
-    "//ash/mus:manifest",
     "//ash/touch_hud/mus:manifest",
     "//mash/catalog_viewer:manifest",
     "//mash/quick_launch:manifest",
@@ -53,7 +66,6 @@ service_manifest("mash_manifest") {
   ]
   packaged_services = [
     "accessibility_autoclick",
-    "ash",
     "catalog_viewer",
     "mash_session",
     "quick_launch",
@@ -63,18 +75,13 @@ service_manifest("mash_manifest") {
     "ui",
   ]
 
+  if (is_chromeos) {
+    deps += [ "//ash/mus:manifest" ]
+    packaged_services += [ "ash" ]
+  }
+
   if (is_linux && !is_android) {
     deps += [ "//components/font_service:manifest" ]
     packaged_services += [ "font_service" ]
   }
-}
-
-service_manifest("browser_manifest") {
-  name = "content_browser"
-  source = "${root_out_dir}/Packages/chrome_content_browser/manifest.json"
-  output_name = "chrome_mash_content_browser"
-  deps = [
-    "//chrome/app:chrome_content_browser_manifest",
-  ]
-  overlays = [ "chrome_mash_content_browser_manifest_overlay.json" ]
 }

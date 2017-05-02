@@ -36,6 +36,7 @@ class CSSValue;
 class Element;
 class ExceptionState;
 class MutableStylePropertySet;
+class PropertyRegistry;
 class StyleSheetContents;
 
 class AbstractPropertySetCSSStyleDeclaration : public CSSStyleDeclaration {
@@ -79,6 +80,7 @@ class AbstractPropertySetCSSStyleDeclaration : public CSSStyleDeclaration {
   virtual void willMutate() {}
   virtual void didMutate(MutationType) {}
   virtual MutableStylePropertySet& propertySet() const = 0;
+  virtual PropertyRegistry* propertyRegistry() const = 0;
   virtual bool isKeyframeStyle() const { return false; }
 };
 
@@ -95,6 +97,8 @@ class PropertySetCSSStyleDeclaration
     ASSERT(m_propertySet);
     return *m_propertySet;
   }
+
+  PropertyRegistry* propertyRegistry() const override { return nullptr; }
 
   Member<MutableStylePropertySet> m_propertySet;  // Cannot be null
 };
@@ -121,6 +125,7 @@ class StyleRuleCSSStyleDeclaration : public PropertySetCSSStyleDeclaration {
 
   void willMutate() override;
   void didMutate(MutationType) override;
+  PropertyRegistry* propertyRegistry() const final;
 
   Member<CSSRule> m_parentRule;
 };
@@ -139,6 +144,7 @@ class InlineCSSStyleDeclaration final
   Element* parentElement() const override { return m_parentElement; }
 
   void didMutate(MutationType) override;
+  PropertyRegistry* propertyRegistry() const final;
 
   Member<Element> m_parentElement;
 };

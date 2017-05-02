@@ -31,6 +31,7 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/sdch_manager.h"
 #include "net/base/sdch_problem_codes.h"
+#include "net/base/trace_constants.h"
 #include "net/base/url_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cookies/cookie_store.h"
@@ -66,6 +67,10 @@
 #include "net/url_request/url_request_throttler_manager.h"
 #include "net/websockets/websocket_handshake_stream_base.h"
 #include "url/origin.h"
+
+#if defined(OS_ANDROID)
+#include "net/android/network_library.h"
+#endif
 
 static const char kAvailDictionaryHeader[] = "Avail-Dictionary";
 
@@ -168,27 +173,6 @@ void LogChannelIDAndCookieStores(const GURL& url,
                             EPHEMERALITY_MAX);
 }
 
-net::URLRequestRedirectJob* MaybeInternallyRedirect(
-    net::URLRequest* request,
-    net::NetworkDelegate* network_delegate) {
-  const GURL& url = request->url();
-  if (url.SchemeIsCryptographic())
-    return nullptr;
-
-  net::TransportSecurityState* hsts =
-      request->context()->transport_security_state();
-  if (!hsts || !hsts->ShouldUpgradeToSSL(url.host()))
-    return nullptr;
-
-  GURL::Replacements replacements;
-  replacements.SetSchemeStr(url.SchemeIs(url::kHttpScheme) ? url::kHttpsScheme
-                                                           : url::kWssScheme);
-  return new net::URLRequestRedirectJob(
-      request, network_delegate, url.ReplaceComponents(replacements),
-      // Use status code 307 to preserve the method, so POST requests work.
-      net::URLRequestRedirectJob::REDIRECT_307_TEMPORARY_REDIRECT, "HSTS");
-}
-
 }  // namespace
 
 namespace net {
@@ -207,10 +191,34 @@ URLRequestJob* URLRequestHttpJob::Factory(URLRequest* request,
         request, network_delegate, ERR_INVALID_ARGUMENT);
   }
 
-  URLRequestRedirectJob* redirect =
-      MaybeInternallyRedirect(request, network_delegate);
-  if (redirect)
-    return redirect;
+  const GURL& url = request->url();
+
+  // Check for reasons not to return a URLRequestHttpJob. These don't apply to
+  // https and wss requests.
+  if (!url.SchemeIsCryptographic()) {
+    // Check for HSTS upgrade.
+    TransportSecurityState* hsts =
+        request->context()->transport_security_state();
+    if (hsts && hsts->ShouldUpgradeToSSL(url.host())) {
+      GURL::Replacements replacements;
+      replacements.SetSchemeStr(
+          url.SchemeIs(url::kHttpScheme) ? url::kHttpsScheme : url::kWssScheme);
+      return new URLRequestRedirectJob(
+          request, network_delegate, url.ReplaceComponents(replacements),
+          // Use status code 307 to preserve the method, so POST requests work.
+          URLRequestRedirectJob::REDIRECT_307_TEMPORARY_REDIRECT, "HSTS");
+    }
+
+#if defined(OS_ANDROID)
+    // Check whether the app allows cleartext traffic to this host, and return
+    // ERR_CLEARTEXT_NOT_PERMITTED if not.
+    if (request->context()->check_cleartext_permitted() &&
+        !android::IsCleartextPermitted(url.host())) {
+      return new URLRequestErrorJob(request, network_delegate,
+                                    ERR_CLEARTEXT_NOT_PERMITTED);
+    }
+#endif
+  }
 
   return new URLRequestHttpJob(request,
                                network_delegate,
@@ -679,7 +687,9 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
     //
     // * Include both "strict" and "lax" same-site cookies if the request's
     //   |url|, |initiator|, and |first_party_for_cookies| all have the same
-    //   registrable domain.
+    //   registrable domain. Note: this also covers the case of a request
+    //   without an initiator (only happens for browser-initiated main frame
+    //   navigations).
     //
     // * Include only "lax" same-site cookies if the request's |URL| and
     //   |first_party_for_cookies| have the same registrable domain, _and_ the
@@ -689,14 +699,12 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
     //   which target a top-level browsing context.
     //
     // * Otherwise, do not include same-site cookies.
-    url::Origin requested_origin(request_->url());
-    url::Origin site_for_cookies(request_->first_party_for_cookies());
-
     if (registry_controlled_domains::SameDomainOrHost(
-            requested_origin, site_for_cookies,
+            request_->url(), request_->first_party_for_cookies(),
             registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
-      if (registry_controlled_domains::SameDomainOrHost(
-              requested_origin, request_->initiator(),
+      if (!request_->initiator() ||
+          registry_controlled_domains::SameDomainOrHost(
+              request_->url(), request_->initiator().value().GetURL(),
               registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
         options.set_same_site_cookie_mode(
             CookieOptions::SameSiteCookieMode::INCLUDE_STRICT_AND_LAX);
@@ -855,8 +863,7 @@ void URLRequestHttpJob::ProcessExpectCTHeader() {
 }
 
 void URLRequestHttpJob::OnStartCompleted(int result) {
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("net"),
-               "URLRequestHttpJob::OnStartCompleted");
+  TRACE_EVENT0(kNetTracingCategory, "URLRequestHttpJob::OnStartCompleted");
   RecordTimer();
 
   // If the job is done (due to cancellation), can just ignore this
@@ -938,8 +945,7 @@ void URLRequestHttpJob::OnHeadersReceivedCallback(int result) {
 }
 
 void URLRequestHttpJob::OnReadCompleted(int result) {
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("net"),
-               "URLRequestHttpJob::OnReadCompleted");
+  TRACE_EVENT0(kNetTracingCategory, "URLRequestHttpJob::OnReadCompleted");
   read_in_progress_ = false;
 
   DCHECK_NE(ERR_IO_PENDING, result);
@@ -1071,6 +1077,9 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
                base::LowerCaseEqualsASCII(type, kXGZip)) {
       types.push_back(SourceStream::TYPE_GZIP);
     } else if (base::LowerCaseEqualsASCII(type, kSdch)) {
+      // If SDCH support is not configured, pass through raw response.
+      if (!request()->context()->sdch_manager())
+        return upstream;
       types.push_back(SourceStream::TYPE_SDCH);
     } else {
       // Unknown encoding type. Pass through raw response body.
@@ -1484,12 +1493,25 @@ void URLRequestHttpJob::RecordPerfHistograms(CompletionCause reason) {
                                    total_time);
       }
     }
+
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Net.HttpJob.PrefilterBytesRead",
+                                prefilter_bytes_read(), 1, 50000000, 50);
     if (response_info_->was_cached) {
       UMA_HISTOGRAM_TIMES("Net.HttpJob.TotalTimeCached", total_time);
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Net.HttpJob.PrefilterBytesRead.Cache",
+                                  prefilter_bytes_read(), 1, 50000000, 50);
+
       if (response_info_->unused_since_prefetch)
         UMA_HISTOGRAM_COUNTS("Net.Prefetch.HitBytes", prefilter_bytes_read());
     } else {
       UMA_HISTOGRAM_TIMES("Net.HttpJob.TotalTimeNotCached", total_time);
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Net.HttpJob.PrefilterBytesRead.Net",
+                                  prefilter_bytes_read(), 1, 50000000, 50);
+
+      if (request_info_.load_flags & LOAD_PREFETCH) {
+        UMA_HISTOGRAM_COUNTS("Net.Prefetch.PrefilterBytesReadFromNetwork",
+                             prefilter_bytes_read());
+      }
       if (is_https_google) {
         if (used_quic) {
           UMA_HISTOGRAM_MEDIUM_TIMES(
@@ -1501,10 +1523,6 @@ void URLRequestHttpJob::RecordPerfHistograms(CompletionCause reason) {
       }
     }
   }
-
-  if (request_info_.load_flags & LOAD_PREFETCH && !request_->was_cached())
-    UMA_HISTOGRAM_COUNTS("Net.Prefetch.PrefilterBytesReadFromNetwork",
-                         prefilter_bytes_read());
 
   start_time_ = base::TimeTicks();
 }

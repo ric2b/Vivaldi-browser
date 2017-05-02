@@ -21,6 +21,8 @@
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationDelegate.h"
 #include "url/origin.h"
 
+using blink::WebString;
+
 namespace content {
 namespace {
 
@@ -96,7 +98,8 @@ void NotificationManager::show(
 
   active_page_notifications_[notification_id] = ActiveNotificationData(
       delegate, origin_gurl,
-      base::UTF16ToUTF8(base::StringPiece16(notification_data.tag)));
+      notification_data.tag.utf8(
+          WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD));
 
   // TODO(mkwst): This is potentially doing the wrong thing with unique
   // origins. Perhaps also 'file:', 'blob:' and 'filesystem:'. See
@@ -112,7 +115,7 @@ void NotificationManager::showPersistent(
     const blink::WebNotificationData& notification_data,
     std::unique_ptr<blink::WebNotificationResources> notification_resources,
     blink::WebServiceWorkerRegistration* service_worker_registration,
-    blink::WebNotificationShowCallbacks* callbacks) {
+    std::unique_ptr<blink::WebNotificationShowCallbacks> callbacks) {
   DCHECK(service_worker_registration);
   DCHECK_EQ(notification_data.actions.size(),
             notification_resources->actionIcons.size());
@@ -120,10 +123,7 @@ void NotificationManager::showPersistent(
   int64_t service_worker_registration_id =
       static_cast<WebServiceWorkerRegistrationImpl*>(
           service_worker_registration)
-          ->registration_id();
-
-  std::unique_ptr<blink::WebNotificationShowCallbacks> owned_callbacks(
-      callbacks);
+          ->registrationId();
 
   // Verify that the author-provided payload size does not exceed our limit.
   // This is an implementation-defined limit to prevent abuse of notification
@@ -138,7 +138,7 @@ void NotificationManager::showPersistent(
   UMA_HISTOGRAM_COUNTS_1000("Notifications.AuthorDataSize", author_data_size);
 
   if (author_data_size > PlatformNotificationData::kMaximumDeveloperDataSize) {
-    owned_callbacks->onError();
+    callbacks->onError();
     return;
   }
 
@@ -147,7 +147,7 @@ void NotificationManager::showPersistent(
   int request_id =
       notification_dispatcher_->GenerateNotificationId(CurrentWorkerId());
 
-  pending_show_notification_requests_.AddWithID(owned_callbacks.release(),
+  pending_show_notification_requests_.AddWithID(std::move(callbacks),
                                                 request_id);
 
   // TODO(mkwst): This is potentially doing the wrong thing with unique
@@ -162,7 +162,7 @@ void NotificationManager::showPersistent(
 void NotificationManager::getNotifications(
     const blink::WebString& filter_tag,
     blink::WebServiceWorkerRegistration* service_worker_registration,
-    blink::WebNotificationGetCallbacks* callbacks) {
+    std::unique_ptr<blink::WebNotificationGetCallbacks> callbacks) {
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
 
@@ -172,18 +172,20 @@ void NotificationManager::getNotifications(
 
   GURL origin = GURL(service_worker_registration_impl->scope()).GetOrigin();
   int64_t service_worker_registration_id =
-      service_worker_registration_impl->registration_id();
+      service_worker_registration_impl->registrationId();
 
   // TODO(peter): GenerateNotificationId is more of a request id. Consider
   // renaming the method in the NotificationDispatcher if this makes sense.
   int request_id =
       notification_dispatcher_->GenerateNotificationId(CurrentWorkerId());
 
-  pending_get_notification_requests_.AddWithID(callbacks, request_id);
+  pending_get_notification_requests_.AddWithID(std::move(callbacks),
+                                               request_id);
 
   thread_safe_sender_->Send(new PlatformNotificationHostMsg_GetNotifications(
       request_id, service_worker_registration_id, origin,
-      base::UTF16ToUTF8(base::StringPiece16(filter_tag))));
+      filter_tag.utf8(
+          WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD)));
 }
 
 void NotificationManager::close(blink::WebNotificationDelegate* delegate) {
@@ -210,8 +212,10 @@ void NotificationManager::closePersistent(
       // TODO(mkwst): This is potentially doing the wrong thing with unique
       // origins. Perhaps also 'file:', 'blob:' and 'filesystem:'. See
       // https://crbug.com/490074 for detail.
-      url::Origin(origin).GetURL(), base::UTF16ToUTF8(base::StringPiece16(tag)),
-      base::UTF16ToUTF8(base::StringPiece16(notification_id))));
+      url::Origin(origin).GetURL(),
+      tag.utf8(WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD),
+      notification_id.utf8(
+          WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD)));
 }
 
 void NotificationManager::notifyDelegateDestroyed(

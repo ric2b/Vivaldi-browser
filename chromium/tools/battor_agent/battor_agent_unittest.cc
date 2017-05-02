@@ -120,7 +120,7 @@ class BattOrAgentTest : public testing::Test, public BattOrAgent::Listener {
   }
 
   void OnGetFirmwareGitHashComplete(const std::string& firmware_git_hash,
-                            BattOrError error) override {
+                                    BattOrError error) override {
     is_command_complete_ = true;
     command_error_ = error;
     firmware_git_hash_ = firmware_git_hash;
@@ -301,6 +301,15 @@ class BattOrAgentTest : public testing::Test, public BattOrAgent::Listener {
       return;
 
     OnBytesSent(true);
+    if (end_state == BattOrAgentState::INIT_SENT)
+      return;
+
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kInitAck));
+    if (end_state == BattOrAgentState::INIT_ACKED)
+      return;
+
+    OnBytesSent(true);
     if (end_state == BattOrAgentState::GIT_FIRMWARE_HASH_REQUEST_SENT)
       return;
 
@@ -401,7 +410,7 @@ TEST_F(BattOrAgentTest, StartTracingFailsIfInitAckReadFails) {
 
     // Bytes will be sent because INIT will be retried.
     OnBytesSent(true);
-   }
+  }
 
   EXPECT_TRUE(IsCommandComplete());
   EXPECT_EQ(BATTOR_ERROR_TOO_MANY_INIT_RETRIES, GetCommandError());
@@ -455,20 +464,86 @@ TEST_F(BattOrAgentTest, StartTracingFailsIfStartTracingSendFails) {
   EXPECT_EQ(BATTOR_ERROR_SEND_ERROR, GetCommandError());
 }
 
-TEST_F(BattOrAgentTest, StartTracingFailsIfStartTracingAckReadFails) {
-  RunStartTracingTo(BattOrAgentState::START_TRACING_SENT);
-  OnMessageRead(false, BATTOR_MESSAGE_TYPE_CONTROL_ACK, nullptr);
+TEST_F(BattOrAgentTest, StartTracingSucceedsAfterRetriesIfWrongAckRead) {
+  RunStartTracingTo(BattOrAgentState::CONNECTED);
+
+  for (int i = 0; i < 4; i++) {
+    // Go through the correct init sequence, but give the wrong ack to
+    // START_TRACING.
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kInitAck));
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kSetGainAck));
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kInitAck));
+  }
+
+  // On the last attempt, give the correct ack to START_TRACING.
+  OnBytesSent(true);
+  OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK, ToCharVector(kInitAck));
+  OnBytesSent(true);
+  OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                ToCharVector(kSetGainAck));
+  OnBytesSent(true);
+  OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                ToCharVector(kStartTracingAck));
 
   EXPECT_TRUE(IsCommandComplete());
-  EXPECT_EQ(BATTOR_ERROR_RECEIVE_ERROR, GetCommandError());
+  EXPECT_EQ(BATTOR_ERROR_NONE, GetCommandError());
 }
 
-TEST_F(BattOrAgentTest, StartTracingFailsIfStartTracingWrongAckRead) {
-  RunStartTracingTo(BattOrAgentState::START_TRACING_SENT);
+TEST_F(BattOrAgentTest, StartTracingSucceedsAfterRetriesWithReadFailure) {
+  RunStartTracingTo(BattOrAgentState::CONNECTED);
+
+  for (int i = 0; i < 4; i++) {
+    // Go through the correct init sequence, but indicate that we failed to read
+    // the START_TRACING ack.
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kInitAck));
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kSetGainAck));
+    OnBytesSent(true);
+    OnMessageRead(false, BATTOR_MESSAGE_TYPE_CONTROL_ACK, nullptr);
+  }
+
+  // On the last attempt, give the correct ack to START_TRACING.
+  OnBytesSent(true);
   OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK, ToCharVector(kInitAck));
+  OnBytesSent(true);
+  OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                ToCharVector(kSetGainAck));
+  OnBytesSent(true);
+  OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                ToCharVector(kStartTracingAck));
 
   EXPECT_TRUE(IsCommandComplete());
-  EXPECT_EQ(BATTOR_ERROR_UNEXPECTED_MESSAGE, GetCommandError());
+  EXPECT_EQ(BATTOR_ERROR_NONE, GetCommandError());
+}
+
+TEST_F(BattOrAgentTest, StartTracingFailsIfStartTracingWrongAckReadTooMuch) {
+  RunStartTracingTo(BattOrAgentState::CONNECTED);
+
+  for (int i = 0; i < 5; i++) {
+    // Go through the correct init sequence, but give the wrong ack to
+    // START_TRACING.
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kInitAck));
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kSetGainAck));
+    OnBytesSent(true);
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kInitAck));
+  }
+
+  EXPECT_TRUE(IsCommandComplete());
+  EXPECT_EQ(BATTOR_ERROR_TOO_MANY_START_TRACING_RETRIES, GetCommandError());
 }
 
 TEST_F(BattOrAgentTest, StartTracingSucceedsWithOneInitFailure) {
@@ -796,7 +871,7 @@ TEST_F(BattOrAgentTest, StopTracingFailsIfDataFrameMissingByte) {
 
   // Remove the last byte from the frame to make it invalid.
   std::unique_ptr<vector<char>> frame_bytes =
-      CreateFrame(frame_header, frame, 2);
+      CreateFrame(frame_header, frame, 1);
   frame_bytes->pop_back();
 
   OnMessageRead(true, BATTOR_MESSAGE_TYPE_SAMPLES, std::move(frame_bytes));
@@ -887,7 +962,6 @@ TEST_F(BattOrAgentTest, RecordClockSyncMarkerPrintsInStopTracingResult) {
       "0.00 0.0 0.0 <MY_MARKER>\n"
       "1.00 0.6 1.2\n",
       GetTrace());
-
 }
 
 TEST_F(BattOrAgentTest, RecordClockSyncMarkerFailsWithoutConnection) {
@@ -961,5 +1035,41 @@ TEST_F(BattOrAgentTest, GetFirmwareGitHashFailsIfReadHasWrongType) {
 
   EXPECT_TRUE(IsCommandComplete());
   EXPECT_EQ(BATTOR_ERROR_UNEXPECTED_MESSAGE, GetCommandError());
+}
+
+TEST_F(BattOrAgentTest, GetFirmwareGitHashFailsIfInitSendFails) {
+  RunGetFirmwareGitHashTo(BattOrAgentState::CONNECTED);
+  OnBytesSent(false);
+
+  EXPECT_TRUE(IsCommandComplete());
+  EXPECT_EQ(BATTOR_ERROR_SEND_ERROR, GetCommandError());
+}
+
+TEST_F(BattOrAgentTest, GetFirmwareGitHashFailsIfInitAckReadFails) {
+  RunGetFirmwareGitHashTo(BattOrAgentState::INIT_SENT);
+
+  for (int i =0; i < 21; i++) {
+    OnMessageRead(false, BATTOR_MESSAGE_TYPE_CONTROL_ACK, nullptr);
+
+    // Bytes will be sent because INIT will be retried.
+    OnBytesSent(true);
+  }
+
+  EXPECT_TRUE(IsCommandComplete());
+  EXPECT_EQ(BATTOR_ERROR_TOO_MANY_INIT_RETRIES, GetCommandError());
+}
+
+TEST_F(BattOrAgentTest, GetFirmwareGithashFailsIfInitWrongAckRead) {
+  RunGetFirmwareGitHashTo(BattOrAgentState::INIT_SENT);
+  for (int i = 0; i < 21; i++) {
+    OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
+                  ToCharVector(kStartTracingAck));
+
+    // Bytes will be sent because INIT will be retried.
+    OnBytesSent(true);
+  }
+
+  EXPECT_TRUE(IsCommandComplete());
+  EXPECT_EQ(BATTOR_ERROR_TOO_MANY_INIT_RETRIES, GetCommandError());
 }
 }  // namespace battor

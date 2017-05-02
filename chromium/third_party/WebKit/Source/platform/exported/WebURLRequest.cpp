@@ -59,7 +59,7 @@ class ExtraDataContainer : public ResourceRequest::ExtraData {
 
  private:
   explicit ExtraDataContainer(WebURLRequest::ExtraData* extraData)
-      : m_extraData(wrapUnique(extraData)) {}
+      : m_extraData(WTF::wrapUnique(extraData)) {}
 
   std::unique_ptr<WebURLRequest::ExtraData> m_extraData;
 };
@@ -239,7 +239,7 @@ WebURLRequest::FrameType WebURLRequest::getFrameType() const {
   return m_resourceRequest->frameType();
 }
 
-WebReferrerPolicy WebURLRequest::referrerPolicy() const {
+WebReferrerPolicy WebURLRequest::getReferrerPolicy() const {
   return static_cast<WebReferrerPolicy>(m_resourceRequest->getReferrerPolicy());
 }
 
@@ -347,12 +347,13 @@ void WebURLRequest::setFetchRedirectMode(
   return m_resourceRequest->setFetchRedirectMode(redirect);
 }
 
-WebURLRequest::LoFiState WebURLRequest::getLoFiState() const {
-  return m_resourceRequest->loFiState();
+WebURLRequest::PreviewsState WebURLRequest::getPreviewsState() const {
+  return m_resourceRequest->previewsState();
 }
 
-void WebURLRequest::setLoFiState(WebURLRequest::LoFiState loFiState) {
-  return m_resourceRequest->setLoFiState(loFiState);
+void WebURLRequest::setPreviewsState(
+    WebURLRequest::PreviewsState previewsState) {
+  return m_resourceRequest->setPreviewsState(previewsState);
 }
 
 WebURLRequest::ExtraData* WebURLRequest::getExtraData() const {

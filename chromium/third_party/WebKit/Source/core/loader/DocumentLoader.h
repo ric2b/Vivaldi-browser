@@ -60,6 +60,8 @@ class ResourceFetcher;
 class DocumentInit;
 class LocalFrame;
 class FrameLoader;
+class FrameLoaderClient;
+class ResourceTimingInfo;
 class WebDocumentSubresourceFilter;
 struct ViewportDescriptionWrapper;
 
@@ -73,11 +75,15 @@ class CORE_EXPORT DocumentLoader
                                 const ResourceRequest& request,
                                 const SubstituteData& data,
                                 ClientRedirectPolicy clientRedirectPolicy) {
+    DCHECK(frame);
+
     return new DocumentLoader(frame, request, data, clientRedirectPolicy);
   }
   ~DocumentLoader() override;
 
   LocalFrame* frame() const { return m_frame; }
+
+  ResourceTimingInfo* getNavigationTimingInfo() const;
 
   virtual void detachFromFrame();
 
@@ -90,7 +96,7 @@ class CORE_EXPORT DocumentLoader
 
   const ResourceRequest& originalRequest() const;
 
-  const ResourceRequest& request() const;
+  const ResourceRequest& getRequest() const;
 
   ResourceFetcher* fetcher() const { return m_fetcher.get(); }
 
@@ -135,13 +141,8 @@ class CORE_EXPORT DocumentLoader
     m_navigationType = navigationType;
   }
 
-  void upgradeInsecureRequest();
-
   void startLoadingMainResource();
 
-  void acceptDataFromThreadedReceiver(const char* data,
-                                      int dataLength,
-                                      int encodedDataLength);
   DocumentLoadTiming& timing() { return m_documentLoadTiming; }
   const DocumentLoadTiming& timing() const { return m_documentLoadTiming; }
 
@@ -170,12 +171,8 @@ class CORE_EXPORT DocumentLoader
   };
   InitialScrollState& initialScrollState() { return m_initialScrollState; }
 
-  void setWasBlockedAfterXFrameOptionsOrCSP() {
-    m_wasBlockedAfterXFrameOptionsOrCSP = true;
-  }
-  bool wasBlockedAfterXFrameOptionsOrCSP() {
-    return m_wasBlockedAfterXFrameOptionsOrCSP;
-  }
+  void setWasBlockedAfterCSP() { m_wasBlockedAfterCSP = true; }
+  bool wasBlockedAfterCSP() { return m_wasBlockedAfterCSP; }
 
   void dispatchLinkHeaderPreloads(ViewportDescriptionWrapper*,
                                   LinkLoader::MediaPreloadPolicy);
@@ -206,7 +203,10 @@ class CORE_EXPORT DocumentLoader
                     const KURL& overridingURL = KURL());
   void endWriting();
 
-  FrameLoader* frameLoader() const;
+  // Use these method only where it's guaranteed that |m_frame| hasn't been
+  // cleared.
+  FrameLoader& frameLoader() const;
+  FrameLoaderClient& frameLoaderClient() const;
 
   void commitIfReady();
   void commitData(const char* bytes, size_t length);
@@ -215,7 +215,9 @@ class CORE_EXPORT DocumentLoader
   bool maybeCreateArchive();
 
   void finishedLoading(double finishTime);
-  void cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceResponse&);
+  void cancelLoadAfterCSPDenied(const ResourceResponse&);
+
+  // RawResourceClient implementation
   bool redirectReceived(Resource*,
                         const ResourceRequest&,
                         const ResourceResponse&) final;
@@ -223,9 +225,12 @@ class CORE_EXPORT DocumentLoader
                         const ResourceResponse&,
                         std::unique_ptr<WebDataConsumerHandle>) final;
   void dataReceived(Resource*, const char* data, size_t length) final;
-  void processData(const char* data, size_t length);
+
+  // ResourceClient implementation
   void notifyFinished(Resource*) final;
   String debugName() const override { return "DocumentLoader"; }
+
+  void processData(const char* data, size_t length);
 
   bool maybeLoadEmpty();
 
@@ -271,13 +276,12 @@ class CORE_EXPORT DocumentLoader
   ClientHintsPreferences m_clientHintsPreferences;
   InitialScrollState m_initialScrollState;
 
-  bool m_wasBlockedAfterXFrameOptionsOrCSP;
+  bool m_wasBlockedAfterCSP;
 
   enum State {
     NotStarted,
     Provisional,
     Committed,
-    MainResourceDone,
     SentDidFinishLoad
   };
   State m_state;

@@ -63,13 +63,11 @@ void WebFormElement::getFormControlElements(
   const HTMLFormElement* form = constUnwrap<HTMLFormElement>();
   Vector<WebFormControlElement> formControlElements;
 
-  const FormAssociatedElement::List& associatedElements =
-      form->associatedElements();
-  for (FormAssociatedElement::List::const_iterator it =
-           associatedElements.begin();
-       it != associatedElements.end(); ++it) {
+  const ListedElement::List& listedElements = form->listedElements();
+  for (ListedElement::List::const_iterator it = listedElements.begin();
+       it != listedElements.end(); ++it) {
     if ((*it)->isFormControlElement())
-      formControlElements.append(toHTMLFormControlElement(*it));
+      formControlElements.push_back(toHTMLFormControlElement(*it));
   }
   result.assign(formControlElements);
 }

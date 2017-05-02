@@ -6,8 +6,8 @@
 #define MainThreadWorkletGlobalScope_h
 
 #include "core/CoreExport.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/frame/DOMWindowProperty.h"
 #include "core/workers/WorkletGlobalScope.h"
 #include "core/workers/WorkletGlobalScopeProxy.h"
 
@@ -19,12 +19,21 @@ class ScriptSourceCode;
 
 class CORE_EXPORT MainThreadWorkletGlobalScope : public WorkletGlobalScope,
                                                  public WorkletGlobalScopeProxy,
-                                                 public DOMWindowProperty {
+                                                 public ContextClient {
+  USING_GARBAGE_COLLECTED_MIXIN(MainThreadWorkletGlobalScope);
+
  public:
+  MainThreadWorkletGlobalScope(LocalFrame*,
+                               const KURL&,
+                               const String& userAgent,
+                               PassRefPtr<SecurityOrigin>,
+                               v8::Isolate*);
   ~MainThreadWorkletGlobalScope() override;
   bool isMainThreadWorkletGlobalScope() const final { return true; }
 
   // WorkerOrWorkletGlobalScope
+  void countFeature(UseCounter::Feature) final;
+  void countDeprecation(UseCounter::Feature) final;
   WorkerThread* thread() const final;
 
   // WorkletGlobalScopeProxy
@@ -36,15 +45,8 @@ class CORE_EXPORT MainThreadWorkletGlobalScope : public WorkletGlobalScope,
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
     WorkletGlobalScope::trace(visitor);
-    DOMWindowProperty::trace(visitor);
+    ContextClient::trace(visitor);
   }
-
- protected:
-  MainThreadWorkletGlobalScope(LocalFrame*,
-                               const KURL&,
-                               const String& userAgent,
-                               PassRefPtr<SecurityOrigin>,
-                               v8::Isolate*);
 };
 
 DEFINE_TYPE_CASTS(MainThreadWorkletGlobalScope,

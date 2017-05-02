@@ -7,10 +7,9 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ContextLifecycleObserver.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/frame/PlatformEventController.h"
-#include "core/page/PageVisibilityObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/sensor/SensorOptions.h"
 #include "modules/sensor/SensorProxy.h"
@@ -19,20 +18,18 @@
 namespace blink {
 
 class ExceptionState;
-class ScriptState;
+class ExecutionContext;
 class SensorReading;
-class SensorPollingStrategy;
 
 class Sensor : public EventTargetWithInlineData,
-               public ActiveScriptWrappable,
+               public ActiveScriptWrappable<Sensor>,
                public ContextLifecycleObserver,
-               public PageVisibilityObserver,
                public SensorProxy::Observer {
   USING_GARBAGE_COLLECTED_MIXIN(Sensor);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  enum class SensorState { Idle, Activating, Active, Errored };
+  enum class SensorState { Idle, Activating, Activated, Errored };
 
   ~Sensor() override;
 
@@ -62,7 +59,7 @@ class Sensor : public EventTargetWithInlineData,
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  Sensor(ScriptState*,
+  Sensor(ExecutionContext*,
          const SensorOptions&,
          ExceptionState&,
          device::mojom::blink::SensorType);
@@ -81,11 +78,11 @@ class Sensor : public EventTargetWithInlineData,
   void initSensorProxyIfNeeded();
 
   // ContextLifecycleObserver overrides.
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // SensorController::Observer overrides.
   void onSensorInitialized() override;
-  void onSensorReadingChanged() override;
+  void onSensorReadingChanged(double timestamp) override;
   void onSensorError(ExceptionCode,
                      const String& sanitizedMessage,
                      const String& unsanitizedMessage) override;
@@ -93,21 +90,13 @@ class Sensor : public EventTargetWithInlineData,
   void onStartRequestCompleted(bool);
   void onStopRequestCompleted(bool);
 
-  // PageVisibilityObserver overrides.
-  void pageVisibilityChanged() override;
-
   void startListening();
   void stopListening();
-
-  // Makes sensor reading refresh its values from the shared buffer.
-  void pollForData();
 
   void updateState(SensorState newState);
   void reportError(ExceptionCode = UnknownError,
                    const String& sanitizedMessage = String(),
                    const String& unsanitizedMessage = String());
-
-  void updatePollingStatus();
 
   void notifySensorReadingChanged();
   void notifyOnActivate();
@@ -118,9 +107,9 @@ class Sensor : public EventTargetWithInlineData,
   device::mojom::blink::SensorType m_type;
   SensorState m_state;
   Member<SensorProxy> m_sensorProxy;
-  std::unique_ptr<SensorPollingStrategy> m_polling;
   device::SensorReading m_storedData;
   SensorConfigurationPtr m_configuration;
+  double m_lastUpdateTimestamp;
 };
 
 }  // namespace blink

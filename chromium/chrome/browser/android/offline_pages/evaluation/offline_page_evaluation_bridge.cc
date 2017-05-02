@@ -14,24 +14,24 @@
 #include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/evaluation/evaluation_test_scheduler.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
-#include "chrome/browser/android/offline_pages/prerendering_offliner_factory.h"
+#include "chrome/browser/android/offline_pages/prerendering_offliner.h"
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/common/chrome_constants.h"
-#include "components/offline_pages/background/offliner_factory.h"
-#include "components/offline_pages/background/offliner_policy.h"
-#include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/background/request_notifier.h"
-#include "components/offline_pages/background/request_queue.h"
-#include "components/offline_pages/background/request_queue_store.h"
-#include "components/offline_pages/background/request_queue_store_sql.h"
-#include "components/offline_pages/background/save_page_request.h"
-#include "components/offline_pages/downloads/download_notifying_observer.h"
-#include "components/offline_pages/offline_page_item.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/background/offliner.h"
+#include "components/offline_pages/core/background/offliner_policy.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/background/request_notifier.h"
+#include "components/offline_pages/core/background/request_queue.h"
+#include "components/offline_pages/core/background/request_queue_store.h"
+#include "components/offline_pages/core/background/request_queue_store_sql.h"
+#include "components/offline_pages/core/background/save_page_request.h"
+#include "components/offline_pages/core/downloads/download_notifying_observer.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/OfflinePageEvaluationBridge_jni.h"
@@ -47,12 +47,7 @@ namespace offline_pages {
 namespace android {
 
 namespace {
-const bool kPreferUntriedRequest = false;
-const bool kPreferEarlierRequest = true;
-const bool kPreferRetryCountOverRecency = false;
-const int kMaxStartedTries = 4;
-const int kMaxCompletedTries = 1;
-const int kImmediateRequestExpirationTimeInSeconds = 3600;
+const char kNativeTag[] = "OPNative";
 
 void ToJavaOfflinePageList(JNIEnv* env,
                            jobject j_result_obj,
@@ -170,14 +165,10 @@ bool OfflinePageEvaluationBridge::Register(JNIEnv* env) {
 std::unique_ptr<KeyedService>
 OfflinePageEvaluationBridge::GetTestingRequestCoordinator(
     content::BrowserContext* context) {
-  // Create a new OfflinerPolicy with a larger background processing
-  // budget (3600 sec). Other values are the same with default ones.
-  std::unique_ptr<OfflinerPolicy> policy(new OfflinerPolicy(
-      kPreferUntriedRequest, kPreferEarlierRequest,
-      kPreferRetryCountOverRecency, kMaxStartedTries, kMaxCompletedTries,
-      kImmediateRequestExpirationTimeInSeconds));
-  std::unique_ptr<OfflinerFactory> prerenderer_offliner(
-      new PrerenderingOfflinerFactory(context));
+  std::unique_ptr<OfflinerPolicy> policy(new OfflinerPolicy());
+  std::unique_ptr<Offliner> prerenderer_offliner(new PrerenderingOffliner(
+      context, policy.get(),
+      OfflinePageModelFactory::GetForBrowserContext(context)));
 
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
       content::BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
@@ -200,7 +191,7 @@ OfflinePageEvaluationBridge::GetTestingRequestCoordinator(
       base::MakeUnique<RequestCoordinator>(
           std::move(policy), std::move(prerenderer_offliner), std::move(queue),
           std::move(scheduler), network_quality_estimator);
-  request_coordinator->SetImmediateScheduleCallbackForTest(
+  request_coordinator->SetInternalStartProcessingCallbackForTest(
       base::Bind(&android::EvaluationTestScheduler::ImmediateScheduleCallback,
                  base::Unretained(scheduler.get())));
 
@@ -225,6 +216,8 @@ OfflinePageEvaluationBridge::OfflinePageEvaluationBridge(
   NotifyIfDoneLoading();
   offline_page_model_->AddObserver(this);
   request_coordinator_->AddObserver(this);
+  offline_page_model_->GetLogger()->SetClient(this);
+  request_coordinator_->GetLogger()->SetClient(this);
 }
 
 OfflinePageEvaluationBridge::~OfflinePageEvaluationBridge() {
@@ -240,8 +233,9 @@ void OfflinePageEvaluationBridge::OfflinePageModelLoaded(
   NotifyIfDoneLoading();
 }
 
-void OfflinePageEvaluationBridge::OfflinePageModelChanged(
-    OfflinePageModel* model) {}
+void OfflinePageEvaluationBridge::OfflinePageAdded(
+    OfflinePageModel* model,
+    const OfflinePageItem& added_page) {}
 
 void OfflinePageEvaluationBridge::OfflinePageDeleted(
     int64_t offline_id,
@@ -269,6 +263,13 @@ void OfflinePageEvaluationBridge::OnChanged(const SavePageRequest& request) {
       env, java_ref_, ToJavaSavePageRequest(env, request));
 }
 
+void OfflinePageEvaluationBridge::CustomLog(const std::string& message) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_OfflinePageEvaluationBridge_log(env, java_ref_,
+                                       ConvertUTF8ToJavaString(env, kNativeTag),
+                                       ConvertUTF8ToJavaString(env, message));
+}
+
 void OfflinePageEvaluationBridge::GetAllPages(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -292,11 +293,8 @@ bool OfflinePageEvaluationBridge::PushRequestProcessing(
   DCHECK(request_coordinator_);
   base::android::RunCallbackAndroid(j_callback_obj, false);
 
-  net::NetworkChangeNotifier::ConnectionType connection =
-      net::NetworkChangeNotifier::GetConnectionType();
-  DeviceConditions device_conditions(false, 0, connection);
-  return request_coordinator_->StartProcessing(
-      device_conditions, base::Bind(&OnPushRequestsDone, j_callback_ref));
+  return request_coordinator_->StartImmediateProcessing(
+      base::Bind(&OnPushRequestsDone, j_callback_ref));
 }
 
 void OfflinePageEvaluationBridge::SavePageLater(

@@ -17,7 +17,8 @@ namespace chromeos {
 ArcTermsOfServiceScreen::ArcTermsOfServiceScreen(
     BaseScreenDelegate* base_screen_delegate,
     ArcTermsOfServiceScreenActor* actor)
-    : BaseScreen(base_screen_delegate), actor_(actor) {
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE),
+      actor_(actor) {
   DCHECK(actor_);
   if (actor_)
     actor_->SetDelegate(this);
@@ -27,8 +28,6 @@ ArcTermsOfServiceScreen::~ArcTermsOfServiceScreen() {
   if (actor_)
     actor_->SetDelegate(nullptr);
 }
-
-void ArcTermsOfServiceScreen::PrepareToShow() {}
 
 void ArcTermsOfServiceScreen::Show() {
   if (!actor_)
@@ -41,10 +40,6 @@ void ArcTermsOfServiceScreen::Show() {
 void ArcTermsOfServiceScreen::Hide() {
   if (actor_)
     actor_->Hide();
-}
-
-std::string ArcTermsOfServiceScreen::GetName() const {
-  return WizardController::kArcTermsOfServiceScreenName;
 }
 
 void ArcTermsOfServiceScreen::OnSkip() {

@@ -23,49 +23,46 @@
 #include "core/layout/svg/LayoutSVGViewportContainer.h"
 
 #include "core/layout/svg/SVGLayoutSupport.h"
-#include "core/paint/SVGContainerPainter.h"
 #include "core/svg/SVGSVGElement.h"
-#include "core/svg/SVGUseElement.h"
-#include "platform/graphics/GraphicsContext.h"
 
 namespace blink {
 
-LayoutSVGViewportContainer::LayoutSVGViewportContainer(SVGElement* node)
+LayoutSVGViewportContainer::LayoutSVGViewportContainer(SVGSVGElement* node)
     : LayoutSVGContainer(node),
       m_isLayoutSizeChanged(false),
       m_needsTransformUpdate(true) {}
 
-void LayoutSVGViewportContainer::determineIfLayoutSizeChanged() {
-  ASSERT(element());
-  if (!isSVGSVGElement(*element()))
-    return;
+void LayoutSVGViewportContainer::layout() {
+  DCHECK(needsLayout());
+  DCHECK(isSVGSVGElement(element()));
 
-  m_isLayoutSizeChanged =
-      toSVGSVGElement(element())->hasRelativeLengths() && selfNeedsLayout();
-}
+  const SVGSVGElement* svg = toSVGSVGElement(element());
+  m_isLayoutSizeChanged = selfNeedsLayout() && svg->hasRelativeLengths();
 
-void LayoutSVGViewportContainer::calcViewport() {
-  SVGElement* element = this->element();
-  ASSERT(element);
-  if (!isSVGSVGElement(*element))
-    return;
-  SVGSVGElement* svg = toSVGSVGElement(element);
-  FloatRect oldViewport = m_viewport;
-
-  SVGLengthContext lengthContext(element);
-  m_viewport = FloatRect(svg->x()->currentValue()->value(lengthContext),
-                         svg->y()->currentValue()->value(lengthContext),
-                         svg->width()->currentValue()->value(lengthContext),
-                         svg->height()->currentValue()->value(lengthContext));
-
-  if (oldViewport != m_viewport) {
-    setNeedsBoundariesUpdate();
-    setNeedsTransformUpdate();
+  if (selfNeedsLayout()) {
+    SVGLengthContext lengthContext(svg);
+    FloatRect oldViewport = m_viewport;
+    m_viewport = FloatRect(svg->x()->currentValue()->value(lengthContext),
+                           svg->y()->currentValue()->value(lengthContext),
+                           svg->width()->currentValue()->value(lengthContext),
+                           svg->height()->currentValue()->value(lengthContext));
+    if (oldViewport != m_viewport) {
+      setNeedsBoundariesUpdate();
+      // The transform depends on viewport values.
+      setNeedsTransformUpdate();
+    }
   }
+
+  LayoutSVGContainer::layout();
 }
 
 void LayoutSVGViewportContainer::setNeedsTransformUpdate() {
   setMayNeedPaintInvalidationSubtree();
+  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
+    // The transform paint property relies on the SVG transform being up-to-date
+    // (see: PaintPropertyTreeBuilder::updateTransformForNonRootSVG).
+    setNeedsPaintPropertyUpdate();
+  }
   m_needsTransformUpdate = true;
 }
 
@@ -73,36 +70,26 @@ SVGTransformChange LayoutSVGViewportContainer::calculateLocalTransform() {
   if (!m_needsTransformUpdate)
     return SVGTransformChange::None;
 
+  DCHECK(isSVGSVGElement(element()));
+  const SVGSVGElement* svg = toSVGSVGElement(element());
   SVGTransformChangeDetector changeDetector(m_localToParentTransform);
   m_localToParentTransform =
       AffineTransform::translation(m_viewport.x(), m_viewport.y()) *
-      viewportTransform();
+      svg->viewBoxToViewTransform(m_viewport.width(), m_viewport.height());
   m_needsTransformUpdate = false;
   return changeDetector.computeChange(m_localToParentTransform);
 }
 
-AffineTransform LayoutSVGViewportContainer::viewportTransform() const {
-  ASSERT(element());
-  if (isSVGSVGElement(*element())) {
-    SVGSVGElement* svg = toSVGSVGElement(element());
-    return svg->viewBoxToViewTransform(m_viewport.width(), m_viewport.height());
+bool LayoutSVGViewportContainer::nodeAtFloatPoint(
+    HitTestResult& result,
+    const FloatPoint& pointInParent,
+    HitTestAction action) {
+  // Respect the viewport clip which is in parent coordinates.
+  if (SVGLayoutSupport::isOverflowHidden(this)) {
+    if (!m_viewport.contains(pointInParent))
+      return false;
   }
-
-  return AffineTransform();
-}
-
-bool LayoutSVGViewportContainer::pointIsInsideViewportClip(
-    const FloatPoint& pointInParent) {
-  // Respect the viewport clip (which is in parent coords)
-  if (!SVGLayoutSupport::isOverflowHidden(this))
-    return true;
-
-  return m_viewport.contains(pointInParent);
-}
-
-void LayoutSVGViewportContainer::paint(const PaintInfo& paintInfo,
-                                       const LayoutPoint& paintOffset) const {
-  SVGContainerPainter(*this).paint(paintInfo);
+  return LayoutSVGContainer::nodeAtFloatPoint(result, pointInParent, action);
 }
 
 }  // namespace blink

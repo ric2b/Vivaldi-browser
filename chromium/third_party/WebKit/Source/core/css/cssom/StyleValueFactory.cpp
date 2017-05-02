@@ -6,7 +6,10 @@
 
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSValue.h"
+#include "core/css/cssom/CSSCalcLength.h"
+#include "core/css/cssom/CSSKeywordValue.h"
 #include "core/css/cssom/CSSNumberValue.h"
+#include "core/css/cssom/CSSOMTypes.h"
 #include "core/css/cssom/CSSSimpleLength.h"
 #include "core/css/cssom/CSSStyleValue.h"
 #include "core/css/cssom/CSSStyleVariableReferenceValue.h"
@@ -19,40 +22,61 @@ namespace blink {
 
 namespace {
 
-CSSStyleValue* styleValueForPrimitiveValue(
+CSSStyleValue* createStyleValueFromPrimitiveValue(
     const CSSPrimitiveValue& primitiveValue) {
   if (primitiveValue.isNumber())
     return CSSNumberValue::create(primitiveValue.getDoubleValue());
   if (primitiveValue.isLength() || primitiveValue.isPercentage())
     return CSSSimpleLength::fromCSSValue(primitiveValue);
-
   return nullptr;
 }
 
-CSSStyleValue* styleValueForProperty(CSSPropertyID propertyID,
-                                     const CSSValue& value) {
+CSSStyleValue* createStyleValueWithPropertyInternal(CSSPropertyID propertyID,
+                                                    const CSSValue& value) {
   switch (propertyID) {
     case CSSPropertyTransform:
       return CSSTransformValue::fromCSSValue(value);
     default:
-      // TODO(meade): Implement other complex properties.
+      // TODO(meade): Implement other properties.
       break;
   }
+  if (value.isPrimitiveValue() && toCSSPrimitiveValue(value).isCalculated()) {
+    // TODO(meade): Handle other calculated types, e.g. angles here.
+    if (CSSOMTypes::propertyCanTakeType(propertyID,
+                                        CSSStyleValue::CalcLengthType)) {
+      return CSSCalcLength::fromCSSValue(toCSSPrimitiveValue(value));
+    }
+  }
+  return nullptr;
+}
 
+CSSStyleValue* createStyleValue(const CSSValue& value) {
+  if (value.isCSSWideKeyword() || value.isIdentifierValue() ||
+      value.isCustomIdentValue())
+    return CSSKeywordValue::fromCSSValue(value);
   if (value.isPrimitiveValue())
-    return styleValueForPrimitiveValue(toCSSPrimitiveValue(value));
+    return createStyleValueFromPrimitiveValue(toCSSPrimitiveValue(value));
   if (value.isVariableReferenceValue())
     return CSSUnparsedValue::fromCSSValue(toCSSVariableReferenceValue(value));
-  if (value.isImageValue())
+  if (value.isImageValue()) {
     return CSSURLImageValue::create(
         toCSSImageValue(value).valueWithURLMadeAbsolute());
-
+  }
   return nullptr;
+}
+
+CSSStyleValue* createStyleValueWithProperty(CSSPropertyID propertyID,
+                                            const CSSValue& value) {
+  CSSStyleValue* styleValue =
+      createStyleValueWithPropertyInternal(propertyID, value);
+  if (styleValue)
+    return styleValue;
+  return createStyleValue(value);
 }
 
 CSSStyleValueVector unsupportedCSSValue(const CSSValue& value) {
   CSSStyleValueVector styleValueVector;
-  styleValueVector.append(CSSUnsupportedStyleValue::create(value.cssText()));
+  styleValueVector.push_back(CSSUnsupportedStyleValue::create(value.cssText()));
   return styleValueVector;
 }
 
@@ -60,26 +84,27 @@ CSSStyleValueVector unsupportedCSSValue(const CSSValue& value) {
 
 CSSStyleValueVector StyleValueFactory::cssValueToStyleValueVector(
     CSSPropertyID propertyID,
-    const CSSValue& value) {
+    const CSSValue& cssValue) {
   CSSStyleValueVector styleValueVector;
-  CSSStyleValue* styleValue = styleValueForProperty(propertyID, value);
+
+  CSSStyleValue* styleValue =
+      createStyleValueWithProperty(propertyID, cssValue);
   if (styleValue) {
-    styleValueVector.append(styleValue);
+    styleValueVector.push_back(styleValue);
     return styleValueVector;
   }
 
-  if (!value.isValueList()) {
-    return unsupportedCSSValue(value);
+  if (!cssValue.isValueList()) {
+    return unsupportedCSSValue(cssValue);
   }
 
   // If it's a list, we can try it as a list valued property.
-  const CSSValueList& cssValueList = toCSSValueList(value);
+  const CSSValueList& cssValueList = toCSSValueList(cssValue);
   for (const CSSValue* innerValue : cssValueList) {
-    styleValue = styleValueForProperty(propertyID, *innerValue);
-    if (!styleValue) {
-      return unsupportedCSSValue(value);
-    }
-    styleValueVector.append(styleValue);
+    styleValue = createStyleValueWithProperty(propertyID, *innerValue);
+    if (!styleValue)
+      return unsupportedCSSValue(cssValue);
+    styleValueVector.push_back(styleValue);
   }
   return styleValueVector;
 }

@@ -14,11 +14,9 @@
 #include "base/stl_util.h"
 #include "base/test/scoped_command_line.h"
 #include "base/values.h"
-#include "extensions/common/features/api_feature.h"
 #include "extensions/common/features/complex_feature.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/features/feature_session_type.h"
-#include "extensions/common/features/permission_feature.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -44,11 +42,6 @@ struct FeatureSessionTypeTestData {
   FeatureSessionType current_session_type;
   std::initializer_list<FeatureSessionType> feature_session_types;
 };
-
-template <class FeatureClass>
-SimpleFeature* CreateFeature() {
-  return new FeatureClass();
-}
 
 Feature::AvailabilityResult IsAvailableInChannel(Channel channel_for_feature,
                                                  Channel channel_for_testing) {
@@ -458,6 +451,10 @@ TEST_F(SimpleFeatureTest, SessionType) {
        Feature::IS_AVAILABLE,
        FeatureSessionType::KIOSK,
        {}},
+      {"session agnostic feature in auto-launched kiosk session",
+       Feature::IS_AVAILABLE,
+       FeatureSessionType::AUTOLAUNCHED_KIOSK,
+       {}},
       {"session agnostic feature in regular session",
        Feature::IS_AVAILABLE,
        FeatureSessionType::REGULAR,
@@ -477,7 +474,19 @@ TEST_F(SimpleFeatureTest, SessionType) {
       {"feature with multiple session types in initial session",
        Feature::INVALID_SESSION_TYPE,
        FeatureSessionType::INITIAL,
-       {FeatureSessionType::REGULAR, FeatureSessionType::KIOSK}}};
+       {FeatureSessionType::REGULAR, FeatureSessionType::KIOSK}},
+      {"feature with auto-launched kiosk session type in regular session",
+       Feature::INVALID_SESSION_TYPE,
+       FeatureSessionType::AUTOLAUNCHED_KIOSK,
+       {FeatureSessionType::REGULAR}},
+      {"feature with auto-launched kiosk session type in auto-launched kiosk",
+       Feature::IS_AVAILABLE,
+       FeatureSessionType::AUTOLAUNCHED_KIOSK,
+       {FeatureSessionType::AUTOLAUNCHED_KIOSK}},
+      {"feature with kiosk session type in auto-launched kiosk session",
+       Feature::IS_AVAILABLE,
+       FeatureSessionType::AUTOLAUNCHED_KIOSK,
+       {FeatureSessionType::KIOSK}}};
 
   for (size_t i = 0; i < arraysize(kTestData); ++i) {
     std::unique_ptr<base::AutoReset<FeatureSessionType>> current_session(
@@ -757,10 +766,10 @@ TEST_F(SimpleFeatureTest, SupportedChannel) {
 TEST_F(SimpleFeatureTest, SimpleFeatureAvailability) {
   std::unique_ptr<ComplexFeature> complex_feature;
   {
-    std::unique_ptr<SimpleFeature> feature1(CreateFeature<SimpleFeature>());
+    std::unique_ptr<SimpleFeature> feature1(new SimpleFeature());
     feature1->channel_.reset(new Channel(Channel::BETA));
     feature1->extension_types_.push_back(Manifest::TYPE_EXTENSION);
-    std::unique_ptr<SimpleFeature> feature2(CreateFeature<SimpleFeature>());
+    std::unique_ptr<SimpleFeature> feature2(new SimpleFeature());
     feature2->channel_.reset(new Channel(Channel::BETA));
     feature2->extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
     std::vector<Feature*> list;
@@ -808,10 +817,10 @@ TEST_F(SimpleFeatureTest, ComplexFeatureAvailability) {
   std::unique_ptr<ComplexFeature> complex_feature;
   {
     // Rule: "extension", channel trunk.
-    std::unique_ptr<SimpleFeature> feature1(CreateFeature<SimpleFeature>());
+    std::unique_ptr<SimpleFeature> feature1(new SimpleFeature());
     feature1->channel_.reset(new Channel(Channel::UNKNOWN));
     feature1->extension_types_.push_back(Manifest::TYPE_EXTENSION);
-    std::unique_ptr<SimpleFeature> feature2(CreateFeature<SimpleFeature>());
+    std::unique_ptr<SimpleFeature> feature2(new SimpleFeature());
     // Rule: "legacy_packaged_app", channel stable.
     feature2->channel_.reset(new Channel(Channel::STABLE));
     feature2->extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);

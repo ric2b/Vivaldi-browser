@@ -43,6 +43,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSize.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/Time.h"
 
 namespace {
 
@@ -71,15 +72,16 @@ unsigned GetEventModifiers(int modifiers) {
 // is an estimate because these two clocks respond differently to user setting
 // time and NTP adjustments. If timestamp is empty then returns current
 // monotonic timestamp.
-double GetEventTimeStamp(const blink::protocol::Maybe<double>& timestamp) {
+TimeTicks GetEventTimeStamp(const blink::protocol::Maybe<double>& timestamp) {
   // Take a snapshot of difference between two clocks on first run and use it
   // for the duration of the application.
   static double epochToMonotonicTimeDelta =
       currentTime() - monotonicallyIncreasingTime();
-  if (timestamp.isJust())
-    return timestamp.fromJust() - epochToMonotonicTimeDelta;
-
-  return monotonicallyIncreasingTime();
+  if (timestamp.isJust()) {
+    double ticksInSeconds = timestamp.fromJust() - epochToMonotonicTimeDelta;
+    return TimeTicks::FromSeconds(ticksInSeconds);
+  }
+  return TimeTicks::Now();
 }
 
 class SyntheticInspectorTouchPoint : public blink::PlatformTouchPoint {
@@ -106,14 +108,14 @@ class SyntheticInspectorTouchEvent : public blink::PlatformTouchEvent {
  public:
   SyntheticInspectorTouchEvent(const blink::PlatformEvent::EventType type,
                                unsigned modifiers,
-                               double timestamp) {
+                               TimeTicks timestamp) {
     m_type = type;
     m_modifiers = modifiers;
     m_timestamp = timestamp;
   }
 
   void append(const blink::PlatformTouchPoint& point) {
-    m_touchPoints.append(point);
+    m_touchPoints.push_back(point);
   }
 };
 
@@ -210,7 +212,12 @@ Response InspectorInputAgent::dispatchTouchEvent(
     event.append(touchPoint);
   }
 
-  m_inspectedFrames->root()->eventHandler().handleTouchEvent(event);
+  // TODO: We need to add the support for generating coalesced events in
+  // the devtools.
+  Vector<PlatformTouchEvent> coalescedEvents;
+
+  m_inspectedFrames->root()->eventHandler().handleTouchEvent(event,
+                                                             coalescedEvents);
   return Response::OK();
 }
 

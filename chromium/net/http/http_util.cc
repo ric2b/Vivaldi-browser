@@ -165,34 +165,6 @@ void HttpUtil::ParseContentType(const std::string& content_type_str,
 }
 
 // static
-// Parse the Range header according to RFC 2616 14.35.1
-// ranges-specifier = byte-ranges-specifier
-// byte-ranges-specifier = bytes-unit "=" byte-range-set
-// byte-range-set  = 1#( byte-range-spec | suffix-byte-range-spec )
-// byte-range-spec = first-byte-pos "-" [last-byte-pos]
-// first-byte-pos  = 1*DIGIT
-// last-byte-pos   = 1*DIGIT
-bool HttpUtil::ParseRanges(const std::string& headers,
-                           std::vector<HttpByteRange>* ranges) {
-  std::string ranges_specifier;
-  HttpUtil::HeadersIterator it(headers.begin(), headers.end(), "\r\n");
-
-  while (it.GetNext()) {
-    // Look for "Range" header.
-    if (!base::LowerCaseEqualsASCII(it.name(), "range"))
-      continue;
-    ranges_specifier = it.values();
-    // We just care about the first "Range" header, so break here.
-    break;
-  }
-
-  if (ranges_specifier.empty())
-    return false;
-
-  return ParseRangeHeader(ranges_specifier, ranges);
-}
-
-// static
 bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
                                 std::vector<HttpByteRange>* ranges) {
   size_t equal_char_offset = ranges_specifier.find('=');
@@ -209,8 +181,9 @@ bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
   TrimLWS(&bytes_unit_begin, &bytes_unit_end);
   // "bytes" unit identifier is not found.
   if (!base::LowerCaseEqualsASCII(
-          base::StringPiece(bytes_unit_begin, bytes_unit_end), "bytes"))
+          base::StringPiece(bytes_unit_begin, bytes_unit_end), "bytes")) {
     return false;
+  }
 
   ValuesIterator byte_range_set_iterator(byte_range_set_begin,
                                          byte_range_set_end, ',');
@@ -265,6 +238,58 @@ bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
 }
 
 // static
+// From RFC 2616 14.16:
+// content-range-spec =
+//     bytes-unit SP byte-range-resp-spec "/" ( instance-length | "*" )
+// byte-range-resp-spec = (first-byte-pos "-" last-byte-pos) | "*"
+// instance-length = 1*DIGIT
+// bytes-unit = "bytes"
+bool HttpUtil::ParseContentRangeHeaderFor206(
+    base::StringPiece content_range_spec,
+    int64_t* first_byte_position,
+    int64_t* last_byte_position,
+    int64_t* instance_length) {
+  *first_byte_position = *last_byte_position = *instance_length = -1;
+  content_range_spec = TrimLWS(content_range_spec);
+
+  size_t space_position = content_range_spec.find(' ');
+  if (space_position == base::StringPiece::npos)
+    return false;
+
+  // Invalid header if it doesn't contain "bytes-unit".
+  if (!base::LowerCaseEqualsASCII(
+          TrimLWS(content_range_spec.substr(0, space_position)), "bytes")) {
+    return false;
+  }
+
+  size_t minus_position = content_range_spec.find('-', space_position + 1);
+  if (minus_position == base::StringPiece::npos)
+    return false;
+  size_t slash_position = content_range_spec.find('/', minus_position + 1);
+  if (slash_position == base::StringPiece::npos)
+    return false;
+
+  if (base::StringToInt64(
+          TrimLWS(content_range_spec.substr(
+              space_position + 1, minus_position - (space_position + 1))),
+          first_byte_position) &&
+      *first_byte_position >= 0 &&
+      base::StringToInt64(
+          TrimLWS(content_range_spec.substr(
+              minus_position + 1, slash_position - (minus_position + 1))),
+          last_byte_position) &&
+      *last_byte_position >= *first_byte_position &&
+      base::StringToInt64(
+          TrimLWS(content_range_spec.substr(slash_position + 1)),
+          instance_length) &&
+      *instance_length > *last_byte_position) {
+    return true;
+  }
+  *first_byte_position = *last_byte_position = *instance_length = -1;
+  return false;
+}
+
+// static
 bool HttpUtil::ParseRetryAfterHeader(const std::string& retry_after_string,
                                      base::Time now,
                                      base::TimeDelta* retry_after) {
@@ -287,30 +312,8 @@ bool HttpUtil::ParseRetryAfterHeader(const std::string& retry_after_string,
   return true;
 }
 
-// static
-bool HttpUtil::HasHeader(const std::string& headers, const char* name) {
-  size_t name_len = strlen(name);
-  std::string::const_iterator it =
-      std::search(headers.begin(),
-                  headers.end(),
-                  name,
-                  name + name_len,
-                  base::CaseInsensitiveCompareASCII<char>());
-  if (it == headers.end())
-    return false;
-
-  // ensure match is prefixed by newline
-  if (it != headers.begin() && it[-1] != '\n')
-    return false;
-
-  // ensure match is suffixed by colon
-  if (it + name_len >= headers.end() || it[name_len] != ':')
-    return false;
-
-  return true;
-}
-
 namespace {
+
 // A header string containing any of the following fields will cause
 // an error. The list comes from the XMLHttpRequest standard.
 // http://www.w3.org/TR/XMLHttpRequest/#the-setrequestheader-method
@@ -337,7 +340,8 @@ const char* const kForbiddenHeaderFields[] = {
   "user-agent",
   "via",
 };
-}  // anonymous namespace
+
+}  // namespace
 
 // static
 bool HttpUtil::IsSafeHeader(const std::string& name) {
@@ -367,32 +371,6 @@ bool HttpUtil::IsValidHeaderValue(const base::StringPiece& value) {
       return false;
   }
   return true;
-}
-
-// static
-std::string HttpUtil::StripHeaders(const std::string& headers,
-                                   const char* const headers_to_remove[],
-                                   size_t headers_to_remove_len) {
-  std::string stripped_headers;
-  HttpUtil::HeadersIterator it(headers.begin(), headers.end(), "\r\n");
-
-  while (it.GetNext()) {
-    bool should_remove = false;
-    for (size_t i = 0; i < headers_to_remove_len; ++i) {
-      if (base::LowerCaseEqualsASCII(
-              base::StringPiece(it.name_begin(), it.name_end()),
-              headers_to_remove[i])) {
-        should_remove = true;
-        break;
-      }
-    }
-    if (!should_remove) {
-      // Assume that name and values are on the same line.
-      stripped_headers.append(it.name_begin(), it.values_end());
-      stripped_headers.append("\r\n");
-    }
-  }
-  return stripped_headers;
 }
 
 // static
@@ -426,7 +404,8 @@ bool HttpUtil::IsNonCoalescingHeader(std::string::const_iterator name_begin,
 }
 
 bool HttpUtil::IsLWS(char c) {
-  return strchr(HTTP_LWS, c) != NULL;
+  const base::StringPiece kWhiteSpaceCharacters(HTTP_LWS);
+  return kWhiteSpaceCharacters.find(c) != base::StringPiece::npos;
 }
 
 // static
@@ -779,16 +758,6 @@ std::string HttpUtil::GenerateAcceptLanguageHeader(
       qvalue10 -= kQvalueDecrement10;
   }
   return lang_list_with_q;
-}
-
-void HttpUtil::AppendHeaderIfMissing(const char* header_name,
-                                     const std::string& header_value,
-                                     std::string* headers) {
-  if (header_value.empty())
-    return;
-  if (HttpUtil::HasHeader(*headers, header_name))
-    return;
-  *headers += std::string(header_name) + ": " + header_value + "\r\n";
 }
 
 bool HttpUtil::HasStrongValidators(HttpVersion version,

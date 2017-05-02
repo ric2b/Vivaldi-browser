@@ -37,10 +37,13 @@ PolicyMap::Entry PolicyMap::Entry::DeepCopy() const {
 
 bool PolicyMap::Entry::has_higher_priority_than(
     const PolicyMap::Entry& other) const {
-  if (level == other.level)
+  if (level == other.level) {
+    if (scope == other.scope) {
+      return source > other.source;
+    }
     return scope > other.scope;
-  else
-    return level > other.level;
+  }
+  return level > other.level;
 }
 
 bool PolicyMap::Entry::Equals(const PolicyMap::Entry& other) const {
@@ -87,6 +90,12 @@ void PolicyMap::Set(
 
 void PolicyMap::Set(const std::string& policy, Entry entry) {
   map_[policy] = std::move(entry);
+}
+
+void PolicyMap::SetSourceForAll(PolicySource source) {
+  for (auto& it : map_) {
+    it.second.source = source;
+  }
 }
 
 void PolicyMap::Erase(const std::string& policy) {

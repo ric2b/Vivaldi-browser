@@ -176,6 +176,9 @@ class VIEWS_EXPORT ViewsDelegate {
   // Returns the context factory for new windows.
   virtual ui::ContextFactory* GetContextFactory();
 
+  // Returns the privileged context factory for new windows.
+  virtual ui::ContextFactoryPrivate* GetContextFactoryPrivate();
+
   // Returns the user-visible name of the application.
   virtual std::string GetApplicationName();
 
@@ -193,12 +196,24 @@ class VIEWS_EXPORT ViewsDelegate {
   // Returns a blocking pool task runner given a TaskRunnerType.
   virtual scoped_refptr<base::TaskRunner> GetBlockingPoolTaskRunner();
 
-  // Returns the insets that should be applied around a DialogClientView.
+  // Returns the insets that should be applied around a DialogClientView. Note
+  // that the top inset is used for the distance between the buttons and the
+  // DialogClientView's content view.
   virtual gfx::Insets GetDialogButtonInsets();
 
   // Returns the spacing between a pair of related horizontal buttons, used for
   // dialog layout.
   virtual int GetDialogRelatedButtonHorizontalSpacing();
+
+  // Returns the spacing between a pair of related vertical controls, used for
+  // dialog layout.
+  virtual int GetDialogRelatedControlVerticalSpacing();
+
+  // Returns the insets that should be applied around a dialog's frame view.
+  virtual gfx::Insets GetDialogFrameViewInsets();
+
+  // Returns the margins that should be applied around a bubble dialog.
+  virtual gfx::Insets GetBubbleDialogMargins();
 
  protected:
   ViewsDelegate();

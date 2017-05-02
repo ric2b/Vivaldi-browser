@@ -33,9 +33,9 @@ const SVGEnumerationStringEntries&
 getStaticStringEntries<SVGMarkerOrientType>() {
   DEFINE_STATIC_LOCAL(SVGEnumerationStringEntries, entries, ());
   if (entries.isEmpty()) {
-    entries.append(std::make_pair(SVGMarkerOrientAuto, "auto"));
-    entries.append(std::make_pair(SVGMarkerOrientAngle, "angle"));
-    entries.append(
+    entries.push_back(std::make_pair(SVGMarkerOrientAuto, "auto"));
+    entries.push_back(std::make_pair(SVGMarkerOrientAngle, "angle"));
+    entries.push_back(
         std::make_pair(SVGMarkerOrientAutoStartReverse, "auto-start-reverse"));
   }
   return entries;
@@ -64,7 +64,7 @@ void SVGMarkerOrientEnumeration::notifyChange() {
 
 void SVGMarkerOrientEnumeration::add(SVGPropertyBase*, SVGElement*) {
   // SVGMarkerOrientEnumeration is only animated via SVGAngle
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
 }
 
 void SVGMarkerOrientEnumeration::calculateAnimatedValue(
@@ -76,14 +76,14 @@ void SVGMarkerOrientEnumeration::calculateAnimatedValue(
     SVGPropertyBase* toAtEndOfDurationValue,
     SVGElement* contextElement) {
   // SVGMarkerOrientEnumeration is only animated via SVGAngle
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
 }
 
 float SVGMarkerOrientEnumeration::calculateDistance(
     SVGPropertyBase* to,
     SVGElement* contextElement) {
   // SVGMarkerOrientEnumeration is only animated via SVGAngle
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return -1.0;
 }
 

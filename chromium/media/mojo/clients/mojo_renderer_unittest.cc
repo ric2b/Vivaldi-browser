@@ -6,9 +6,11 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/test_message_loop.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/cdm_config.h"
@@ -66,7 +68,7 @@ class MojoRendererTest : public ::testing::Test {
         mojo_cdm_service_context_.GetWeakPtr(), nullptr, nullptr,
         std::move(mock_renderer),
         MojoRendererService::InitiateSurfaceRequestCB(),
-        mojo::GetProxy(&remote_renderer));
+        mojo::MakeRequest(&remote_renderer));
 
     mojo_renderer_.reset(
         new MojoRenderer(message_loop_.task_runner(),
@@ -92,6 +94,7 @@ class MojoRendererTest : public ::testing::Test {
   MOCK_METHOD1(OnInitialized, void(PipelineStatus));
   MOCK_METHOD0(OnFlushed, void());
   MOCK_METHOD1(OnCdmAttached, void(bool));
+  MOCK_METHOD1(OnSurfaceRequestToken, void(const base::UnguessableToken&));
 
   std::unique_ptr<StrictMock<MockDemuxerStream>> CreateStream(
       DemuxerStream::Type type) {
@@ -116,7 +119,7 @@ class MojoRendererTest : public ::testing::Test {
   }
 
   void InitializeAndExpect(PipelineStatus status) {
-    DVLOG(1) << __FUNCTION__ << ": " << status;
+    DVLOG(1) << __func__ << ": " << status;
     EXPECT_CALL(*this, OnInitialized(status));
     mojo_renderer_->Initialize(
         &demuxer_, &renderer_client_,
@@ -133,7 +136,7 @@ class MojoRendererTest : public ::testing::Test {
   }
 
   void Flush() {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     // Flush callback should always be fired.
     EXPECT_CALL(*this, OnFlushed());
     mojo_renderer_->Flush(
@@ -142,7 +145,7 @@ class MojoRendererTest : public ::testing::Test {
   }
 
   void SetCdmAndExpect(bool success) {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     // Set CDM callback should always be fired.
     EXPECT_CALL(*this, OnCdmAttached(success));
     mojo_renderer_->SetCdm(
@@ -155,7 +158,7 @@ class MojoRendererTest : public ::testing::Test {
   // Note that |mock_renderer_| will also be destroyed, do NOT expect anything
   // on it. Otherwise the test will crash.
   void ConnectionError() {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     DCHECK(renderer_binding_);
     renderer_binding_->Close();
     base::RunLoop().RunUntilIdle();
@@ -173,7 +176,7 @@ class MojoRendererTest : public ::testing::Test {
     mojo::MakeStrongBinding(
         base::MakeUnique<MojoCdmService>(mojo_cdm_service_context_.GetWeakPtr(),
                                          &cdm_factory_),
-        mojo::GetProxy(&remote_cdm_));
+        mojo::MakeRequest(&remote_cdm_));
     remote_cdm_->Initialize(
         kClearKeyKeySystem, "https://www.test.com",
         mojom::CdmConfig::From(CdmConfig()),
@@ -370,6 +373,22 @@ TEST_F(MojoRendererTest, GetMediaTime) {
   WaitFor(kSleepTime);
   EXPECT_EQ(pause_time, mojo_renderer_->GetMediaTime());
   Destroy();
+}
+
+// When |initiate_surface_request_cb_| is not set, the client should not call
+// InitiateScopedSurfaceRequest(). Otherwise, it will cause the pipe to be
+// closed and MojoRendererService destroyed.
+TEST_F(MojoRendererTest, InitiateScopedSurfaceRequest) {
+  Initialize();
+  DCHECK(renderer_binding_);
+
+  EXPECT_CALL(renderer_client_, OnError(PIPELINE_ERROR_DECODE)).Times(1);
+
+  mojo_renderer_->InitiateScopedSurfaceRequest(base::Bind(
+      &MojoRendererTest::OnSurfaceRequestToken, base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+
+  DCHECK(!renderer_binding_);
 }
 
 TEST_F(MojoRendererTest, OnBufferingStateChange) {

@@ -30,7 +30,6 @@
 #include "core/svg/SVGElement.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "wtf/CurrentTime.h"
 
 namespace blink {
 
@@ -57,7 +56,7 @@ Event::Event() : Event("", false, false) {
 Event::Event(const AtomicString& eventType,
              bool canBubbleArg,
              bool cancelableArg,
-             double platformTimeStamp)
+             TimeTicks platformTimeStamp)
     : Event(eventType,
             canBubbleArg,
             cancelableArg,
@@ -72,13 +71,13 @@ Event::Event(const AtomicString& eventType,
             canBubbleArg,
             cancelableArg,
             composedMode,
-            monotonicallyIncreasingTime()) {}
+            TimeTicks::Now()) {}
 
 Event::Event(const AtomicString& eventType,
              bool canBubbleArg,
              bool cancelableArg,
              ComposedMode composedMode,
-             double platformTimeStamp)
+             TimeTicks platformTimeStamp)
     : m_type(eventType),
       m_canBubble(canBubbleArg),
       m_cancelable(cancelableArg),
@@ -103,7 +102,7 @@ Event::Event(const AtomicString& eventType, const EventInit& initializer)
             initializer.cancelable(),
             initializer.composed() ? ComposedMode::Composed
                                    : ComposedMode::Scoped,
-            monotonicallyIncreasingTime()) {}
+            TimeTicks::Now()) {}
 
 Event::~Event() {}
 
@@ -301,12 +300,9 @@ HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState,
 
   if (Node* node = m_currentTarget->toNode()) {
     DCHECK(m_eventPath);
-    size_t eventPathSize = m_eventPath->size();
-    for (size_t i = 0; i < eventPathSize; ++i) {
-      if (node == (*m_eventPath)[i].node()) {
-        return (*m_eventPath)[i].treeScopeEventContext().ensureEventPath(
-            *m_eventPath);
-      }
+    for (auto& context : m_eventPath->nodeEventContexts()) {
+      if (node == context.node())
+        return context.treeScopeEventContext().ensureEventPath(*m_eventPath);
     }
     NOTREACHED();
   }
@@ -332,8 +328,9 @@ double Event::timeStamp(ScriptState* scriptState) const {
   if (scriptState && scriptState->domWindow()) {
     Performance* performance =
         DOMWindowPerformance::performance(*scriptState->domWindow());
+    double timestampSeconds = (m_platformTimeStamp - TimeTicks()).InSecondsF();
     timeStamp =
-        performance->monotonicTimeToDOMHighResTimeStamp(m_platformTimeStamp);
+        performance->monotonicTimeToDOMHighResTimeStamp(timestampSeconds);
   }
 
   return timeStamp;

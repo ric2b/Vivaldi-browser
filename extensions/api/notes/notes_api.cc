@@ -191,8 +191,8 @@ bool NotesGetFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<NoteTreeNode> notes;
-  Notes_Model* model = GetNotesModel();
-  Notes_Node* root = model->root();
+  Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  Notes_Node* root = model->root_node();
   if (params->id_or_id_list.as_strings) {
     std::vector<std::string>& ids = *params->id_or_id_list.as_strings;
     size_t count = ids.size();
@@ -234,9 +234,11 @@ NotesGetTreeFunction::NotesGetTreeFunction() {}
 
 bool NotesGetTreeFunction::RunAsync() {
   std::vector<NoteTreeNode> notes;
-  Notes_Model* model = GetNotesModel();
-  Notes_Node* root = model->root();
+  Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  Notes_Node* root = model->main_node();
   std::unique_ptr<NoteTreeNode> new_note(CreateTreeNode(root));
+  std::unique_ptr<NoteTreeNode> trash_note(CreateTreeNode(model->trash_node()));
+  new_note->children->push_back(std::move(*trash_note));
   if (new_note->children.get()->size())  // Do not return root.
     notes.push_back(std::move(*new_note));
   results_ = vivaldi::notes::GetTree::Results::Create(notes);
@@ -290,7 +292,7 @@ bool NotesCreateFunction::RunAsync() {
   if (params->note.parent_id.get()) {
     int64_t idval;
     base::StringToInt64(*params->note.parent_id.get(), &idval);
-    parent = GetNodeFromId(model->root(), idval);
+    parent = GetNodeFromId(model->root_node(), idval);
   }
 
   // insert the attachments
@@ -308,12 +310,11 @@ bool NotesCreateFunction::RunAsync() {
     }
   }
 
-  if (!parent) {
-    parent = model->root();
+  if (!parent || parent == model->root_node()) {
+    parent = model->main_node();
   }
-  if (parent == model->root()) {
-    // Insert it before Trash, hence the -1.
-    int64_t maxIndex = parent->child_count() - 1;
+  if (parent == model->main_node()) {
+    int64_t maxIndex = parent->child_count();
     int64_t newIndex = maxIndex;
     if (params->note.index.get()) {
       newIndex = *params->note.index.get();
@@ -357,16 +358,16 @@ bool NotesUpdateFunction::RunAsync() {
   Notes_Model* model = GetNotesModel();
   int64_t idval;
   base::StringToInt64(params->id, &idval);
-  Notes_Node* node = GetNodeFromId(model->root(), idval);
+  Notes_Node* node = GetNodeFromId(model->root_node(), idval);
   if (!node) {
     error_ = noteNotFoundStr;
     SendResponse(false);
-    DCHECK(node);
     return false;
   }
 
   vivaldi::notes::OnChanged::ChangeInfo changeinfo;
 
+  model->StartUpdatingNode(node);
   // All fields are optional.
   base::string16 title;
   if (params->changes.title.get()) {
@@ -430,6 +431,8 @@ bool NotesUpdateFunction::RunAsync() {
       new std::vector<NoteAttachment>(std::move(newattachments)));
   }
 
+  model->FinishedUpdatingNode(node);
+
   std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
 
   results_ = vivaldi::notes::Create::Results::Create(*ret);
@@ -459,12 +462,11 @@ bool NotesRemoveFunction::RunAsync() {
 
   Notes_Model* model = GetNotesModel();
 
-  Notes_Node* root = model->root();
+  Notes_Node* root = model->root_node();
   Notes_Node* node = GetNodeFromId(root, id);
   if (!node) {
     error_ = noteNotFoundStr;
     SendResponse(false);
-    DCHECK(node);
     return false;
   }
   Notes_Node* parent = node->parent();
@@ -563,7 +565,8 @@ bool NotesSearchFunction::RunAsync() {
 
   base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
   if (needle.length() > 0) {
-    ui::TreeNodeIterator<Notes_Node> iterator(GetNotesModel()->root());
+    ui::TreeNodeIterator<Notes_Node> iterator(
+        NotesModelFactory::GetForProfile(GetProfile())->root_node());
 
     while (iterator.has_next()) {
       Notes_Node* node = iterator.Next();
@@ -599,8 +602,8 @@ bool NotesMoveFunction::RunAsync() {
     vivaldi::notes::Move::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel();
-  Notes_Node* root = model->root();
+  Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  Notes_Node* root = model->root_node();
 
   int64_t id;
   base::StringToInt64(params->id, &id);
@@ -694,6 +697,7 @@ bool NotesEmptyTrashFunction::RunAsync() {
     success = true;
   }
   results_ = vivaldi::notes::EmptyTrash::Results::Create(success);
+  SendResponse(true);
   return true;
 }
 

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "components/exo/buffer.h"
@@ -176,7 +176,7 @@ TEST_F(PointerTest, OnPointerMotion) {
   std::unique_ptr<Surface> child_surface(new Surface);
   std::unique_ptr<ShellSurface> child_shell_surface(new ShellSurface(
       child_surface.get(), shell_surface.get(), gfx::Rect(9, 9, 1, 1), true,
-      ash::kShellWindowId_DefaultContainer));
+      false, ash::kShellWindowId_DefaultContainer));
   gfx::Size child_buffer_size(15, 15);
   std::unique_ptr<Buffer> child_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(child_buffer_size)));
@@ -309,12 +309,12 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
   std::unique_ptr<Surface> surface2(new Surface);
   std::unique_ptr<ShellSurface> shell_surface2(
       new ShellSurface(surface2.get(), nullptr, gfx::Rect(0, 0, 5, 5), true,
-                       ash::kShellWindowId_SystemModalContainer));
+                       false, ash::kShellWindowId_SystemModalContainer));
   std::unique_ptr<Buffer> buffer2(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(gfx::Size(5, 5))));
   surface2->Attach(buffer2.get());
   surface2->Commit();
-  ash::wm::CenterWindow(ash::WmWindowAura::Get(surface2->window()));
+  ash::wm::CenterWindow(ash::WmWindow::Get(surface2->window()));
   gfx::Point location2 = surface2->window()->GetBoundsInScreen().origin();
 
   // Make the window modal.

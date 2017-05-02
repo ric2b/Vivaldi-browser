@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_stream_sequencer.h"
 
 namespace net {
@@ -42,7 +42,7 @@ class QuicStreamPeer {
       QuicStream* stream,
       base::StringPiece data,
       bool fin,
-      QuicAckListenerInterface* ack_notifier_delegate);
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   static net::QuicStreamSequencer* sequencer(QuicStream* stream);
 

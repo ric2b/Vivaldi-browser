@@ -187,13 +187,9 @@ class CC_EXPORT MathUtil {
   // clipped_quad array. Note that num_vertices_in_clipped_quad may be zero,
   // which means the entire quad was clipped, and none of the vertices in the
   // array are valid.
-  static void MapClippedQuad(const gfx::Transform& transform,
-                             const gfx::QuadF& src_quad,
-                             gfx::PointF clipped_quad[8],
-                             int* num_vertices_in_clipped_quad);
   static bool MapClippedQuad3d(const gfx::Transform& transform,
                                const gfx::QuadF& src_quad,
-                               gfx::Point3F clipped_quad[8],
+                               gfx::Point3F clipped_quad[6],
                                int* num_vertices_in_clipped_quad);
 
   static gfx::RectF ComputeEnclosingRectOfVertices(const gfx::PointF vertices[],
@@ -309,6 +305,12 @@ class CC_EXPORT MathUtil {
 
   // Returns vector that y axis (0,1,0) transforms to under given transform.
   static gfx::Vector3dF GetYAxis(const gfx::Transform& transform);
+
+  static bool IsNearlyTheSameForTesting(float left, float right);
+  static bool IsNearlyTheSameForTesting(const gfx::PointF& l,
+                                        const gfx::PointF& r);
+  static bool IsNearlyTheSameForTesting(const gfx::Point3F& l,
+                                        const gfx::Point3F& r);
 
  private:
   template <typename T>

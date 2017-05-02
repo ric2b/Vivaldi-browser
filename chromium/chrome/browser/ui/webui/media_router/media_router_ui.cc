@@ -11,6 +11,7 @@
 
 #include "base/guid.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -36,8 +37,11 @@
 #include "chrome/browser/ui/webui/media_router/media_router_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/media_router/media_router_resources_provider.h"
 #include "chrome/browser/ui/webui/media_router/media_router_webui_message_handler.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -47,6 +51,7 @@
 #include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
+#include "url/origin.h"
 
 namespace media_router {
 
@@ -88,6 +93,15 @@ base::TimeDelta GetRouteRequestTimeout(MediaCastMode cast_mode) {
   }
 }
 
+// Returns the first source in |sources| that can be connected to by using the
+// "Cast" button in the dialog, or an empty source if there is none.  This is
+// used by the Media Router to find such a matching route if it exists.
+MediaSource GetSourceForRouteObserver(const std::vector<MediaSource>& sources) {
+  auto source_it =
+      std::find_if(sources.begin(), sources.end(), CanConnectToMediaSource);
+  return source_it != sources.end() ? *source_it : MediaSource("");
+}
+
 }  // namespace
 
 // static
@@ -113,7 +127,8 @@ class MediaRouterUI::UIIssuesObserver : public IssuesObserver {
   ~UIIssuesObserver() override {}
 
   // IssuesObserver implementation.
-  void OnIssueUpdated(const Issue* issue) override { ui_->SetIssue(issue); }
+  void OnIssue(const Issue& issue) override { ui_->SetIssue(issue); }
+  void OnIssuesCleared() override { ui_->ClearIssue(); }
 
  private:
   // Reference back to the owning MediaRouterUI instance.
@@ -140,13 +155,15 @@ void MediaRouterUI::UIMediaRoutesObserver::OnRoutesUpdated(
 
 MediaRouterUI::MediaRouterUI(content::WebUI* web_ui)
     : ConstrainedWebDialogUI(web_ui),
-      handler_(new MediaRouterWebUIMessageHandler(this)),
       ui_initialized_(false),
       current_route_request_id_(-1),
       route_request_counter_(0),
       initiator_(nullptr),
       router_(nullptr),
       weak_factory_(this) {
+  auto handler = base::MakeUnique<MediaRouterWebUIMessageHandler>(this);
+  handler_ = handler.get();
+
   // Create a WebUIDataSource containing the chrome://media-router page's
   // content.
   std::unique_ptr<content::WebUIDataSource> html_source(
@@ -169,13 +186,10 @@ MediaRouterUI::MediaRouterUI(content::WebUI* web_ui)
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui),
                                 html_source.release());
 
-  // Ownership of |handler_| is transferred to |web_ui|.
-  web_ui->AddMessageHandler(handler_);
+  web_ui->AddMessageHandler(std::move(handler));
 }
 
 MediaRouterUI::~MediaRouterUI() {
-  if (issues_observer_) issues_observer_->UnregisterObserver();
-
   if (query_result_manager_.get()) query_result_manager_->RemoveObserver(this);
   if (presentation_service_delegate_.get())
     presentation_service_delegate_->RemoveDefaultPresentationRequestObserver(
@@ -306,10 +320,15 @@ void MediaRouterUI::OnDefaultPresentationChanged(
   query_result_manager_->SetSourcesForCastMode(
       MediaCastMode::DEFAULT, sources,
       presentation_request_->frame_url().GetOrigin());
-  // Register for MediaRoute updates.
-  // TODO(crbug.com/627655): Use multiple URLs.
+  // Register for MediaRoute updates.  NOTE(mfoltz): If there are multiple
+  // sources that can be connected to via the dialog, this will break.  We will
+  // need to observe multiple sources (keyed by sinks) in that case.  As this is
+  // Cast-specific for the forseeable future, it may be simpler to plumb a new
+  // observer API for this case.
+  const MediaSource source_for_route_observer =
+      GetSourceForRouteObserver(sources);
   routes_observer_.reset(new UIMediaRoutesObserver(
-      router_, sources[0].id(),
+      router_, source_for_route_observer.id(),
       base::Bind(&MediaRouterUI::OnRoutesUpdated, base::Unretained(this))));
 
   UpdateCastModes();
@@ -365,9 +384,8 @@ void MediaRouterUI::UIInitialized() {
   ui_initialized_ = true;
 
   // Register for Issue updates.
-  if (!issues_observer_)
-    issues_observer_.reset(new UIIssuesObserver(router_, this));
-  issues_observer_->RegisterObserver();
+  issues_observer_.reset(new UIIssuesObserver(router_, this));
+  issues_observer_->Init();
 }
 
 bool MediaRouterUI::CreateRoute(const MediaSink::Id& sink_id,
@@ -486,9 +504,11 @@ void MediaRouterUI::CloseRoute(const MediaRoute::Id& route_id) {
   router_->TerminateRoute(route_id);
 }
 
-void MediaRouterUI::AddIssue(const Issue& issue) { router_->AddIssue(issue); }
+void MediaRouterUI::AddIssue(const IssueInfo& issue) {
+  router_->AddIssue(issue);
+}
 
-void MediaRouterUI::ClearIssue(const std::string& issue_id) {
+void MediaRouterUI::ClearIssue(const Issue::Id& issue_id) {
   router_->ClearIssue(issue_id);
 }
 
@@ -509,6 +529,37 @@ void MediaRouterUI::SearchSinksAndCreateRoute(
                  weak_factory_.GetWeakPtr(), cast_mode));
 }
 
+bool MediaRouterUI::UserSelectedTabMirroringForCurrentOrigin() const {
+  const base::ListValue* origins =
+      Profile::FromWebUI(web_ui())->GetPrefs()->GetList(
+          prefs::kMediaRouterTabMirroringSources);
+  return origins->Find(base::StringValue(GetSerializedInitiatorOrigin())) !=
+         origins->end();
+}
+
+void MediaRouterUI::RecordCastModeSelection(MediaCastMode cast_mode) {
+  ListPrefUpdate update(Profile::FromWebUI(web_ui())->GetPrefs(),
+                        prefs::kMediaRouterTabMirroringSources);
+
+  switch (cast_mode) {
+    case MediaCastMode::DEFAULT:
+      update->Remove(base::StringValue(GetSerializedInitiatorOrigin()),
+                     nullptr);
+      break;
+    case MediaCastMode::TAB_MIRROR:
+      update->AppendIfNotPresent(
+          base::MakeUnique<base::StringValue>(GetSerializedInitiatorOrigin()));
+      break;
+    case MediaCastMode::DESKTOP_MIRROR:
+      // Desktop mirroring isn't domain-specific, so we don't record the
+      // selection.
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+}
+
 void MediaRouterUI::OnResultsUpdated(
     const std::vector<MediaSinkWithCastModes>& sinks) {
   sinks_ = sinks;
@@ -520,11 +571,18 @@ void MediaRouterUI::OnResultsUpdated(
               return sink1.sink.CompareUsingCollator(sink2.sink, collator_ptr);
             });
 
-  if (ui_initialized_) handler_->UpdateSinks(sinks_);
+  if (ui_initialized_)
+    handler_->UpdateSinks(sinks_);
 }
 
-void MediaRouterUI::SetIssue(const Issue* issue) {
-  if (ui_initialized_) handler_->UpdateIssue(issue);
+void MediaRouterUI::SetIssue(const Issue& issue) {
+  if (ui_initialized_)
+    handler_->UpdateIssue(issue);
+}
+
+void MediaRouterUI::ClearIssue() {
+  if (ui_initialized_)
+    handler_->ClearIssue();
 }
 
 void MediaRouterUI::OnRoutesUpdated(
@@ -631,11 +689,8 @@ void MediaRouterUI::SendIssueForRouteTimeout(
       NOTREACHED();
   }
 
-  Issue issue(issue_title, std::string(),
-              IssueAction(IssueAction::TYPE_DISMISS),
-              std::vector<IssueAction>(), std::string(), Issue::NOTIFICATION,
-              false, -1);
-  AddIssue(issue);
+  AddIssue(IssueInfo(issue_title, IssueInfo::Action::DISMISS,
+                     IssueInfo::Severity::NOTIFICATION));
 }
 
 void MediaRouterUI::SendIssueForUnableToCast(MediaCastMode cast_mode) {
@@ -647,10 +702,8 @@ void MediaRouterUI::SendIssueForUnableToCast(MediaCastMode cast_mode) {
                 IDS_MEDIA_ROUTER_ISSUE_UNABLE_TO_CAST_DESKTOP)
           : l10n_util::GetStringUTF8(
                 IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT_FOR_TAB);
-  AddIssue(Issue(issue_title, std::string(),
-                 IssueAction(IssueAction::TYPE_DISMISS),
-                 std::vector<IssueAction>(), std::string(), Issue::WARNING,
-                 false, -1));
+  AddIssue(IssueInfo(issue_title, IssueInfo::Action::DISMISS,
+                     IssueInfo::Severity::WARNING));
 }
 
 GURL MediaRouterUI::GetFrameURL() const {
@@ -671,6 +724,10 @@ std::string MediaRouterUI::GetTruncatedPresentationRequestSourceName() const {
              ? GetExtensionName(gurl, extensions::ExtensionRegistry::Get(
                                           Profile::FromWebUI(web_ui())))
              : TruncateHost(GetHostFromURL(gurl));
+}
+
+const std::set<MediaCastMode>& MediaRouterUI::cast_modes() const {
+  return cast_modes_;
 }
 
 const std::string& MediaRouterUI::GetRouteProviderExtensionId() const {
@@ -701,6 +758,13 @@ void MediaRouterUI::OnUIInitialDataReceived() {
 
 void MediaRouterUI::UpdateMaxDialogHeight(int height) {
   handler_->UpdateMaxDialogHeight(height);
+}
+
+std::string MediaRouterUI::GetSerializedInitiatorOrigin() const {
+  url::Origin origin = initiator_
+                           ? url::Origin(initiator_->GetLastCommittedURL())
+                           : url::Origin();
+  return origin.Serialize();
 }
 
 }  // namespace media_router

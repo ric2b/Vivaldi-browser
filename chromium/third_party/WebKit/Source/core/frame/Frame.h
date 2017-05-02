@@ -54,7 +54,7 @@ class Page;
 class SecurityContext;
 class Settings;
 class WindowProxy;
-class WindowProxyManager;
+class WindowProxyManagerBase;
 struct FrameLoadRequest;
 
 enum class FrameDetachType { Remove, Swap };
@@ -74,7 +74,6 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   virtual bool isLocalFrame() const = 0;
   virtual bool isRemoteFrame() const = 0;
 
-  virtual DOMWindow* domWindow() const = 0;
   virtual WindowProxy* windowProxy(DOMWrapperWorld&) = 0;
 
   virtual void navigate(Document& originDocument,
@@ -90,8 +89,6 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   void disconnectOwnerElement();
   virtual bool shouldClose() = 0;
 
-  virtual void setDocumentHasReceivedUserGesture() = 0;
-
   FrameClient* client() const;
 
   // NOTE: Page is moving out of Blink up into the browser process as
@@ -106,6 +103,8 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   FrameOwner* owner() const;
   void setOwner(FrameOwner* owner) { m_owner = owner; }
   HTMLFrameOwnerElement* deprecatedLocalOwner() const;
+
+  DOMWindow* domWindow() const { return m_domWindow; }
 
   FrameTree& tree() const;
   ChromeClient& chromeClient() const;
@@ -142,9 +141,12 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   void setIsLoading(bool isLoading) { m_isLoading = isLoading; }
   bool isLoading() const { return m_isLoading; }
 
-  virtual WindowProxyManager* getWindowProxyManager() const = 0;
+  virtual WindowProxyManagerBase* getWindowProxyManager() const = 0;
 
   virtual void didChangeVisibilityState();
+
+  void setDocumentHasReceivedUserGesture();
+  bool hasReceivedUserGesture() const { return m_hasReceivedUserGesture; }
 
   bool isDetaching() const { return m_isDetaching; }
 
@@ -155,7 +157,9 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
 
   Member<FrameHost> m_host;
   Member<FrameOwner> m_owner;
+  Member<DOMWindow> m_domWindow;
 
+  bool m_hasReceivedUserGesture = false;
   bool m_isDetaching = false;
 
  private:

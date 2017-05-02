@@ -36,6 +36,7 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
+#include "remoting/base/logging.h"
 #include "url/gurl.h"
 
 namespace {
@@ -127,11 +128,14 @@ void TokenValidatorBase::OnResponseStarted(net::URLRequest* source,
   DCHECK_NE(net_result, net::ERR_IO_PENDING);
   DCHECK_EQ(request_.get(), source);
 
-  if (net_result != net::OK)
+  if (net_result != net::OK) {
+    // Process all network errors in the same manner as read errors.
+    OnReadCompleted(request_.get(), net_result);
     return;
+  }
 
   int bytes_read = request_->Read(buffer_.get(), kBufferSize);
-  if (bytes_read > 0)
+  if (bytes_read != net::ERR_IO_PENDING)
     OnReadCompleted(request_.get(), bytes_read);
 }
 
@@ -233,6 +237,13 @@ void TokenValidatorBase::ContinueWithCertificate(
     net::X509Certificate* client_cert,
     net::SSLPrivateKey* client_private_key) {
   if (request_) {
+    if (client_cert) {
+      HOST_LOG << "Using certificate issued by: '"
+               << client_cert->issuer().common_name << "' with start date: '"
+               << client_cert->valid_start() << "' and expiry date: '"
+               << client_cert->valid_expiry() << "'";
+    }
+
     request_->ContinueWithCertificate(client_cert, client_private_key);
   }
 }

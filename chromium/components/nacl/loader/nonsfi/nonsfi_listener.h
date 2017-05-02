@@ -20,12 +20,6 @@ class Message;
 class SyncChannel;
 }  // namespace IPC
 
-namespace mojo {
-namespace edk {
-class ScopedIPCSupport;
-}  // namespace edk
-}  // namespace mojo
-
 class NaClTrustedListener;
 
 namespace nacl {
@@ -51,8 +45,7 @@ class NonSfiListener : public IPC::Listener {
   base::Thread io_thread_;
   base::WaitableEvent shutdown_event_;
   std::unique_ptr<IPC::SyncChannel> channel_;
-  scoped_refptr<NaClTrustedListener> trusted_listener_;
-  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<NaClTrustedListener> trusted_listener_;
 
   std::unique_ptr<std::map<std::string, int>> key_fd_map_;
 

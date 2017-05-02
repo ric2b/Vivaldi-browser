@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "base/files/file_enumerator.h"
@@ -64,7 +65,7 @@ CFNumberRef GetCFNumberProperty(io_service_t service, const CFStringRef key) {
 // successful.
 bool GetStringProperty(io_service_t service,
                        const CFStringRef key,
-                       mojo::String* value) {
+                       std::string* value) {
   CFStringRef propValue = GetCFStringProperty(service, key);
   if (propValue) {
     *value = base::SysCFStringRefToUTF8(propValue);
@@ -100,8 +101,8 @@ int Clamp(int value, int min, int max) {
 // Returns an array of devices as retrieved through the new method of
 // enumerating serial devices (IOKit).  This new method gives more information
 // about the devices than the old method.
-mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
-  mojo::Array<serial::DeviceInfoPtr> devices;
+std::vector<serial::DeviceInfoPtr> GetDevicesNew() {
+  std::vector<serial::DeviceInfoPtr> devices;
 
   // Make a service query to find all serial devices.
   CFMutableDictionaryRef matchingDict =
@@ -134,17 +135,17 @@ mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
       callout_info->product_id = productId;
     }
 
-    mojo::String displayName;
+    std::string display_name;
     if (GetStringProperty(scoped_device.get(), CFSTR(kUSBProductString),
-                          &displayName)) {
-      callout_info->display_name = displayName.PassStorage();
+                          &display_name)) {
+      callout_info->display_name = std::move(display_name);
     }
 
     // Each serial device has two "paths" in /dev/ associated with it: a
     // "dialin" path starting with "tty" and a "callout" path starting with
     // "cu". Each of these is considered a different device from Chrome's
     // standpoint, but both should share the device's USB properties.
-    mojo::String dialinDevice;
+    std::string dialinDevice;
     if (GetStringProperty(scoped_device.get(), CFSTR(kIODialinDeviceKey),
                           &dialinDevice)) {
       serial::DeviceInfoPtr dialin_info = callout_info.Clone();
@@ -152,7 +153,7 @@ mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
       devices.push_back(std::move(dialin_info));
     }
 
-    mojo::String calloutDevice;
+    std::string calloutDevice;
     if (GetStringProperty(scoped_device.get(), CFSTR(kIOCalloutDeviceKey),
                           &calloutDevice)) {
       callout_info->path = calloutDevice;
@@ -166,7 +167,7 @@ mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
 // Returns an array of devices as retrieved through the old method of
 // enumerating serial devices (pattern matching in /dev/). This old method gives
 // less information about the devices than the new method.
-mojo::Array<serial::DeviceInfoPtr> GetDevicesOld() {
+std::vector<serial::DeviceInfoPtr> GetDevicesOld() {
   const base::FilePath kDevRoot("/dev");
   const int kFilesAndSymLinks =
       base::FileEnumerator::FILES | base::FileEnumerator::SHOW_SYM_LINKS;
@@ -180,7 +181,7 @@ mojo::Array<serial::DeviceInfoPtr> GetDevicesOld() {
   valid_patterns.insert("/dev/tty.*");
   valid_patterns.insert("/dev/cu.*");
 
-  mojo::Array<serial::DeviceInfoPtr> devices;
+  std::vector<serial::DeviceInfoPtr> devices;
   base::FileEnumerator enumerator(kDevRoot, false, kFilesAndSymLinks);
   do {
     const base::FilePath next_device_path(enumerator.Next());
@@ -213,31 +214,28 @@ SerialDeviceEnumeratorMac::SerialDeviceEnumeratorMac() {}
 
 SerialDeviceEnumeratorMac::~SerialDeviceEnumeratorMac() {}
 
-mojo::Array<serial::DeviceInfoPtr> SerialDeviceEnumeratorMac::GetDevices() {
-  mojo::Array<serial::DeviceInfoPtr> newDevices = GetDevicesNew();
-  mojo::Array<serial::DeviceInfoPtr> oldDevices = GetDevicesOld();
+std::vector<serial::DeviceInfoPtr> SerialDeviceEnumeratorMac::GetDevices() {
+  std::vector<serial::DeviceInfoPtr> devices = GetDevicesNew();
+  std::vector<serial::DeviceInfoPtr> old_devices = GetDevicesOld();
 
   UMA_HISTOGRAM_SPARSE_SLOWLY(
       "Hardware.Serial.NewMinusOldDeviceListSize",
-      Clamp(newDevices.size() - oldDevices.size(), -10, 10));
+      Clamp(devices.size() - old_devices.size(), -10, 10));
 
   // Add devices found from both the new and old methods of enumeration. If a
   // device is found using both the new and the old enumeration method, then we
   // take the device from the new enumeration method because it's able to
   // collect more information. We do this by inserting the new devices first,
   // because insertions are ignored if the key already exists.
-  mojo::Map<mojo::String, serial::DeviceInfoPtr> deviceMap;
-  for (unsigned long i = 0; i < newDevices.size(); i++) {
-    deviceMap.insert(newDevices[i]->path, newDevices[i].Clone());
+  std::unordered_set<std::string> devices_seen;
+  for (const auto& device : devices) {
+    bool inserted = devices_seen.insert(device->path).second;
+    DCHECK(inserted);
   }
-  for (unsigned long i = 0; i < oldDevices.size(); i++) {
-    deviceMap.insert(oldDevices[i]->path, oldDevices[i].Clone());
+  for (auto& device : old_devices) {
+    if (devices_seen.insert(device->path).second)
+      devices.push_back(std::move(device));
   }
-
-  mojo::Array<mojo::String> paths;
-  mojo::Array<serial::DeviceInfoPtr> devices;
-  deviceMap.DecomposeMapTo(&paths, &devices);
-
   return devices;
 }
 

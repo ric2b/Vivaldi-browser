@@ -10,12 +10,14 @@
 // Note: If a function here also works with browser_tests, it should be in
 // the content public API.
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/run_loop.h"
 #include "cc/surfaces/surface_id.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -30,7 +32,6 @@ class SurfaceManager;
 namespace content {
 
 class FrameTreeNode;
-class MessageLoopRunner;
 class RenderFrameHost;
 class RenderWidgetHostViewChildFrame;
 class Shell;
@@ -107,12 +108,12 @@ class NavigationStallDelegate : public ResourceDispatcherHostDelegate {
 
  private:
   // ResourceDispatcherHostDelegate
-  void RequestBeginning(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      content::AppCacheService* appcache_service,
-      ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) override;
+  void RequestBeginning(net::URLRequest* request,
+                        content::ResourceContext* resource_context,
+                        content::AppCacheService* appcache_service,
+                        ResourceType resource_type,
+                        std::vector<std::unique_ptr<content::ResourceThrottle>>*
+                            throttles) override;
 
   GURL url_;
 };
@@ -198,8 +199,8 @@ class UrlCommitObserver : WebContentsObserver {
   // The URL this observer is expecting to be committed.
   GURL url_;
 
-  // The MessageLoopRunner used to spin the message loop.
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+  // The RunLoop used to spin the message loop.
+  base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(UrlCommitObserver);
 };

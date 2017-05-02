@@ -9,12 +9,12 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/search/hotword_client.h"
@@ -30,11 +30,8 @@
 class AppListControllerDelegate;
 class Profile;
 
-namespace apps {
-class CustomLauncherPageContents;
-}
-
 namespace app_list {
+class CustomLauncherPageContents;
 class LauncherPageEventDispatcher;
 class SearchController;
 class SearchResourceManager;
@@ -47,10 +44,6 @@ class FilePath;
 
 namespace content {
 struct SpeechRecognitionSessionPreamble;
-}
-
-namespace gfx {
-class ImageSkia;
 }
 
 #if defined(USE_ASH)
@@ -197,7 +190,8 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
   ScopedObserver<SigninManagerBase, AppListViewDelegate> scoped_observer_;
 
   // Window contents of additional custom launcher pages.
-  ScopedVector<apps::CustomLauncherPageContents> custom_page_contents_;
+  std::vector<std::unique_ptr<app_list::CustomLauncherPageContents>>
+      custom_page_contents_;
 
   // Registers for NOTIFICATION_APP_TERMINATING to unload custom launcher pages.
   content::NotificationRegistrar registrar_;

@@ -8,22 +8,19 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.os.StrictMode;
 
-import com.google.vr.ndk.base.AndroidCompat;
 import com.google.vr.ndk.base.DaydreamApi;
 import com.google.vr.ndk.base.GvrApi;
-
-import org.chromium.base.annotations.UsedByReflection;
 
 /**
  * A wrapper for DaydreamApi. Note that we have to recreate the DaydreamApi instance each time we
  * use it, or API calls begin to silently fail.
  */
-@UsedByReflection("VrShellDelegate.java")
 public class VrDaydreamApiImpl implements VrDaydreamApi {
+    private static final String TAG = "VrDaydreamApiImpl";
     private final Activity mActivity;
 
-    @UsedByReflection("VrShellDelegate.java")
     public VrDaydreamApiImpl(Activity activity) {
         mActivity = activity;
     }
@@ -75,15 +72,16 @@ public class VrDaydreamApiImpl implements VrDaydreamApi {
     }
 
     @Override
-    public void setVrModeEnabled(boolean enabled) {
-        AndroidCompat.setVrModeEnabled(mActivity, enabled);
-    }
-
-    @Override
     public Boolean isDaydreamCurrentViewer() {
         DaydreamApi daydreamApi = DaydreamApi.create(mActivity);
         if (daydreamApi == null) return false;
-        int type = daydreamApi.getCurrentViewerType();
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        int type = GvrApi.ViewerType.CARDBOARD;
+        try {
+            type = daydreamApi.getCurrentViewerType();
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
         daydreamApi.close();
         return type == GvrApi.ViewerType.DAYDREAM;
     }

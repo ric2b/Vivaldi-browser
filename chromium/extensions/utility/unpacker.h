@@ -13,8 +13,6 @@
 #include "base/macros.h"
 #include "extensions/common/manifest.h"
 
-class SkBitmap;
-
 namespace base {
 class DictionaryValue;
 }
@@ -67,7 +65,7 @@ class Unpacker {
   bool DumpMessageCatalogsToFile();
 
   // Parse all _locales/*/messages.json files inside the extension.
-  bool ReadAllMessageCatalogs(const std::string& default_locale);
+  bool ReadAllMessageCatalogs();
 
   // Decodes the image at the given path and puts it in our list of decoded
   // images.

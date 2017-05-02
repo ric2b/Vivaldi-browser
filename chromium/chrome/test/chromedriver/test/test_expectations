@@ -75,7 +75,8 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'TypingTest.testShouldBeAbleToTypeIntoContentEditableElementWithExistingValue',
     'TypingTest.testShouldNotTypeIntoElementsThatPreventKeyDownEvents',
     'TypingTest.testTypingIntoAnIFrameWithContentEditableOrDesignModeSet',
-    'UnexpectedAlertBehaviorTest.*',
+    'UnexpectedAlertBehaviorTest.requiredUnhandledAlertCapabilityHasPriorityOverDesired',
+    'UnexpectedAlertBehaviorTest.dismissUnhandledAlertsByDefault',
     'VisibilityTest.testElementHiddenByOverflowXIsNotVisible',
     'VisibilityTest.testElementHiddenByOverflowYIsNotVisible',
     'VisibilityTest.tooSmallAWindowWithOverflowHiddenIsNotAProblem',
@@ -99,6 +100,9 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
     'BasicMouseInterfaceTest.testDraggingElementWithMouseFiresEvents',
     'BasicMouseInterfaceTest.testDraggingElementWithMouseMovesItToAnotherList',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625
+    'TakesScreenshotTest.*',
+    'WindowTest.*',
 ]
 
 _OS_NEGATIVE_FILTER = {}
@@ -176,6 +180,7 @@ _OS_NEGATIVE_FILTER['android:chrome'] = [
 
     # Alerts are not yet supported on Android.
     'AlertsTest.*',
+    'UnexpectedAlertBehaviorTest.*',
 
     # http://crbug.com/156390
     'DragAndDropTest.*',

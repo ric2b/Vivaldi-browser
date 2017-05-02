@@ -27,7 +27,6 @@
 
 class PrinterHandler;
 class PrintPreviewUI;
-class PrintSystemTaskProxy;
 
 namespace base {
 class DictionaryValue;
@@ -40,6 +39,10 @@ class WebContents;
 
 namespace gfx {
 class Size;
+}
+
+namespace printing {
+class PrinterBackendProxy;
 }
 
 // The handler for Javascript messages related to the print preview dialog.
@@ -112,6 +115,8 @@ class PrintPreviewHandler
 
   PrintPreviewUI* print_preview_ui() const;
 
+  printing::PrinterBackendProxy* printer_backend_proxy();
+
   // Gets the list of printers. |args| is unused.
   void HandleGetPrinters(const base::ListValue* args);
 
@@ -149,6 +154,9 @@ class PrintPreviewHandler
 
   // Gets the printer capabilities. First element of |args| is the printer name.
   void HandleGetPrinterCapabilities(const base::ListValue* args);
+
+  // Performs printer setup. First element of |args| is the printer name.
+  void HandlePrinterSetup(const base::ListValue* args);
 
 #if BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
   // Asks the initiator renderer to show the native print system dialog. |args|
@@ -213,6 +221,12 @@ class PrintPreviewHandler
   void SendPrinterCapabilities(
       const std::string& printer_name,
       std::unique_ptr<base::DictionaryValue> settings_info);
+
+  // Send the result of performing printer setup. |settings_info| contains
+  // printer capabilities.
+  void SendPrinterSetup(const std::string& callback_id,
+                        const std::string& printer_name,
+                        std::unique_ptr<base::DictionaryValue> settings_info);
 
   // Send the list of printers to the Web UI.
   void SetupPrinterList(const printing::PrinterList& printer_list);
@@ -380,6 +394,10 @@ class PrintPreviewHandler
   // Notifies tests that want to know if the PDF has been saved. This doesn't
   // notify the test if it was a successful save, only that it was attempted.
   base::Closure pdf_file_saved_closure_;
+
+  // Proxy for calls to the print backend.  Lazily initialized since web_ui() is
+  // not available at construction time.
+  std::unique_ptr<printing::PrinterBackendProxy> printer_backend_proxy_;
 
   base::WeakPtrFactory<PrintPreviewHandler> weak_factory_;
 

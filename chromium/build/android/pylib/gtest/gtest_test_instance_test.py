@@ -81,6 +81,18 @@ class GtestTestInstanceTests(unittest.TestCase):
     ]
     self.assertEqual(expected, actual)
 
+  def testParseGTestListTests_emptyTestName(self):
+    raw_output = [
+      'TestCase.',
+      '  ',
+      '  nonEmptyTestName',
+    ]
+    actual = gtest_test_instance.ParseGTestListTests(raw_output)
+    expected = [
+      'TestCase.nonEmptyTestName',
+    ]
+    self.assertEqual(expected, actual)
+
   def testParseGTestOutput_pass(self):
     raw_output = [
       '[ RUN      ] FooTest.Bar',
@@ -208,6 +220,37 @@ class GtestTestInstanceTests(unittest.TestCase):
     actual = gtest_test_instance \
         .ConvertTestFilterFileIntoGTestFilterArgument(input_lines)
     expected = 'positive1:positive2-negative1:negative2'
+    self.assertEquals(expected, actual)
+
+  def testTestNameWithoutDisabledPrefix_disabled(self):
+    test_name_list = [
+      'A.DISABLED_B',
+      'DISABLED_A.B',
+      'DISABLED_A.DISABLED_B',
+    ]
+    for test_name in test_name_list:
+      actual = gtest_test_instance \
+          .TestNameWithoutDisabledPrefix(test_name)
+      expected = 'A.B'
+      self.assertEquals(expected, actual)
+
+  def testTestNameWithoutDisabledPrefix_flaky(self):
+    test_name_list = [
+      'A.FLAKY_B',
+      'FLAKY_A.B',
+      'FLAKY_A.FLAKY_B',
+    ]
+    for test_name in test_name_list:
+      actual = gtest_test_instance \
+          .TestNameWithoutDisabledPrefix(test_name)
+      expected = 'A.B'
+      self.assertEquals(expected, actual)
+
+  def testTestNameWithoutDisabledPrefix_notDisabledOrFlaky(self):
+    test_name = 'A.B'
+    actual = gtest_test_instance \
+        .TestNameWithoutDisabledPrefix(test_name)
+    expected = 'A.B'
     self.assertEquals(expected, actual)
 
 

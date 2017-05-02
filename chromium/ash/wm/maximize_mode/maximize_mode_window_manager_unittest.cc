@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "ash/aura/wm_window_aura.h"
+#include "ash/common/ash_switches.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/mru_window_tracker.h"
@@ -16,6 +16,7 @@
 #include "ash/common/wm/window_state_observer.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -24,9 +25,11 @@
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -130,9 +133,10 @@ class MaximizeModeWindowManagerTest : public test::AshTestBase {
     }
     aura::Window* window = aura::test::CreateTestWindowWithDelegateAndType(
         delegate, type, 0, bounds, NULL);
-    window->SetProperty(aura::client::kCanMaximizeKey, can_maximize);
-    if (!can_resize)
-      window->SetProperty(aura::client::kCanResizeKey, false);
+    int32_t behavior = ui::mojom::kResizeBehaviorNone;
+    behavior |= can_resize ? ui::mojom::kResizeBehaviorCanResize : 0;
+    behavior |= can_maximize ? ui::mojom::kResizeBehaviorCanMaximize : 0;
+    window->SetProperty(aura::client::kResizeBehaviorKey, behavior);
     aura::Window* container = Shell::GetContainer(
         Shell::GetPrimaryRootWindow(), wm::kSwitchableWindowContainerIds[0]);
     container->AddChild(window);
@@ -766,7 +770,7 @@ TEST_F(MaximizeModeWindowManagerTest, ModeChangeKeepsMRUOrder) {
 
   // The windows should be in the reverse order of creation in the MRU list.
   {
-    aura::Window::Windows windows = WmWindowAura::ToAuraWindows(
+    aura::Window::Windows windows = WmWindow::ToAuraWindows(
         WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
 
     EXPECT_EQ(w1.get(), windows[4]);
@@ -781,7 +785,7 @@ TEST_F(MaximizeModeWindowManagerTest, ModeChangeKeepsMRUOrder) {
   ASSERT_TRUE(manager);
   EXPECT_EQ(5, manager->GetNumberOfManagedWindows());
   {
-    aura::Window::Windows windows = WmWindowAura::ToAuraWindows(
+    aura::Window::Windows windows = WmWindow::ToAuraWindows(
         WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
     // We do not test maximization here again since that was done already.
     EXPECT_EQ(w1.get(), windows[4]);
@@ -794,7 +798,7 @@ TEST_F(MaximizeModeWindowManagerTest, ModeChangeKeepsMRUOrder) {
   // Destroying should still keep the order.
   DestroyMaximizeModeWindowManager();
   {
-    aura::Window::Windows windows = WmWindowAura::ToAuraWindows(
+    aura::Window::Windows windows = WmWindow::ToAuraWindows(
         WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
     // We do not test maximization here again since that was done already.
     EXPECT_EQ(w1.get(), windows[4]);
@@ -1569,6 +1573,10 @@ TEST_F(MaximizeModeWindowManagerTest, AlwaysOnTopWindows) {
 
 // Tests that docked windows are not maximized, and not tracked.
 TEST_F(MaximizeModeWindowManagerTest, DontMaximizeDockedWindows) {
+  // Enable window docking for this test.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ash::switches::kAshEnableDockedWindows);
+
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> window(
       CreateWindow(ui::wm::WINDOW_TYPE_NORMAL, rect));

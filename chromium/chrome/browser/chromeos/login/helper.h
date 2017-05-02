@@ -15,8 +15,6 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/views/view.h"
 
-class GURL;
-
 namespace gfx {
 class Rect;
 class Size;
@@ -109,6 +107,12 @@ content::StoragePartition* GetSigninPartition();
 // based flow, the context of the sign-in profile is returned. For webview based
 // flow, the context of the sign-in webview storage partition is returned.
 net::URLRequestContextGetter* GetSigninContext();
+
+using OnPipeReadyCallback = base::Callback<void(base::ScopedFD fd)>;
+// Returns file descriptor of a pipe, open for reading. Pipe keeps the passed
+// data.
+void GetPipeReadEnd(const std::string& data,
+                    const OnPipeReadyCallback& callback);
 
 }  // namespace login
 

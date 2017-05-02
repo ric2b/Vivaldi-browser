@@ -34,16 +34,8 @@
 #include "core/layout/LayoutTableCell.h"
 
 using namespace std;
-using namespace std;
 
 namespace blink {
-
-// Rowspan: match Firefox's limit of 65,534. Edge has a higher limit, at
-// least 2^17.
-// Colspan: Firefox uses a limit of 1,000 for colspan and resets the value to 1.
-// TODO(dgrogan): Determine Edge's colspan limit.
-static const unsigned maxColSpan = 8190;
-static const unsigned maxRowSpan = 65534;
 
 using namespace HTMLNames;
 
@@ -59,7 +51,16 @@ unsigned HTMLTableCellElement::colSpan() const {
   if (colSpanValue.isEmpty() ||
       !parseHTMLNonNegativeInteger(colSpanValue, value))
     return 1;
-  return max(1u, min(value, maxColSpan));
+  // Counting for https://github.com/whatwg/html/issues/1198
+  UseCounter::count(document(), UseCounter::HTMLTableCellElementColspan);
+  if (value > 8190) {
+    UseCounter::count(document(),
+                      UseCounter::HTMLTableCellElementColspanGreaterThan8190);
+  } else if (value > 1000) {
+    UseCounter::count(document(),
+                      UseCounter::HTMLTableCellElementColspanGreaterThan1000);
+  }
+  return max(1u, min(value, maxColSpan()));
 }
 
 unsigned HTMLTableCellElement::rowSpan() const {
@@ -68,7 +69,7 @@ unsigned HTMLTableCellElement::rowSpan() const {
   if (rowSpanValue.isEmpty() ||
       !parseHTMLNonNegativeInteger(rowSpanValue, value))
     return 1;
-  return max(1u, min(value, maxRowSpan));
+  return max(1u, min(value, maxRowSpan()));
 }
 
 int HTMLTableCellElement::cellIndex() const {
@@ -117,17 +118,13 @@ void HTMLTableCellElement::collectStyleForPresentationAttribute(
   }
 }
 
-void HTMLTableCellElement::parseAttribute(const QualifiedName& name,
-                                          const AtomicString& oldValue,
-                                          const AtomicString& value) {
-  if (name == rowspanAttr) {
-    if (layoutObject() && layoutObject()->isTableCell())
-      toLayoutTableCell(layoutObject())->colSpanOrRowSpanChanged();
-  } else if (name == colspanAttr) {
+void HTMLTableCellElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == rowspanAttr || params.name == colspanAttr) {
     if (layoutObject() && layoutObject()->isTableCell())
       toLayoutTableCell(layoutObject())->colSpanOrRowSpanChanged();
   } else {
-    HTMLTablePartElement::parseAttribute(name, oldValue, value);
+    HTMLTablePartElement::parseAttribute(params);
   }
 }
 
@@ -172,31 +169,6 @@ const AtomicString& HTMLTableCellElement::headers() const {
 
 void HTMLTableCellElement::setRowSpan(unsigned n) {
   setUnsignedIntegralAttribute(rowspanAttr, n);
-}
-
-const AtomicString& HTMLTableCellElement::scope() const {
-  const AtomicString& scopeValue = fastGetAttribute(scopeAttr);
-  if (equalIgnoringASCIICase(scopeValue, "row")) {
-    DEFINE_STATIC_LOCAL(const AtomicString, row, ("row"));
-    return row;
-  }
-  if (equalIgnoringASCIICase(scopeValue, "col")) {
-    DEFINE_STATIC_LOCAL(const AtomicString, col, ("col"));
-    return col;
-  }
-  if (equalIgnoringASCIICase(scopeValue, "rowgroup")) {
-    DEFINE_STATIC_LOCAL(const AtomicString, rowgroup, ("rowgroup"));
-    return rowgroup;
-  }
-  if (equalIgnoringASCIICase(scopeValue, "colgroup")) {
-    DEFINE_STATIC_LOCAL(const AtomicString, colgroup, ("colgroup"));
-    return colgroup;
-  }
-  return emptyAtom;
-}
-
-void HTMLTableCellElement::setScope(const AtomicString& value) {
-  setAttribute(scopeAttr, value);
 }
 
 }  // namespace blink

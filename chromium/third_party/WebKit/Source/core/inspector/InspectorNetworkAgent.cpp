@@ -30,7 +30,7 @@
 
 #include "core/inspector/InspectorNetworkAgent.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptableDocumentParser.h"
@@ -58,6 +58,7 @@
 #include "core/page/NetworkStateNotifier.h"
 #include "core/page/Page.h"
 #include "core/xmlhttprequest/XMLHttpRequest.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/ResourceError.h"
@@ -67,9 +68,10 @@
 #include "platform/network/WebSocketHandshakeRequest.h"
 #include "platform/network/WebSocketHandshakeResponse.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebCachePolicy.h"
-#include "public/platform/WebMixedContent.h"
+#include "public/platform/WebMixedContentContextType.h"
 #include "public/platform/WebURLLoaderClient.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/CurrentTime.h"
@@ -139,7 +141,7 @@ static std::unique_ptr<protocol::Network::Headers> buildObjectForHeaders(
   for (const auto& header : headers)
     headersObject->setString(header.key.getString(), header.value);
   protocol::ErrorSupport errors;
-  return protocol::Network::Headers::parse(headersObject.get(), &errors);
+  return protocol::Network::Headers::fromValue(headersObject.get(), &errors);
 }
 
 class InspectorFileReaderLoaderClient final : public FileReaderLoaderClient {
@@ -209,15 +211,14 @@ KURL urlWithoutFragment(const KURL& url) {
   return result;
 }
 
-String mixedContentTypeForContextType(
-    WebMixedContent::ContextType contextType) {
+String mixedContentTypeForContextType(WebMixedContentContextType contextType) {
   switch (contextType) {
-    case WebMixedContent::ContextType::NotMixedContent:
+    case WebMixedContentContextType::NotMixedContent:
       return protocol::Network::Request::MixedContentTypeEnum::None;
-    case WebMixedContent::ContextType::Blockable:
+    case WebMixedContentContextType::Blockable:
       return protocol::Network::Request::MixedContentTypeEnum::Blockable;
-    case WebMixedContent::ContextType::OptionallyBlockable:
-    case WebMixedContent::ContextType::ShouldBeBlockable:
+    case WebMixedContentContextType::OptionallyBlockable:
+    case WebMixedContentContextType::ShouldBeBlockable:
       return protocol::Network::Request::MixedContentTypeEnum::
           OptionallyBlockable;
   }
@@ -246,19 +247,19 @@ String resourcePriorityJSON(ResourceLoadPriority priority) {
 
 String buildBlockedReason(ResourceRequestBlockedReason reason) {
   switch (reason) {
-    case ResourceRequestBlockedReasonCSP:
+    case ResourceRequestBlockedReason::CSP:
       return protocol::Network::BlockedReasonEnum::Csp;
-    case ResourceRequestBlockedReasonMixedContent:
+    case ResourceRequestBlockedReason::MixedContent:
       return protocol::Network::BlockedReasonEnum::MixedContent;
-    case ResourceRequestBlockedReasonOrigin:
+    case ResourceRequestBlockedReason::Origin:
       return protocol::Network::BlockedReasonEnum::Origin;
-    case ResourceRequestBlockedReasonInspector:
+    case ResourceRequestBlockedReason::Inspector:
       return protocol::Network::BlockedReasonEnum::Inspector;
-    case ResourceRequestBlockedReasonSubresourceFilter:
+    case ResourceRequestBlockedReason::SubresourceFilter:
       return protocol::Network::BlockedReasonEnum::SubresourceFilter;
-    case ResourceRequestBlockedReasonOther:
+    case ResourceRequestBlockedReason::Other:
       return protocol::Network::BlockedReasonEnum::Other;
-    case ResourceRequestBlockedReasonNone:
+    case ResourceRequestBlockedReason::None:
     default:
       NOTREACHED();
       return protocol::Network::BlockedReasonEnum::Other;
@@ -285,6 +286,37 @@ WebConnectionType toWebConnectionType(const String& connectionType) {
   if (connectionType == protocol::Network::ConnectionTypeEnum::Other)
     return WebConnectionTypeOther;
   return WebConnectionTypeUnknown;
+}
+
+String referrerPolicy(ReferrerPolicy policy) {
+  switch (policy) {
+    case ReferrerPolicyAlways:
+      return protocol::Network::Request::ReferrerPolicyEnum::UnsafeUrl;
+    case ReferrerPolicyDefault:
+      if (RuntimeEnabledFeatures::reducedReferrerGranularityEnabled()) {
+        return protocol::Network::Request::ReferrerPolicyEnum::
+            NoReferrerWhenDowngradeOriginWhenCrossOrigin;
+      } else {
+        return protocol::Network::Request::ReferrerPolicyEnum::
+            NoReferrerWhenDowngrade;
+      }
+    case ReferrerPolicyNoReferrerWhenDowngrade:
+      return protocol::Network::Request::ReferrerPolicyEnum::
+          NoReferrerWhenDowngrade;
+    case ReferrerPolicyNever:
+      return protocol::Network::Request::ReferrerPolicyEnum::NoReferrer;
+    case ReferrerPolicyOrigin:
+      return protocol::Network::Request::ReferrerPolicyEnum::Origin;
+    case ReferrerPolicyOriginWhenCrossOrigin:
+      return protocol::Network::Request::ReferrerPolicyEnum::
+          OriginWhenCrossOrigin;
+    case ReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin:
+      return protocol::Network::Request::ReferrerPolicyEnum::
+          NoReferrerWhenDowngradeOriginWhenCrossOrigin;
+  }
+
+  return protocol::Network::Request::ReferrerPolicyEnum::
+      NoReferrerWhenDowngrade;
 }
 
 }  // namespace
@@ -329,6 +361,7 @@ buildObjectForResourceRequest(const ResourceRequest& request) {
           .setMethod(request.httpMethod())
           .setHeaders(buildObjectForHeaders(request.httpHeaderFields()))
           .setInitialPriority(resourcePriorityJSON(request.priority()))
+          .setReferrerPolicy(referrerPolicy(request.getReferrerPolicy()))
           .build();
   if (request.httpBody() && !request.httpBody()->isEmpty()) {
     Vector<char> bytes;
@@ -363,10 +396,7 @@ buildObjectForResourceResponse(const ResourceResponse& response,
   else
     headersMap = response.httpHeaderFields();
 
-  int64_t encodedDataLength =
-      response.resourceLoadInfo()
-          ? response.resourceLoadInfo()->encodedDataLength
-          : -1;
+  int64_t encodedDataLength = response.encodedDataLength();
 
   String securityState = protocol::Security::SecurityStateEnum::Unknown;
   switch (response.getSecurityStyle()) {
@@ -604,6 +634,8 @@ void InspectorNetworkAgent::willSendRequestInternal(
   requestInfo->setMixedContentType(mixedContentTypeForContextType(
       MixedContentChecker::contextTypeForInspector(frame, request)));
 
+  requestInfo->setReferrerPolicy(referrerPolicy(request.getReferrerPolicy()));
+
   String resourceType = InspectorPageAgent::resourceTypeJson(type);
   frontend()->requestWillBeSent(
       requestId, frameId, loaderId,
@@ -728,7 +760,7 @@ void InspectorNetworkAgent::didReceiveResourceResponse(
   // following didReceiveResponse as there will be no calls to didReceiveData
   // from the network stack.
   if (isNotModified && cachedResource && cachedResource->encodedSize())
-    didReceiveData(frame, identifier, 0, cachedResource->encodedSize(), 0);
+    didReceiveData(frame, identifier, 0, cachedResource->encodedSize());
 }
 
 static bool isErrorStatusCode(int statusCode) {
@@ -738,8 +770,7 @@ static bool isErrorStatusCode(int statusCode) {
 void InspectorNetworkAgent::didReceiveData(LocalFrame*,
                                            unsigned long identifier,
                                            const char* data,
-                                           int dataLength,
-                                           int encodedDataLength) {
+                                           int dataLength) {
   String requestId = IdentifiersFactory::requestId(identifier);
 
   if (data) {
@@ -753,8 +784,17 @@ void InspectorNetworkAgent::didReceiveData(LocalFrame*,
       m_resourcesData->maybeAddResourceData(requestId, data, dataLength);
   }
 
-  frontend()->dataReceived(requestId, monotonicallyIncreasingTime(), dataLength,
-                           encodedDataLength);
+  frontend()->dataReceived(
+      requestId, monotonicallyIncreasingTime(), dataLength,
+      m_resourcesData->getAndClearPendingEncodedDataLength(requestId));
+}
+
+void InspectorNetworkAgent::didReceiveEncodedDataLength(
+    LocalFrame*,
+    unsigned long identifier,
+    int encodedDataLength) {
+  String requestId = IdentifiersFactory::requestId(identifier);
+  m_resourcesData->addPendingEncodedDataLength(requestId, encodedDataLength);
 }
 
 void InspectorNetworkAgent::didFinishLoading(unsigned long identifier,
@@ -763,6 +803,14 @@ void InspectorNetworkAgent::didFinishLoading(unsigned long identifier,
   String requestId = IdentifiersFactory::requestId(identifier);
   NetworkResourcesData::ResourceData const* resourceData =
       m_resourcesData->data(requestId);
+
+  int pendingEncodedDataLength =
+      m_resourcesData->getAndClearPendingEncodedDataLength(requestId);
+  if (pendingEncodedDataLength > 0) {
+    frontend()->dataReceived(requestId, monotonicallyIncreasingTime(), 0,
+                             pendingEncodedDataLength);
+  }
+
   if (resourceData &&
       (!resourceData->cachedResource() ||
        resourceData->cachedResource()->getDataBufferingPolicy() ==
@@ -1194,7 +1242,7 @@ Response InspectorNetworkAgent::setUserAgentOverride(const String& userAgent) {
 Response InspectorNetworkAgent::setExtraHTTPHeaders(
     const std::unique_ptr<protocol::Network::Headers> headers) {
   m_state->setObject(NetworkAgentState::extraRequestHeaders,
-                     headers->serialize());
+                     headers->toValue());
   return Response::OK();
 }
 
@@ -1314,7 +1362,7 @@ Response InspectorNetworkAgent::replayXHR(const String& requestId) {
     return Response::Error("Given id does not correspond to XHR");
 
   ExecutionContext* executionContext = xhrReplayData->getExecutionContext();
-  if (!executionContext) {
+  if (executionContext->isContextDestroyed()) {
     m_resourcesData->setXHRReplayData(requestId, 0);
     return Response::Error("Document is already detached");
   }
@@ -1324,12 +1372,15 @@ Response InspectorNetworkAgent::replayXHR(const String& requestId) {
   executionContext->removeURLFromMemoryCache(xhrReplayData->url());
 
   xhr->open(xhrReplayData->method(), xhrReplayData->url(),
-            xhrReplayData->async(), IGNORE_EXCEPTION);
+            xhrReplayData->async(), IGNORE_EXCEPTION_FOR_TESTING);
   if (xhrReplayData->includeCredentials())
-    xhr->setWithCredentials(true, IGNORE_EXCEPTION);
-  for (const auto& header : xhrReplayData->headers())
-    xhr->setRequestHeader(header.key, header.value, IGNORE_EXCEPTION);
-  xhr->sendForInspectorXHRReplay(xhrReplayData->formData(), IGNORE_EXCEPTION);
+    xhr->setWithCredentials(true, IGNORE_EXCEPTION_FOR_TESTING);
+  for (const auto& header : xhrReplayData->headers()) {
+    xhr->setRequestHeader(header.key, header.value,
+                          IGNORE_EXCEPTION_FOR_TESTING);
+  }
+  xhr->sendForInspectorXHRReplay(xhrReplayData->formData(),
+                                 IGNORE_EXCEPTION_FOR_TESTING);
 
   m_replayXHRs.add(xhr);
   return Response::OK();
@@ -1373,6 +1424,9 @@ Response InspectorNetworkAgent::emulateNetworkConditions(
 }
 
 Response InspectorNetworkAgent::setCacheDisabled(bool cacheDisabled) {
+  // TODO(ananta)
+  // We should extract network cache state into a global entity which can be
+  // queried from FrameLoader and other places.
   m_state->setBoolean(NetworkAgentState::cacheDisabled, cacheDisabled);
   if (cacheDisabled)
     memoryCache()->evictResources();
@@ -1458,6 +1512,12 @@ bool InspectorNetworkAgent::fetchResourceContent(Document* document,
     }
   }
   return false;
+}
+
+bool InspectorNetworkAgent::cacheDisabled() {
+  return m_state->booleanProperty(NetworkAgentState::networkAgentEnabled,
+                                  false) &&
+         m_state->booleanProperty(NetworkAgentState::cacheDisabled, false);
 }
 
 void InspectorNetworkAgent::removeFinishedReplayXHRFired(TimerBase*) {

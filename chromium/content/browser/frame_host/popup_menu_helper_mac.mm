@@ -20,6 +20,9 @@
 #include "content/public/browser/notification_types.h"
 #import "ui/base/cocoa/base_view.h"
 
+#include "app/vivaldi_apptools.h"
+#include "content/browser/frame_host/render_widget_host_view_guest.h"
+
 namespace content {
 
 namespace {
@@ -62,8 +65,21 @@ void PopupMenuHelper::ShowPopupMenu(
   // call returns. That's what was happening in <http://crbug.com/33250>).
   RenderWidgetHostViewMac* rwhvm =
       static_cast<RenderWidgetHostViewMac*>(GetRenderWidgetHostView());
-  base::scoped_nsobject<RenderWidgetHostViewCocoa> cocoa_view(
-      [rwhvm->cocoa_view() retain]);
+  base::scoped_nsobject<RenderWidgetHostViewCocoa> cocoa_view;
+
+  if (vivaldi::IsVivaldiRunning()) {
+    RenderWidgetHostViewGuest* rwhvg = static_cast<RenderWidgetHostViewGuest*>(
+      render_frame_host_->frame_tree_node()
+      ->frame_tree()
+      ->root()
+      ->current_frame_host()
+      ->GetView());
+
+    cocoa_view.reset(
+     static_cast<RenderWidgetHostViewCocoa*>([rwhvg->GetNativeView() retain]));
+  } else {
+    cocoa_view.reset([rwhvm->cocoa_view() retain]);
+  }
 
   // Display the menu.
   menu_runner_ = [[WebMenuRunner alloc] initWithItems:items

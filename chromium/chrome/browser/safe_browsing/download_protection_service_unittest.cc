@@ -33,13 +33,13 @@
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
 #include "chrome/browser/safe_browsing/local_database_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/safe_browsing/file_type_policies_test_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/common/safebrowsing_switches.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/test_database_manager.h"
@@ -431,6 +431,12 @@ class DownloadProtectionServiceTest : public testing::Test {
     final_path_ = final_full_path;
     hash_ = "hash";
 
+    if (url_chain_.size() > 0) {
+      EXPECT_CALL(*item, GetURL()).WillRepeatedly(ReturnRef(url_chain_.back()));
+    } else{
+      GURL empty_url;
+      EXPECT_CALL(*item, GetURL()).WillRepeatedly(ReturnRef(empty_url));
+    }
     EXPECT_CALL(*item, GetFullPath()).WillRepeatedly(ReturnRef(tmp_path_));
     EXPECT_CALL(*item, GetTargetFilePath())
         .WillRepeatedly(ReturnRef(final_path_));
@@ -1718,6 +1724,7 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
   std::string hash = "hash";
 
   content::MockDownloadItem item;
+  EXPECT_CALL(item, GetURL()).WillRepeatedly(ReturnRef(url_chain.back()));
   EXPECT_CALL(item, GetUrlChain()).WillRepeatedly(ReturnRef(url_chain));
   EXPECT_CALL(item, GetReferrerUrl()).WillRepeatedly(ReturnRef(referrer));
   EXPECT_CALL(item, GetHash()).WillRepeatedly(ReturnRef(hash));
@@ -1731,8 +1738,8 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
         .WillOnce(Return(true));
     RunLoop run_loop;
     download_service_->CheckDownloadUrl(
-        item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
-                         base::Unretained(this), run_loop.QuitClosure()));
+        &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                          base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     EXPECT_TRUE(IsResult(DownloadProtectionService::SAFE));
     Mock::VerifyAndClearExpectations(sb_service_.get());
@@ -1744,8 +1751,8 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
             DoAll(CheckDownloadUrlDone(SB_THREAT_TYPE_SAFE), Return(false)));
     RunLoop run_loop;
     download_service_->CheckDownloadUrl(
-        item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
-                         base::Unretained(this), run_loop.QuitClosure()));
+        &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                          base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     EXPECT_TRUE(IsResult(DownloadProtectionService::SAFE));
     Mock::VerifyAndClearExpectations(sb_service_.get());
@@ -1757,8 +1764,8 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
                         Return(false)));
     RunLoop run_loop;
     download_service_->CheckDownloadUrl(
-        item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
-                         base::Unretained(this), run_loop.QuitClosure()));
+        &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                          base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     EXPECT_TRUE(IsResult(DownloadProtectionService::SAFE));
     Mock::VerifyAndClearExpectations(sb_service_.get());
@@ -1770,8 +1777,8 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
                         Return(false)));
     RunLoop run_loop;
     download_service_->CheckDownloadUrl(
-        item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
-                         base::Unretained(this), run_loop.QuitClosure()));
+        &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                          base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     EXPECT_TRUE(IsResult(DownloadProtectionService::DANGEROUS));
   }
@@ -2015,8 +2022,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_Unsupported) {
   std::vector<base::FilePath::StringType> alternate_extensions{
       FILE_PATH_LITERAL(".tmp"), FILE_PATH_LITERAL(".asdfasdf")};
   download_service_->CheckPPAPIDownloadRequest(
-      GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-      profile_.get(),
+      GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+      alternate_extensions, profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::SyncCheckDoneCallback,
                  base::Unretained(this)));
   ASSERT_TRUE(IsResult(DownloadProtectionService::SAFE));
@@ -2050,8 +2057,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_SupportedDefault) {
     SetExtendedReportingPreference(true);
     RunLoop run_loop;
     download_service_->CheckPPAPIDownloadRequest(
-        GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-        profile_.get(),
+        GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+        alternate_extensions, profile_.get(),
         base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                    base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -2074,8 +2081,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_SupportedAlternate) {
   SetExtendedReportingPreference(false);
   RunLoop run_loop;
   download_service_->CheckPPAPIDownloadRequest(
-      GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-      profile_.get(),
+      GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+      alternate_extensions, profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                  base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
@@ -2095,8 +2102,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_WhitelistedURL) {
 
   RunLoop run_loop;
   download_service_->CheckPPAPIDownloadRequest(
-      GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-      profile_.get(),
+      GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+      alternate_extensions, profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                  base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
@@ -2115,8 +2122,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_FetchFailed) {
       .WillRepeatedly(Return(false));
   RunLoop run_loop;
   download_service_->CheckPPAPIDownloadRequest(
-      GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-      profile_.get(),
+      GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+      alternate_extensions, profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                  base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
@@ -2136,8 +2143,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_InvalidResponse) {
       .WillRepeatedly(Return(false));
   RunLoop run_loop;
   download_service_->CheckPPAPIDownloadRequest(
-      GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-      profile_.get(),
+      GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+      alternate_extensions, profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                  base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
@@ -2157,8 +2164,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_Timeout) {
   download_service_->download_request_timeout_ms_ = 0;
   RunLoop run_loop;
   download_service_->CheckPPAPIDownloadRequest(
-      GURL("http://example.com/foo"), default_file_path, alternate_extensions,
-      profile_.get(),
+      GURL("http://example.com/foo"), GURL(), nullptr, default_file_path,
+      alternate_extensions, profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                  base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
@@ -2219,7 +2226,8 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_Payload) {
   const GURL kRequestorUrl("http://example.com/foo");
   RunLoop run_loop;
   download_service_->CheckPPAPIDownloadRequest(
-      kRequestorUrl, default_file_path, alternate_extensions, profile_.get(),
+      kRequestorUrl, GURL(), nullptr, default_file_path, alternate_extensions,
+      profile_.get(),
       base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
                  base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
@@ -2252,7 +2260,7 @@ class DownloadProtectionServiceFlagTest : public DownloadProtectionServiceTest {
     blacklisted_hash_ = std::string(bytes.begin(), bytes.end());
 
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kSbManualDownloadBlacklist,
+        safe_browsing::switches::kSbManualDownloadBlacklist,
         blacklisted_hash_hex_);
 
     DownloadProtectionServiceTest::SetUp();

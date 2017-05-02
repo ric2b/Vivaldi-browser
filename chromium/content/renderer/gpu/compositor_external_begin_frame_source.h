@@ -10,6 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/threading/non_thread_safe.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "content/renderer/gpu/compositor_forwarding_message_filter.h"
 
@@ -42,8 +43,9 @@ class CompositorExternalBeginFrameSource
   // cc::BeginFrameSource implementation.
   void AddObserver(cc::BeginFrameObserver* obs) override;
   void RemoveObserver(cc::BeginFrameObserver* obs) override;
+  // TODO(eseckler): Track and forward BeginFrameAcks to browser.
   void DidFinishFrame(cc::BeginFrameObserver* obs,
-                      size_t remaining_frames) override {}
+                      const cc::BeginFrameAck& ack) override {}
   bool IsThrottled() const override;
 
   // cc::ExternalBeginFrameSourceClient implementation.

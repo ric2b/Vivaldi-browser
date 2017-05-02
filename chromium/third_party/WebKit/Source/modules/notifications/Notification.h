@@ -35,7 +35,7 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMTimeStamp.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -57,10 +57,11 @@ class NotificationPermissionCallback;
 class NotificationResourcesLoader;
 class ScriptState;
 
-class MODULES_EXPORT Notification final : public EventTargetWithInlineData,
-                                          public ActiveScriptWrappable,
-                                          public ActiveDOMObject,
-                                          public WebNotificationDelegate {
+class MODULES_EXPORT Notification final
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<Notification>,
+      public ContextLifecycleObserver,
+      public WebNotificationDelegate {
   USING_GARBAGE_COLLECTED_MIXIN(Notification);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -120,12 +121,12 @@ class MODULES_EXPORT Notification final : public EventTargetWithInlineData,
 
   // EventTarget interface.
   ExecutionContext* getExecutionContext() const final {
-    return ActiveDOMObject::getExecutionContext();
+    return ContextLifecycleObserver::getExecutionContext();
   }
   const AtomicString& interfaceName() const override;
 
-  // ActiveDOMObject interface.
-  void contextDestroyed() override;
+  // ContextLifecycleObserver interface.
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable interface.
   bool hasPendingActivity() const final;

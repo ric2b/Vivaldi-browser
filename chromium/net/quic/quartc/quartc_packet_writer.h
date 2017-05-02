@@ -5,8 +5,8 @@
 #ifndef NET_QUIC_QUARTC_QUARTC_PACKET_WRITER_H_
 #define NET_QUIC_QUARTC_QUARTC_PACKET_WRITER_H_
 
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_packet_writer.h"
+#include "net/quic/platform/api/quic_export.h"
 #include "net/quic/quartc/quartc_session_interface.h"
 
 namespace net {
@@ -14,7 +14,7 @@ namespace net {
 // Implements a QuicPacketWriter using a
 // QuartcSessionInterface::PacketTransport, which allows a QuicConnection to
 // use(for example), a WebRTC IceTransport.
-class NET_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
+class QUIC_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
  public:
   QuartcPacketWriter(QuartcSessionInterface::PacketTransport* packet_transport,
                      QuicByteCount max_packet_size);
@@ -24,8 +24,8 @@ class NET_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
   // to the QuartcSessionInterface::PacketTransport.
   WriteResult WritePacket(const char* buffer,
                           size_t buf_len,
-                          const IPAddress& self_address,
-                          const IPEndPoint& peer_address,
+                          const QuicIpAddress& self_address,
+                          const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
 
   // This is always set to false so that QuicConnection buffers unsent packets.
@@ -39,7 +39,8 @@ class NET_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
   // Maximum size of the QUIC packet which can be written. Users such as WebRTC
   // can set the value through the QuartcFactoryConfig without updating the QUIC
   // code.
-  QuicByteCount GetMaxPacketSize(const IPEndPoint& peer_address) const override;
+  QuicByteCount GetMaxPacketSize(
+      const QuicSocketAddress& peer_address) const override;
 
   // This method is not used because the network layer in WebRTC will determine
   // the writing states.

@@ -8,6 +8,7 @@ import android.content.Context;
 import android.support.annotation.Nullable;
 import android.support.v4.widget.DrawerLayout;
 import android.util.AttributeSet;
+import android.view.View;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -32,14 +33,14 @@ public class DownloadManagerToolbar extends SelectionToolbar<DownloadHistoryItem
 
     @Override
     public void initialize(SelectionDelegate<DownloadHistoryItemWrapper> delegate, int titleResId,
-            @Nullable DrawerLayout drawerLayout, int normalGroupResId, int selectedGroupResId) {
+            @Nullable DrawerLayout drawerLayout, int normalGroupResId, int selectedGroupResId,
+            @Nullable Integer normalBackgroundColorResId) {
         if (DeviceFormFactor.isTablet(getContext())) {
             getMenu().removeItem(R.id.close_menu_id);
         }
 
-        super.initialize(delegate, titleResId, drawerLayout, normalGroupResId, selectedGroupResId);
-
-        mNumberRollView.setContentDescriptionString(R.plurals.accessibility_selected_items);
+        super.initialize(delegate, titleResId, drawerLayout, normalGroupResId, selectedGroupResId,
+                normalBackgroundColorResId);
     }
 
     @Override
@@ -57,12 +58,22 @@ public class DownloadManagerToolbar extends SelectionToolbar<DownloadHistoryItem
             updateTitle();
         } else {
             int numSelected = mSelectionDelegate.getSelectedItems().size();
-            findViewById(R.id.selection_mode_share_menu_id).setContentDescription(
-                    getResources().getQuantityString(R.plurals.accessibility_share_selected_items,
-                            numSelected, numSelected));
-            findViewById(R.id.selection_mode_delete_menu_id).setContentDescription(
-                    getResources().getQuantityString(R.plurals.accessibility_remove_selected_items,
-                            numSelected, numSelected));
+
+            // If the share or delete menu items are shown in the overflow menu instead of as an
+            // action, there may not be views associated with them.
+            View shareButton = findViewById(R.id.selection_mode_share_menu_id);
+            if (shareButton != null) {
+                shareButton.setContentDescription(getResources().getQuantityString(
+                        R.plurals.accessibility_share_selected_items,
+                                numSelected, numSelected));
+            }
+
+            View deleteButton = findViewById(R.id.selection_mode_delete_menu_id);
+            if (deleteButton != null) {
+                deleteButton.setContentDescription(getResources().getQuantityString(
+                        R.plurals.accessibility_remove_selected_items,
+                        numSelected, numSelected));
+            }
 
             if (!wasSelectionEnabled) {
                 RecordUserAction.record("Android.DownloadManager.SelectionEstablished");

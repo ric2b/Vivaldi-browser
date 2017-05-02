@@ -27,6 +27,7 @@
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/test/views_test_base.h"
 
 #if defined(USE_AURA)
@@ -158,8 +159,6 @@ class CustomButtonTest : public ViewsTestBase {
     widget_->dragged_view_ = dragged_view;
   }
 
-  void SimulateKeyEvent(ui::KeyEvent* event) { widget()->OnKeyEvent(event); }
-
  private:
   std::unique_ptr<Widget> widget_;
   TestCustomButton* button_ = nullptr;
@@ -221,24 +220,21 @@ TEST_F(CustomButtonTest, HoverStateOnVisibilityChange) {
   aura::test::TestCursorClient cursor_client(
       widget()->GetNativeView()->GetRootWindow());
 
-  // Mus doesn't support disabling mouse events. https://crbug.com/618321
-  if (!IsMus()) {
-    // In Aura views, no new hover effects are invoked if mouse events
-    // are disabled.
-    cursor_client.DisableMouseEvents();
+  // In Aura views, no new hover effects are invoked if mouse events
+  // are disabled.
+  cursor_client.DisableMouseEvents();
 
-    button()->SetEnabled(false);
-    EXPECT_EQ(CustomButton::STATE_DISABLED, button()->state());
+  button()->SetEnabled(false);
+  EXPECT_EQ(CustomButton::STATE_DISABLED, button()->state());
 
-    button()->SetEnabled(true);
-    EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+  button()->SetEnabled(true);
+  EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
 
-    button()->SetVisible(false);
-    EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+  button()->SetVisible(false);
+  EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
 
-    button()->SetVisible(true);
-    EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
-  }
+  button()->SetVisible(true);
+  EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
 #endif  // !defined(OS_MACOSX) || defined(USE_AURA)
 }
 
@@ -465,6 +461,19 @@ TEST_F(CustomButtonTest, HideInkDropOnBlur) {
   EXPECT_TRUE(button()->pressed());
 }
 
+TEST_F(CustomButtonTest, HideInkDropHighlightOnDisable) {
+  TestInkDrop* ink_drop = new TestInkDrop();
+  CreateButtonWithInkDrop(base::WrapUnique(ink_drop), false);
+
+  ui::test::EventGenerator generator(widget()->GetNativeWindow());
+  generator.MoveMouseToInHost(10, 10);
+  EXPECT_TRUE(ink_drop->is_hovered());
+  button()->SetEnabled(false);
+  EXPECT_FALSE(ink_drop->is_hovered());
+  button()->SetEnabled(true);
+  EXPECT_TRUE(ink_drop->is_hovered());
+}
+
 TEST_F(CustomButtonTest, InkDropAfterTryingToShowContextMenu) {
   TestInkDrop* ink_drop = new TestInkDrop();
   CreateButtonWithInkDrop(base::WrapUnique(ink_drop), false);
@@ -629,24 +638,61 @@ TEST_F(CustomButtonTest, NoLayerAddedForWidgetVisibilityChanges) {
   delete button();
 }
 
-// Todo(karandeepb): On Mac, a button should get clicked on a Space key press
-// (and not release). Modify this test after fixing crbug.com/607429.
-// Test that Space Key behaves correctly on a focused button.
-TEST_F(CustomButtonTest, ClickOnSpace) {
+// Verify that the Space key clicks the button on key-press on Mac, and
+// key-release on other platforms.
+TEST_F(CustomButtonTest, ActionOnSpace) {
   // Give focus to the button.
   button()->SetFocusForPlatform();
   button()->RequestFocus();
-  EXPECT_EQ(button(), widget()->GetFocusManager()->GetFocusedView());
+  EXPECT_TRUE(button()->HasFocus());
 
   ui::KeyEvent space_press(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, ui::EF_NONE);
-  SimulateKeyEvent(&space_press);
-  EXPECT_EQ(CustomButton::STATE_PRESSED, button()->state());
-  EXPECT_FALSE(button()->pressed());
+  EXPECT_TRUE(button()->OnKeyPressed(space_press));
 
-  ui::KeyEvent space_release(ui::ET_KEY_RELEASED, ui::VKEY_SPACE, ui::EF_NONE);
-  SimulateKeyEvent(&space_release);
+#if defined(OS_MACOSX)
   EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
   EXPECT_TRUE(button()->pressed());
+#else
+  EXPECT_EQ(CustomButton::STATE_PRESSED, button()->state());
+  EXPECT_FALSE(button()->pressed());
+#endif
+
+  ui::KeyEvent space_release(ui::ET_KEY_RELEASED, ui::VKEY_SPACE, ui::EF_NONE);
+
+#if defined(OS_MACOSX)
+  EXPECT_FALSE(button()->OnKeyReleased(space_release));
+#else
+  EXPECT_TRUE(button()->OnKeyReleased(space_release));
+#endif
+
+  EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+  EXPECT_TRUE(button()->pressed());
+}
+
+// Verify that the Return key clicks the button on key-press on all platforms
+// except Mac. On Mac, the Return key performs the default action associated
+// with a dialog, even if a button has focus.
+TEST_F(CustomButtonTest, ActionOnReturn) {
+  // Give focus to the button.
+  button()->SetFocusForPlatform();
+  button()->RequestFocus();
+  EXPECT_TRUE(button()->HasFocus());
+
+  ui::KeyEvent return_press(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
+
+#if defined(OS_MACOSX)
+  EXPECT_FALSE(button()->OnKeyPressed(return_press));
+  EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+  EXPECT_FALSE(button()->pressed());
+#else
+  EXPECT_TRUE(button()->OnKeyPressed(return_press));
+  EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+  EXPECT_TRUE(button()->pressed());
+#endif
+
+  ui::KeyEvent return_release(ui::ET_KEY_RELEASED, ui::VKEY_RETURN,
+                              ui::EF_NONE);
+  EXPECT_FALSE(button()->OnKeyReleased(return_release));
 }
 
 }  // namespace views

@@ -25,7 +25,7 @@
 
 #include "core/html/forms/ChooserOnlyTemporalInputTypeView.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/FrameHost.h"
@@ -40,7 +40,6 @@ ChooserOnlyTemporalInputTypeView::ChooserOnlyTemporalInputTypeView(
     HTMLInputElement& element,
     BaseTemporalInputType& inputType)
     : KeyboardClickableInputTypeView(element), m_inputType(inputType) {
-  ThreadState::current()->registerPreFinalizer(this);
 }
 
 ChooserOnlyTemporalInputTypeView* ChooserOnlyTemporalInputTypeView::create(

@@ -34,6 +34,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -89,8 +90,7 @@ BaseAudioContext* BaseAudioContext::create(Document& document,
 
 // Constructor for rendering to the audio hardware.
 BaseAudioContext::BaseAudioContext(Document* document)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(document),
+    : SuspendableObject(document),
       m_destinationNode(nullptr),
       m_isCleared(false),
       m_isResolvingResumePromises(false),
@@ -102,11 +102,12 @@ BaseAudioContext::BaseAudioContext(Document* document)
       m_periodicWaveSine(nullptr),
       m_periodicWaveSquare(nullptr),
       m_periodicWaveSawtooth(nullptr),
-      m_periodicWaveTriangle(nullptr) {
+      m_periodicWaveTriangle(nullptr),
+      m_outputPosition() {
   // If mediaPlaybackRequiresUserGesture is enabled, cross origin iframes will
   // require user gesture for the AudioContext to produce sound.
   if (document->settings() &&
-      document->settings()->mediaPlaybackRequiresUserGesture() &&
+      document->settings()->getMediaPlaybackRequiresUserGesture() &&
       document->frame() && document->frame()->isCrossOriginSubframe()) {
     m_autoplayStatus = AutoplayStatus::AutoplayStatusFailed;
     m_userGestureRequired = true;
@@ -122,8 +123,7 @@ BaseAudioContext::BaseAudioContext(Document* document,
                                    unsigned numberOfChannels,
                                    size_t numberOfFrames,
                                    float sampleRate)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(document),
+    : SuspendableObject(document),
       m_destinationNode(nullptr),
       m_isCleared(false),
       m_isResolvingResumePromises(false),
@@ -135,7 +135,8 @@ BaseAudioContext::BaseAudioContext(Document* document,
       m_periodicWaveSine(nullptr),
       m_periodicWaveSquare(nullptr),
       m_periodicWaveSawtooth(nullptr),
-      m_periodicWaveTriangle(nullptr) {}
+      m_periodicWaveTriangle(nullptr),
+      m_outputPosition() {}
 
 BaseAudioContext::~BaseAudioContext() {
   deferredTaskHandler().contextWillBeDestroyed();
@@ -196,7 +197,7 @@ void BaseAudioContext::uninitialize() {
   clear();
 }
 
-void BaseAudioContext::contextDestroyed() {
+void BaseAudioContext::contextDestroyed(ExecutionContext*) {
   uninitialize();
 }
 
@@ -617,7 +618,7 @@ void BaseAudioContext::setContextState(AudioContextState newState) {
   // Notify context that state changed
   if (getExecutionContext())
     getExecutionContext()->postTask(
-        BLINK_FROM_HERE,
+        TaskType::MediaElementEvent, BLINK_FROM_HERE,
         createSameThreadTask(&BaseAudioContext::notifyStateChange,
                              wrapPersistent(this)));
 }
@@ -629,7 +630,7 @@ void BaseAudioContext::notifyStateChange() {
 void BaseAudioContext::notifySourceNodeFinishedProcessing(
     AudioHandler* handler) {
   DCHECK(isAudioThread());
-  m_finishedSourceHandlers.append(handler);
+  m_finishedSourceHandlers.push_back(handler);
 }
 
 void BaseAudioContext::removeFinishedSourceNodes() {
@@ -674,7 +675,7 @@ void BaseAudioContext::notifySourceNodeStartedProcessing(AudioNode* node) {
   DCHECK(isMainThread());
   AutoLocker locker(this);
 
-  m_activeSourceNodes.append(node);
+  m_activeSourceNodes.push_back(node);
   node->handler().makeConnection();
 }
 
@@ -706,7 +707,8 @@ void BaseAudioContext::handleStoppableSourceNodes() {
   }
 }
 
-void BaseAudioContext::handlePreRenderTasks() {
+void BaseAudioContext::handlePreRenderTasks(
+    const AudioIOPosition& outputPosition) {
   DCHECK(isAudioThread());
 
   // At the beginning of every render quantum, try to update the internal
@@ -723,6 +725,9 @@ void BaseAudioContext::handlePreRenderTasks() {
 
     // Update the dirty state of the listener.
     listener()->updateState();
+
+    // Update output timestamp.
+    m_outputPosition = outputPosition;
 
     unlock();
   }
@@ -817,6 +822,12 @@ bool BaseAudioContext::isAllowedToStart() const {
   return false;
 }
 
+AudioIOPosition BaseAudioContext::outputPosition() {
+  DCHECK(isMainThread());
+  AutoLocker locker(this);
+  return m_outputPosition;
+}
+
 void BaseAudioContext::rejectPendingResolvers() {
   DCHECK(isMainThread());
 
@@ -850,7 +861,7 @@ const AtomicString& BaseAudioContext::interfaceName() const {
 }
 
 ExecutionContext* BaseAudioContext::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
 void BaseAudioContext::startRendering() {
@@ -877,7 +888,7 @@ DEFINE_TRACE(BaseAudioContext) {
   visitor->trace(m_periodicWaveSawtooth);
   visitor->trace(m_periodicWaveTriangle);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 SecurityOrigin* BaseAudioContext::getSecurityOrigin() const {

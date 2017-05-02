@@ -4,16 +4,17 @@
 
 #include "ash/common/shelf/shelf_window_watcher.h"
 
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_item_types.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/base/hit_test.h"
 #include "ui/views/widget/widget.h"
@@ -35,8 +36,8 @@ class ShelfWindowWatcherTest : public test::AshTestBase {
     test::AshTestBase::TearDown();
   }
 
-  ShelfID CreateShelfItem(WmWindow* window) {
-    ShelfID id = model_->next_id();
+  static ShelfID CreateShelfItem(WmWindow* window) {
+    ShelfID id = WmShell::Get()->shelf_model()->next_id();
     window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_DIALOG);
     return id;
   }
@@ -105,10 +106,6 @@ TEST_F(ShelfWindowWatcherTest, CreateAndRemoveShelfItemProperties) {
   // Clearing twice doesn't do anything.
   window2->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_UNDEFINED);
   EXPECT_EQ(1, model_->item_count());
-
-  // Setting an icon id (without a valid item type) does not add a shelf item.
-  window2->SetIntProperty(WmWindowProperty::SHELF_ICON_RESOURCE_ID, 1234);
-  EXPECT_EQ(1, model_->item_count());
 }
 
 TEST_F(ShelfWindowWatcherTest, ActivateWindow) {
@@ -161,7 +158,7 @@ TEST_F(ShelfWindowWatcherTest, UpdateWindowProperty) {
   EXPECT_EQ(STATUS_ACTIVE, model_->items()[index].status);
 
   // Update the ShelfItemType for |window|.
-  window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_PLATFORM_APP);
+  window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_APP);
   // No new item is created after updating a launcher item.
   EXPECT_EQ(2, model_->item_count());
   // index and id are not changed after updating a launcher item.
@@ -309,6 +306,54 @@ TEST_F(ShelfWindowWatcherTest, PanelWindow) {
   EXPECT_EQ(2, model_->item_count());
   widget1.reset();
   EXPECT_EQ(1, model_->item_count());
+}
+
+TEST_F(ShelfWindowWatcherTest, DontCreateShelfEntriesForChildWindows) {
+  const int initial_item_count = model_->item_count();
+
+  WmWindow* window = WmShell::Get()->NewWindow(ui::wm::WINDOW_TYPE_NORMAL,
+                                               ui::LAYER_NOT_DRAWN);
+  window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_APP);
+  WmShell::Get()
+      ->GetPrimaryRootWindow()
+      ->GetChildByShellWindowId(kShellWindowId_DefaultContainer)
+      ->AddChild(window);
+  window->Show();
+  EXPECT_EQ(initial_item_count + 1, model_->item_count());
+
+  WmWindow* child_window = WmShell::Get()->NewWindow(ui::wm::WINDOW_TYPE_NORMAL,
+                                                     ui::LAYER_NOT_DRAWN);
+  child_window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_APP);
+  window->AddChild(child_window);
+  child_window->Show();
+  // |child_window| should not result in adding a new entry.
+  EXPECT_EQ(initial_item_count + 1, model_->item_count());
+
+  child_window->Destroy();
+  window->Destroy();
+  EXPECT_EQ(initial_item_count, model_->item_count());
+}
+
+// Ensures ShelfWindowWatcher supports windows opened prior to session start.
+using ShelfWindowWatcherSessionStartTest = test::NoSessionAshTestBase;
+TEST_F(ShelfWindowWatcherSessionStartTest, PreExistingWindow) {
+  ShelfModel* model = WmShell::Get()->shelf_model();
+  ASSERT_FALSE(
+      WmShell::Get()->GetSessionStateDelegate()->IsActiveUserSessionStarted());
+
+  // ShelfModel only has an APP_LIST item.
+  EXPECT_EQ(1, model->item_count());
+
+  // Construct a window that should get a shelf item once the session starts.
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(nullptr, kShellWindowId_DefaultContainer, gfx::Rect());
+  WmWindow* window = WmLookup::Get()->GetWindowForWidget(widget.get());
+  ShelfWindowWatcherTest::CreateShelfItem(window);
+  EXPECT_EQ(1, model->item_count());
+
+  // Start the test user session; ShelfWindowWatcher will find the open window.
+  SetSessionStarted(true);
+  EXPECT_EQ(2, model->item_count());
 }
 
 }  // namespace ash

@@ -4,13 +4,13 @@
 
 #include "net/quic/core/quic_server_session_base.h"
 
-#include "base/logging.h"
 #include "net/quic/core/proto/cached_network_parameters.pb.h"
-#include "net/quic/core/quic_bug_tracker.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_spdy_session.h"
 #include "net/quic/core/quic_stream.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_logging.h"
 
 using std::string;
 
@@ -55,7 +55,7 @@ void QuicServerSessionBase::OnConfigNegotiated() {
   bandwidth_resumption_enabled_ =
       last_bandwidth_resumption || max_bandwidth_resumption;
 
-  if (!FLAGS_quic_enable_server_push_by_default ||
+  if (!FLAGS_quic_reloadable_flag_quic_enable_server_push_by_default ||
       connection()->version() < QUIC_VERSION_35) {
     set_server_push_enabled(
         ContainsQuicTag(config()->ReceivedConnectionOptions(), kSPSH));
@@ -74,7 +74,7 @@ void QuicServerSessionBase::OnConfigNegotiated() {
 
     if (bandwidth_resumption_enabled_) {
       // Only do bandwidth resumption if estimate is recent enough.
-      const int64_t seconds_since_estimate =
+      const uint64_t seconds_since_estimate =
           connection()->clock()->WallNow().ToUNIXSeconds() -
           cached_network_params->timestamp();
       if (seconds_since_estimate <= kNumSecondsPerHour) {
@@ -107,7 +107,7 @@ void QuicServerSessionBase::OnCongestionWindowChange(QuicTime now) {
 
   // If not enough time has passed since the last time we sent an update to the
   // client, or not enough packets have been sent, then return early.
-  const QuicSentPacketManagerInterface& sent_packet_manager =
+  const QuicSentPacketManager& sent_packet_manager =
       connection()->sent_packet_manager();
   int64_t srtt_ms =
       sent_packet_manager.GetRttStats()->smoothed_rtt().ToMilliseconds();
@@ -148,8 +148,8 @@ void QuicServerSessionBase::OnCongestionWindowChange(QuicTime now) {
   }
 
   bandwidth_estimate_sent_to_client_ = new_bandwidth_estimate;
-  DVLOG(1) << "Server: sending new bandwidth estimate (KBytes/s): "
-           << bandwidth_estimate_sent_to_client_.ToKBytesPerSecond();
+  QUIC_DVLOG(1) << "Server: sending new bandwidth estimate (KBytes/s): "
+                << bandwidth_estimate_sent_to_client_.ToKBytesPerSecond();
 
   // Include max bandwidth in the update.
   QuicBandwidth max_bandwidth_estimate =
@@ -200,7 +200,7 @@ bool QuicServerSessionBase::ShouldCreateIncomingDynamicStream(QuicStreamId id) {
   }
 
   if (id % 2 == 0) {
-    DVLOG(1) << "Invalid incoming even stream_id:" << id;
+    QUIC_DLOG(INFO) << "Invalid incoming even stream_id:" << id;
     connection()->CloseConnection(
         QUIC_INVALID_STREAM_ID, "Client created even numbered stream",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);

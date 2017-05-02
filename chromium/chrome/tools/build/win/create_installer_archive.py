@@ -153,7 +153,7 @@ def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir):
 
 def SignTarget(target):
   if not (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
-    os.environ.get("VIVALDI_SIGNING_KEY", None)):
+	  os.environ.get("VIVALDI_SIGNING_KEY", None)):
     return;
   if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
     return
@@ -174,7 +174,7 @@ def SignTarget(target):
 
 def SignTargets(config, distribution, staging_dir,enable_hidpi):
   if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
-    os.environ.get("VIVALDI_SIGNING_KEY", None)):
+	  os.environ.get("VIVALDI_SIGNING_KEY", None)):
 
     print "Start Signing"
     sections = ['GENERAL']
@@ -370,7 +370,6 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
   except LZMA_OOM:
     return os.path.basename(orig_file)
 
-
   return compressed_archive_file
 
 
@@ -561,31 +560,8 @@ def DoComponentBuildTasks(staging_dir, build_dir, target_arch,
   if not os.path.exists(installer_dir):
     os.mkdir(installer_dir)
 
-  if setup_runtime_deps:
-    setup_component_dlls = ParseDLLsFromDeps(build_dir, setup_runtime_deps)
-  else:
-    # Explicitly list the component DLLs setup.exe depends on (this list may
-    # contain wildcards). These will be copied to |installer_dir| in the
-    # archive.
-    # TODO(jbauman): Remove when GYP is deprecated on Windows.
-    setup_component_dll_globs = [ #'api-ms-win-*.dll',
-                                  'base.dll',
-                                  'boringssl.dll',
-                                  'crcrypto.dll',
-                                  'icui18n.dll',
-                                  'icuuc.dll',
-                                  'msvc*.dll',
-                                  'ucrtbase*.dll',
-                                  #'vcruntime*.dll',
-                                ]
-    setup_component_dlls = set()
-    for setup_component_dll_glob in setup_component_dll_globs:
-      setup_component_partial_dlls = glob.glob(
-          os.path.join(build_dir, setup_component_dll_glob))
-      if len(setup_component_partial_dlls) == 0:
-        raise Exception('Error: missing expected DLL for component build '
-                        'mini_installer: "%s"' % setup_component_dll_glob)
-      setup_component_dlls.update(setup_component_partial_dlls)
+  setup_component_dlls = ParseDLLsFromDeps(build_dir, setup_runtime_deps)
+
   for setup_component_dll in setup_component_dlls:
     g_archive_inputs.append(setup_component_dll)
     shutil.copy(setup_component_dll, installer_dir)
@@ -594,27 +570,13 @@ def DoComponentBuildTasks(staging_dir, build_dir, target_arch,
   # the version assembly to be able to refer to them below and make sure
   # chrome.exe can find them at runtime), except the ones that are already
   # staged (i.e. non-component DLLs).
-  if chrome_runtime_deps:
-    build_dlls = ParseDLLsFromDeps(build_dir, chrome_runtime_deps)
-  else:
-    # If no chrome_runtime_deps was specified, every DLL in build_dir is
-    # considered to be a component DLL.
-    # TODO(jbauman): Remove when GYP is deprecated on Windows.
-    build_dlls = glob.glob(os.path.join(build_dir, '*.dll'))
+  build_dlls = ParseDLLsFromDeps(build_dir, chrome_runtime_deps)
   staged_dll_basenames = [os.path.basename(staged_dll) for staged_dll in \
                           glob.glob(os.path.join(version_dir, '*.dll'))]
   component_dll_filenames = []
   for component_dll in [dll for dll in build_dlls if \
                         os.path.basename(dll) not in staged_dll_basenames]:
     component_dll_name = os.path.basename(component_dll)
-    # ash*.dll remoting_*.dll's don't belong in the archive (it doesn't depend
-    # on them in gyp). Trying to copy them causes a build race when creating the
-    # installer archive in component mode. See: crbug.com/180996 and
-    # crbug.com/586967
-    if (component_dll_name.startswith('remoting_') or
-        component_dll_name.startswith('ash')):
-      continue
-
     component_dll_filenames.append(component_dll_name)
     g_archive_inputs.append(component_dll)
     shutil.copy(component_dll, version_dir)
@@ -729,9 +691,6 @@ def _ParseOptions():
   parser.add_option('--depfile',
       help='Generate a depfile with the given name listing the implicit inputs '
            'to the archive process that can be used with a build system.')
-
-  # TODO(jbauman): Make --chrome_runtime_deps and --setup_runtime_deps
-  # mandatory when GYP is deprecated on Windows.
   parser.add_option('--chrome_runtime_deps',
       help='A file listing runtime dependencies. This will be used to get a '
            'list of DLLs to archive in a component build.')
@@ -761,6 +720,12 @@ def _ParseOptions():
 
   if not options.input_file:
     parser.error('You must provide an input file')
+
+  is_component_build = options.component_build == '1'
+  if is_component_build and not options.chrome_runtime_deps:
+    parser.error("chrome_runtime_deps must be specified for a component build")
+  if is_component_build and not options.setup_runtime_deps:
+    parser.error("setup_runtime_deps must be specified for a component build")
 
   if not options.output_dir:
     options.output_dir = options.build_dir

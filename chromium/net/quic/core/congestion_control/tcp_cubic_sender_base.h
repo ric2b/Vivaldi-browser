@@ -4,22 +4,22 @@
 //
 // TCP cubic send side congestion algorithm, emulates the behavior of TCP cubic.
 
-#ifndef NET_QUIC_CONGESTION_CONTROL_TCP_CUBIC_SENDER_BASE_H_
-#define NET_QUIC_CONGESTION_CONTROL_TCP_CUBIC_SENDER_BASE_H_
+#ifndef NET_QUIC_CORE_CONGESTION_CONTROL_TCP_CUBIC_SENDER_BASE_H_
+#define NET_QUIC_CORE_CONGESTION_CONTROL_TCP_CUBIC_SENDER_BASE_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/congestion_control/cubic.h"
 #include "net/quic/core/congestion_control/hybrid_slow_start.h"
 #include "net/quic/core/congestion_control/prr_sender.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/quic_bandwidth.h"
 #include "net/quic/core/quic_connection_stats.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -32,13 +32,14 @@ namespace test {
 class TcpCubicSenderBasePeer;
 }  // namespace test
 
-class NET_EXPORT_PRIVATE TcpCubicSenderBase : public SendAlgorithmInterface {
+class QUIC_EXPORT_PRIVATE TcpCubicSenderBase : public SendAlgorithmInterface {
  public:
   // Reno option and max_tcp_congestion_window are provided for testing.
   TcpCubicSenderBase(const QuicClock* clock,
                      const RttStats* rtt_stats,
                      bool reno,
                      QuicConnectionStats* stats);
+
   ~TcpCubicSenderBase() override;
 
   // Start implementation of SendAlgorithmInterface.
@@ -94,7 +95,8 @@ class NET_EXPORT_PRIVATE TcpCubicSenderBase : public SendAlgorithmInterface {
   // window.
   virtual void MaybeIncreaseCwnd(QuicPacketNumber acked_packet_number,
                                  QuicByteCount acked_bytes,
-                                 QuicByteCount prior_in_flight) = 0;
+                                 QuicByteCount prior_in_flight,
+                                 QuicTime event_time) = 0;
 
   // Called when a retransmission has occured which resulted in packets
   // being retransmitted.
@@ -111,7 +113,8 @@ class NET_EXPORT_PRIVATE TcpCubicSenderBase : public SendAlgorithmInterface {
   // TODO(ianswett): Remove these and migrate to OnCongestionEvent.
   void OnPacketAcked(QuicPacketNumber acked_packet_number,
                      QuicByteCount acked_bytes,
-                     QuicByteCount prior_in_flight);
+                     QuicByteCount prior_in_flight,
+                     QuicTime event_time);
 
  protected:
   // TODO(rch): Make these private and clean up subclass access to them.
@@ -157,4 +160,4 @@ class NET_EXPORT_PRIVATE TcpCubicSenderBase : public SendAlgorithmInterface {
 
 }  // namespace net
 
-#endif  // NET_QUIC_CONGESTION_CONTROL_TCP_CUBIC_SENDER_BASE_H_
+#endif  // NET_QUIC_CORE_CONGESTION_CONTROL_TCP_CUBIC_SENDER_BASE_H_

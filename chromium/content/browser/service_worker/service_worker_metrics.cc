@@ -80,33 +80,62 @@ std::string EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_NAVIGATION_HINT_LINK_TAP_DOWN";
     case ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST:
       return "_EXTERNAL_REQUEST";
+    case ServiceWorkerMetrics::EventType::PAYMENT_REQUEST:
+      return "_PAYMENT_REQUEST";
     case ServiceWorkerMetrics::EventType::NUM_TYPES:
       NOTREACHED() << static_cast<int>(event_type);
   }
   return "_UNKNOWN";
 }
 
-std::string GetWorkerPreparationSuffix(
+ServiceWorkerMetrics::WorkerPreparationType GetWorkerPreparationType(
     EmbeddedWorkerStatus initial_worker_status,
     ServiceWorkerMetrics::StartSituation start_situation) {
+  using Situation = ServiceWorkerMetrics::StartSituation;
+  using Preparation = ServiceWorkerMetrics::WorkerPreparationType;
   switch (initial_worker_status) {
     case EmbeddedWorkerStatus::STOPPED: {
       switch (start_situation) {
-        case ServiceWorkerMetrics::StartSituation::DURING_STARTUP:
-          return "_StartWorkerDuringStartup";
-        case ServiceWorkerMetrics::StartSituation::NEW_PROCESS:
-          return "_StartWorkerNewProcess";
-        case ServiceWorkerMetrics::StartSituation::EXISTING_PROCESS:
-          return "_StartWorkerExistingProcess";
-        default:
-          NOTREACHED() << static_cast<int>(start_situation);
+        case Situation::DURING_STARTUP:
+          return Preparation::START_DURING_STARTUP;
+        case Situation::NEW_PROCESS:
+          return Preparation::START_IN_NEW_PROCESS;
+        case Situation::EXISTING_PROCESS:
+          return Preparation::START_IN_EXISTING_PROCESS;
+        case Situation::UNKNOWN:
+          break;
       }
+      break;
     }
     case EmbeddedWorkerStatus::STARTING:
-      return "_StartingWorker";
+      return Preparation::STARTING;
     case EmbeddedWorkerStatus::RUNNING:
-      return "_RunningWorker";
+      return Preparation::RUNNING;
     case EmbeddedWorkerStatus::STOPPING:
+      return Preparation::STOPPING;
+  }
+  NOTREACHED() << static_cast<int>(initial_worker_status);
+  return Preparation::UNKNOWN;
+}
+
+std::string GetWorkerPreparationSuffix(
+    ServiceWorkerMetrics::WorkerPreparationType status) {
+  using Preparation = ServiceWorkerMetrics::WorkerPreparationType;
+  switch (status) {
+    case Preparation::UNKNOWN:
+    case Preparation::NUM_TYPES:
+      break;
+    case Preparation::START_DURING_STARTUP:
+      return "_StartWorkerDuringStartup";
+    case Preparation::START_IN_NEW_PROCESS:
+      return "_StartWorkerNewProcess";
+    case Preparation::START_IN_EXISTING_PROCESS:
+      return "_StartWorkerExistingProcess";
+    case Preparation::STARTING:
+      return "_StartingWorker";
+    case Preparation::RUNNING:
+      return "_RunningWorker";
+    case Preparation::STOPPING:
       return "_StoppingWorker";
   }
   NOTREACHED();
@@ -231,6 +260,8 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Navigation Hint Link Tap Down";
     case EventType::EXTERNAL_REQUEST:
       return "External Request";
+    case EventType::PAYMENT_REQUEST:
+      return "Payment Request";
     case EventType::NUM_TYPES:
       break;
   }
@@ -321,9 +352,12 @@ void ServiceWorkerMetrics::RecordDeleteAndStartOverResult(
                             result, NUM_DELETE_AND_START_OVER_RESULT_TYPES);
 }
 
-void ServiceWorkerMetrics::CountControlledPageLoad(Site site,
-                                                   const GURL& url,
-                                                   bool is_main_frame_load) {
+void ServiceWorkerMetrics::CountControlledPageLoad(
+    Site site,
+    const GURL& url,
+    bool is_main_frame_load,
+    ui::PageTransition page_transition,
+    size_t redirect_chain_length) {
   DCHECK_NE(site, Site::OTHER);
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.PageLoad", static_cast<int>(site),
                             static_cast<int>(Site::NUM_TYPES));
@@ -332,9 +366,21 @@ void ServiceWorkerMetrics::CountControlledPageLoad(Site site,
                               static_cast<int>(site),
                               static_cast<int>(Site::NUM_TYPES));
   }
-
   if (ShouldExcludeSiteFromHistogram(site))
     return;
+
+  if (is_main_frame_load) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "ServiceWorker.MainFramePageLoad.CoreTransition",
+        static_cast<int>(ui::PageTransitionStripQualifier(page_transition)),
+        static_cast<int>(ui::PAGE_TRANSITION_LAST_CORE) + 1);
+    // Currently the max number of HTTP redirects is 20 which is defined as
+    // kMaxRedirects in net/url_request/url_request.cc. So the max number of the
+    // chain length is 21.
+    UMA_HISTOGRAM_EXACT_LINEAR(
+        "ServiceWorker.MainFramePageLoad.RedirectChainLength",
+        redirect_chain_length, 21);
+  }
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                           base::Bind(&RecordURLMetricOnUI, url));
 }
@@ -368,10 +414,10 @@ void ServiceWorkerMetrics::RecordStartWorkerTime(base::TimeDelta time,
                                                  StartSituation start_situation,
                                                  EventType purpose) {
   if (is_installed) {
-    std::string name = "ServiceWorker.StartWorker.Time";
-    UMA_HISTOGRAM_MEDIUM_TIMES(name, time);
-    RecordSuffixedMediumTimeHistogram(
-        name, StartSituationToSuffix(start_situation), time);
+    UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.StartWorker.Time", time);
+    RecordSuffixedMediumTimeHistogram("ServiceWorker.StartWorker.Time",
+                                      StartSituationToSuffix(start_situation),
+                                      time);
     RecordSuffixedMediumTimeHistogram(
         "ServiceWorker.StartWorker.Time",
         StartSituationToSuffix(start_situation) + EventTypeToSuffix(purpose),
@@ -381,16 +427,51 @@ void ServiceWorkerMetrics::RecordStartWorkerTime(base::TimeDelta time,
   }
 }
 
-void ServiceWorkerMetrics::RecordActivatedWorkerPreparationTimeForMainFrame(
+void ServiceWorkerMetrics::RecordActivatedWorkerPreparationForMainFrame(
     base::TimeDelta time,
     EmbeddedWorkerStatus initial_worker_status,
-    StartSituation start_situation) {
-  std::string name =
-      "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time";
-  UMA_HISTOGRAM_MEDIUM_TIMES(name, time);
+    StartSituation start_situation,
+    bool did_navigation_preload) {
+  // Record the worker preparation type.
+  WorkerPreparationType preparation =
+      GetWorkerPreparationType(initial_worker_status, start_situation);
+  UMA_HISTOGRAM_ENUMERATION(
+      "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Type",
+      static_cast<int>(preparation),
+      static_cast<int>(WorkerPreparationType::NUM_TYPES));
+  if (did_navigation_preload) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Type_"
+        "NavigationPreloadEnabled",
+        static_cast<int>(preparation),
+        static_cast<int>(WorkerPreparationType::NUM_TYPES));
+  }
+
+  // Record the preparation time.
+  UMA_HISTOGRAM_MEDIUM_TIMES(
+      "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time", time);
+
+  // Record the preparation time using the worker preparation suffix.
   RecordSuffixedMediumTimeHistogram(
-      name, GetWorkerPreparationSuffix(initial_worker_status, start_situation),
-      time);
+      "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time",
+      GetWorkerPreparationSuffix(preparation), time);
+
+  // Record the preparation time using the navigation preload suffix.
+  if (did_navigation_preload) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time_"
+        "NavigationPreloadEnabled",
+        time);
+    // We're mostly interested in when the worker needed to start up. To avoid
+    // using too much memory, just log the the common case of startup in an
+    // existing process.
+    if (preparation == WorkerPreparationType::START_IN_EXISTING_PROCESS) {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time_"
+          "StartWorkerExistingProcess_NavigationPreloadEnabled",
+          time);
+    }
+  }
 }
 
 void ServiceWorkerMetrics::RecordWorkerStopped(StopStatus status) {
@@ -572,6 +653,10 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
     case EventType::EXTERNAL_REQUEST:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ExternalRequest.Time", time);
       break;
+    case EventType::PAYMENT_REQUEST:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.PaymentRequestEvent.Time",
+                                 time);
+      break;
     // Those navigation hints should not be sent as request events.
     case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
     case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
@@ -743,6 +828,123 @@ void ServiceWorkerMetrics::RecordStartStatusAfterFailure(
   } else if (failure_count == 3) {
     UMA_HISTOGRAM_ENUMERATION("ServiceWorker.StartWorker.AfterFailureStreak_3",
                               status, SERVICE_WORKER_ERROR_MAX_VALUE);
+  }
+}
+
+void ServiceWorkerMetrics::RecordNavigationPreloadRequestHeaderSize(
+    size_t size) {
+  UMA_HISTOGRAM_COUNTS_100000("ServiceWorker.NavigationPreload.HeaderSize",
+                              size);
+}
+
+void ServiceWorkerMetrics::RecordNavigationPreloadResponse(
+    base::TimeDelta worker_start,
+    base::TimeDelta response_start,
+    EmbeddedWorkerStatus initial_worker_status,
+    StartSituation start_situation) {
+  DCHECK_GE(worker_start.ToInternalValue(), 0);
+  DCHECK_GE(response_start.ToInternalValue(), 0);
+
+  UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.NavigationPreload.ResponseTime",
+                             response_start);
+
+  const bool nav_preload_finished_first = response_start < worker_start;
+  UMA_HISTOGRAM_BOOLEAN(
+      "ServiceWorker.NavigationPreload.FinishedBeforeStartWorker",
+      nav_preload_finished_first);
+
+  const bool existing_process_startup =
+      (initial_worker_status == EmbeddedWorkerStatus::STOPPED &&
+       start_situation ==
+           ServiceWorkerMetrics::StartSituation::EXISTING_PROCESS);
+  if (existing_process_startup) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "ServiceWorker.NavigationPreload.FinishedBeforeStartWorker"
+        "_StartWorkerExistingProcess",
+        nav_preload_finished_first);
+  }
+
+  UMA_HISTOGRAM_MEDIUM_TIMES(
+      "ServiceWorker.NavigationPreload.ConcurrentTime",
+      nav_preload_finished_first ? response_start : worker_start);
+
+  if (nav_preload_finished_first) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "ServiceWorker.NavigationPreload.ConcurrentTime_NavPreloadFirst",
+        response_start);
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "ServiceWorker.NavigationPreload.SWStartAfterNavPreload",
+        worker_start - response_start);
+
+    if (existing_process_startup) {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.NavigationPreload.ConcurrentTime_"
+          "StartWorkerExistingProcess",
+          response_start);
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.NavigationPreload.ConcurrentTime_"
+          "NavPreloadFirst_StartWorkerExistingProcess",
+          response_start);
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.NavigationPreload.SWStartAfterNavPreload_"
+          "StartWorkerExistingProcess",
+          worker_start - response_start);
+    }
+  } else {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "ServiceWorker.NavigationPreload.ConcurrentTime_SWStartFirst",
+        worker_start);
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "ServiceWorker.NavigationPreload.NavPreloadAfterSWStart",
+        response_start - worker_start);
+
+    if (existing_process_startup) {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.NavigationPreload.ConcurrentTime_"
+          "StartWorkerExistingProcess",
+          worker_start);
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.NavigationPreload.ConcurrentTime_"
+          "SWStartFirst_StartWorkerExistingProcess",
+          worker_start);
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.NavigationPreload.NavPreloadAfterSWStart_"
+          "StartWorkerExistingProcess",
+          response_start - worker_start);
+    }
+  }
+}
+
+void ServiceWorkerMetrics::RecordContextRequestHandlerStatus(
+    ServiceWorkerContextRequestHandler::CreateJobStatus status,
+    bool is_installed,
+    bool is_main_script) {
+  const int value = static_cast<int>(status);
+  const int max = static_cast<int>(
+      ServiceWorkerContextRequestHandler::CreateJobStatus::NUM_TYPES);
+  if (is_installed) {
+    if (is_main_script) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "ServiceWorker.ContextRequestHandlerStatus.InstalledWorker."
+          "MainScript",
+          value, max);
+    } else {
+      UMA_HISTOGRAM_ENUMERATION(
+          "ServiceWorker.ContextRequestHandlerStatus.InstalledWorker."
+          "ImportedScript",
+          value, max);
+    }
+  } else {
+    if (is_main_script) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "ServiceWorker.ContextRequestHandlerStatus.NewWorker.MainScript",
+          value, max);
+    } else {
+      UMA_HISTOGRAM_ENUMERATION(
+          "ServiceWorker.ContextRequestHandlerStatus.NewWorker."
+          "ImportedScript",
+          value, max);
+    }
   }
 }
 

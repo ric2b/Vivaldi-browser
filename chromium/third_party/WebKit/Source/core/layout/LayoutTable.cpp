@@ -92,9 +92,9 @@ void LayoutTable::styleDidChange(StyleDifference diff,
     // explicit width is specified on the table. Auto width implies auto table
     // layout.
     if (style()->isFixedTableLayout())
-      m_tableLayout = makeUnique<TableLayoutAlgorithmFixed>(this);
+      m_tableLayout = WTF::makeUnique<TableLayoutAlgorithmFixed>(this);
     else
-      m_tableLayout = makeUnique<TableLayoutAlgorithmAuto>(this);
+      m_tableLayout = WTF::makeUnique<TableLayoutAlgorithmAuto>(this);
   }
 
   // If border was changed, invalidate collapsed borders cache.
@@ -216,7 +216,7 @@ void LayoutTable::addChild(LayoutObject* child, LayoutObject* beforeChild) {
 
 void LayoutTable::addCaption(const LayoutTableCaption* caption) {
   ASSERT(m_captions.find(caption) == kNotFound);
-  m_captions.append(const_cast<LayoutTableCaption*>(caption));
+  m_captions.push_back(const_cast<LayoutTableCaption*>(caption));
 }
 
 void LayoutTable::removeCaption(const LayoutTableCaption* oldCaption) {
@@ -373,7 +373,7 @@ LayoutUnit LayoutTable::convertStyleLogicalWidthToComputedWidth(
   bool isCSSTable = !isHTMLTableElement(node());
   if (isCSSTable && styleLogicalWidth.isSpecified() &&
       styleLogicalWidth.isPositive() &&
-      style()->boxSizing() == BoxSizingContentBox)
+      style()->boxSizing() == EBoxSizing::kContentBox)
     borders =
         borderStart() + borderEnd() +
         (collapseBorders() ? LayoutUnit() : paddingStart() + paddingEnd());
@@ -396,7 +396,7 @@ LayoutUnit LayoutTable::convertStyleLogicalHeightToComputedHeight(
     // FIXME: We cannot apply box-sizing: content-box on <table> which other
     // browsers allow.
     if (isHTMLTableElement(node()) ||
-        style()->boxSizing() == BoxSizingBorderBox) {
+        style()->boxSizing() == EBoxSizing::kBorderBox) {
       borders = borderAndPadding;
     }
     computedLogicalHeight = LayoutUnit(styleLogicalHeight.value() - borders);
@@ -589,7 +589,7 @@ void LayoutTable::layout() {
     // Lay out top captions.
     // FIXME: Collapse caption margin.
     for (unsigned i = 0; i < m_captions.size(); i++) {
-      if (m_captions[i]->style()->captionSide() == ECaptionSide::Bottom)
+      if (m_captions[i]->style()->captionSide() == ECaptionSide::kBottom)
         continue;
       layoutCaption(*m_captions[i], layouter);
     }
@@ -635,16 +635,12 @@ void LayoutTable::layout() {
         if (sectionLogicalHeight <
                 section->pageLogicalHeightForOffset(section->logicalTop()) &&
             section->getPaginationBreakability() != AllowAnyBreaks) {
-          LayoutUnit offsetForTableHeaders =
-              state.heightOffsetForTableHeaders();
           // Don't include any strut in the header group - we only want the
           // height from its content.
-          offsetForTableHeaders += sectionLogicalHeight;
+          LayoutUnit offsetForTableHeaders = sectionLogicalHeight;
           if (LayoutTableRow* row = section->firstRow())
             offsetForTableHeaders -= row->paginationStrut();
-          section->setOffsetForRepeatingHeader(
-              state.heightOffsetForTableHeaders());
-          state.setHeightOffsetForTableHeaders(offsetForTableHeaders);
+          setRowOffsetFromRepeatingHeader(offsetForTableHeaders);
         }
       }
     }
@@ -717,7 +713,7 @@ void LayoutTable::layout() {
 
     // Lay out bottom captions.
     for (unsigned i = 0; i < m_captions.size(); i++) {
-      if (m_captions[i]->style()->captionSide() != ECaptionSide::Bottom)
+      if (m_captions[i]->style()->captionSide() != ECaptionSide::kBottom)
         continue;
       layoutCaption(*m_captions[i], layouter);
     }
@@ -737,7 +733,7 @@ void LayoutTable::layout() {
     computeOverflow(clientLogicalBottom());
     updateAfterLayout();
 
-    if (state.pageLogicalHeight()) {
+    if (state.isPaginated() && isPageLogicalHeightKnown()) {
       m_blockOffsetToFirstRepeatableHeader = state.pageLogicalOffset(
           *this, topSection ? topSection->logicalTop() : LayoutUnit());
     }
@@ -829,7 +825,7 @@ void LayoutTable::subtractCaptionRect(LayoutRect& rect) const {
                                       m_captions[i]->marginBefore() +
                                       m_captions[i]->marginAfter();
     bool captionIsBefore =
-        (m_captions[i]->style()->captionSide() != ECaptionSide::Bottom) ^
+        (m_captions[i]->style()->captionSide() != ECaptionSide::kBottom) ^
         style()->isFlippedBlocksWritingMode();
     if (style()->isHorizontalWritingMode()) {
       rect.setHeight(rect.height() - captionLogicalHeight);
@@ -964,7 +960,7 @@ void LayoutTable::splitEffectiveColumn(unsigned index, unsigned firstSpan) {
 
 void LayoutTable::appendEffectiveColumn(unsigned span) {
   unsigned newColumnIndex = m_effectiveColumns.size();
-  m_effectiveColumns.append(span);
+  m_effectiveColumns.push_back(span);
 
   // Unless the table has cell(s) with colspan that exceed the number of columns
   // afforded by the other rows in the table we can use the fast path when
@@ -1010,7 +1006,7 @@ void LayoutTable::updateColumnCache() const {
        columnLayoutObject = columnLayoutObject->nextColumn()) {
     if (columnLayoutObject->isTableColumnGroupWithColumnChildren())
       continue;
-    m_columnLayoutObjects.append(columnLayoutObject);
+    m_columnLayoutObjects.push_back(columnLayoutObject);
   }
   m_columnLayoutObjectsValid = true;
 }
@@ -1449,8 +1445,7 @@ LayoutTableCell* LayoutTable::cellAbove(const LayoutTableCell* cell) const {
   if (section) {
     unsigned effCol =
         absoluteColumnToEffectiveColumn(cell->absoluteColumnIndex());
-    LayoutTableSection::CellStruct& aboveCell = section->cellAt(rAbove, effCol);
-    return aboveCell.primaryCell();
+    return section->primaryCellAt(rAbove, effCol);
   }
   return nullptr;
 }
@@ -1476,8 +1471,7 @@ LayoutTableCell* LayoutTable::cellBelow(const LayoutTableCell* cell) const {
   if (section) {
     unsigned effCol =
         absoluteColumnToEffectiveColumn(cell->absoluteColumnIndex());
-    LayoutTableSection::CellStruct& belowCell = section->cellAt(rBelow, effCol);
-    return belowCell.primaryCell();
+    return section->primaryCellAt(rBelow, effCol);
   }
   return nullptr;
 }
@@ -1502,8 +1496,6 @@ LayoutTableCell* LayoutTable::cellAfter(const LayoutTableCell* cell) const {
 
   unsigned effCol = absoluteColumnToEffectiveColumn(
       cell->absoluteColumnIndex() + cell->colSpan());
-  if (effCol >= numEffectiveColumns())
-    return nullptr;
   return cell->section()->primaryCellAt(cell->rowIndex(), effCol);
 }
 
@@ -1633,7 +1625,7 @@ LayoutTable* LayoutTable::createAnonymousWithParent(
           parent->isLayoutInline() ? EDisplay::InlineTable : EDisplay::Table);
   LayoutTable* newTable = new LayoutTable(nullptr);
   newTable->setDocumentForAnonymous(&parent->document());
-  newTable->setStyle(newStyle.release());
+  newTable->setStyle(std::move(newStyle));
   return newTable;
 }
 

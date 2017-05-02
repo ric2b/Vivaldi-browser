@@ -11,10 +11,11 @@
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
 #include "modules/shapedetection/ShapeDetector.h"
-#include "public/platform/modules/shapedetection/shapedetection.mojom-blink.h"
+#include "services/shape_detection/public/interfaces/facedetection.mojom-blink.h"
 
 namespace blink {
 
+class FaceDetectorOptions;
 class LocalFrame;
 
 class MODULES_EXPORT FaceDetector final : public ShapeDetector,
@@ -22,14 +23,25 @@ class MODULES_EXPORT FaceDetector final : public ShapeDetector,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static FaceDetector* create(ScriptState*);
+  static FaceDetector* create(Document&, const FaceDetectorOptions&);
 
-  ScriptPromise detect(ScriptState*, const CanvasImageSourceUnion&);
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit FaceDetector(LocalFrame&);
+  FaceDetector(LocalFrame&, const FaceDetectorOptions&);
   ~FaceDetector() override = default;
+
+  ScriptPromise doDetect(ScriptPromiseResolver*,
+                         mojo::ScopedSharedBufferHandle,
+                         int imageWidth,
+                         int imageHeight) override;
+  void onDetectFaces(ScriptPromiseResolver*,
+                     shape_detection::mojom::blink::FaceDetectionResultPtr);
+  void onFaceServiceConnectionError();
+
+  shape_detection::mojom::blink::FaceDetectionPtr m_faceService;
+
+  HeapHashSet<Member<ScriptPromiseResolver>> m_faceServiceRequests;
 };
 
 }  // namespace blink

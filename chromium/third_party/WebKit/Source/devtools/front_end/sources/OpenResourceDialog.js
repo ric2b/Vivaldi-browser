@@ -11,10 +11,9 @@ Sources.OpenResourceDialog = class extends Sources.FilteredUISourceCodeListDeleg
   /**
    * @param {!Sources.SourcesView} sourcesView
    * @param {!Map.<!Workspace.UISourceCode, number>} defaultScores
-   * @param {!Array<string>} history
    */
-  constructor(sourcesView, defaultScores, history) {
-    super(defaultScores, history);
+  constructor(sourcesView, defaultScores) {
+    super(defaultScores);
     this._sourcesView = sourcesView;
     this.populate();
   }
@@ -26,8 +25,10 @@ Sources.OpenResourceDialog = class extends Sources.FilteredUISourceCodeListDeleg
    * @param {!Array<string>} history
    */
   static show(sourcesView, query, defaultScores, history) {
-    Sources.OpenResourceDialog._instanceForTest = new Sources.OpenResourceDialog(sourcesView, defaultScores, history);
-    var filteredItemSelectionDialog = new UI.FilteredListWidget(Sources.OpenResourceDialog._instanceForTest);
+    var dialog = new Sources.OpenResourceDialog(sourcesView, defaultScores);
+    if (InspectorFrontendHost.isUnderTest())
+      Sources.OpenResourceDialog._instanceForTest = dialog;
+    var filteredItemSelectionDialog = new QuickOpen.FilteredListWidget(dialog, history);
     filteredItemSelectionDialog.showAsDialog();
     filteredItemSelectionDialog.setQuery(query);
   }
@@ -61,7 +62,7 @@ Sources.OpenResourceDialog = class extends Sources.FilteredUISourceCodeListDeleg
    * @return {boolean}
    */
   filterProject(project) {
-    return !Workspace.Project.isServiceProject(project);
+    return !project.isServiceProject();
   }
 
   /**
@@ -96,7 +97,7 @@ Sources.SelectUISourceCodeForProjectTypesDialog = class extends Sources.Filtered
    */
   static show(name, types, callback) {
     var filteredItemSelectionDialog =
-        new UI.FilteredListWidget(new Sources.SelectUISourceCodeForProjectTypesDialog(types, callback));
+        new QuickOpen.FilteredListWidget(new Sources.SelectUISourceCodeForProjectTypesDialog(types, callback));
     filteredItemSelectionDialog.showAsDialog();
     filteredItemSelectionDialog.setQuery(name);
   }

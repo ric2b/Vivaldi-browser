@@ -5,8 +5,8 @@
 #ifndef ScriptedIdleTaskController_h
 #define ScriptedIdleTaskController_h
 
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/IdleDeadline.h"
+#include "core/dom/SuspendableObject.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Vector.h"
@@ -19,7 +19,7 @@ class IdleRequestOptions;
 
 class ScriptedIdleTaskController
     : public GarbageCollectedFinalized<ScriptedIdleTaskController>,
-      public ActiveDOMObject {
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(ScriptedIdleTaskController);
 
  public:
@@ -35,8 +35,8 @@ class ScriptedIdleTaskController
   int registerCallback(IdleRequestCallback*, const IdleRequestOptions&);
   void cancelCallback(CallbackId);
 
-  // ActiveDOMObject interface.
-  void contextDestroyed() override;
+  // SuspendableObject interface.
+  void contextDestroyed(ExecutionContext*) override;
   void suspend() override;
   void resume() override;
 

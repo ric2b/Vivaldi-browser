@@ -41,12 +41,14 @@
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebClipboard.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
+#include "public/platform/WebMouseWheelEvent.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/web/WebCache.h"
@@ -419,9 +421,8 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest) {
                                                       WebInputEvent::NumLockOn |
                                                       WebInputEvent::IsLeft);
 #endif
-  WebKeyboardEvent webKeyboardEventC;
-  webKeyboardEventC.type = WebInputEvent::RawKeyDown;
-  webKeyboardEventC.modifiers = modifierKey;
+  WebKeyboardEvent webKeyboardEventC(WebInputEvent::RawKeyDown, modifierKey,
+                                     WebInputEvent::TimeStampForTesting);
   webKeyboardEventC.windowsKeyCode = 67;
   KeyboardEvent* keyEventC = KeyboardEvent::create(webKeyboardEventC, 0);
   toWebPluginContainerImpl(pluginContainerOneElement.pluginContainer())
@@ -434,9 +435,9 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest) {
   EXPECT_EQ(WebString(""), Platform::current()->clipboard()->readPlainText(
                                WebClipboard::Buffer()));
 
-  WebKeyboardEvent webKeyboardEventInsert;
-  webKeyboardEventInsert.type = WebInputEvent::RawKeyDown;
-  webKeyboardEventInsert.modifiers = modifierKey;
+  WebKeyboardEvent webKeyboardEventInsert(WebInputEvent::RawKeyDown,
+                                          modifierKey,
+                                          WebInputEvent::TimeStampForTesting);
   webKeyboardEventInsert.windowsKeyCode = 45;
   KeyboardEvent* keyEventInsert =
       KeyboardEvent::create(webKeyboardEventInsert, 0);
@@ -455,13 +456,23 @@ class EventTestPlugin : public FakeWebPlugin {
 
   WebInputEventResult handleInputEvent(const WebInputEvent& event,
                                        WebCursorInfo&) override {
-    m_lastEventType = event.type;
+    m_lastEventType = event.type();
+    if (WebInputEvent::isMouseEventType(event.type()) ||
+        event.type() == WebInputEvent::MouseWheel) {
+      const WebMouseEvent& mouseEvent =
+          static_cast<const WebMouseEvent&>(event);
+      m_lastMouseEventLocation = IntPoint(mouseEvent.x, mouseEvent.y);
+    }
+
     return WebInputEventResult::HandledSystem;
   }
   WebInputEvent::Type getLastInputEventType() { return m_lastEventType; }
 
+  IntPoint getLastMouseEventLocation() { return m_lastMouseEventLocation; }
+
  private:
   WebInputEvent::Type m_lastEventType;
+  IntPoint m_lastMouseEventLocation;
 };
 
 TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
@@ -487,8 +498,9 @@ TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
                           ->plugin();
   EventTestPlugin* testPlugin = static_cast<EventTestPlugin*>(plugin);
 
-  WebGestureEvent event;
-  event.type = WebInputEvent::GestureLongPress;
+  WebGestureEvent event(WebInputEvent::GestureLongPress,
+                        WebInputEvent::NoModifiers,
+                        WebInputEvent::TimeStampForTesting);
   event.sourceDevice = WebGestureDeviceTouchscreen;
 
   // First, send an event that doesn't hit the plugin to verify that the
@@ -512,6 +524,45 @@ TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
 
   EXPECT_EQ(WebInputEvent::GestureLongPress,
             testPlugin->getLastInputEventType());
+}
+
+TEST_F(WebPluginContainerTest, MouseWheelEventTranslated) {
+  URLTestHelpers::registerMockedURLFromBaseURL(
+      WebString::fromUTF8(m_baseURL.c_str()),
+      WebString::fromUTF8("plugin_container.html"));
+  CustomPluginWebFrameClient<EventTestPlugin>
+      pluginWebFrameClient;  // Must outlive webViewHelper.
+  FrameTestHelpers::WebViewHelper webViewHelper;
+  WebView* webView = webViewHelper.initializeAndLoad(
+      m_baseURL + "plugin_container.html", true, &pluginWebFrameClient);
+  DCHECK(webView);
+  webView->settings()->setPluginsEnabled(true);
+  webView->resize(WebSize(300, 300));
+  webView->updateAllLifecyclePhases();
+  runPendingTasks();
+
+  WebElement pluginContainerOneElement =
+      webView->mainFrame()->document().getElementById(
+          WebString::fromUTF8("translated-plugin"));
+  WebPlugin* plugin = static_cast<WebPluginContainerImpl*>(
+                          pluginContainerOneElement.pluginContainer())
+                          ->plugin();
+  EventTestPlugin* testPlugin = static_cast<EventTestPlugin*>(plugin);
+
+  WebMouseWheelEvent event(WebInputEvent::MouseWheel,
+                           WebInputEvent::NoModifiers,
+                           WebInputEvent::TimeStampForTesting);
+
+  WebRect rect = pluginContainerOneElement.boundsInViewport();
+  event.x = rect.x + rect.width / 2;
+  event.y = rect.y + rect.height / 2;
+
+  webView->handleInputEvent(event);
+  runPendingTasks();
+
+  EXPECT_EQ(WebInputEvent::MouseWheel, testPlugin->getLastInputEventType());
+  EXPECT_EQ(rect.width / 2, testPlugin->getLastMouseEventLocation().x());
+  EXPECT_EQ(rect.height / 2, testPlugin->getLastMouseEventLocation().y());
 }
 
 // Verify that isRectTopmost returns false when the document is detached.
@@ -700,19 +751,10 @@ class CompositedPlugin : public FakeWebPlugin {
   std::unique_ptr<WebLayer> m_layer;
 };
 
-class ScopedSPv2 {
- public:
-  ScopedSPv2() { RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(true); }
-  ~ScopedSPv2() { m_featuresBackup.restore(); }
-
- private:
-  RuntimeEnabledFeatures::Backup m_featuresBackup;
-};
-
 }  // namespace
 
 TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
-  ScopedSPv2 enableSPv2;
+  ScopedSlimmingPaintV2ForTest enableSPv2(true);
   URLTestHelpers::registerMockedURLFromBaseURL(
       WebString::fromUTF8(m_baseURL.c_str()),
       WebString::fromUTF8("plugin.html"));
@@ -734,11 +776,11 @@ TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
       static_cast<const CompositedPlugin*>(container->plugin());
 
   std::unique_ptr<PaintController> paintController = PaintController::create();
-  PaintChunkProperties properties;
-  properties.transform = TransformPaintPropertyNode::root();
-  properties.clip = ClipPaintPropertyNode::root();
-  properties.effect = EffectPaintPropertyNode::root();
-  properties.scroll = ScrollPaintPropertyNode::root();
+  PropertyTreeState propertyTreeState(
+      TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+      EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+  PaintChunkProperties properties(propertyTreeState);
+
   paintController->updateCurrentPaintChunkProperties(nullptr, properties);
   GraphicsContext graphicsContext(*paintController);
   container->paint(graphicsContext, CullRect(IntRect(10, 10, 400, 300)));

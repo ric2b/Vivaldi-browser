@@ -10,12 +10,11 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "ui/gfx/native_widget_types.h"
 
-namespace views {
-class Widget;
-}  // namespace views
+class AccountId;
 
 namespace chromeos {
 
@@ -71,8 +70,8 @@ class LoginDisplayHost {
 
   // Starts out-of-box-experience flow or shows other screen handled by
   // Wizard controller i.e. camera, recovery.
-  // One could specify start screen with |first_screen_name|.
-  virtual void StartWizard(const std::string& first_screen_name) = 0;
+  // One could specify start screen with |first_screen|.
+  virtual void StartWizard(OobeScreen first_screen) = 0;
 
   // Returns current WizardController, if it exists.
   // Result should not be stored.
@@ -107,6 +106,9 @@ class LoginDisplayHost {
 
   // Starts the demo app launch.
   virtual void StartDemoAppLaunch() = 0;
+
+  // Starts ARC kiosk splash screen.
+  virtual void StartArcKiosk(const AccountId& account_id) = 0;
 
  protected:
   // Default LoginDisplayHost. Child class sets the reference.

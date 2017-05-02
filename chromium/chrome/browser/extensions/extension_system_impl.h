@@ -9,11 +9,19 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/one_shot_event.h"
 
 class Profile;
-class ValueStore;
+
+#if defined(OS_CHROMEOS)
+namespace chromeos {
+class DeviceLocalAccountManagementPolicyProvider;
+class SigninScreenPolicyProvider;
+}
+#endif  // defined(OS_CHROMEOS)
 
 namespace extensions {
 
@@ -72,7 +80,7 @@ class ExtensionSystemImpl : public ExtensionSystem {
 
   // Owns the Extension-related systems that have a single instance
   // shared between normal and incognito profiles.
-  class Shared : public KeyedService {
+  class Shared : public KeyedService, public content::NotificationObserver {
    public:
     explicit Shared(Profile* profile);
     ~Shared() override;
@@ -102,10 +110,16 @@ class ExtensionSystemImpl : public ExtensionSystem {
     ContentVerifier* content_verifier();
 
    private:
+    // content::NotificationObserver implementation.
+    void Observe(int type,
+                 const content::NotificationSource& source,
+                 const content::NotificationDetails& details) override;
+
     Profile* profile_;
 
     // The services that are shared between normal and incognito profiles.
 
+    content::NotificationRegistrar registrar_;
     std::unique_ptr<StateStore> state_store_;
     std::unique_ptr<StateStoreNotificationObserver>
         state_store_notification_observer_;
@@ -134,6 +148,8 @@ class ExtensionSystemImpl : public ExtensionSystem {
 #if defined(OS_CHROMEOS)
     std::unique_ptr<chromeos::DeviceLocalAccountManagementPolicyProvider>
         device_local_account_management_policy_provider_;
+    std::unique_ptr<chromeos::SigninScreenPolicyProvider>
+        signin_screen_policy_provider_;
     std::unique_ptr<InstallGate> kiosk_app_update_install_gate_;
 #endif
 

@@ -6,11 +6,15 @@
 
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/web/public/web_state/web_state.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 IOSChromeMetricsHelper::IOSChromeMetricsHelper(
     web::WebState* web_state,
@@ -22,10 +26,7 @@ IOSChromeMetricsHelper::IOSChromeMetricsHelper(
           ios::HistoryServiceFactory::GetForBrowserState(
               ios::ChromeBrowserState::FromBrowserState(
                   web_state->GetBrowserState()),
-              ServiceAccessType::EXPLICIT_ACCESS),
-          GetApplicationContext()->GetRapporService()
-              ? GetApplicationContext()->GetRapporService()->AsWeakPtr()
-              : base::WeakPtr<rappor::RapporService>()) {}
+              ServiceAccessType::EXPLICIT_ACCESS)) {}
 
 IOSChromeMetricsHelper::~IOSChromeMetricsHelper() {}
 

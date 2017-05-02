@@ -74,7 +74,7 @@ void AddPublicSessionDetailsToUserDictionaryEntry(
   policy::BrowserPolicyConnectorChromeOS* policy_connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
 
-  if (policy_connector->IsEnterpriseManaged()) {
+  if (policy_connector->IsCloudManaged()) {
     user_dict->SetString(kKeyEnterpriseDomain,
                          policy_connector->GetEnterpriseDomain());
   }
@@ -252,6 +252,10 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
   if (is_public_session)
     return false;
 
+  if (user->GetType() == user_manager::USER_TYPE_ACTIVE_DIRECTORY) {
+    return true;
+  }
+
   // At this point the reason for invalid token should be already set. If not,
   // this might be a leftover from an old version.
   if (token_status == user_manager::User::OAUTH2_TOKEN_STATUS_INVALID)
@@ -264,6 +268,13 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
 
 void UserSelectionScreen::SetHandler(LoginDisplayWebUIHandler* handler) {
   handler_ = handler;
+
+  if (handler_) {
+    // Forcibly refresh all of the user images, as the |handler_| instance may
+    // have been reused.
+    for (user_manager::User* user : users_)
+      handler_->OnUserImageChanged(*user);
+  }
 }
 
 void UserSelectionScreen::SetView(UserBoardView* view) {
@@ -365,8 +376,8 @@ void UserSelectionScreen::SendUserList() {
   std::string owner_email;
   chromeos::CrosSettings::Get()->GetString(chromeos::kDeviceOwner,
                                            &owner_email);
-  const AccountId owner =
-      user_manager::known_user::GetAccountId(owner_email, std::string());
+  const AccountId owner = user_manager::known_user::GetAccountId(
+      owner_email, std::string() /* id */, AccountType::UNKNOWN);
 
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();

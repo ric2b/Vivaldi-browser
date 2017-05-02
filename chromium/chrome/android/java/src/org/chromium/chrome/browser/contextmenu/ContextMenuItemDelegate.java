@@ -97,6 +97,51 @@ public interface ContextMenuItemDelegate {
      */
     void onSaveToClipboard(String text, int clipboardType);
 
+    /**
+     * @return whether an activity is available to handle an intent to call a phone number.
+     */
+    public boolean supportsCall();
+
+    /**
+     * Called when the {@code url} should be parsed to call a phone number.
+     * @param url The URL to be parsed to call a phone number.
+     */
+    void onCall(String url);
+
+    /**
+     * @return whether an activity is available to handle an intent to send an email.
+     */
+    public boolean supportsSendEmailMessage();
+
+    /**
+     * Called when the {@code url} should be parsed to send an email.
+     * @param url The URL to be parsed to send an email.
+     */
+    void onSendEmailMessage(String url);
+
+    /**
+     * @return whether an activity is available to handle an intent to send a text message.
+     */
+    public boolean supportsSendTextMessage();
+
+    /**
+     * Called when the {@code url} should be parsed to send a text message.
+     * @param url The URL to be parsed to send a text message.
+     */
+    void onSendTextMessage(String url);
+
+    /**
+     * Returns whether or not an activity is available to handle intent to add contacts.
+     * @return true if an activity is available to handle intent to add contacts.
+     */
+    public boolean supportsAddToContacts();
+
+    /**
+     * Called when the {@code url} should be parsed to add to contacts.
+     * @param url The URL to be parsed to add to contacts.
+     */
+    void onAddToContacts(String url);
+
    /**
     * @return page url.
     */
@@ -108,9 +153,4 @@ public interface ContextMenuItemDelegate {
      * @param pageUrl URL of the current page.
      */
     void onOpenInChrome(String linkUrl, String pageUrl);
-
-    /**
-     * Called to queue a task to sometime later make an offline page for this url.
-     */
-    void onSavePageLater(String linkUrl);
 }

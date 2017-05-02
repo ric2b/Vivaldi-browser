@@ -15,7 +15,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/layout.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/screen.h"
@@ -56,7 +56,7 @@ aura::WindowTreeHost* FindMirroringWindowTreeHostFromScreenPoint(
 }  // namespace
 
 UnifiedMouseWarpController::UnifiedMouseWarpController()
-    : current_cursor_display_id_(display::Display::kInvalidDisplayID),
+    : current_cursor_display_id_(display::kInvalidDisplayId),
       update_location_for_test_(false) {}
 
 UnifiedMouseWarpController::~UnifiedMouseWarpController() {}
@@ -74,7 +74,7 @@ bool UnifiedMouseWarpController::WarpMouseCursor(ui::MouseEvent* event) {
   // transform back to the host coordinates.
   target->GetHost()->GetRootTransform().TransformPoint(&point_in_unified_host);
 
-  if (current_cursor_display_id_ != display::Display::kInvalidDisplayID) {
+  if (current_cursor_display_id_ != display::kInvalidDisplayId) {
     aura::client::CursorClient* cursor_client =
         aura::client::GetCursorClient(target->GetRootWindow());
     if (cursor_client) {
@@ -88,7 +88,7 @@ bool UnifiedMouseWarpController::WarpMouseCursor(ui::MouseEvent* event) {
         const display::Display& new_display = mirroring_display_list[index];
         if (current_cursor_display_id_ != new_display.id()) {
           cursor_client->SetDisplay(new_display);
-          current_cursor_display_id_ = display::Display::kInvalidDisplayID;
+          current_cursor_display_id_ = display::kInvalidDisplayId;
         }
       }
     }
@@ -110,7 +110,8 @@ bool UnifiedMouseWarpController::WarpMouseCursor(ui::MouseEvent* event) {
       FindMirroringWindowTreeHostFromScreenPoint(point_in_unified_host);
   if (!host)
     return false;
-  point_in_native.Offset(host->GetBounds().x(), host->GetBounds().y());
+  point_in_native.Offset(host->GetBoundsInPixels().x(),
+                         host->GetBoundsInPixels().y());
 #endif
 
   return WarpMouseCursorInNativeCoords(point_in_native, point_in_unified_host,

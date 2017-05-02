@@ -26,7 +26,7 @@
       tab.document.write('<META HTTP-EQUIV="refresh" content="0; url=../signed.exe">');
       tab.document.close();
     }
-    
+
     // Trigger download in a new tab and the download is from a data url.
     function downloadInNewTabWithDataURL() {
        var tab = window.open('');
@@ -34,7 +34,7 @@
        tab.document.write('<META HTTP-EQUIV="refresh" content="0; url=data:application/octet-stream;base64,a2poYWxrc2hkbGtoYXNka2xoYXNsa2RoYWxraGtoYWxza2hka2xzamFoZGxramhhc2xka2hhc2xrZGgKYXNrZGpoa2FzZGpoYWtzaGRrYXNoZGtoYXNrZGhhc2tkaGthc2hka2Foc2RraGFrc2hka2FzaGRraGFzCmFza2pkaGFrc2hkbSxjbmtzamFoZGtoYXNrZGhhc2tka2hrYXNkCjg3MzQ2ODEyNzQ2OGtqc2hka2FoZHNrZGhraApha3NqZGthc2Roa3NkaGthc2hka2FzaGtkaAohISomXkAqJl4qYWhpZGFzeWRpeWlhc1xcb1wKa2Fqc2Roa2FzaGRrYXNoZGsKYWtzamRoc2tkaAplbmQK">');
        tab.document.close();
     }
-    
+
     // Create a data blob and save it as a test.exe file in filesystem's
     // space with use URL filesystem:http://test_host/temporary/test.exe
     // to download it.
@@ -53,7 +53,11 @@
                 fileEntry.createWriter(
                   function(writer){
                     writer.onwriteend = function(){
-                      window.location.href = fileEntry.toURL();
+                      var save_link = document.createElementNS("http://www.w3.org/1999/xhtml", "a");
+                      save_link.href = fileEntry.toURL();
+                      save_link.download = filename;
+                      var event = new MouseEvent("click");
+                      save_link.dispatchEvent(event);
                     };
                     writer.onerror = errorize;
                     writer.write(blob);
@@ -71,7 +75,6 @@
           },
           errorize);
     }
-
     </script>
   </head>
   <body>
@@ -115,8 +118,32 @@
       Open download in new tab with data url
     </a><br>
 
-    <a id="html5_file_api" href="" onclick="downloadViaFileApi()">
-      Download via HTML5 file system API
-    </a>
+    <a id="new_tab_download_with_server_redirect" href="#" rel="noreferrer" target=_blank>
+      Open navigation in a new tab and immediately redirect to a download by server.
+    </a><br>
+
+    <script>
+      var request = location.origin + "/server-redirect?" + location.origin +
+                    "/safe_browsing/download_protection/signed.exe";
+      document.getElementById("new_tab_download_with_server_redirect")
+              .setAttribute('href', request);
+    </script>
+
+    <a id="sub_frame_download_attribution" href="navigation_observer_multi_frame_tests.html">
+      Download in subframe.
+    </a><br>
+
+    <a id="complete_referrer_chain" href="redirect_to_landing.html">
+      Click on landing referrer and landing page then reach download
+    </a><br>
+
+    <a id="attribution_within_two_user_gestures" href="page_before_landing_referrer.html">
+      Attribution should not trace back more than 2 user gestures.
+    </a><br>
+
+    <button id="html5_file_api" onclick="downloadViaFileApi()">
+      Download via HTML5 file system API without trigger navigation
+    </button><br>
+
   </body>
 </html>

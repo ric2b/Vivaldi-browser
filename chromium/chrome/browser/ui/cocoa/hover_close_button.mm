@@ -4,25 +4,16 @@
 
 #import "chrome/browser/ui/cocoa/hover_close_button.h"
 
-#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/themes/theme_service.h"
-#import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#import "chrome/browser/ui/cocoa/tabs/tab_controller.h"
-#import "chrome/browser/ui/cocoa/tabs/tab_view.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMKeyValueAnimation.h"
-#include "ui/base/cocoa/animation_utils.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 
 namespace  {
@@ -37,6 +28,8 @@ NSString* gTooltip = nil;
 // If this string is changed, the setter (currently setFadeOutValue:) must
 // be changed as well to match.
 NSString* const kFadeOutValueKeyPath = @"fadeOutValue";
+
+const SkColor kDefaultIconColor = SkColorSetARGB(0xA0, 0x00, 0x00, 0x00);
 }  // namespace
 
 @interface HoverCloseButton ()
@@ -53,6 +46,8 @@ NSString* const kFadeOutValueKeyPath = @"fadeOutValue";
 @end
 
 @implementation HoverCloseButton
+
+@synthesize iconColor = iconColor_;
 
 + (void)initialize {
   // Grab some strings that are used by all close buttons.
@@ -155,36 +150,29 @@ NSString* const kFadeOutValueKeyPath = @"fadeOutValue";
   [self setNeedsDisplay];
 }
 
-- (TabView *)tabView {
-  return base::mac::ObjCCast<TabView>([self superview]);
-}
-
 - (NSImage*)imageForHoverState:(HoverState)hoverState {
-  gfx::VectorIconId vectorIconID;
+  const gfx::VectorIcon* vectorIcon = nullptr;
   SkColor vectorIconColor = gfx::kPlaceholderColor;
-  TabView* tabView = [self tabView];
 
   switch (hoverState) {
     case kHoverStateNone:
-      vectorIconID = gfx::VectorIconId::TAB_CLOSE_NORMAL;
-      vectorIconColor =
-          tabView ? [tabView iconColor] : tabs::kDefaultTabTextColor;
+      vectorIcon = &kTabCloseNormalIcon;
+      vectorIconColor = iconColor_;
       break;
     case kHoverStateMouseOver:
       // For mouse over, the icon color is the fill color of the circle.
-      vectorIconID = gfx::VectorIconId::TAB_CLOSE_HOVERED_PRESSED;
+      vectorIcon = &kTabCloseHoveredPressedIcon;
       vectorIconColor = SkColorSetARGB(0xFF, 0xDB, 0x44, 0x37);
       break;
     case kHoverStateMouseDown:
       // For mouse pressed, the icon color is the fill color of the circle.
-      vectorIconID = gfx::VectorIconId::TAB_CLOSE_HOVERED_PRESSED;
+      vectorIcon = &kTabCloseHoveredPressedIcon;
       vectorIconColor = SkColorSetARGB(0xFF, 0xA8, 0x35, 0x2A);
       break;
   }
 
   return NSImageFromImageSkia(
-      gfx::CreateVectorIcon(vectorIconID, kTabCloseButtonSize,
-          vectorIconColor));
+      gfx::CreateVectorIcon(*vectorIcon, kTabCloseButtonSize, vectorIconColor));
 }
 
 - (void)setHoverState:(HoverState)state {
@@ -218,8 +206,8 @@ NSString* const kFadeOutValueKeyPath = @"fadeOutValue";
   // tooltip contents immediately before showing it.
   [self addToolTipRect:[self bounds] owner:self userData:NULL];
 
-  // Initialize previousState.
   previousState_ = kHoverStateNone;
+  iconColor_ = kDefaultIconColor;
 }
 
 // Called each time a tooltip is about to be shown.
@@ -250,6 +238,13 @@ NSString* const kFadeOutValueKeyPath = @"fadeOutValue";
       IDS_ACCNAME_CLOSE_TAB,
       base::SysNSStringToUTF16(accessibilityTitle));
   [super setAccessibilityTitle:extendedTitle];
+}
+
+- (void)setIconColor:(SkColor)iconColor {
+  if (iconColor != iconColor_) {
+    iconColor_ = iconColor;
+    [self setNeedsDisplay:YES];
+  }
 }
 
 @end

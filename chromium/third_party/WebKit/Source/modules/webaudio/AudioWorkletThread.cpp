@@ -10,7 +10,7 @@
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
@@ -27,8 +27,8 @@ std::unique_ptr<AudioWorkletThread> AudioWorkletThread::create(
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("audio-worklet"),
                "AudioWorkletThread::create");
   DCHECK(isMainThread());
-  return wrapUnique(new AudioWorkletThread(std::move(workerLoaderProxy),
-                                           workerReportingProxy));
+  return WTF::wrapUnique(new AudioWorkletThread(std::move(workerLoaderProxy),
+                                                workerReportingProxy));
 }
 
 AudioWorkletThread::AudioWorkletThread(
@@ -39,8 +39,7 @@ AudioWorkletThread::AudioWorkletThread(
 AudioWorkletThread::~AudioWorkletThread() {}
 
 WorkerBackingThread& AudioWorkletThread::workerBackingThread() {
-  return *WorkletThreadHolder<AudioWorkletThread>::threadHolderInstance()
-              ->thread();
+  return *WorkletThreadHolder<AudioWorkletThread>::getInstance()->thread();
 }
 
 void collectAllGarbageOnAudioWorkletThread(WaitableEvent* doneEvent) {
@@ -51,11 +50,11 @@ void collectAllGarbageOnAudioWorkletThread(WaitableEvent* doneEvent) {
 void AudioWorkletThread::collectAllGarbage() {
   DCHECK(isMainThread());
   WaitableEvent doneEvent;
-  WorkletThreadHolder<AudioWorkletThread>* threadHolderInstance =
-      WorkletThreadHolder<AudioWorkletThread>::threadHolderInstance();
-  if (!threadHolderInstance)
+  WorkletThreadHolder<AudioWorkletThread>* workletThreadHolder =
+      WorkletThreadHolder<AudioWorkletThread>::getInstance();
+  if (!workletThreadHolder)
     return;
-  threadHolderInstance->thread()->backingThread().postTask(
+  workletThreadHolder->thread()->backingThread().postTask(
       BLINK_FROM_HERE, crossThreadBind(&collectAllGarbageOnAudioWorkletThread,
                                        crossThreadUnretained(&doneEvent)));
   doneEvent.wait();
@@ -63,8 +62,7 @@ void AudioWorkletThread::collectAllGarbage() {
 
 void AudioWorkletThread::ensureSharedBackingThread() {
   DCHECK(isMainThread());
-  WorkletThreadHolder<AudioWorkletThread>::ensureInstance(
-      "AudioWorkletThread", BlinkGC::PerThreadHeapMode);
+  WorkletThreadHolder<AudioWorkletThread>::ensureInstance("AudioWorkletThread");
 }
 
 void AudioWorkletThread::clearSharedBackingThread() {
@@ -73,8 +71,7 @@ void AudioWorkletThread::clearSharedBackingThread() {
 }
 
 void AudioWorkletThread::createSharedBackingThreadForTest() {
-  WorkletThreadHolder<AudioWorkletThread>::createForTest(
-      "AudioWorkletThread", BlinkGC::PerThreadHeapMode);
+  WorkletThreadHolder<AudioWorkletThread>::createForTest("AudioWorkletThread");
 }
 
 WorkerOrWorkletGlobalScope* AudioWorkletThread::createWorkerGlobalScope(

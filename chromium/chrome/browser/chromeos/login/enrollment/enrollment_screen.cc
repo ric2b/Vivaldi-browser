@@ -59,12 +59,12 @@ namespace chromeos {
 // static
 EnrollmentScreen* EnrollmentScreen::Get(ScreenManager* manager) {
   return static_cast<EnrollmentScreen*>(
-      manager->GetScreen(WizardController::kEnrollmentScreenName));
+      manager->GetScreen(OobeScreen::SCREEN_OOBE_ENROLLMENT));
 }
 
 EnrollmentScreen::EnrollmentScreen(BaseScreenDelegate* base_screen_delegate,
                                    EnrollmentScreenActor* actor)
-    : BaseScreen(base_screen_delegate),
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_ENROLLMENT),
       actor_(actor),
       weak_ptr_factory_(this) {}
 
@@ -141,10 +141,6 @@ void EnrollmentScreen::OnAuthCleared(const base::Closure& callback) {
   callback.Run();
 }
 
-void EnrollmentScreen::PrepareToShow() {
-  actor_->PrepareToShow();
-}
-
 void EnrollmentScreen::Show() {
   UMA(policy::kMetricEnrollmentTriggered);
   switch (current_auth_) {
@@ -168,10 +164,6 @@ void EnrollmentScreen::ShowInteractiveScreen() {
 void EnrollmentScreen::Hide() {
   actor_->Hide();
   weak_ptr_factory_.InvalidateWeakPtrs();
-}
-
-std::string EnrollmentScreen::GetName() const {
-  return WizardController::kEnrollmentScreenName;
 }
 
 void EnrollmentScreen::AuthenticateUsingAttestation() {
@@ -249,7 +241,7 @@ void EnrollmentScreen::OnEnrollmentError(policy::EnrollmentStatus status) {
   RecordEnrollmentErrorMetrics();
   // If the DM server does not have a device pre-provisioned for attestation-
   // based enrollment and we have a fallback authentication, show it.
-  if (status.status() == policy::EnrollmentStatus::STATUS_REGISTRATION_FAILED &&
+  if (status.status() == policy::EnrollmentStatus::REGISTRATION_FAILED &&
       status.client_status() == policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND &&
       current_auth_ == AUTH_ATTESTATION && AdvanceToNextAuth())
     Show();
@@ -302,11 +294,11 @@ void EnrollmentScreen::OnDeviceAttributeUploadCompleted(bool success) {
     policy::BrowserPolicyConnectorChromeOS* connector =
         g_browser_process->platform_part()->browser_policy_connector_chromeos();
     connector->GetDeviceCloudPolicyManager()->core()->RefreshSoon();
-    actor_->ShowEnrollmentStatus(policy::EnrollmentStatus::ForStatus(
-        policy::EnrollmentStatus::STATUS_SUCCESS));
+    actor_->ShowEnrollmentStatus(
+        policy::EnrollmentStatus::ForStatus(policy::EnrollmentStatus::SUCCESS));
   } else {
     actor_->ShowEnrollmentStatus(policy::EnrollmentStatus::ForStatus(
-        policy::EnrollmentStatus::STATUS_ATTRIBUTE_UPDATE_FAILED));
+        policy::EnrollmentStatus::ATTRIBUTE_UPDATE_FAILED));
   }
 }
 
@@ -333,8 +325,8 @@ void EnrollmentScreen::SendEnrollmentAuthToken(const std::string& token) {
 void EnrollmentScreen::ShowEnrollmentStatusOnSuccess() {
   if (elapsed_timer_)
     UMA_ENROLLMENT_TIME(kMetricEnrollmentTimeSuccess, elapsed_timer_);
-  actor_->ShowEnrollmentStatus(policy::EnrollmentStatus::ForStatus(
-      policy::EnrollmentStatus::STATUS_SUCCESS));
+  actor_->ShowEnrollmentStatus(
+      policy::EnrollmentStatus::ForStatus(policy::EnrollmentStatus::SUCCESS));
 }
 
 void EnrollmentScreen::UMA(policy::MetricEnrollment sample) {

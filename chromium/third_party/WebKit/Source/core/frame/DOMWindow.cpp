@@ -4,6 +4,7 @@
 
 #include "core/frame/DOMWindow.h"
 
+#include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -20,6 +21,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/input/EventHandler.h"
+#include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -30,19 +32,21 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/Suborigin.h"
-#include <memory>
 
 namespace blink {
 
-DOMWindow::DOMWindow() : m_windowIsClosing(false) {}
+DOMWindow::DOMWindow(Frame& frame) : m_frame(frame), m_windowIsClosing(false) {}
 
-DOMWindow::~DOMWindow() {}
+DOMWindow::~DOMWindow() {
+  // The frame must be disconnected before finalization.
+  DCHECK(!m_frame);
+}
 
 v8::Local<v8::Object> DOMWindow::wrap(v8::Isolate*,
                                       v8::Local<v8::Object> creationContext) {
-  // DOMWindow must never be wrapped with wrap method.  The wrappers must be
-  // created at WindowProxy::createContext() and setupWindowPrototypeChain().
-  RELEASE_NOTREACHED();
+  LOG(FATAL) << "DOMWindow must never be wrapped with wrap method.  The "
+                "wrappers must be created at WindowProxy::createContext() and "
+                "setupWindowPrototypeChain().";
   return v8::Local<v8::Object>();
 }
 
@@ -50,7 +54,9 @@ v8::Local<v8::Object> DOMWindow::associateWithWrapper(
     v8::Isolate*,
     const WrapperTypeInfo*,
     v8::Local<v8::Object> wrapper) {
-  RELEASE_NOTREACHED();  // same as wrap method
+  LOG(FATAL) << "DOMWindow must never be wrapped with wrap method.  The "
+                "wrappers must be created at WindowProxy::createContext() and "
+                "setupWindowPrototypeChain().";
   return v8::Local<v8::Object>();
 }
 
@@ -107,9 +113,10 @@ DOMWindow* DOMWindow::top() const {
   return frame()->tree().top()->domWindow();
 }
 
-External* DOMWindow::external() const {
-  DEFINE_STATIC_LOCAL(Persistent<External>, external, (new External));
-  return external;
+External* DOMWindow::external() {
+  if (!m_external)
+    m_external = new External;
+  return m_external;
 }
 
 DOMWindow* DOMWindow::anonymousIndexedGetter(uint32_t index) const {
@@ -153,9 +160,8 @@ bool DOMWindow::isInsecureScriptAccess(LocalDOMWindow& callingWindow,
 }
 
 void DOMWindow::resetLocation() {
-  // Location needs to be reset manually because it doesn't inherit from
-  // DOMWindowProperty.  DOMWindowProperty is local-only, and Location needs to
-  // support remote windows, too.
+  // Location needs to be reset manually so that it doesn't retain a stale
+  // Frame pointer.
   if (m_location) {
     m_location->reset();
     m_location = nullptr;
@@ -378,7 +384,7 @@ void DOMWindow::close(ExecutionContext* context) {
 
   Settings* settings = frame()->settings();
   bool allowScriptsToCloseWindows =
-      settings && settings->allowScriptsToCloseWindows();
+      settings && settings->getAllowScriptsToCloseWindows();
 
   if (!page->openedByDOM() && frame()->client()->backForwardLength() > 1 &&
       !allowScriptsToCloseWindows) {
@@ -432,8 +438,17 @@ void DOMWindow::focus(ExecutionContext* context) {
   page->focusController().focusDocumentView(frame(), true /* notifyEmbedder */);
 }
 
+InputDeviceCapabilitiesConstants* DOMWindow::getInputDeviceCapabilities() {
+  if (!m_inputCapabilities)
+    m_inputCapabilities = new InputDeviceCapabilitiesConstants;
+  return m_inputCapabilities;
+}
+
 DEFINE_TRACE(DOMWindow) {
+  visitor->trace(m_frame);
+  visitor->trace(m_inputCapabilities);
   visitor->trace(m_location);
+  visitor->trace(m_external);
   EventTargetWithInlineData::trace(visitor);
 }
 

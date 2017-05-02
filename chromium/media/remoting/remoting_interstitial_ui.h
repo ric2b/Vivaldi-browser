@@ -5,35 +5,37 @@
 #ifndef MEDIA_REMOTING_REMOTING_INTERSTITIAL_UI_H_
 #define MEDIA_REMOTING_REMOTING_INTERSTITIAL_UI_H_
 
-#include "base/callback.h"
 #include "base/memory/ref_counted.h"
-#include "media/base/pipeline_metadata.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+
+namespace gfx {
+class Size;
+}
 
 namespace media {
 
 class VideoFrame;
-class VideoRendererSink;
 
-class RemotingInterstitialUI {
- public:
-  RemotingInterstitialUI(VideoRendererSink* video_renderer_sink,
-                         const PipelineMetadata& pipeline_metadata);
-  ~RemotingInterstitialUI();
-
-  void ShowInterstitial(bool is_remoting_successful);
-
- private:
-  // Gets an 'interstitial' VideoFrame to paint on the media player when the
-  // video is being played remotely.
-  scoped_refptr<VideoFrame> GetInterstitial(const SkBitmap& background_image,
-                                            bool is_remoting_successful);
-
-  VideoRendererSink* const video_renderer_sink_;  // Outlives this class.
-  PipelineMetadata pipeline_metadata_;
-
-  DISALLOW_COPY_AND_ASSIGN(RemotingInterstitialUI);
+enum RemotingInterstitialType {
+  BETWEEN_SESSIONS,             // Show background image only.
+  IN_SESSION,                   // Show MEDIA_REMOTING_CASTING_VIDEO_TEXT.
+  ENCRYPTED_MEDIA_FATAL_ERROR,  // Show MEDIA_REMOTING_CAST_ERROR_TEXT.
 };
+
+// Render an interstitial frame--a combination of |image| in the background
+// along with a text message describing what is going on--and return it in a
+// VideoFrame. |image| may be scaled accordingly without changing its aspect
+// ratio. When it has a different aspect ratio than |natural_size|, a scaled
+// |background_image| will be centered in the frame. When |image| is empty, a
+// blank black background will be used.
+//
+// Threading note: This *must* be called on the main thread, because it uses
+// Skia's font rendering facility, which loads/caches fonts on the main thread.
+// http://crbug.com/687473.
+scoped_refptr<VideoFrame> RenderInterstitialFrame(
+    const SkBitmap& image,
+    const gfx::Size& natural_size,
+    RemotingInterstitialType type);
 
 }  // namespace media
 

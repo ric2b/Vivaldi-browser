@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/ime.mojom.h"
+#include "services/ui/public/interfaces/ime/ime.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/base/ime/input_method_base.h"
 
@@ -64,6 +64,7 @@ class AURA_EXPORT InputMethodMus : public ui::InputMethodBase {
   // for tests.
   Window* window_;
 
+  // May be null in tests.
   ui::mojom::IMEServerPtr ime_server_;
   ui::mojom::InputMethodPtr input_method_;
   std::unique_ptr<TextInputClientImpl> text_input_client_;

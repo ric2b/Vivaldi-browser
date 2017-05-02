@@ -12,12 +12,12 @@ import re
 import sys
 
 from idl_types import set_ancestors, IdlType
-from v8_attributes import attribute_filters
 from v8_globals import includes
 from v8_interface import constant_filters
 from v8_types import set_component_dirs
 from v8_methods import method_filters
-from v8_utilities import capitalize, for_origin_trial_feature, unique_by
+import v8_utilities
+from v8_utilities import capitalize, unique_by
 from utilities import (idl_filename_to_component, is_valid_component_dependency,
                        format_remove_duplicates, format_blink_cpp_source_code)
 
@@ -46,7 +46,7 @@ def generate_indented_conditional(code, conditional):
     # Indent if statement to level of original code
     indent = re.match(' *', code).group(0)
     return ('%sif (%s) {\n' % (indent, conditional) +
-            '    %s\n' % '\n    '.join(code.splitlines()) +
+            '  %s\n' % '\n  '.join(code.splitlines()) +
             '%s}\n' % indent)
 
 
@@ -65,10 +65,12 @@ def secure_context_if(code, secure_context_test):
 
 
 # [RuntimeEnabled]
-def runtime_enabled_if(code, runtime_enabled_function_name):
-    if not runtime_enabled_function_name:
+def runtime_enabled_if(code, name):
+    if not name:
         return code
-    return generate_indented_conditional(code, '%s()' % runtime_enabled_function_name)
+
+    function = v8_utilities.runtime_enabled_function(name)
+    return generate_indented_conditional(code, function)
 
 
 def initialize_jinja_env(cache_dir):
@@ -83,13 +85,12 @@ def initialize_jinja_env(cache_dir):
     jinja_env.filters.update({
         'blink_capitalize': capitalize,
         'exposed': exposed_if,
-        'for_origin_trial_feature': for_origin_trial_feature,
         'format_blink_cpp_source_code': format_blink_cpp_source_code,
         'format_remove_duplicates': format_remove_duplicates,
         'runtime_enabled': runtime_enabled_if,
+        'runtime_enabled_function': v8_utilities.runtime_enabled_function,
         'secure_context': secure_context_if,
         'unique_by': unique_by})
-    jinja_env.filters.update(attribute_filters())
     jinja_env.filters.update(constant_filters())
     jinja_env.filters.update(method_filters())
     return jinja_env
@@ -103,6 +104,13 @@ def normalize_and_sort_includes(include_paths):
             include_path = match.group(1)
         normalized_include_paths.append(include_path)
     return sorted(normalized_include_paths)
+
+
+def render_template(template, context):
+    filename = str(template.filename)
+    filename = filename[filename.rfind("third_party"):]
+    context["jinja_template_filename"] = filename
+    return template.render(context)
 
 
 class CodeGeneratorBase(object):
@@ -145,8 +153,8 @@ class CodeGeneratorBase(object):
 
         template_context['cpp_includes'] = normalize_and_sort_includes(includes)
 
-        header_text = header_template.render(template_context)
-        cpp_text = cpp_template.render(template_context)
+        header_text = render_template(header_template, template_context)
+        cpp_text = render_template(cpp_template, template_context)
         return header_text, cpp_text
 
     def generate_code(self, definitions, definition_name):

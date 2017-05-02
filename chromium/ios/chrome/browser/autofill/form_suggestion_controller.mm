@@ -91,7 +91,7 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
   base::scoped_nsobject<JsSuggestionManager> _jsSuggestionManager;
 
   // The provider for the current set of suggestions.
-  id<FormSuggestionProvider> _provider;  // weak
+  __unsafe_unretained id<FormSuggestionProvider> _provider;  // weak
 }
 
 - (instancetype)initWithWebState:(web::WebState*)webState
@@ -133,7 +133,7 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
   [self detachFromWebState];
 }
 
-- (void)webStateDidLoadPage:(web::WebState*)webState {
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   [self processPage:webState];
 }
 

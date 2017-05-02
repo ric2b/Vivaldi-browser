@@ -8,8 +8,8 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ContextLifecycleObserver.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/frame/PlatformEventController.h"
 #include "modules/EventTargetModules.h"
 #include "modules/battery/battery_status.h"
@@ -18,8 +18,8 @@
 namespace blink {
 
 class BatteryManager final : public EventTargetWithInlineData,
-                             public ActiveScriptWrappable,
-                             public ActiveDOMObject,
+                             public ActiveScriptWrappable<BatteryManager>,
+                             public SuspendableObject,
                              public PlatformEventController {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(BatteryManager);
@@ -55,10 +55,10 @@ class BatteryManager final : public EventTargetWithInlineData,
   void unregisterWithDispatcher() override;
   bool hasLastData() override;
 
-  // ActiveDOMObject implementation.
+  // SuspendableObject implementation.
   void suspend() override;
   void resume() override;
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable implementation.
   bool hasPendingActivity() const final;

@@ -95,6 +95,7 @@ void BluetoothRemoteGattServiceMac::DidDiscoverCharacteristics() {
     if (gatt_characteristic_mac) {
       const std::string& identifier = gatt_characteristic_mac->GetIdentifier();
       characteristic_identifier_to_remove.erase(identifier);
+      gatt_characteristic_mac->DiscoverDescriptors();
       continue;
     }
     gatt_characteristic_mac =
@@ -103,6 +104,7 @@ void BluetoothRemoteGattServiceMac::DidDiscoverCharacteristics() {
     auto result_iter = gatt_characteristic_macs_.insert(
         {identifier, base::WrapUnique(gatt_characteristic_mac)});
     DCHECK(result_iter.second);
+    gatt_characteristic_mac->DiscoverDescriptors();
     GetMacAdapter()->NotifyGattCharacteristicAdded(gatt_characteristic_mac);
   }
 
@@ -115,8 +117,33 @@ void BluetoothRemoteGattServiceMac::DidDiscoverCharacteristics() {
     GetMacAdapter()->NotifyGattCharacteristicRemoved(
         characteristic_to_remove.get());
   }
-  is_discovery_complete_ = true;
-  GetMacAdapter()->NotifyGattServiceChanged(this);
+  SendNotificationIfComplete();
+}
+
+void BluetoothRemoteGattServiceMac::DidDiscoverDescriptors(
+    CBCharacteristic* characteristic) {
+  DCHECK(!is_discovery_complete_);
+  BluetoothRemoteGattCharacteristicMac* gatt_characteristic =
+      GetBluetoothRemoteGattCharacteristicMac(characteristic);
+  DCHECK(gatt_characteristic);
+  gatt_characteristic->DidDiscoverDescriptors();
+  SendNotificationIfComplete();
+}
+
+void BluetoothRemoteGattServiceMac::SendNotificationIfComplete() {
+  DCHECK(!is_discovery_complete_);
+  // Notify when all characteristics have been fully discovered.
+  is_discovery_complete_ =
+      std::find_if_not(
+          gatt_characteristic_macs_.begin(), gatt_characteristic_macs_.end(),
+          [](const std::pair<
+              const std::string,
+              std::unique_ptr<BluetoothRemoteGattCharacteristicMac>>& pair) {
+            return pair.second->IsDiscoveryComplete();
+          }) == gatt_characteristic_macs_.end();
+  if (is_discovery_complete_) {
+    GetMacAdapter()->NotifyGattServiceChanged(this);
+  }
 }
 
 void BluetoothRemoteGattServiceMac::DidUpdateValue(
@@ -146,7 +173,7 @@ void BluetoothRemoteGattServiceMac::DidUpdateNotificationState(
   gatt_characteristic->DidUpdateNotificationState(error);
 }
 
-bool BluetoothRemoteGattServiceMac::IsDiscoveryComplete() {
+bool BluetoothRemoteGattServiceMac::IsDiscoveryComplete() const {
   return is_discovery_complete_;
 }
 

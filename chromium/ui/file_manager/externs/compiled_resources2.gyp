@@ -4,7 +4,19 @@
 {
   'targets': [
     {
+      'target_name': 'app_window_common',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
       'target_name': 'audio_player_foreground',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'background_window',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'byte_reader',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
@@ -36,11 +48,31 @@
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
+      'target_name': 'directory_change_event',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'entries_changed_event',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'entry_location',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
       'target_name': 'es6_workaround',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
       'target_name': 'exif_entry',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'file_browser_background',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'file_operation_progress_event',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
@@ -64,6 +96,14 @@
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
+      'target_name': 'metadata_parser_interface',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'metadata_worker_window',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
       'target_name': 'paper_elements',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
@@ -76,11 +116,23 @@
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
+      'target_name': 'progress_center_panel',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
       'target_name': 'video_player_foreground',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {
       'target_name': 'volume_info',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'volume_info_list',
+      'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
+    },
+    {
+      'target_name': 'volume_manager',
       'includes': ['../../../third_party/closure_compiler/include_js.gypi'],
     },
     {

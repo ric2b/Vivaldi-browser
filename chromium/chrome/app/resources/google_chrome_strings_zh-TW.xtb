@@ -2,10 +2,10 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="1001534784610492198">安裝程式封存檔案已經損壞或無效，請再次下載 Google Chrome。</translation>
-<translation id="103396972844768118">Chrome 資料的相關重要資訊</translation>
 <translation id="1035334672863811645">登入 Chrome</translation>
 <translation id="1061441684050139317">Chrome 需要存取麥克風，才能與這個網站分享。</translation>
 <translation id="1065672644894730302">系統無法讀取您的偏好設定。部分功能可能無法使用，且系統也不會儲存任何偏好設定的變更。</translation>
+<translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> 先前使用的是 Chrome</translation>
 <translation id="1104959162601287462">關於 Chrome 作業系統(&amp;C)</translation>
 <translation id="110877069173485804">這是您專屬的 Chrome</translation>
 <translation id="123620459398936149">Chrome OS 無法同步處理您的資料，請更新您的同步通關密語。</translation>
@@ -17,7 +17,6 @@
 <translation id="1434626383986940139">Chrome Canary 應用程式</translation>
 <translation id="1457721931618994305">正在更新 Google Chrome...</translation>
 <translation id="1469002951682717133">Chrome 應用程式啟動器</translation>
-<translation id="1475773083554142432">Chrome 會使用「<ph name="SAVED_PASSWORD_LINK" />」儲存此密碼，讓您在下次需要使用時套用。</translation>
 <translation id="1480489203462860648">安裝完畢，馬上試試吧！</translation>
 <translation id="1553358976309200471">更新 Chrome</translation>
 <translation id="1587223624401073077">Google Chrome 正在使用您的攝影機。</translation>
@@ -38,10 +37,10 @@
 <translation id="2063848847527508675">Chrome 作業系統必須重新啟動，才能套用更新。</translation>
 <translation id="2077129598763517140">在可用時使用硬體加速</translation>
 <translation id="2084710999043359739">加到 Chrome</translation>
+<translation id="2120620239521071941">登出後，系統會將 <ph name="ITEMS_COUNT" /> 個項目從這個裝置上刪除。日後如要重新取得你的資料，請以 <ph name="USER_EMAIL" /> 身分登入 Chrome。</translation>
 <translation id="2147651015520127414">Chrome 已驗證這個網站的憑證是由「<ph name="ISSUER" />」所核發。</translation>
 <translation id="2246246234298806438">缺乏內建的 PDF 檢視器時，Google Chrome 無法顯示列印預覽。</translation>
 <translation id="2252923619938421629">只要回報目前的設定，就能助我們一臂之力，讓 Google Chrome 更臻完美</translation>
-<translation id="225614027745146050">歡迎使用</translation>
 <translation id="2286950485307333924">您現在已登入 Chrome</translation>
 <translation id="2290014774651636340">缺少 Google API 金鑰，系統將停用 Google Chrome 的部分功能。</translation>
 <translation id="2290095356545025170">您是否確定要解除安裝 Google Chrome？</translation>
@@ -57,12 +56,11 @@
 <translation id="2485422356828889247">解除安裝</translation>
 <translation id="2580411288591421699">您無法安裝這個版本的 Google Chrome，因為相同的版本目前正在執行中。請關閉 Google Chrome 然後再試一次。</translation>
 <translation id="2582790009689336987">Google Chrome 將停止支援這種 Linux 系統，因此這部電腦很快就不會再收到 Google Chrome 更新。</translation>
+<translation id="2586406160782125153">登出後，系統會將你的瀏覽資料從這個裝置上刪除。日後如要重新取得你的資料，請以 <ph name="USER_EMAIL" /> 身分登入 Chrome。</translation>
 <translation id="2588322182880276190">Chrome 標誌</translation>
 <translation id="2664962310688259219">Chrome 作業系統開放原始碼授權</translation>
 <translation id="2665296953892887393">將當機報告和<ph name="UMA_LINK" />傳送給 Google，助我們一臂之力，讓 Google Chrome 更臻完美</translation>
-<translation id="2681064822612051220">系統在安裝 Google Chrome 時發生衝突問題，請先解除安裝，然後再試一次。</translation>
 <translation id="2689103672227170538">這個擴充功能已變更 Chrome 啟動時所顯示的網頁。</translation>
-<translation id="2704356438731803243">如果您想要另行保留現有的 Chrome 資料，可以為 <ph name="USER_NAME" /> 建立新的 Chrome 使用者。</translation>
 <translation id="2748463065602559597">您正在瀏覽安全型 Google Chrome 網頁。</translation>
 <translation id="2769762047821873045">Google Chrome 並非您的預設瀏覽器。</translation>
 <translation id="2770231113462710648">將預設瀏覽器變更為：</translation>
@@ -94,6 +92,7 @@
 <translation id="345171907106878721">新增為 Chrome 使用者</translation>
 <translation id="3612333635265770873">依據名稱判斷，這個模組可能會與 Google Chrome 衝突。</translation>
 <translation id="3622797965165704966">無論是登入 Google 帳戶使用 Chrome，還是以 Google 帳戶使用共用電腦，現在都變得更容易了。</translation>
+<translation id="3718181793972440140">登出後，系統會將 1 個項目從這個裝置上刪除。日後如要重新取得你的資料，請以 <ph name="USER_EMAIL" /> 身分登入 Chrome。</translation>
 <translation id="3735758079232443276">擴充功能「<ph name="EXTENSION_NAME" />」已變更 Chrome 啟動時所顯示的網頁。</translation>
 <translation id="3738139272394829648">輕觸搜尋</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
@@ -132,7 +131,6 @@
 <translation id="4771048833395599659">這個檔案可能不安全，因此遭到 Chrome 封鎖。</translation>
 <translation id="4794050651896644714">在 Chrome 中儲存詳細資料</translation>
 <translation id="4891791193823137474">讓 Google Chrome 在背景執行</translation>
-<translation id="4901390485477164536">太好了！Google Chrome 現已成為你的預設瀏覽器。</translation>
 <translation id="4921569541910214635">如果您與他人共用電腦，現在可以依自己的喜好和習慣設定 Chrome。</translation>
 <translation id="4953650215774548573">將 Google Chrome 設為預設瀏覽器</translation>
 <translation id="495931528404527476">在 Chrome 中</translation>
@@ -150,7 +148,6 @@
 <translation id="5251420635869119124">以訪客身分使用 Chrome 不會留下任何紀錄。</translation>
 <translation id="5253588388888612165">如果您和「<ph name="PROFILE_NAME" />」共用這台電腦，只要在 Chrome 新增個人身分，就能享有專屬的瀏覽環境。如果您並未與對方共用電腦，請解除其 Google 帳戶的連結。</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome 將於 1 秒後重新啟動。}other{Google Chrome 將於 # 秒後重新啟動。}}</translation>
-<translation id="5328989068199000832">Google Chrome Binaries</translation>
 <translation id="5334545119300433702">已知這個模組與 Google Chrome 衝突。</translation>
 <translation id="5386244825306882791">這個擴充功能也會控管 Chrome 啟動時或您使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="5430073640787465221">您的偏好設定檔已毀損或無效。
@@ -201,13 +198,10 @@ Google Chrome 無法復原您的設定。</translation>
 <translation id="683440813066116847">允許 mDNS 流量的 Google Chrome Canary 輸入規則。</translation>
 <translation id="686561893457936865">隨時隨地都能使用 Chrome</translation>
 <translation id="6883876366448858277">將特定字詞及其上下文內容傳送至 Google 搜尋，並傳回字詞定義、相關圖片和其他搜尋結果。</translation>
-<translation id="6930860321615955692">https://support.google.com/chrome/?p=ib_chromeframe</translation>
 <translation id="6970811910055250180">正在更新裝置...</translation>
 <translation id="6982337800632491844">在使用這個裝置前，<ph name="DOMAIN" /> 要求您詳讀並接受下列《服務條款》。這些條款不會擴展、修改或限制《Chrome 作業系統條款》。</translation>
 <translation id="6989339256997917931">Google Chrome 已更新，但您至少已有 30 天未使用該瀏覽器。</translation>
-<translation id="699076943483372849">這個網站使用的 Chrome 內嵌框架外掛程式已淘汰，無法再接收安全性和穩定性更新。請解除安裝該外掛程式，並升級至新型瀏覽器。</translation>
-<translation id="6991142834212251086">將我的 Chrome 資料連結至這個帳戶</translation>
-<translation id="7060865993964054389">Google Chrome 應用程式啟動器</translation>
+<translation id="7048801529101012374">太好了！Google Chrome 現已成為你的預設瀏覽器。</translation>
 <translation id="7098166902387133879">Google Chrome 正在使用您的麥克風。</translation>
 <translation id="7106741999175697885">工作管理員 - Google Chrome</translation>
 <translation id="7125719106133729027">由於 Chrome 無法更新至最新版本，您現在無法使用各種最新功能和安全性修正。請以人工方式重新安裝 Chrome。</translation>
@@ -251,7 +245,6 @@ Google Chrome 無法復原您的設定。</translation>
 <translation id="8008534537613507642">重新安裝 Chrome</translation>
 <translation id="8030318113982266900">正在將裝置更新至「<ph name="CHANNEL_NAME" />」版...</translation>
 <translation id="8032142183999901390">將您的帳戶從 Chrome 移除後，可能需要重新載入開啟的分頁，操作才會生效。</translation>
-<translation id="8037887340639533879">找不到安裝的 Google Chrome，無法更新。</translation>
 <translation id="8129812357326543296">關於 Google Chrome(&amp;G)</translation>
 <translation id="8183957050892517584">Chrome 會妥善保存您的個人詳細資料，讓您不必重複輸入相同的資料。</translation>
 <translation id="8211929904040702368">這會將至少 <ph name="TOTAL_COUNT" /> 個項目從這個裝置上永久刪除。如果日後想要擷取資料，請以「$2」的身分登入 Chrome。</translation>
@@ -261,7 +254,6 @@ Google Chrome 無法復原您的設定。</translation>
 <translation id="8342675569599923794">這個檔案並不安全，因此遭到 Chrome 封鎖。</translation>
 <translation id="8406086379114794905">協助改善 Chrome 的服務品質</translation>
 <translation id="8455999171311319804">選擇性：自動將診斷資料和使用情況資料傳送給 Google，協助我們讓 Chrome 作業系統更臻完善。</translation>
-<translation id="853189717709780425">您已登入管理化環境下的帳戶，並將管理控制權授予您的 Chrome 設定檔。您的 Chrome 資料 (例如應用程式、書籤、紀錄、密碼和其他設定) 均將永久與 <ph name="USER_NAME" /> 建立關聯。您可以透過 Google 帳戶資訊主頁刪除這些資料，但您無法將這些資料與其他帳戶建立關聯。</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Chrome 應用程式啟動器 Canary 頻道</translation>
 <translation id="8556340503434111824">Google Chrome 推出全新版本，速度更勝以往。</translation>

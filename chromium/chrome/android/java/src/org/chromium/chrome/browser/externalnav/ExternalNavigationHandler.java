@@ -12,9 +12,11 @@ import android.net.Uri;
 import android.os.SystemClock;
 import android.provider.Browser;
 import android.text.TextUtils;
+import android.util.Pair;
 import android.webkit.WebView;
 
 import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -44,6 +46,11 @@ public class ExternalNavigationHandler {
     private static final String SCHEME_WTAI = "wtai://wp/";
     private static final String SCHEME_WTAI_MC = "wtai://wp/mc;";
     private static final String SCHEME_SMS = "sms";
+
+    private static final String PLAY_PACKAGE_PARAM = "id";
+    private static final String PLAY_REFERRER_PARAM = "referrer";
+    private static final String PLAY_APP_PATH = "/store/apps/details";
+    private static final String PLAY_HOSTNAME = "play.google.com";
 
     @VisibleForTesting
     static final String EXTRA_BROWSER_FALLBACK_URL = "browser_fallback_url";
@@ -329,6 +336,7 @@ public class ExternalNavigationHandler {
         if (resolvingInfos == null) return OverrideUrlLoadingResult.NO_OVERRIDE;
 
         boolean canResolveActivity = resolvingInfos.size() > 0;
+        String packageName = ContextUtils.getApplicationContext().getPackageName();
         // check whether the intent can be resolved. If not, we will see
         // whether we can download it from the Market.
         if (!canResolveActivity) {
@@ -336,36 +344,14 @@ public class ExternalNavigationHandler {
                 return clobberCurrentTabWithFallbackUrl(browserFallbackUrl, params);
             }
 
-            String packagename = intent.getPackage();
-            if (packagename != null) {
-                String marketReferrer =
-                        IntentUtils.safeGetStringExtra(intent, EXTRA_MARKET_REFERRER);
+            if (intent.getPackage() != null) {
+                String marketReferrer = IntentUtils.safeGetStringExtra(
+                        intent, EXTRA_MARKET_REFERRER);
                 if (TextUtils.isEmpty(marketReferrer)) {
-                    marketReferrer = mDelegate.getPackageName();
+                    marketReferrer = packageName;
                 }
-                try {
-                    Uri marketUri = new Uri.Builder()
-                            .scheme("market")
-                            .authority("details")
-                            .appendQueryParameter("id", packagename)
-                            .appendQueryParameter("referrer", Uri.decode(marketReferrer))
-                            .build();
-                    intent = new Intent(Intent.ACTION_VIEW, marketUri);
-                    intent.addCategory(Intent.CATEGORY_BROWSABLE);
-                    intent.setPackage("com.android.vending");
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    if (params.getReferrerUrl() != null) {
-                        intent.putExtra(Intent.EXTRA_REFERRER, Uri.parse(params.getReferrerUrl()));
-                    }
-                    mDelegate.startActivity(intent, false);
-                    return OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT;
-                } catch (ActivityNotFoundException ex) {
-                    // ignore the error on devices that does not have
-                    // play market installed.
-                    return OverrideUrlLoadingResult.NO_OVERRIDE;
-                }
+                return sendIntentToMarket(intent.getPackage(), marketReferrer, params);
             }
-
             return OverrideUrlLoadingResult.NO_OVERRIDE;
         }
 
@@ -383,7 +369,7 @@ public class ExternalNavigationHandler {
         // Set the Browser application ID to us in case the user chooses Chrome
         // as the app.  This will make sure the link is opened in the same tab
         // instead of making a new one.
-        intent.putExtra(Browser.EXTRA_APPLICATION_ID, mDelegate.getPackageName());
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, packageName);
         if (params.isOpenInNewTab()) intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         mDelegate.maybeSetWindowId(intent);
@@ -408,12 +394,6 @@ public class ExternalNavigationHandler {
         // startActivityIfNeeded or startActivity.
         if (!isExternalProtocol) {
             if (!mDelegate.isSpecializedHandlerAvailable(resolvingInfos)) {
-                if (params.webApkPackageName() != null) {
-                    intent.setPackage(mDelegate.getPackageName());
-                    mDelegate.startActivity(intent, false);
-                    return OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT;
-                }
-
                 if (incomingIntentRedirect && mDelegate.maybeLaunchInstantApp(
                         params.getTab(), params.getUrl(), params.getReferrerUrl(), true)) {
                     return OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT;
@@ -461,7 +441,7 @@ public class ExternalNavigationHandler {
 
         boolean isDirectInstantAppsIntent = isExternalProtocol && isIntentToInstantApp(intent);
         boolean shouldProxyForInstantApps = isDirectInstantAppsIntent
-                && mDelegate.isSerpReferrer(params.getReferrerUrl(), params.getTab());
+                && mDelegate.isSerpReferrer(params.getTab());
         if (shouldProxyForInstantApps) {
             intent.putExtra(InstantAppsHandler.IS_GOOGLE_SEARCH_REFERRER, true);
         } else if (isDirectInstantAppsIntent) {
@@ -539,6 +519,42 @@ public class ExternalNavigationHandler {
     }
 
     /**
+     * @return OVERRIDE_WITH_EXTERNAL_INTENT when we successfully started market activity,
+     *         NO_OVERRIDE otherwise.
+     */
+    private OverrideUrlLoadingResult sendIntentToMarket(String packageName, String marketReferrer,
+            ExternalNavigationParams params) {
+        try {
+            Uri marketUri = new Uri.Builder()
+                    .scheme("market")
+                    .authority("details")
+                    .appendQueryParameter(PLAY_PACKAGE_PARAM, packageName)
+                    .appendQueryParameter(PLAY_REFERRER_PARAM, Uri.decode(marketReferrer))
+                    .build();
+            Intent intent = new Intent(Intent.ACTION_VIEW, marketUri);
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            intent.setPackage("com.android.vending");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (params.getReferrerUrl() != null) {
+                intent.putExtra(Intent.EXTRA_REFERRER, Uri.parse(params.getReferrerUrl()));
+            }
+            if (params.isIncognito()) {
+                mDelegate.startIncognitoIntent(intent, params.getReferrerUrl(), null,
+                        params.getTab(),
+                        params.shouldCloseContentsOnOverrideUrlLoadingAndLaunchIntent(), false);
+                return OverrideUrlLoadingResult.OVERRIDE_WITH_ASYNC_ACTION;
+            } else {
+                mDelegate.startActivity(intent, false);
+                return OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT;
+            }
+        } catch (ActivityNotFoundException ex) {
+            // ignore the error on devices that does not have
+            // play market installed.
+            return OverrideUrlLoadingResult.NO_OVERRIDE;
+        }
+    }
+
+    /**
      * Checks whether {@param intent} is for an Instant App. Considers both package and actions that
      * would resolve to Supervisor.
      * @return Whether the given intent is going to open an Instant App.
@@ -565,11 +581,19 @@ public class ExternalNavigationHandler {
      */
     private OverrideUrlLoadingResult clobberCurrentTabWithFallbackUrl(
             String browserFallbackUrl, ExternalNavigationParams params) {
-        if (!params.isMainFrame()) {
-            // For subframes, we don't support fallback url for now.
-            // http://crbug.com/364522.
-            return OverrideUrlLoadingResult.NO_OVERRIDE;
+        // If the fallback URL is a link to Play Store, send the user to Play Store app
+        // instead: crbug.com/638672.
+        Pair<String, String> appInfo = maybeGetPlayStoreAppIdAndReferrer(browserFallbackUrl);
+        if (appInfo != null) {
+            String marketReferrer = TextUtils.isEmpty(appInfo.second)
+                    ? ContextUtils.getApplicationContext().getPackageName() : appInfo.second;
+            return sendIntentToMarket(appInfo.first, marketReferrer, params);
         }
+
+        // For subframes, we don't support fallback url for now.
+        // http://crbug.com/364522.
+        if (!params.isMainFrame()) return OverrideUrlLoadingResult.NO_OVERRIDE;
+
         // NOTE: any further redirection from fall-back URL should not override URL loading.
         // Otherwise, it can be used in chain for fingerprinting multiple app installation
         // status in one shot. In order to prevent this scenario, we notify redirection
@@ -579,6 +603,21 @@ public class ExternalNavigationHandler {
         }
         return mDelegate.clobberCurrentTab(
                 browserFallbackUrl, params.getReferrerUrl(), params.getTab());
+    }
+
+    /**
+     * If the given URL is to Google Play, extracts the package name and referrer tracking code
+     * from the {@param url} and returns as a Pair in that order. Otherwise returns null.
+     */
+    private Pair<String, String> maybeGetPlayStoreAppIdAndReferrer(String url) {
+        Uri uri = Uri.parse(url);
+        if (PLAY_HOSTNAME.equals(uri.getHost()) && uri.getPath() != null
+                && uri.getPath().startsWith(PLAY_APP_PATH)
+                && !TextUtils.isEmpty(uri.getQueryParameter(PLAY_PACKAGE_PARAM))) {
+            return new Pair<String, String>(uri.getQueryParameter(PLAY_PACKAGE_PARAM),
+                    uri.getQueryParameter(PLAY_REFERRER_PARAM));
+        }
+        return null;
     }
 
     /**

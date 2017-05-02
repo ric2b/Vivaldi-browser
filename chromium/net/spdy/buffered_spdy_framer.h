@@ -28,7 +28,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   // Called if an error is detected in the SpdySerializedFrame protocol.
   virtual void OnError(SpdyFramer::SpdyError error_code) = 0;
 
-  // Called if an error is detected in a SPDY stream.
+  // Called if an error is detected in a HTTP2 stream.
   virtual void OnStreamError(SpdyStreamId stream_id,
                              const std::string& description) = 0;
 
@@ -49,8 +49,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   // Called when data is received.
   // |stream_id| The stream receiving data.
   // |data| A buffer containing the data received.
-  // |len| The length of the data buffer (at most 2^24 - 1 for SPDY/3,
-  // but 2^16 - 1 - 8 for HTTP2).
+  // |len| The length of the data buffer (at most 2^16 - 1 - 8).
   virtual void OnStreamFrameData(SpdyStreamId stream_id,
                                  const char* data,
                                  size_t len) = 0;
@@ -69,7 +68,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
 
   // Called when an individual setting within a SETTINGS frame has been parsed
   // and validated.
-  virtual void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) = 0;
+  virtual void OnSetting(SpdySettingsIds id, uint32_t value) = 0;
 
   // Called when a SETTINGS frame is received with the ACK flag set.
   virtual void OnSettingsAck() {}
@@ -136,12 +135,6 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
 
   // SpdyFramerVisitorInterface
   void OnError(SpdyFramer* spdy_framer) override;
-  void OnSynStream(SpdyStreamId stream_id,
-                   SpdyStreamId associated_stream_id,
-                   SpdyPriority priority,
-                   bool fin,
-                   bool unidirectional) override;
-  void OnSynReply(SpdyStreamId stream_id, bool fin) override;
   void OnHeaders(SpdyStreamId stream_id,
                  bool has_priority,
                  int weight,
@@ -158,7 +151,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
       SpdyStreamId stream_id) override;
   void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override;
   void OnSettings(bool clear_persisted) override;
-  void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override;
+  void OnSetting(SpdySettingsIds id, uint32_t value) override;
   void OnSettingsAck() override;
   void OnSettingsEnd() override;
   void OnPing(SpdyPingId unique_id, bool is_ack) override;
@@ -208,6 +201,10 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
   SpdySerializedFrame* CreatePushPromise(SpdyStreamId stream_id,
                                          SpdyStreamId promised_stream_id,
                                          SpdyHeaderBlock headers);
+  SpdySerializedFrame* CreatePriority(SpdyStreamId stream_id,
+                                      SpdyStreamId dependency_id,
+                                      int weight,
+                                      bool exclusive) const;
 
   // Serialize a frame of unknown type.
   SpdySerializedFrame SerializeFrame(const SpdyFrameIR& frame) {
@@ -222,10 +219,6 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
 
   size_t GetFrameHeaderSize() const {
     return spdy_framer_.GetFrameHeaderSize();
-  }
-
-  size_t GetSynStreamMinimumSize() const {
-    return spdy_framer_.GetSynStreamMinimumSize();
   }
 
   size_t GetFrameMinimumSize() const {

@@ -211,6 +211,12 @@ blink::WebSecurityStyle GetSecurityStyle(
       SecurityLevelToSecurityStyle(
           security_state::kDisplayedInsecureContentLevel);
 
+  if (security_info.malicious_content_status !=
+      security_state::MALICIOUS_CONTENT_STATUS_NONE) {
+    security_style_explanations->summary =
+        l10n_util::GetStringUTF8(IDS_SAFEBROWSING_WARNING);
+  }
+
   // Check if the page is HTTP; if so, no more explanations are needed. Note
   // that SecurityStyleUnauthenticated does not necessarily mean that
   // the page is loaded over HTTP, because the security style merely
@@ -224,19 +230,11 @@ blink::WebSecurityStyle GetSecurityStyle(
     return security_style;
   }
 
-  if (security_info.sha1_deprecation_status ==
-      security_state::DEPRECATED_SHA1_MAJOR) {
-    security_style_explanations->broken_explanations.push_back(
-        content::SecurityStyleExplanation(
-            l10n_util::GetStringUTF8(IDS_MAJOR_SHA1),
-            l10n_util::GetStringUTF8(IDS_MAJOR_SHA1_DESCRIPTION),
-            !!security_info.certificate));
-  } else if (security_info.sha1_deprecation_status ==
-             security_state::DEPRECATED_SHA1_MINOR) {
+  if (security_info.sha1_in_chain) {
     security_style_explanations->unauthenticated_explanations.push_back(
         content::SecurityStyleExplanation(
-            l10n_util::GetStringUTF8(IDS_MINOR_SHA1),
-            l10n_util::GetStringUTF8(IDS_MINOR_SHA1_DESCRIPTION),
+            l10n_util::GetStringUTF8(IDS_SHA1),
+            l10n_util::GetStringUTF8(IDS_SHA1_DESCRIPTION),
             !!security_info.certificate));
   }
 
@@ -293,11 +291,9 @@ blink::WebSecurityStyle GetSecurityStyle(
       security_style_explanations->broken_explanations.push_back(explanation);
     }
   } else {
-    // If the certificate does not have errors and is not using
-    // deprecated SHA1, then add an explanation that the certificate is
-    // valid.
-    if (security_info.sha1_deprecation_status ==
-        security_state::NO_DEPRECATED_SHA1) {
+    // If the certificate does not have errors and is not using SHA1, then add
+    // an explanation that the certificate is valid.
+    if (!security_info.sha1_in_chain) {
       security_style_explanations->secure_explanations.push_back(
           content::SecurityStyleExplanation(
               l10n_util::GetStringUTF8(IDS_VALID_SERVER_CERTIFICATE),

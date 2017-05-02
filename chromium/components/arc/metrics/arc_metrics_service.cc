@@ -29,7 +29,6 @@ ArcMetricsService::ArcMetricsService(ArcBridgeService* bridge_service)
     : ArcService(bridge_service),
       binding_(this),
       process_observer_(this),
-      oom_kills_monitor_handle_(OomKillsMonitor::StartMonitoring()),
       weak_ptr_factory_(this) {
   arc_bridge_service()->metrics()->AddObserver(this);
   arc_bridge_service()->process()->AddObserver(&process_observer_);
@@ -76,9 +75,8 @@ void ArcMetricsService::OnProcessInstanceClosed() {
 }
 
 void ArcMetricsService::RequestProcessList() {
-  mojom::ProcessInstance* process_instance =
-      arc_bridge_service()->process()->GetInstanceForMethod(
-          "RequestProcessList");
+  mojom::ProcessInstance* process_instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service()->process(), RequestProcessList);
   if (!process_instance)
     return;
   VLOG(2) << "RequestProcessList";
@@ -121,7 +119,7 @@ void ArcMetricsService::OnArcStartTimeRetrieved(
     return;
   }
   auto* instance =
-      arc_bridge_service()->metrics()->GetInstanceForMethod("Init");
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->metrics(), Init);
   if (!instance)
     return;
 
@@ -130,7 +128,7 @@ void ArcMetricsService::OnArcStartTimeRetrieved(
   // time availability in ReportBootProgress().
   if (!binding_.is_bound()) {
     mojom::MetricsHostPtr host_ptr;
-    binding_.Bind(mojo::GetProxy(&host_ptr));
+    binding_.Bind(mojo::MakeRequest(&host_ptr));
     instance->Init(std::move(host_ptr));
   }
   arc_start_time_ = arc_start_time;

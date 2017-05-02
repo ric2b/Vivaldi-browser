@@ -344,8 +344,8 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   // failed.
   init_cb_ = BindToCurrentLoop(init_cb);
 
-  const AudioParameters& hw_params =
-      sink_->GetOutputDeviceInfo().output_params();
+  auto output_device_info = sink_->GetOutputDeviceInfo();
+  const AudioParameters& hw_params = output_device_info.output_params();
   expecting_config_changes_ = stream->SupportsConfigChanges();
   if (!expecting_config_changes_ || !hw_params.IsValid() ||
       hw_params.format() == AudioParameters::AUDIO_FAKE) {
@@ -506,6 +506,8 @@ void AudioRendererImpl::OnStatisticsUpdate(const PipelineStatistics& stats) {
 
 void AudioRendererImpl::OnBufferingStateChange(BufferingState state) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+  media_log_->AddEvent(media_log_->CreateBufferingStateChangedEvent(
+      "audio_buffering_state", state));
   client_->OnBufferingStateChange(state);
 }
 
@@ -754,18 +756,22 @@ bool AudioRendererImpl::IsBeforeStartTime(
          (buffer->timestamp() + buffer->duration()) < start_timestamp_;
 }
 
-int AudioRendererImpl::Render(AudioBus* audio_bus,
-                              uint32_t frames_delayed,
-                              uint32_t frames_skipped) {
+int AudioRendererImpl::Render(base::TimeDelta delay,
+                              base::TimeTicks delay_timestamp,
+                              int prior_frames_skipped,
+                              AudioBus* audio_bus) {
   const int frames_requested = audio_bus->frames();
-  DVLOG(4) << __func__ << " frames_delayed:" << frames_delayed
-           << " frames_skipped:" << frames_skipped
+  DVLOG(4) << __func__ << " delay:" << delay
+           << " prior_frames_skipped:" << prior_frames_skipped
            << " frames_requested:" << frames_requested;
 
   int frames_written = 0;
   {
     base::AutoLock auto_lock(lock_);
     last_render_time_ = tick_clock_->NowTicks();
+
+    int64_t frames_delayed = AudioTimestampHelper::TimeToFrames(
+        delay, audio_parameters_.sample_rate());
 
     if (!stop_rendering_time_.is_null()) {
       audio_clock_->CompensateForSuspendedWrites(

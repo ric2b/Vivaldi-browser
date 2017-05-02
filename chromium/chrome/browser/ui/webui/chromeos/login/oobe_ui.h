@@ -14,9 +14,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/settings/shutdown_policy_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/core_oobe_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "content/public/browser/web_ui_controller.h"
 
 namespace ash {
@@ -29,6 +29,7 @@ class DictionaryValue;
 
 namespace chromeos {
 class AppLaunchSplashScreenActor;
+class ArcKioskSplashScreenActor;
 class ArcTermsOfServiceScreenActor;
 class AutoEnrollmentCheckScreenActor;
 class BaseScreenHandler;
@@ -49,7 +50,6 @@ class KioskEnableScreenActor;
 class LoginScreenContext;
 class NativeWindowDelegate;
 class NetworkDropdownHandler;
-class NetworkErrorView;
 class NetworkStateInformer;
 class NetworkView;
 class SigninScreenHandler;
@@ -78,6 +78,7 @@ class OobeUI : public content::WebUIController,
   static const char kLockDisplay[];
   static const char kUserAddingDisplay[];
   static const char kAppLaunchSplashDisplay[];
+  static const char kArcKioskSplashDisplay[];
 
   class Observer {
    public:
@@ -110,6 +111,7 @@ class OobeUI : public content::WebUIController,
   AutoEnrollmentCheckScreenActor* GetAutoEnrollmentCheckScreenActor();
   SupervisedUserCreationScreenHandler* GetSupervisedUserCreationScreenActor();
   AppLaunchSplashScreenActor* GetAppLaunchSplashScreenActor();
+  ArcKioskSplashScreenActor* GetArcKioskSplashScreenActor();
   bool IsJSReady(const base::Closure& display_is_ready_callback);
   HIDDetectionView* GetHIDDetectionView();
   ControllerPairingScreenActor* GetControllerPairingScreenActor();
@@ -160,11 +162,15 @@ class OobeUI : public content::WebUIController,
     return network_state_informer_.get();
   }
 
+  // Does ReloadContent() if needed (for example, if material design mode has
+  // changed).
+  void UpdateLocalizedStringsIfNeeded();
+
  private:
-  void AddScreenHandler(BaseScreenHandler* handler);
+  void AddScreenHandler(std::unique_ptr<BaseScreenHandler> handler);
 
   // CoreOobeHandler::Delegate implementation:
-  void OnCurrentScreenChanged(const std::string& screen) override;
+  void OnCurrentScreenChanged(OobeScreen screen) override;
 
   // Type of UI.
   std::string display_type_;
@@ -195,6 +201,7 @@ class OobeUI : public content::WebUIController,
   SupervisedUserCreationScreenHandler* supervised_user_creation_screen_actor_ =
       nullptr;
   AppLaunchSplashScreenActor* app_launch_splash_screen_actor_ = nullptr;
+  ArcKioskSplashScreenActor* arc_kiosk_splash_screen_actor_ = nullptr;
   ControllerPairingScreenActor* controller_pairing_screen_actor_ = nullptr;
   HostPairingScreenActor* host_pairing_screen_actor_ = nullptr;
   DeviceDisabledScreenActor* device_disabled_screen_actor_ = nullptr;
@@ -235,6 +242,10 @@ class OobeUI : public content::WebUIController,
   // Flag that indicates whether JS part is fully loaded and ready to accept
   // calls.
   bool ready_ = false;
+
+  // This flag stores material-design mode (on/off) of currently displayed UI.
+  // If different version of UI is required, UI is updated.
+  bool oobe_ui_md_mode_ = false;
 
   // Callbacks to notify when JS part is fully loaded and ready to accept calls.
   std::vector<base::Closure> ready_callbacks_;

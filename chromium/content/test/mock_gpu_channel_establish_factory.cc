@@ -16,7 +16,7 @@ void MockGpuChannelEstablishFactory::EstablishGpuChannel(
 }
 
 scoped_refptr<gpu::GpuChannelHost>
-MockGpuChannelEstablishFactory::EstablishGpuChannelSync() {
+MockGpuChannelEstablishFactory::EstablishGpuChannelSync(bool force_access_to_gpu) {
   return nullptr;
 }
 

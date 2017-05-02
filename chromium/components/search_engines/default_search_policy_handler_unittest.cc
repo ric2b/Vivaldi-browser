@@ -14,13 +14,6 @@
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/search_engines_pref_names.h"
 
-namespace {
-// TODO(caitkp): Should we find a way to route this through DefaultSearchManager
-// to avoid hardcoding this here?
-const char kDefaultSearchProviderData[] =
-    "default_search_provider_data.template_url_data";
-}  // namespace
-
 namespace policy {
 
 class DefaultSearchPolicyHandlerTest
@@ -133,7 +126,8 @@ TEST_F(DefaultSearchPolicyHandlerTest, MissingUrl) {
   UpdateProviderPolicy(policy);
 
   const base::Value* temp = nullptr;
-  EXPECT_FALSE(store_->GetValue(kDefaultSearchProviderData, &temp));
+  EXPECT_FALSE(store_->GetValue(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
 }
 
 // Checks that if the default search policy is invalid, that no elements of the
@@ -148,7 +142,54 @@ TEST_F(DefaultSearchPolicyHandlerTest, Invalid) {
   UpdateProviderPolicy(policy);
 
   const base::Value* temp = nullptr;
-  EXPECT_FALSE(store_->GetValue(kDefaultSearchProviderData, &temp));
+  EXPECT_FALSE(store_->GetValue(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
+}
+
+// Checks that if the default search policy has invalid type for elements,
+// that no elements of the default search policy will be present in prefs.
+TEST_F(DefaultSearchPolicyHandlerTest, InvalidType) {
+  // List of policies defined in test policy.
+  const char* kPolicyNamesToCheck[] = {
+      key::kDefaultSearchProviderEnabled,
+      key::kDefaultSearchProviderName,
+      key::kDefaultSearchProviderKeyword,
+      key::kDefaultSearchProviderSearchURL,
+      key::kDefaultSearchProviderSuggestURL,
+      key::kDefaultSearchProviderIconURL,
+      key::kDefaultSearchProviderEncodings,
+      key::kDefaultSearchProviderAlternateURLs,
+      key::kDefaultSearchProviderSearchTermsReplacementKey,
+      key::kDefaultSearchProviderImageURL,
+      key::kDefaultSearchProviderNewTabURL,
+      key::kDefaultSearchProviderImageURLPostParams};
+
+  PolicyMap policy;
+  BuildDefaultSearchPolicy(&policy);
+
+  for (auto policy_name : kPolicyNamesToCheck) {
+    // Check that policy can be successfully applied first.
+    UpdateProviderPolicy(policy);
+    const base::Value* temp = nullptr;
+    EXPECT_TRUE(store_->GetValue(
+        DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
+
+    auto old_value = base::WrapUnique(policy.GetValue(policy_name)->DeepCopy());
+    // BinaryValue is not supported in any current default search policy params.
+    // Try changing policy param to BinaryValue and check that policy becomes
+    // invalid.
+    policy.Set(policy_name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, base::WrapUnique(new base::BinaryValue()),
+               nullptr);
+    UpdateProviderPolicy(policy);
+
+    EXPECT_FALSE(store_->GetValue(
+        DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp))
+        << "Policy type check failed " << policy_name;
+    // Return old value to policy map.
+    policy.Set(policy_name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, std::move(old_value), nullptr);
+  }
 }
 
 // Checks that for a fully defined search policy, all elements have been
@@ -162,7 +203,8 @@ TEST_F(DefaultSearchPolicyHandlerTest, FullyDefined) {
   const base::DictionaryValue* dictionary;
   std::string value;
   const base::ListValue* list_value;
-  EXPECT_TRUE(store_->GetValue(kDefaultSearchProviderData, &temp));
+  EXPECT_TRUE(store_->GetValue(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
   temp->GetAsDictionary(&dictionary);
 
   EXPECT_TRUE(dictionary->GetString(DefaultSearchManager::kURL, &value));
@@ -224,7 +266,8 @@ TEST_F(DefaultSearchPolicyHandlerTest, Disabled) {
   UpdateProviderPolicy(policy);
   const base::Value* temp = NULL;
   const base::DictionaryValue* dictionary;
-  EXPECT_TRUE(store_->GetValue(kDefaultSearchProviderData, &temp));
+  EXPECT_TRUE(store_->GetValue(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
   temp->GetAsDictionary(&dictionary);
   bool disabled = false;
   EXPECT_TRUE(dictionary->GetBoolean(DefaultSearchManager::kDisabledByPolicy,
@@ -248,7 +291,8 @@ TEST_F(DefaultSearchPolicyHandlerTest, MinimallyDefined) {
   const base::DictionaryValue* dictionary;
   std::string value;
   const base::ListValue* list_value;
-  EXPECT_TRUE(store_->GetValue(kDefaultSearchProviderData, &temp));
+  EXPECT_TRUE(store_->GetValue(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
   temp->GetAsDictionary(&dictionary);
 
   // Name and keyword should be derived from host.
@@ -306,7 +350,8 @@ TEST_F(DefaultSearchPolicyHandlerTest, FileURL) {
   const base::DictionaryValue* dictionary;
   std::string value;
 
-  EXPECT_TRUE(store_->GetValue(kDefaultSearchProviderData, &temp));
+  EXPECT_TRUE(store_->GetValue(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName, &temp));
   temp->GetAsDictionary(&dictionary);
 
   EXPECT_TRUE(dictionary->GetString(DefaultSearchManager::kURL, &value));
@@ -316,4 +361,5 @@ TEST_F(DefaultSearchPolicyHandlerTest, FileURL) {
   EXPECT_TRUE(dictionary->GetString(DefaultSearchManager::kKeyword, &value));
   EXPECT_EQ("_", value);
 }
+
 }  // namespace policy

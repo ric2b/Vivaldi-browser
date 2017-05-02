@@ -17,7 +17,7 @@ class MockGpuChannelEstablishFactory : public gpu::GpuChannelEstablishFactory {
 
   void EstablishGpuChannel(
       const gpu::GpuChannelEstablishedCallback& callback) override;
-  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
+  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync(bool force_access_to_gpu = false) override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 };
 

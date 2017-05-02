@@ -8,39 +8,13 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_info.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
-#include "chrome/browser/net/prediction_options.h"
+#include "chrome/browser/android/offline_pages/offliner_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/pref_names.h"
-#include "components/content_settings/core/common/pref_names.h"
-#include "components/offline_pages/background/save_page_request.h"
-#include "components/offline_pages/client_namespace_constants.h"
-#include "components/offline_pages/offline_page_model.h"
-#include "components/prefs/pref_service.h"
+#include "components/offline_pages/core/background/save_page_request.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
-
-namespace {
-
-bool AreThirdPartyCookiesBlocked(content::BrowserContext* browser_context) {
-  return Profile::FromBrowserContext(browser_context)
-      ->GetPrefs()
-      ->GetBoolean(prefs::kBlockThirdPartyCookies);
-}
-
-bool IsNetworkPredictionDisabled(content::BrowserContext* browser_context) {
-  return Profile::FromBrowserContext(browser_context)
-             ->GetPrefs()
-             ->GetInteger(prefs::kNetworkPredictionOptions) ==
-         chrome_browser_net::NETWORK_PREDICTION_NEVER;
-}
-
-enum class OfflinePagesCctApiPrerenderAllowedStatus {
-  PRERENDER_ALLOWED,
-  THIRD_PARTY_COOKIES_DISABLED,
-  NETWORK_PREDICTION_DISABLED,
-};
-
-}  // namespace
 
 namespace offline_pages {
 
@@ -90,6 +64,7 @@ void PrerenderingOffliner::OnLoadPageDone(
     save_page_params.url = web_contents->GetLastCommittedURL();
     save_page_params.client_id = request.client_id();
     save_page_params.proposed_offline_id = request.request_id();
+    save_page_params.is_background = true;
     // Pass in the original URL if it is different from the last committed URL
     // when redirects occur.
     if (save_page_params.url != request.url())
@@ -145,11 +120,6 @@ bool PrerenderingOffliner::LoadAndSave(const SavePageRequest& request,
 
   if (pending_request_) {
     DVLOG(1) << "Already have pending request";
-    return false;
-  }
-
-  if (!GetOrCreateLoader()->CanPrerender()) {
-    DVLOG(1) << "Prerendering not allowed/configured";
     return false;
   }
 

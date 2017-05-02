@@ -13,7 +13,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/browser_thread_impl.h"
-#include "content/browser/gpu/shader_disk_cache.h"
+#include "content/browser/gpu/shader_cache_factory.h"
 #include "content/browser/quota/mock_quota_manager.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/local_storage_usage_info.h"
@@ -27,17 +27,19 @@
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "ppapi/features/features.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "base/memory/ptr_util.h"
 #include "ppapi/shared_impl/ppapi_constants.h"
 #include "storage/browser/fileapi/async_file_util.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation_context.h"
 #include "storage/browser/fileapi/isolated_context.h"
 #include "storage/common/fileapi/file_system_util.h"
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 using net::CanonicalCookie;
 
@@ -53,10 +55,10 @@ const char kTestOrigin2[] = "http://host2:1/";
 const char kTestOrigin3[] = "http://host3:1/";
 const char kTestOriginDevTools[] = "chrome-devtools://abcdefghijklmnopqrstuvw/";
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 const char kWidevineCdmPluginId[] = "application_x-ppapi-widevine-cdm";
 const char kClearKeyCdmPluginId[] = "application_x-ppapi-clearkey-cdm";
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 const GURL kOrigin1(kTestOrigin1);
 const GURL kOrigin2(kTestOrigin2);
@@ -245,7 +247,7 @@ class RemoveLocalStorageTester {
   DISALLOW_COPY_AND_ASSIGN(RemoveLocalStorageTester);
 };
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 class RemovePluginPrivateDataTester {
  public:
   explicit RemovePluginPrivateDataTester(
@@ -278,6 +280,8 @@ class RemovePluginPrivateDataTester {
     SetFileTimestamp(widevine_file1, now);
     SetFileTimestamp(widevine_file2, sixty_days_ago);
   }
+
+  void DeleteClearKeyTestData() { DeleteFile(clearkey_file_); }
 
   // Returns true, if the given origin exists in a PluginPrivateFileSystem.
   bool DataExistsForOrigin(const GURL& origin) {
@@ -359,6 +363,20 @@ class RemovePluginPrivateDataTester {
     return file_url;
   }
 
+  void DeleteFile(storage::FileSystemURL file_url) {
+    AwaitCompletionHelper await_completion;
+    storage::AsyncFileUtil* file_util = filesystem_context_->GetAsyncFileUtil(
+        storage::kFileSystemTypePluginPrivate);
+    std::unique_ptr<storage::FileSystemOperationContext> operation_context =
+        base::MakeUnique<storage::FileSystemOperationContext>(
+            filesystem_context_);
+    file_util->DeleteFile(
+        std::move(operation_context), file_url,
+        base::Bind(&RemovePluginPrivateDataTester::OnFileDeleted,
+                   base::Unretained(this), &await_completion));
+    await_completion.BlockUntilNotified();
+  }
+
   // Sets the last_access_time and last_modified_time to |time_stamp| on the
   // file specified by |file_url|. The file must already exist.
   void SetFileTimestamp(const storage::FileSystemURL& file_url,
@@ -387,6 +405,12 @@ class RemovePluginPrivateDataTester {
                      bool created) {
     EXPECT_EQ(base::File::FILE_OK, result) << base::File::ErrorToString(result);
     EXPECT_TRUE(created);
+    await_completion->Notify();
+  }
+
+  void OnFileDeleted(AwaitCompletionHelper* await_completion,
+                     base::File::Error result) {
+    EXPECT_EQ(base::File::FILE_OK, result) << base::File::ErrorToString(result);
     await_completion->Notify();
   }
 
@@ -431,12 +455,13 @@ class RemovePluginPrivateDataTester {
   // We don't own this pointer.
   storage::FileSystemContext* filesystem_context_;
 
-  // Keep track of the URL for the ClearKey file so that it can be written to.
+  // Keep track of the URL for the ClearKey file so that it can be written to
+  // or deleted.
   storage::FileSystemURL clearkey_file_;
 
   DISALLOW_COPY_AND_ASSIGN(RemovePluginPrivateDataTester);
 };
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 bool IsWebSafeSchemeForTest(const std::string& scheme) {
   return scheme == "http";
@@ -551,7 +576,7 @@ void ClearData(content::StoragePartition* partition,
       time, time, run_loop->QuitClosure());
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 void ClearPluginPrivateData(content::StoragePartition* partition,
                             const GURL& storage_origin,
                             const base::Time delete_begin,
@@ -563,7 +588,7 @@ void ClearPluginPrivateData(content::StoragePartition* partition,
       StoragePartition::OriginMatcherFunction(), delete_begin, delete_end,
       run_loop->QuitClosure());
 }
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 }  // namespace
 
@@ -601,19 +626,19 @@ class StoragePartitionShaderClearTest : public testing::Test {
   StoragePartitionShaderClearTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
         browser_context_(new TestBrowserContext()) {
-    ShaderCacheFactory::InitInstance(
+    InitShaderCacheFactorySingleton(
         base::ThreadTaskRunnerHandle::Get(),
         BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE));
-    ShaderCacheFactory::GetInstance()->SetCacheInfo(
+    GetShaderCacheFactorySingleton()->SetCacheInfo(
         kDefaultClientId,
-        BrowserContext::GetDefaultStoragePartition(
-            browser_context())->GetPath());
-    cache_ = ShaderCacheFactory::GetInstance()->Get(kDefaultClientId);
+        BrowserContext::GetDefaultStoragePartition(browser_context())
+            ->GetPath());
+    cache_ = GetShaderCacheFactorySingleton()->Get(kDefaultClientId);
   }
 
   ~StoragePartitionShaderClearTest() override {
     cache_ = NULL;
-    ShaderCacheFactory::GetInstance()->RemoveCacheInfo(kDefaultClientId);
+    GetShaderCacheFactorySingleton()->RemoveCacheInfo(kDefaultClientId);
   }
 
   void InitCache() {
@@ -640,7 +665,7 @@ class StoragePartitionShaderClearTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestBrowserContext> browser_context_;
 
-  scoped_refptr<ShaderDiskCache> cache_;
+  scoped_refptr<gpu::ShaderDiskCache> cache_;
 };
 
 // Tests ---------------------------------------------------------------------
@@ -1197,7 +1222,7 @@ TEST_F(StoragePartitionImplTest, RemoveLocalStorageForLastWeek) {
   EXPECT_TRUE(tester.DOMStorageExistsForOrigin(kOrigin3));
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 TEST_F(StoragePartitionImplTest, RemovePluginPrivateDataForever) {
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
       BrowserContext::GetDefaultStoragePartition(browser_context()));
@@ -1291,7 +1316,33 @@ TEST_F(StoragePartitionImplTest, RemovePluginPrivateDataWhileWriting) {
   base::File file2 = tester.OpenClearKeyFileForWrite();
   EXPECT_FALSE(file2.IsValid());
 }
-#endif  // defined(ENABLE_PLUGINS)
+
+TEST_F(StoragePartitionImplTest, RemovePluginPrivateDataAfterDeletion) {
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      BrowserContext::GetDefaultStoragePartition(browser_context()));
+
+  RemovePluginPrivateDataTester tester(partition->GetFileSystemContext());
+  tester.AddPluginPrivateTestData();
+  EXPECT_TRUE(tester.DataExistsForOrigin(kOrigin1));
+  EXPECT_TRUE(tester.DataExistsForOrigin(kOrigin2));
+
+  // Delete the single file saved for |kOrigin1|. This does not remove the
+  // origin from the list of Origins. However, ClearPluginPrivateData() will
+  // remove it.
+  tester.DeleteClearKeyTestData();
+  EXPECT_TRUE(tester.DataExistsForOrigin(kOrigin1));
+  EXPECT_TRUE(tester.DataExistsForOrigin(kOrigin2));
+
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&ClearPluginPrivateData, partition, GURL(),
+                            base::Time(), base::Time::Max(), &run_loop));
+  run_loop.Run();
+
+  EXPECT_FALSE(tester.DataExistsForOrigin(kOrigin1));
+  EXPECT_FALSE(tester.DataExistsForOrigin(kOrigin2));
+}
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 TEST(StoragePartitionImplStaticTest, CreatePredicateForHostCookies) {
   GURL url("http://www.example.com/");

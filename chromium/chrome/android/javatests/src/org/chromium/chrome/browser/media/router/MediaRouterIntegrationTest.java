@@ -8,7 +8,7 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 
 import android.app.Dialog;
 import android.os.StrictMode;
-import android.test.suitebuilder.annotation.LargeTest;
+import android.support.test.filters.LargeTest;
 import android.view.View;
 
 import org.json.JSONObject;
@@ -360,6 +360,6 @@ public class MediaRouterIntegrationTest extends ChromeActivityTestCaseBase<Chrom
                     routeSelectionDialog.cancel();
                 }
             });
-        checkStartFailed(webContents, "AbortError", "Dialog closed.");
+        checkStartFailed(webContents, "NotAllowedError", "Dialog closed.");
     }
 }

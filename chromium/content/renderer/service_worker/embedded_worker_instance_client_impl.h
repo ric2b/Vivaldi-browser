@@ -12,7 +12,6 @@
 #include "content/renderer/service_worker/embedded_worker_dispatcher.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace content {
 
@@ -27,12 +26,11 @@ class EmbeddedWorkerInstanceClientImpl
 
   ~EmbeddedWorkerInstanceClientImpl() override;
 
-  // This method can be called from any threads.
-  void ExposeInterfacesToBrowser(
-      service_manager::InterfaceRegistry* interface_registry);
-
   // Called from ServiceWorkerContextClient.
   void StopWorkerCompleted();
+  EmbeddedWorkerDevToolsAgent* devtools_agent() {
+    return wrapper_->devtools_agent();
+  };
 
  private:
   EmbeddedWorkerInstanceClientImpl(
@@ -42,25 +40,21 @@ class EmbeddedWorkerInstanceClientImpl
   // mojom::EmbeddedWorkerInstanceClient implementation
   void StartWorker(
       const EmbeddedWorkerStartParams& params,
-      service_manager::mojom::InterfaceProviderPtr browser_interfaces,
-      service_manager::mojom::InterfaceProviderRequest renderer_request)
-      override;
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request) override;
   void StopWorker(const StopWorkerCallback& callback) override;
+  void ResumeAfterDownload() override;
+  void AddMessageToConsole(blink::WebConsoleMessage::Level level,
+                           const std::string& message) override;
 
   // Handler of connection error bound to |binding_|
   void OnError();
 
   EmbeddedWorkerDispatcher* dispatcher_;
   mojo::Binding<mojom::EmbeddedWorkerInstanceClient> binding_;
-  service_manager::InterfaceProvider remote_interfaces_;
 
   // This is valid before StartWorker is called. After that, this object
   // will be passed to ServiceWorkerContextClient.
   std::unique_ptr<EmbeddedWorkerInstanceClientImpl> temporal_self_;
-
-  // This is drained by ServiceWorkerContextClient after the worker thread is
-  // launched.
-  service_manager::mojom::InterfaceProviderRequest renderer_request_;
 
   base::Optional<int> embedded_worker_id_;
 

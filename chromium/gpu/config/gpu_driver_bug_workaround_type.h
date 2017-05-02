@@ -73,6 +73,8 @@
          disable_post_sub_buffers_for_onscreen_surfaces)     \
   GPU_OP(DISABLE_PROGRAM_CACHE,                              \
          disable_program_cache)                              \
+  GPU_OP(DISABLE_PROGRAM_CACHING_FOR_TRANSFORM_FEEDBACK,     \
+         disable_program_caching_for_transform_feedback)     \
   GPU_OP(DISABLE_PROGRAM_DISK_CACHE,                         \
          disable_program_disk_cache)                         \
   GPU_OP(DISABLE_TEXTURE_CUBE_MAP_SEAMLESS,                  \
@@ -103,6 +105,8 @@
          force_discrete_gpu)                                 \
   GPU_OP(FORCE_INTEGRATED_GPU,                               \
          force_integrated_gpu)                               \
+  GPU_OP(FORCE_UPDATE_SCISSOR_STATE_WHEN_BINDING_FBO0,       \
+         force_update_scissor_state_when_binding_fbo0)       \
   GPU_OP(GET_FRAG_DATA_INFO_BUG,                             \
          get_frag_data_info_bug)                             \
   GPU_OP(GL_CLEAR_BROKEN,                                    \
@@ -153,6 +157,8 @@
          reverse_point_sprite_coord_origin)                  \
   GPU_OP(REWRITE_DO_WHILE_LOOPS,                             \
          rewrite_do_while_loops)                             \
+  GPU_OP(REWRITE_FLOAT_UNARY_MINUS_OPERATOR,                 \
+         rewrite_float_unary_minus_operator)                 \
   GPU_OP(REWRITE_TEXELFETCHOFFSET_TO_TEXELFETCH,             \
          rewrite_texelfetchoffset_to_texelfetch)             \
   GPU_OP(SCALARIZE_VEC_AND_MAT_CONSTRUCTOR_ARGS,             \

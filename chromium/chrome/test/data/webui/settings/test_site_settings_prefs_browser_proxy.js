@@ -14,7 +14,6 @@ var prefsEmpty = {
     cookies: '',
     geolocation: '',
     javascript: '',
-    keygen: '',
     mic: '',
     notifications: '',
     plugins: '',
@@ -28,7 +27,6 @@ var prefsEmpty = {
     cookies: [],
     geolocation: [],
     javascript: [],
-    keygen: [],
     mic: [],
     notifications: [],
     plugins: [],
@@ -52,7 +50,8 @@ var TestSiteSettingsPrefsBrowserProxy = function() {
     'fetchZoomLevels',
     'getDefaultValueForContentType',
     'getExceptionList',
-    'initializeProtocolHandlerList',
+    'observeProtocolHandlers',
+    'observeProtocolHandlersEnabledState',
     'removeProtocolHandler',
     'removeUsbDevice',
     'removeZoomLevel',
@@ -145,8 +144,6 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.defaults.images;
     } else if (contentType == settings.ContentSettingsTypes.JAVASCRIPT) {
       pref = this.prefs_.defaults.javascript;
-    } else if (contentType == settings.ContentSettingsTypes.KEYGEN) {
-      pref = this.prefs_.defaults.keygen;
     } else if (contentType == settings.ContentSettingsTypes.MIC) {
       pref = this.prefs_.defaults.mic;
     } else if (contentType == settings.ContentSettingsTypes.NOTIFICATIONS) {
@@ -187,8 +184,6 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.exceptions.images;
     else if (contentType == settings.ContentSettingsTypes.JAVASCRIPT)
       pref = this.prefs_.exceptions.javascript;
-    else if (contentType == settings.ContentSettingsTypes.KEYGEN)
-      pref = this.prefs_.exceptions.keygen;
     else if (contentType == settings.ContentSettingsTypes.MIC)
       pref = this.prefs_.exceptions.mic;
     else if (contentType == settings.ContentSettingsTypes.NOTIFICATIONS)
@@ -247,10 +242,16 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
   },
 
   /** @override */
-  initializeProtocolHandlerList: function() {
+  observeProtocolHandlers: function() {
     cr.webUIListenerCallback('setHandlersEnabled', true);
     cr.webUIListenerCallback('setProtocolHandlers', this.protocolHandlers_);
-    this.methodCalled('initializeProtocolHandlerList');
+    this.methodCalled('observeProtocolHandlers');
+  },
+
+  /** @override */
+  observeProtocolHandlersEnabledState: function() {
+    cr.webUIListenerCallback('setHandlersEnabled', true);
+    this.methodCalled('observeProtocolHandlersEnabledState');
   },
 
   /** @override */

@@ -142,7 +142,7 @@ PermissionService* StorageManager::getPermissionService(
     ExecutionContext* executionContext) {
   if (!m_permissionService &&
       connectToPermissionService(executionContext,
-                                 mojo::GetProxy(&m_permissionService)))
+                                 mojo::MakeRequest(&m_permissionService)))
     m_permissionService.set_connection_error_handler(convertToBaseCallback(
         WTF::bind(&StorageManager::permissionServiceConnectionError,
                   wrapWeakPersistent(this))));
@@ -161,7 +161,7 @@ void StorageManager::permissionServiceConnectionError() {
 void StorageManager::permissionRequestComplete(ScriptPromiseResolver* resolver,
                                                PermissionStatus status) {
   if (!resolver->getExecutionContext() ||
-      resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+      resolver->getExecutionContext()->isContextDestroyed())
     return;
   resolver->resolve(status == PermissionStatus::GRANTED);
 }

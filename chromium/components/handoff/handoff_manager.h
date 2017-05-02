@@ -5,9 +5,8 @@
 #ifndef COMPONENTS_HANDOFF_HANDOFF_MANAGER_H_
 #define COMPONENTS_HANDOFF_HANDOFF_MANAGER_H_
 
-#include <Foundation/Foundation.h>
+#import <Foundation/Foundation.h>
 
-#include "base/mac/objc_property_releaser.h"
 #include "build/build_config.h"
 #include "components/handoff/handoff_utility.h"
 #include "url/gurl.h"
@@ -22,14 +21,7 @@ class PrefRegistrySyncable;
 
 // Maintains all of the state relevant to the Handoff feature. Allows Chrome to
 // hand off the current active URL to other devices.
-@interface HandoffManager : NSObject {
- @private
-  base::mac::ObjCPropertyReleaser _propertyReleaser_HandoffManager;
-
-  GURL _activeURL;
-  NSUserActivity* _userActivity;
-  handoff::Origin _origin;
-}
+@interface HandoffManager : NSObject
 
 #if defined(OS_IOS)
 // Registers preferences related to Handoff.

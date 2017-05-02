@@ -23,7 +23,22 @@ using VisitorCallback = void (*)(Visitor*, void* self);
 using TraceCallback = VisitorCallback;
 using WeakCallback = VisitorCallback;
 using EphemeronCallback = VisitorCallback;
-using PreFinalizerCallback = bool (*)(void*);
+
+// Simple alias to avoid heap compaction type signatures turning into
+// a sea of generic |void*|s.
+using MovableReference = void*;
+
+// Heap compaction supports registering callbacks that are to be invoked
+// when an object is moved during compaction. This is to support internal
+// location fixups that need to happen as a result.
+//
+// i.e., when the object residing at |from| is moved to |to| by the compaction
+// pass, invoke the callback to adjust any internal references that now need
+// to be |to|-relative.
+using MovingObjectCallback = void (*)(void* callbackData,
+                                      MovableReference from,
+                                      MovableReference to,
+                                      size_t);
 
 // List of typed arenas. The list is used to generate the implementation
 // of typed arena related methods.
@@ -57,14 +72,6 @@ class PLATFORM_EXPORT BlinkGC final {
     // The sweeping task doesn't run. The marks added in the marking task
     // are just cleared.
     TakeSnapshot,
-    // The marking task does not mark objects outside the heap of the GCing
-    // thread.
-    ThreadTerminationGC,
-    // Just run thread-local weak processing. The weak processing may trace
-    // already marked objects but it must not trace any unmarked object.
-    // It's unfortunate that the thread-local weak processing requires
-    // a marking visitor. See TODO in HashTable::process.
-    ThreadLocalWeakProcessing,
   };
 
   enum GCReason {
@@ -77,7 +84,7 @@ class PLATFORM_EXPORT BlinkGC final {
     NumberOfGCReason,
   };
 
-  enum HeapIndices {
+  enum ArenaIndices {
     EagerSweepArenaIndex = 0,
     NormalPage1ArenaIndex,
     NormalPage2ArenaIndex,
@@ -97,11 +104,6 @@ class PLATFORM_EXPORT BlinkGC final {
   enum V8GCType {
     V8MinorGC,
     V8MajorGC,
-  };
-
-  enum ThreadHeapMode {
-    MainThreadHeapMode,
-    PerThreadHeapMode,
   };
 };
 

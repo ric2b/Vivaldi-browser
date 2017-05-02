@@ -157,6 +157,8 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
       return ui::AX_ROLE_DOCUMENT;
     case blink::WebAXRoleEmbeddedObject:
       return ui::AX_ROLE_EMBEDDED_OBJECT;
+    case blink::WebAXRoleFeed:
+      return ui::AX_ROLE_FEED;
     case blink::WebAXRoleFigcaption:
       return ui::AX_ROLE_FIGCAPTION;
     case blink::WebAXRoleFigure:
@@ -305,6 +307,8 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
       return ui::AX_ROLE_TABLE;
     case blink::WebAXRoleTableHeaderContainer:
       return ui::AX_ROLE_TABLE_HEADER_CONTAINER;
+    case blink::WebAXRoleTerm:
+      return ui::AX_ROLE_TERM;
     case blink::WebAXRoleTextField:
       return ui::AX_ROLE_TEXT_FIELD;
     case blink::WebAXRoleTime:
@@ -407,6 +411,32 @@ ui::AXEvent AXEventFromBlink(blink::WebAXEvent event) {
       // from adding new event enums in Blink.
       return ui::AX_EVENT_NONE;
   }
+}
+
+ui::AXSupportedAction AXSupportedActionFromBlink(
+    blink::WebAXSupportedAction supported_action) {
+  switch (supported_action) {
+    case blink::WebAXSupportedAction::None:
+      return ui::AX_SUPPORTED_ACTION_NONE;
+    case blink::WebAXSupportedAction::Activate:
+      return ui::AX_SUPPORTED_ACTION_ACTIVATE;
+    case blink::WebAXSupportedAction::Check:
+      return ui::AX_SUPPORTED_ACTION_CHECK;
+    case blink::WebAXSupportedAction::Click:
+      return ui::AX_SUPPORTED_ACTION_CLICK;
+    case blink::WebAXSupportedAction::Jump:
+      return ui::AX_SUPPORTED_ACTION_JUMP;
+    case blink::WebAXSupportedAction::Open:
+      return ui::AX_SUPPORTED_ACTION_OPEN;
+    case blink::WebAXSupportedAction::Press:
+      return ui::AX_SUPPORTED_ACTION_PRESS;
+    case blink::WebAXSupportedAction::Select:
+      return ui::AX_SUPPORTED_ACTION_SELECT;
+    case blink::WebAXSupportedAction::Uncheck:
+      return ui::AX_SUPPORTED_ACTION_UNCHECK;
+  }
+  NOTREACHED();
+  return ui::AX_SUPPORTED_ACTION_NONE;
 }
 
 ui::AXMarkerType AXMarkerTypeFromBlink(blink::WebAXMarkerType marker_type) {
@@ -546,8 +576,6 @@ ui::AXDescriptionFrom AXDescriptionFromFromBlink(
       return ui::AX_DESCRIPTION_FROM_ATTRIBUTE;
     case blink::WebAXDescriptionFromContents:
       return ui::AX_DESCRIPTION_FROM_CONTENTS;
-    case blink::WebAXDescriptionFromPlaceholder:
-      return ui::AX_DESCRIPTION_FROM_PLACEHOLDER;
     case blink::WebAXDescriptionFromRelatedElement:
       return ui::AX_DESCRIPTION_FROM_RELATED_ELEMENT;
   }

@@ -47,14 +47,19 @@ namespace blink {
 HTMLImportChild::HTMLImportChild(const KURL& url,
                                  HTMLImportLoader* loader,
                                  SyncMode sync)
-    : HTMLImport(sync), m_url(url), m_loader(loader), m_client(nullptr) {}
+    : HTMLImport(sync), m_url(url), m_loader(loader), m_client(nullptr) {
+  DCHECK(loader);
+}
 
 HTMLImportChild::~HTMLImportChild() {}
 
 void HTMLImportChild::ownerInserted() {
   if (!m_loader->isDone())
     return;
-  root()->document()->styleEngine().resolverChanged(FullStyleUpdate);
+
+  DCHECK(root());
+  DCHECK(root()->document());
+  root()->document()->styleEngine().htmlImportAddedOrRemoved();
 }
 
 void HTMLImportChild::didShareLoader() {

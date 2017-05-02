@@ -40,13 +40,6 @@
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebVector.h"
 
-#if BLINK_IMPLEMENTATION
-namespace WTF {
-template <typename T>
-class PassRefPtr;
-}
-#endif
-
 namespace v8 {
 class Value;
 template <class T>
@@ -56,7 +49,6 @@ class Local;
 namespace blink {
 
 class Document;
-class DocumentType;
 class WebAXObject;
 class WebElement;
 class WebFormElement;
@@ -80,7 +72,7 @@ class WebDocument : public WebNode {
   BLINK_EXPORT WebURL url() const;
   // Note: Security checks should use the getSecurityOrigin(), not url().
   BLINK_EXPORT WebSecurityOrigin getSecurityOrigin() const;
-  BLINK_EXPORT bool isSecureContext(WebString& errorMessage) const;
+  BLINK_EXPORT bool isSecureContext() const;
 
   BLINK_EXPORT WebString encoding() const;
   BLINK_EXPORT WebString contentLanguage() const;
@@ -112,7 +104,7 @@ class WebDocument : public WebNode {
   BLINK_EXPORT WebURL completeURL(const WebString&) const;
   BLINK_EXPORT WebElement getElementById(const WebString&) const;
   BLINK_EXPORT WebElement focusedElement() const;
-  BLINK_EXPORT WebReferrerPolicy referrerPolicy() const;
+  BLINK_EXPORT WebReferrerPolicy getReferrerPolicy() const;
   BLINK_EXPORT WebString outgoingReferrer();
 
   // Accessibility support. These methods should only be called on the
@@ -135,12 +127,6 @@ class WebDocument : public WebNode {
   // the selectors matches or stops matching an element in this document.
   // Each call to this method overrides any previous calls.
   BLINK_EXPORT void watchCSSSelectors(const WebVector<WebString>& selectors);
-
-  // These methods are exposed only as a temporary fix for a stable-blocker
-  // regression (crbug.com/660706), and should be removed pronto.
-  // TODO(devlin): Make it happen!
-  BLINK_EXPORT bool unloadStartedDoNotUse() const;
-  BLINK_EXPORT bool processingBeforeUnloadDoNotUse() const;
 
   BLINK_EXPORT WebVector<WebDraggableRegion> draggableRegions() const;
 

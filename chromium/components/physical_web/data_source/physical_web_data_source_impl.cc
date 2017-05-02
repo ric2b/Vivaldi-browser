@@ -7,6 +7,8 @@
 #include "components/physical_web/data_source/physical_web_data_source_impl.h"
 #include "components/physical_web/data_source/physical_web_listener.h"
 
+namespace physical_web {
+
 PhysicalWebDataSourceImpl::PhysicalWebDataSourceImpl() {}
 
 PhysicalWebDataSourceImpl::~PhysicalWebDataSourceImpl() {}
@@ -21,19 +23,21 @@ void PhysicalWebDataSourceImpl::UnregisterListener(
   observer_list_.RemoveObserver(physical_web_listener);
 }
 
-void PhysicalWebDataSourceImpl::NotifyOnFound(const std::string& url) {
+void PhysicalWebDataSourceImpl::NotifyOnFound(const GURL& url) {
   for (PhysicalWebListener& observer : observer_list_)
     observer.OnFound(url);
 }
 
-void PhysicalWebDataSourceImpl::NotifyOnLost(const std::string& url) {
+void PhysicalWebDataSourceImpl::NotifyOnLost(const GURL& url) {
   for (PhysicalWebListener& observer : observer_list_)
     observer.OnLost(url);
 }
 
 void PhysicalWebDataSourceImpl::NotifyOnDistanceChanged(
-    const std::string& url,
+    const GURL& url,
     double distance_estimate) {
   for (PhysicalWebListener& observer : observer_list_)
     observer.OnDistanceChanged(url, distance_estimate);
 }
+
+}  // namespace physical_web

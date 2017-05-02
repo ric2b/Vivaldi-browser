@@ -6,13 +6,16 @@
 
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "modules/presentation/PresentationController.h"
 #include "modules/presentation/PresentationReceiver.h"
 #include "modules/presentation/PresentationRequest.h"
+#include "platform/weborigin/KURL.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
-Presentation::Presentation(LocalFrame* frame) : DOMWindowProperty(frame) {}
+Presentation::Presentation(LocalFrame* frame) : ContextClient(frame) {}
 
 // static
 Presentation* Presentation::create(LocalFrame* frame) {
@@ -28,7 +31,7 @@ Presentation* Presentation::create(LocalFrame* frame) {
 DEFINE_TRACE(Presentation) {
   visitor->trace(m_defaultRequest);
   visitor->trace(m_receiver);
-  DOMWindowProperty::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 PresentationRequest* Presentation::defaultRequest() const {
@@ -44,20 +47,23 @@ void Presentation::setDefaultRequest(PresentationRequest* request) {
   PresentationController* controller = PresentationController::from(*frame());
   if (!controller)
     return;
-  controller->setDefaultRequestUrl(request ? request->url() : KURL());
+  controller->setDefaultRequestUrl(request ? request->urls()
+                                           : WTF::Vector<KURL>());
 }
 
 PresentationReceiver* Presentation::receiver() {
-  if (!frame())
+  if (!frame() || !frame()->settings())
     return nullptr;
-  // TODO(crbug.com/647296): only return something if the Blink instance is
-  // running in presentation receiver mode. The flag PresentationReceiver could
-  // be used for that.
+
+  if (!frame()->settings()->getPresentationReceiver())
+    return nullptr;
+
   if (!m_receiver) {
     PresentationController* controller = PresentationController::from(*frame());
     auto* client = controller ? controller->client() : nullptr;
     m_receiver = new PresentationReceiver(frame(), client);
   }
+
   return m_receiver;
 }
 

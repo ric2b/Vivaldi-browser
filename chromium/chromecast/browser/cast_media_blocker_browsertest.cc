@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -44,7 +45,7 @@ class CastMediaBlockerBrowserTest : public CastBrowserTest {
     WaitForLoadStop(web_contents_);
 
     blocker_ = base::MakeUnique<CastMediaBlocker>(
-        content::MediaSession::Get(web_contents_), web_contents_);
+        content::MediaSession::Get(web_contents_));
   }
 
   void BlockAndTestPlayerState(const std::string& media_type, bool blocked) {

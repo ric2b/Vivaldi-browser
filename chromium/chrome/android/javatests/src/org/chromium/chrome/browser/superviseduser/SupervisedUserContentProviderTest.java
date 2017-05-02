@@ -10,7 +10,7 @@ import android.content.ContentResolver;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.RemoteException;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -42,7 +42,7 @@ public class SupervisedUserContentProviderTest extends ChromeActivityTestCaseBas
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        mResolver = getInstrumentation().getContext().getContentResolver();
+        mResolver = getInstrumentation().getTargetContext().getContentResolver();
         assertNotNull(mResolver);
         mAuthority = getInstrumentation().getTargetContext().getPackageName() + AUTHORITY_SUFFIX;
         mUri = new Uri.Builder()
@@ -93,10 +93,10 @@ public class SupervisedUserContentProviderTest extends ChromeActivityTestCaseBas
         SupervisedUserContentProvider.enableContentProviderForTesting();
         Cursor cursor = client.query(mUri, null, "url = 'http://google.com'", null, null);
         assertNotNull(cursor);
-        assertEquals(WebRestrictionsContentProvider.PROCEED, cursor.getInt(0));
+        assertEquals(WebRestrictionsContentProvider.BLOCKED, cursor.getInt(0));
         cursor = client.query(mUri, null, "url = 'http://www.notgoogle.com'", null, null);
         assertNotNull(cursor);
-        assertEquals(WebRestrictionsContentProvider.PROCEED, cursor.getInt(0));
+        assertEquals(WebRestrictionsContentProvider.BLOCKED, cursor.getInt(0));
     }
 
     @SmallTest

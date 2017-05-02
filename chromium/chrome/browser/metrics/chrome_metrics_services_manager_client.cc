@@ -20,7 +20,7 @@
 #include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/metrics_state_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
@@ -59,9 +59,19 @@ const base::Feature kMetricsReportingFeature{"MetricsReporting",
 // Posts |GoogleUpdateSettings::StoreMetricsClientInfo| on blocking pool thread
 // because it needs access to IO and cannot work from UI thread.
 void PostStoreMetricsClientInfo(const metrics::ClientInfo& client_info) {
-  content::BrowserThread::GetBlockingPool()->PostTask(
-      FROM_HERE,
-      base::Bind(&GoogleUpdateSettings::StoreMetricsClientInfo, client_info));
+  // The message loop processes messages after the blocking pool is initialized.
+  // Posting a task to the message loop to post a task to the blocking pool
+  // ensures that the blocking pool is ready to accept tasks at that time.
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(
+          [](const metrics::ClientInfo& client_info) {
+            content::BrowserThread::PostBlockingPoolTask(
+                FROM_HERE,
+                base::Bind(&GoogleUpdateSettings::StoreMetricsClientInfo,
+                           client_info));
+          },
+          client_info));
 }
 
 // Appends a group to the sampling controlling |trial|. The group will be
@@ -188,10 +198,10 @@ bool ChromeMetricsServicesManagerClient::GetSamplingRatePerMille(int* rate) {
   return true;
 }
 
-std::unique_ptr<rappor::RapporService>
-ChromeMetricsServicesManagerClient::CreateRapporService() {
+std::unique_ptr<rappor::RapporServiceImpl>
+ChromeMetricsServicesManagerClient::CreateRapporServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return base::MakeUnique<rappor::RapporService>(
+  return base::MakeUnique<rappor::RapporServiceImpl>(
       local_state_, base::Bind(&chrome::IsIncognitoSessionActive));
 }
 

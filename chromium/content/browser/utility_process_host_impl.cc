@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
@@ -277,8 +278,8 @@ bool UtilityProcessHostImpl::StartProcess() {
       // readlink("/prof/self/exe") sometimes fails on Android at startup.
       // As a workaround skip calling it here, since the executable name is
       // not needed on Android anyway. See crbug.com/500854.
-      base::CommandLine* cmd_line =
-          new base::CommandLine(base::CommandLine::NO_PROGRAM);
+    std::unique_ptr<base::CommandLine> cmd_line =
+        base::MakeUnique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
     #else
       int child_flags = child_flags_;
 
@@ -296,7 +297,8 @@ bool UtilityProcessHostImpl::StartProcess() {
         return false;
       }
 
-      base::CommandLine* cmd_line = new base::CommandLine(exe_path);
+      std::unique_ptr<base::CommandLine> cmd_line =
+          base::MakeUnique<base::CommandLine>(exe_path);
     #endif
 
     cmd_line->AppendSwitchASCII(switches::kProcessType,
@@ -347,9 +349,9 @@ bool UtilityProcessHostImpl::StartProcess() {
       cmd_line->AppendSwitch(switches::kUtilityProcessRunningElevated);
 #endif
 
-    process_->Launch(new UtilitySandboxedProcessLauncherDelegate(
+    process_->Launch(base::MakeUnique<UtilitySandboxedProcessLauncherDelegate>(
                          exposed_dir_, run_elevated_, no_sandbox_, env_),
-                     cmd_line, true);
+                     std::move(cmd_line), true);
   }
 
   return true;

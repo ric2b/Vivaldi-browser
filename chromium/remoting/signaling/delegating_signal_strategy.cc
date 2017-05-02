@@ -7,8 +7,9 @@
 #include "base/bind.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
-#include "third_party/webrtc/libjingle/xmpp/constants.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
+#include "third_party/libjingle_xmpp/xmpp/constants.h"
 
 namespace remoting {
 

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// http://fetch.spec.whatwg.org/#request-class
+// https://fetch.spec.whatwg.org/#request-class
 
 typedef (Request or USVString) RequestInfo;
 
@@ -40,7 +40,7 @@ enum ReferrerPolicy {
     readonly attribute USVString url;
     [ImplementedAs=getHeaders] readonly attribute Headers headers;
     readonly attribute DOMString referrer;
-    readonly attribute ReferrerPolicy referrerPolicy;
+    [ImplementedAs=getReferrerPolicy] readonly attribute ReferrerPolicy referrerPolicy;
     readonly attribute RequestMode mode;
     readonly attribute RequestCredentials credentials;
     readonly attribute RequestRedirect redirect;

@@ -50,6 +50,15 @@ post_process_target("//components/bookmarks/browser:browser") {
   ]
 }
 
+post_process_template("//components:components_tests_pak") {
+  sources += [
+    "$root_gen_dir/vivaldi/vivaldi_native_strings_en-US.pak"
+  ]
+  deps += [
+    "//vivaldi/app:vivaldi_native_strings",
+  ]
+}
+
 foreach(_target,
         [
           "//chrome:packed_resources_100_percent",

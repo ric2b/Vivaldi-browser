@@ -15,6 +15,7 @@ import android.webkit.MimeTypeMap;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionProxyUma;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
@@ -49,7 +50,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     // Items that are included in all context menus.
     private static final int[] BASE_WHITELIST = {
             R.id.contextmenu_copy_link_address,
-            R.id.contextmenu_copy_email_address,
+            R.id.contextmenu_call,
+            R.id.contextmenu_send_message,
+            R.id.contextmenu_add_to_contacts,
+            R.id.contextmenu_copy,
             R.id.contextmenu_copy_link_text,
             R.id.contextmenu_save_link_as,
             R.id.contextmenu_save_image,
@@ -102,7 +106,12 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         static final int ACTION_SAVE_VIDEO = 14;
         static final int ACTION_SHARE_IMAGE = 19;
         static final int ACTION_OPEN_IN_OTHER_WINDOW = 20;
-        static final int NUM_ACTIONS = 21;
+        static final int ACTION_SEND_EMAIL = 23;
+        static final int ACTION_ADD_TO_CONTACTS = 24;
+        static final int ACTION_CALL = 30;
+        static final int ACTION_SEND_TEXT_MESSAGE = 31;
+        static final int ACTION_COPY_PHONE_NUMBER = 32;
+        static final int NUM_ACTIONS = 33;
 
         // Note: these values must match the ContextMenuSaveLinkType enum in histograms.xml.
         // Only add new values at the end, right before NUM_TYPES. We depend on these specific
@@ -211,9 +220,32 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         }
 
         if (MailTo.isMailTo(params.getLinkUrl())) {
+            menu.findItem(R.id.contextmenu_copy_link_text).setVisible(false);
             menu.findItem(R.id.contextmenu_copy_link_address).setVisible(false);
+            menu.setGroupVisible(R.id.contextmenu_group_message, true);
+            if (!mDelegate.supportsSendEmailMessage()) {
+                menu.findItem(R.id.contextmenu_send_message).setVisible(false);
+            }
+            if (TextUtils.isEmpty(MailTo.parse(params.getLinkUrl()).getTo())
+                    || !mDelegate.supportsAddToContacts()) {
+                menu.findItem(R.id.contextmenu_add_to_contacts).setVisible(false);
+            }
+            menu.findItem(R.id.contextmenu_call).setVisible(false);
+        } else if (UrlUtilities.isTelScheme(params.getLinkUrl())) {
+            menu.findItem(R.id.contextmenu_copy_link_text).setVisible(false);
+            menu.findItem(R.id.contextmenu_copy_link_address).setVisible(false);
+            menu.setGroupVisible(R.id.contextmenu_group_message, true);
+            if (!mDelegate.supportsCall()) {
+                menu.findItem(R.id.contextmenu_call).setVisible(false);
+            }
+            if (!mDelegate.supportsSendTextMessage()) {
+                menu.findItem(R.id.contextmenu_send_message).setVisible(false);
+            }
+            if (!mDelegate.supportsAddToContacts()) {
+                menu.findItem(R.id.contextmenu_add_to_contacts).setVisible(false);
+            }
         } else {
-            menu.findItem(R.id.contextmenu_copy_email_address).setVisible(false);
+            menu.setGroupVisible(R.id.contextmenu_group_message, false);
         }
 
         menu.findItem(R.id.contextmenu_save_link_as).setVisible(
@@ -270,6 +302,16 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                                 TemplateUrlService.getInstance()
                                         .getDefaultSearchEngineTemplateUrl().getShortName()));
             }
+        }
+
+        // Hide all items that could spawn additional tabs until FRE has been completed.
+        if (!FirstRunStatus.getFirstRunFlowComplete()) {
+            menu.findItem(R.id.contextmenu_open_image_in_new_tab).setVisible(false);
+            menu.findItem(R.id.contextmenu_open_in_other_window).setVisible(false);
+            menu.findItem(R.id.contextmenu_open_in_new_tab).setVisible(false);
+            menu.findItem(R.id.contextmenu_open_in_incognito_tab).setVisible(false);
+            menu.findItem(R.id.contextmenu_search_by_image).setVisible(false);
+            menu.findItem(R.id.menu_id_open_in_chrome).setVisible(false);
         }
 
         if (mMode == FULLSCREEN_TAB_MODE) {
@@ -330,10 +372,30 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_COPY_LINK_ADDRESS);
             mDelegate.onSaveToClipboard(params.getUnfilteredLinkUrl(),
                     ContextMenuItemDelegate.CLIPBOARD_TYPE_LINK_URL);
-        } else if (itemId == R.id.contextmenu_copy_email_address) {
-            ContextMenuUma.record(params, ContextMenuUma.ACTION_COPY_EMAIL_ADDRESS);
-            mDelegate.onSaveToClipboard(MailTo.parse(params.getLinkUrl()).getTo(),
-                    ContextMenuItemDelegate.CLIPBOARD_TYPE_LINK_URL);
+        } else if (itemId == R.id.contextmenu_call) {
+            ContextMenuUma.record(params, ContextMenuUma.ACTION_CALL);
+            mDelegate.onCall(params.getLinkUrl());
+        } else if (itemId == R.id.contextmenu_send_message) {
+            if (MailTo.isMailTo(params.getLinkUrl())) {
+                ContextMenuUma.record(params, ContextMenuUma.ACTION_SEND_EMAIL);
+                mDelegate.onSendEmailMessage(params.getLinkUrl());
+            } else if (UrlUtilities.isTelScheme(params.getLinkUrl())) {
+                ContextMenuUma.record(params, ContextMenuUma.ACTION_SEND_TEXT_MESSAGE);
+                mDelegate.onSendTextMessage(params.getLinkUrl());
+            }
+        } else if (itemId == R.id.contextmenu_add_to_contacts) {
+            ContextMenuUma.record(params, ContextMenuUma.ACTION_ADD_TO_CONTACTS);
+            mDelegate.onAddToContacts(params.getLinkUrl());
+        } else if (itemId == R.id.contextmenu_copy) {
+            if (MailTo.isMailTo(params.getLinkUrl())) {
+                ContextMenuUma.record(params, ContextMenuUma.ACTION_COPY_EMAIL_ADDRESS);
+                mDelegate.onSaveToClipboard(MailTo.parse(params.getLinkUrl()).getTo(),
+                        ContextMenuItemDelegate.CLIPBOARD_TYPE_LINK_URL);
+            } else if (UrlUtilities.isTelScheme(params.getLinkUrl())) {
+                ContextMenuUma.record(params, ContextMenuUma.ACTION_COPY_PHONE_NUMBER);
+                mDelegate.onSaveToClipboard(UrlUtilities.getTelNumber(params.getLinkUrl()),
+                        ContextMenuItemDelegate.CLIPBOARD_TYPE_LINK_URL);
+            }
         } else if (itemId == R.id.contextmenu_copy_link_text) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_COPY_LINK_TEXT);
             mDelegate.onSaveToClipboard(

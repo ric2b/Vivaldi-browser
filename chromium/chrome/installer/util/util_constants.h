@@ -78,10 +78,8 @@ enum InstallStatus {
                                  // they were invalid for any reason.
   DIFF_PATCH_SOURCE_MISSING = 50,  // No previous version archive found for
                                    // differential update.
-  UNUSED_BINARIES      = 51,  // No multi-install products to update. The
-                              // binaries will be uninstalled if they are not
-                              // in use.
-  UNUSED_BINARIES_UNINSTALLED = 52,  // The binaries were uninstalled.
+  // UNUSED_BINARIES = 51,
+  // UNUSED_BINARIES_UNINSTALLED = 52,
   UNSUPPORTED_OPTION   = 53,  // An unsupported legacy option was given.
   CPU_NOT_SUPPORTED    = 54,  // Current OS not supported
   REENABLE_UPDATES_SUCCEEDED = 55,  // Autoupdates are now enabled.
@@ -127,7 +125,6 @@ enum ArchiveType {
 enum InstallerStage {
   NO_STAGE,                   // No stage to report.
   UPDATING_SETUP,             // Courgette patching setup.exe (diff).
-  UNINSTALLING_CHROME_FRAME,  // Uninstalling multi-install Chrome Frame.
   PRECONDITIONS,              // Evaluating pre-install conditions.
   UNCOMPRESSING,              // Uncompressing chrome.packed.7z.
   PATCHING,                   // Patching chrome.7z using Courgette (diff).
@@ -135,7 +132,6 @@ enum InstallerStage {
   CREATING_VISUAL_MANIFEST,   // Creating VisualElementsManifest.xml.
   BUILDING,                   // Building the install work item list.
   EXECUTING,                  // Executing the install work item list.
-  REFRESHING_POLICY,          // Refreshing the elevation policy.
   UPDATING_CHANNELS,          // Updating channel information.
   COPYING_PREFERENCES_FILE,   // Copying preferences file.
   CREATING_SHORTCUTS,         // Creating shortcuts.
@@ -143,16 +139,11 @@ enum InstallerStage {
   REMOVING_OLD_VERSIONS,      // Deleting old version directories.
   ROLLINGBACK,                // Rolling-back the install work item list.
   FINISHING,                  // Finishing the install.
-  UNINSTALLING_BINARIES,      // Uninstalling unused binaries.
   NUM_STAGES                  // The number of stages.
 };
 
 namespace switches {
 
-extern const char kChrome[];
-#ifndef OMIT_CHROME_FRAME
-extern const char kChromeFrame[];
-#endif
 extern const char kChromeSxS[];
 extern const char kConfigureUserSettings[];
 extern const char kCriticalUpdateVersion[];
@@ -170,7 +161,6 @@ extern const char kInstallerData[];
 extern const char kLogFile[];
 extern const char kMakeChromeDefault[];
 extern const char kMsi[];
-extern const char kMultiInstall[];
 extern const char kNewSetupExe[];
 extern const char kOnOsUpgrade[];
 extern const char kPreviousVersion[];
@@ -215,19 +205,12 @@ extern const char kGoogleUpdateIsMachineEnvVar[];
 }  // namespace env_vars
 
 extern const wchar_t kActiveSetupExe[];
-extern const wchar_t kAppLauncherGuid[];
 extern const wchar_t kChromeDll[];
 extern const wchar_t kChromeChildDll[];
 extern const wchar_t kChromeExe[];
-extern const wchar_t kChromeFrameDll[];
-extern const wchar_t kChromeFrameHelperDll[];
-extern const wchar_t kChromeFrameHelperExe[];
-extern const wchar_t kChromeFrameHelperWndClass[];
-extern const wchar_t kChromeLauncherExe[];
 extern const wchar_t kChromeNewExe[];
 extern const wchar_t kChromeOldExe[];
 extern const wchar_t kCmdOnOsUpgrade[];
-extern const wchar_t kCmdQuickEnableCf[];
 extern const wchar_t kEULASentinelFile[];
 extern const wchar_t kGoogleChromeInstallSubDir1[];
 extern const wchar_t kGoogleChromeInstallSubDir2[];
@@ -262,8 +245,9 @@ extern const wchar_t kVivaldiInstallerInstallType[];
 extern const wchar_t kVivaldiInstallerDefaultBrowser[];
 extern const wchar_t kVivaldiInstallerRegisterBrowser[];
 
-// Product options.
-extern const wchar_t kOptionMultiInstall[];
+// Vivaldi paths and filenames
+extern const wchar_t kVivaldiUpdateNotifierExe[];
+extern const wchar_t kVivaldiUpdateNotifierOldExe[];
 
 // Chrome channel display names.
 // NOTE: Canary is not strictly a 'channel', but rather a separate product

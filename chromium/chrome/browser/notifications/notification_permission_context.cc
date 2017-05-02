@@ -24,10 +24,6 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/gurl.h"
 
-#include "content/public/browser/browser_thread.h"
-#include "chrome/browser/permissions/permission_request_id.h"
-#include "content/public/browser/web_contents.h"
-
 namespace {
 
 // At most one of these is attached to each WebContents. It allows posting
@@ -169,7 +165,6 @@ NotificationPermissionContext::NotificationPermissionContext(
     : PermissionContextBase(profile,
                             permission_type,
                             CONTENT_SETTINGS_TYPE_NOTIFICATIONS),
-      extensions_context_(profile),
       weak_factory_ui_thread_(this) {
   DCHECK(permission_type == content::PermissionType::NOTIFICATIONS ||
          permission_type == content::PermissionType::PUSH_MESSAGING);
@@ -177,7 +172,7 @@ NotificationPermissionContext::NotificationPermissionContext(
 
 NotificationPermissionContext::~NotificationPermissionContext() {}
 
-ContentSetting NotificationPermissionContext::GetPermissionStatus(
+ContentSetting NotificationPermissionContext::GetPermissionStatusInternal(
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   // Push messaging is only allowed to be granted on top-level origins.
@@ -186,8 +181,8 @@ ContentSetting NotificationPermissionContext::GetPermissionStatus(
     return CONTENT_SETTING_BLOCK;
   }
 
-  return PermissionContextBase::GetPermissionStatus(requesting_origin,
-                                                    embedding_origin);
+  return PermissionContextBase::GetPermissionStatusInternal(requesting_origin,
+                                                            embedding_origin);
 }
 
 void NotificationPermissionContext::ResetPermission(
@@ -219,7 +214,7 @@ void NotificationPermissionContext::DecidePermission(
   // from using that to detect whether incognito mode is active, we deny after a
   // random time delay, to simulate a user clicking a bubble/infobar. See also
   // ContentSettingsRegistry::Init, which marks notifications as
-  // INHERIT_IN_INCOGNITO_EXCEPT_ALLOW, and
+  // INHERIT_IF_LESS_PERMISSIVE, and
   // PermissionMenuModel::PermissionMenuModel which prevents users from manually
   // allowing the permission.
   if (profile()->IsOffTheRecord()) {

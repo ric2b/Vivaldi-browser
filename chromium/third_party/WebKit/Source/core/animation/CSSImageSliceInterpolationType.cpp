@@ -88,7 +88,7 @@ class UnderlyingSliceTypesChecker
  public:
   static std::unique_ptr<UnderlyingSliceTypesChecker> create(
       const SliceTypes& underlyingTypes) {
-    return wrapUnique(new UnderlyingSliceTypesChecker(underlyingTypes));
+    return WTF::wrapUnique(new UnderlyingSliceTypesChecker(underlyingTypes));
   }
 
   static SliceTypes getUnderlyingSliceTypes(
@@ -114,7 +114,8 @@ class InheritedSliceTypesChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedSliceTypesChecker> create(
       CSSPropertyID property,
       const SliceTypes& inheritedTypes) {
-    return wrapUnique(new InheritedSliceTypesChecker(property, inheritedTypes));
+    return WTF::wrapUnique(
+        new InheritedSliceTypesChecker(property, inheritedTypes));
   }
 
  private:
@@ -160,7 +161,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertNeutral(
     ConversionCheckers& conversionCheckers) const {
   SliceTypes underlyingTypes =
       UnderlyingSliceTypesChecker::getUnderlyingSliceTypes(underlying);
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       UnderlyingSliceTypesChecker::create(underlyingTypes));
   LengthBox zeroBox(
       Length(0, underlyingTypes.isNumber[SideTop] ? Fixed : Percent),
@@ -183,7 +184,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertInherit(
   const ImageSlice& inheritedImageSlice =
       ImageSlicePropertyFunctions::getImageSlice(cssProperty(),
                                                  *state.parentStyle());
-  conversionCheckers.append(InheritedSliceTypesChecker::create(
+  conversionCheckers.push_back(InheritedSliceTypesChecker::create(
       cssProperty(), SliceTypes(inheritedImageSlice)));
   return convertImageSlice(inheritedImageSlice,
                            state.parentStyle()->effectiveZoom());
@@ -216,9 +217,10 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertValue(
       CSSImageSliceNonInterpolableValue::create(SliceTypes(slice)));
 }
 
-InterpolationValue CSSImageSliceInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  const ComputedStyle& style = *environment.state().style();
+InterpolationValue
+CSSImageSliceInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  const ComputedStyle& style = *state.style();
   return convertImageSlice(
       ImageSlicePropertyFunctions::getImageSlice(cssProperty(), style),
       style.effectiveZoom());
@@ -237,7 +239,7 @@ PairwiseInterpolationValue CSSImageSliceInterpolationType::maybeMergeSingles(
 
   return PairwiseInterpolationValue(std::move(start.interpolableValue),
                                     std::move(end.interpolableValue),
-                                    start.nonInterpolableValue.release());
+                                    std::move(start.nonInterpolableValue));
 }
 
 void CSSImageSliceInterpolationType::composite(
@@ -259,11 +261,11 @@ void CSSImageSliceInterpolationType::composite(
     underlyingValueOwner.set(*this, value);
 }
 
-void CSSImageSliceInterpolationType::apply(
+void CSSImageSliceInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
-  ComputedStyle& style = *environment.state().style();
+    StyleResolverState& state) const {
+  ComputedStyle& style = *state.style();
   const InterpolableList& list = toInterpolableList(interpolableValue);
   const SliceTypes& types =
       toCSSImageSliceNonInterpolableValue(nonInterpolableValue)->types();

@@ -271,7 +271,7 @@ void GaiaOAuthClient::Core::HandleResponse(
     source->GetResponseAsString(&data);
     std::unique_ptr<base::Value> message_value = base::JSONReader::Read(data);
     if (message_value.get() &&
-        message_value->IsType(base::Value::TYPE_DICTIONARY)) {
+        message_value->IsType(base::Value::Type::DICTIONARY)) {
       response_dict.reset(
           static_cast<base::DictionaryValue*>(message_value.release()));
     }
@@ -283,6 +283,7 @@ void GaiaOAuthClient::Core::HandleResponse(
     if ((source->GetMaxRetriesOn5xx() != -1) &&
         (num_retries_ >= source->GetMaxRetriesOn5xx())) {
       // Retry limit reached. Give up.
+      request_type_ = NO_PENDING_REQUEST;
       delegate_->OnNetworkError(source->GetResponseCode());
     } else {
       request_ = std::move(old_request);

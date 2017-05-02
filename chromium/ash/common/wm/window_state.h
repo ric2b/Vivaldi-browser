@@ -115,10 +115,6 @@ class ASH_EXPORT WindowState {
   // Returns true if the window's location can be controlled by the user.
   bool IsUserPositionable() const;
 
-  // Returns true is the window should be excluded from the most recently used
-  // windows list.
-  bool ShouldBeExcludedFromMru() const;
-
   // Checks if the window can change its state accordingly.
   bool CanMaximize() const;
   bool CanMinimize() const;
@@ -135,7 +131,6 @@ class ASH_EXPORT WindowState {
   void Maximize();
   void Minimize();
   void Unminimize();
-  void SetExcludedFromMru(bool excluded_from_mru);
 
   void Activate();
   void Deactivate();
@@ -249,12 +244,6 @@ class ASH_EXPORT WindowState {
   bool bounds_changed_by_user() const { return bounds_changed_by_user_; }
   void set_bounds_changed_by_user(bool bounds_changed_by_user);
 
-  // True if this window is an attached panel.
-  bool panel_attached() const { return panel_attached_; }
-  void set_panel_attached(bool panel_attached) {
-    panel_attached_ = panel_attached;
-  }
-
   // True if the window is ignored by the shelf layout manager for
   // purposes of darkening the shelf.
   bool ignored_by_shelf() const { return ignored_by_shelf_; }
@@ -282,7 +271,7 @@ class ASH_EXPORT WindowState {
   // True if the window should not adjust the window's bounds when
   // virtual keyboard bounds changes.
   // TODO(oshima): This is hack. Replace this with proper
-  // implementation based on EnsureCaretInRect.
+  // implementation based on EnsureCaretNotInRect.
   bool ignore_keyboard_bounds_change() const {
     return ignore_keyboard_bounds_change_;
   }
@@ -373,7 +362,6 @@ class ASH_EXPORT WindowState {
 
   bool window_position_managed_;
   bool bounds_changed_by_user_;
-  bool panel_attached_;
   bool ignored_by_shelf_;
   bool can_consume_system_keys_;
   std::unique_ptr<DragDetails> drag_details_;

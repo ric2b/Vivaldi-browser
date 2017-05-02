@@ -54,19 +54,23 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/StyleEngine.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
+#include "platform/WebTaskRunner.h"
 
 namespace blink {
 
 static const CSSValue* parseCSSValue(const Document* document,
                                      const String& value,
                                      CSSPropertyID propertyID) {
-  CSSParserContext context(*document, UseCounter::getFrom(document));
+  CSSParserContext* context =
+      CSSParserContext::create(*document, UseCounter::getFrom(document));
   return CSSParser::parseFontFaceDescriptor(propertyID, value, context);
 }
 
@@ -80,7 +84,7 @@ FontFace* FontFace::create(ExecutionContext* context,
     return create(context, family, source.getAsArrayBuffer(), descriptors);
   if (source.isArrayBufferView())
     return create(context, family, source.getAsArrayBufferView(), descriptors);
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 
@@ -154,19 +158,12 @@ FontFace* FontFace::create(Document* document,
 }
 
 FontFace::FontFace(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
-      m_status(Unloaded) {
-  suspendIfNeeded();
-}
+    : ContextLifecycleObserver(context), m_status(Unloaded) {}
 
 FontFace::FontFace(ExecutionContext* context,
                    const AtomicString& family,
                    const FontFaceDescriptors& descriptors)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
-      m_family(family),
-      m_status(Unloaded) {
+    : ContextLifecycleObserver(context), m_family(family), m_status(Unloaded) {
   Document* document = toDocument(context);
   setPropertyFromString(document, descriptors.style(), CSSPropertyFontStyle);
   setPropertyFromString(document, descriptors.weight(), CSSPropertyFontWeight);
@@ -178,8 +175,10 @@ FontFace::FontFace(ExecutionContext* context,
                         CSSPropertyFontVariant);
   setPropertyFromString(document, descriptors.featureSettings(),
                         CSSPropertyFontFeatureSettings);
-
-  suspendIfNeeded();
+  if (RuntimeEnabledFeatures::cssFontDisplayEnabled()) {
+    setPropertyFromString(document, descriptors.display(),
+                          CSSPropertyFontDisplay);
+  }
 }
 
 FontFace::~FontFace() {}
@@ -206,6 +205,10 @@ String FontFace::variant() const {
 
 String FontFace::featureSettings() const {
   return m_featureSettings ? m_featureSettings->cssText() : "normal";
+}
+
+String FontFace::display() const {
+  return m_display ? m_display->cssText() : "auto";
 }
 
 void FontFace::setStyle(ExecutionContext* context,
@@ -247,6 +250,13 @@ void FontFace::setFeatureSettings(ExecutionContext* context,
                                   const String& s,
                                   ExceptionState& exceptionState) {
   setPropertyFromString(toDocument(context), s, CSSPropertyFontFeatureSettings,
+                        &exceptionState);
+}
+
+void FontFace::setDisplay(ExecutionContext* context,
+                          const String& s,
+                          ExceptionState& exceptionState) {
+  setPropertyFromString(toDocument(context), s, CSSPropertyFontDisplay,
                         &exceptionState);
 }
 
@@ -298,7 +308,7 @@ bool FontFace::setPropertyValue(const CSSValue* value,
       m_display = value;
       break;
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
       return false;
   }
   return true;
@@ -350,7 +360,7 @@ String FontFace::status() const {
     case Error:
       return "error";
     default:
-      ASSERT_NOT_REACHED();
+      NOTREACHED();
   }
   return emptyString();
 }
@@ -359,22 +369,41 @@ void FontFace::setLoadStatus(LoadStatusType status) {
   m_status = status;
   ASSERT(m_status != Error || m_error);
 
+  // When promises are resolved with 'thenables', instead of the object being
+  // returned directly, the 'then' method is executed (the resolver tries to
+  // resolve the thenable). This can lead to synchronous script execution, so we
+  // post a task. This does not apply to promise rejection (i.e. a thenable
+  // would be returned as is).
   if (m_status == Loaded || m_status == Error) {
     if (m_loadedProperty) {
-      if (m_status == Loaded)
-        m_loadedProperty->resolve(this);
-      else
+      if (m_status == Loaded) {
+        getTaskRunner()->postTask(
+            BLINK_FROM_HERE, WTF::bind(&LoadedProperty::resolve<FontFace*>,
+                                       wrapPersistent(m_loadedProperty.get()),
+                                       wrapPersistent(this)));
+      } else
         m_loadedProperty->reject(m_error.get());
     }
 
-    HeapVector<Member<LoadFontCallback>> callbacks;
-    m_callbacks.swap(callbacks);
-    for (size_t i = 0; i < callbacks.size(); ++i) {
-      if (m_status == Loaded)
-        callbacks[i]->notifyLoaded(this);
-      else
-        callbacks[i]->notifyError(this);
-    }
+    getTaskRunner()->postTask(
+        BLINK_FROM_HERE,
+        WTF::bind(&FontFace::runCallbacks, wrapPersistent(this)));
+  }
+}
+
+WebTaskRunner* FontFace::getTaskRunner() {
+  return TaskRunnerHelper::get(TaskType::DOMManipulation, getExecutionContext())
+      .get();
+}
+
+void FontFace::runCallbacks() {
+  HeapVector<Member<LoadFontCallback>> callbacks;
+  m_callbacks.swap(callbacks);
+  for (size_t i = 0; i < callbacks.size(); ++i) {
+    if (m_status == Loaded)
+      callbacks[i]->notifyLoaded(this);
+    else
+      callbacks[i]->notifyError(this);
   }
 }
 
@@ -397,13 +426,14 @@ ScriptPromise FontFace::fontStatusPromise(ScriptState* scriptState) {
 }
 
 ScriptPromise FontFace::load(ScriptState* scriptState) {
-  loadInternal(scriptState->getExecutionContext());
+  if (m_status == Unloaded)
+    m_cssFontFace->load();
   return fontStatusPromise(scriptState);
 }
 
-void FontFace::loadWithCallback(LoadFontCallback* callback,
-                                ExecutionContext* context) {
-  loadInternal(context);
+void FontFace::loadWithCallback(LoadFontCallback* callback) {
+  if (m_status == Unloaded)
+    m_cssFontFace->load();
   addCallback(callback);
 }
 
@@ -413,14 +443,7 @@ void FontFace::addCallback(LoadFontCallback* callback) {
   else if (m_status == Error)
     callback->notifyError(this);
   else
-    m_callbacks.append(callback);
-}
-
-void FontFace::loadInternal(ExecutionContext* context) {
-  if (m_status != Unloaded)
-    return;
-
-  m_cssFontFace->load();
+    m_callbacks.push_back(callback);
 }
 
 FontTraits FontFace::traits() const {
@@ -563,7 +586,7 @@ static CSSFontFace* createCSSFontFace(FontFace* fontFace,
     for (unsigned i = 0; i < numRanges; i++) {
       const CSSUnicodeRangeValue& range =
           toCSSUnicodeRangeValue(rangeList->item(i));
-      ranges.append(UnicodeRange(range.from(), range.to()));
+      ranges.push_back(UnicodeRange(range.from(), range.to()));
     }
   }
 
@@ -591,7 +614,7 @@ void FontFace::initCSSFontFace(Document* document, const CSSValue* src) {
     if (!item.isLocal()) {
       const Settings* settings = document ? document->settings() : nullptr;
       bool allowDownloading =
-          settings && settings->downloadableBinaryFontsEnabled();
+          settings && settings->getDownloadableBinaryFontsEnabled();
       if (allowDownloading && item.isSupportedFormat() && document) {
         FontResource* fetched = item.fetch(document);
         if (fetched) {
@@ -644,7 +667,7 @@ DEFINE_TRACE(FontFace) {
   visitor->trace(m_loadedProperty);
   visitor->trace(m_cssFontFace);
   visitor->trace(m_callbacks);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 bool FontFace::hadBlankText() const {
@@ -652,8 +675,7 @@ bool FontFace::hadBlankText() const {
 }
 
 bool FontFace::hasPendingActivity() const {
-  return m_status == Loading && getExecutionContext() &&
-         !getExecutionContext()->activeDOMObjectsAreStopped();
+  return m_status == Loading && getExecutionContext();
 }
 
 }  // namespace blink

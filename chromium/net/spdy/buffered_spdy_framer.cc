@@ -20,7 +20,7 @@ size_t kGoAwayDebugDataMaxSize = 1024;
 }  // namespace
 
 BufferedSpdyFramer::BufferedSpdyFramer()
-    : spdy_framer_(HTTP2),
+    : spdy_framer_(SpdyFramer::ENABLE_COMPRESSION),
       visitor_(NULL),
       header_buffer_valid_(false),
       header_stream_id_(SpdyFramer::kInvalidStream),
@@ -45,14 +45,6 @@ void BufferedSpdyFramer::OnError(SpdyFramer* spdy_framer) {
   visitor_->OnError(spdy_framer->error_code());
 }
 
-void BufferedSpdyFramer::OnSynStream(SpdyStreamId stream_id,
-                                     SpdyStreamId associated_stream_id,
-                                     SpdyPriority priority,
-                                     bool fin,
-                                     bool unidirectional) {
-  NOTREACHED();
-}
-
 void BufferedSpdyFramer::OnHeaders(SpdyStreamId stream_id,
                                    bool has_priority,
                                    int weight,
@@ -74,11 +66,6 @@ void BufferedSpdyFramer::OnHeaders(SpdyStreamId stream_id,
   control_frame_fields_->fin = fin;
 
   InitHeaderStreaming(stream_id);
-}
-
-void BufferedSpdyFramer::OnSynReply(SpdyStreamId stream_id,
-                                    bool fin) {
-  NOTREACHED();
 }
 
 void BufferedSpdyFramer::OnDataFrameHeader(SpdyStreamId stream_id,
@@ -118,12 +105,6 @@ void BufferedSpdyFramer::OnHeaderFrameEnd(SpdyStreamId stream_id,
   }
   DCHECK(control_frame_fields_.get());
   switch (control_frame_fields_->type) {
-    case SYN_STREAM:
-      NOTREACHED();
-      break;
-    case SYN_REPLY:
-      NOTREACHED();
-      break;
     case HEADERS:
       visitor_->OnHeaders(
           control_frame_fields_->stream_id, control_frame_fields_->has_priority,
@@ -149,10 +130,8 @@ void BufferedSpdyFramer::OnSettings(bool clear_persisted) {
   visitor_->OnSettings();
 }
 
-void BufferedSpdyFramer::OnSetting(SpdySettingsIds id,
-                                   uint8_t flags,
-                                   uint32_t value) {
-  visitor_->OnSetting(id, flags, value);
+void BufferedSpdyFramer::OnSetting(SpdySettingsIds id, uint32_t value) {
+  visitor_->OnSetting(id, value);
 }
 
 void BufferedSpdyFramer::OnSettingsAck() {
@@ -270,14 +249,9 @@ SpdySerializedFrame* BufferedSpdyFramer::CreateRstStream(
 SpdySerializedFrame* BufferedSpdyFramer::CreateSettings(
     const SettingsMap& values) const {
   SpdySettingsIR settings_ir;
-  for (SettingsMap::const_iterator it = values.begin();
-       it != values.end();
+  for (SettingsMap::const_iterator it = values.begin(); it != values.end();
        ++it) {
-    settings_ir.AddSetting(
-        it->first,
-        (it->second.first & SETTINGS_FLAG_PLEASE_PERSIST) != 0,
-        (it->second.first & SETTINGS_FLAG_PERSISTED) != 0,
-        it->second.second);
+    settings_ir.AddSetting(it->first, it->second);
   }
   return new SpdySerializedFrame(spdy_framer_.SerializeSettings(settings_ir));
 }
@@ -343,6 +317,17 @@ SpdySerializedFrame* BufferedSpdyFramer::CreatePushPromise(
                                     std::move(headers));
   return new SpdySerializedFrame(
       spdy_framer_.SerializePushPromise(push_promise_ir));
+}
+
+// TODO(jgraettinger): Eliminate uses of this method (prefer
+// SpdyPriorityIR).
+SpdySerializedFrame* BufferedSpdyFramer::CreatePriority(
+    SpdyStreamId stream_id,
+    SpdyStreamId dependency_id,
+    int weight,
+    bool exclusive) const {
+  SpdyPriorityIR priority_ir(stream_id, dependency_id, weight, exclusive);
+  return new SpdySerializedFrame(spdy_framer_.SerializePriority(priority_ir));
 }
 
 SpdyPriority BufferedSpdyFramer::GetHighestPriority() const {

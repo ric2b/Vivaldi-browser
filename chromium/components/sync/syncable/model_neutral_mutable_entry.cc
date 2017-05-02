@@ -333,6 +333,29 @@ void ModelNeutralMutableEntry::PutUniqueBookmarkTag(const std::string& tag) {
   MarkDirty();
 }
 
+void ModelNeutralMutableEntry::PutUniqueNotesTag(const std::string& tag) {
+  // This unique tag will eventually be used as the unique suffix when adjusting
+  // this bookmark's position.  Let's make sure it's a valid suffix.
+  if (!UniquePosition::IsValidSuffix(tag)) {
+    NOTREACHED();
+    return;
+  }
+
+  if (!kernel_->ref(UNIQUE_NOTES_TAG).empty() &&
+      tag != kernel_->ref(UNIQUE_NOTES_TAG)) {
+    // There is only one scenario where our tag is expected to change.  That
+    // scenario occurs when our current tag is a non-correct tag assigned during
+    // the UniquePosition migration.
+    std::string migration_generated_tag =
+        GenerateSyncableNotesHash(std::string(),
+                                     kernel_->ref(ID).GetServerId());
+    DCHECK_EQ(migration_generated_tag, kernel_->ref(UNIQUE_NOTES_TAG));
+  }
+
+  kernel_->put(UNIQUE_NOTES_TAG, tag);
+  kernel_->mark_dirty(&dir()->kernel()->dirty_metahandles);
+}
+
 void ModelNeutralMutableEntry::PutServerSpecifics(
     const sync_pb::EntitySpecifics& value) {
   DCHECK(kernel_);

@@ -177,7 +177,6 @@ views::ImageButton* CreateBackButton(views::ButtonListener* listener) {
   back_button->SetImage(views::ImageButton::STATE_DISABLED,
                         rb->GetImageSkiaNamed(IDR_BACK_D));
   back_button->SetFocusForPlatform();
-  back_button->set_request_focus_on_press(true);
   return back_button;
 }
 
@@ -197,7 +196,6 @@ class BackgroundColorHoverButton : public views::LabelButton {
                                   : views::kButtonHEdgeMarginNew;
     SetBorder(views::CreateEmptyBorder(0, button_margin, 0, button_margin));
     SetFocusForPlatform();
-    set_request_focus_on_press(true);
 
     if (switches::IsMaterialDesignUserMenu()) {
       label()->SetHandlesTooltips(false);
@@ -534,7 +532,7 @@ class EditableProfileName : public views::View,
     AddChildView(profile_name_textfield_);
 
     button_ = new RightAlignedIconLabelButton(this, text);
-    button_->SetFontList(medium_font_list);
+    button_->SetFontListDeprecated(medium_font_list);
     // Show an "edit" pencil icon when hovering over. In the default state,
     // we need to create an empty placeholder of the correct size, so that
     // the text doesn't jump around when the hovered icon appears.
@@ -688,18 +686,14 @@ void ProfileChooserView::ShowBubble(
     signin_metrics::AccessPoint access_point,
     views::View* anchor_view,
     Browser* browser) {
-  if (switches::IsMaterialDesignUserMenu()) {
-    // The Material Design User Menu doesn't have a fast user switcher on
-    // right-click. To ease up the transition for users, show the regular user
-    // menu when right-clicking instead of doing nothing.
-    view_mode = profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
-  }
-
   // Don't start creating the view if it would be an empty fast user switcher.
   // It has to happen here to prevent the view system from creating an empty
   // container.
+  // Same for material design user menu since fast profile switcher will be
+  // migrated to the left-click menu.
   if (view_mode == profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER &&
-      !profiles::HasProfileSwitchTargets(browser->profile())) {
+      (!profiles::HasProfileSwitchTargets(browser->profile()) ||
+       switches::IsMaterialDesignUserMenu())) {
     return;
   }
 
@@ -1623,7 +1617,6 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
             gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 18,
                                   gfx::kChromeIconGrey));
         auth_error_email_button_->SetFocusForPlatform();
-        auth_error_email_button_->set_request_focus_on_press(true);
         gfx::Insets insets =
             views::LabelButtonAssetBorder::GetDefaultInsetsForStyle(
                 views::Button::STYLE_TEXTBUTTON);

@@ -56,12 +56,14 @@ class MediaRouterAction : public ToolbarActionViewController,
   void HidePopup() override;
   gfx::NativeView GetPopupNativeView() override;
   ui::MenuModel* GetContextMenu() override;
+  void OnContextMenuClosed() override;
   bool ExecuteAction(bool by_user) override;
   void UpdateState() override;
   bool DisabledClickOpensMenu() const override;
 
   // media_router::IssuesObserver:
-  void OnIssueUpdated(const media_router::Issue* issue) override;
+  void OnIssue(const media_router::Issue& issue) override;
+  void OnIssuesCleared() override;
 
   // media_router::MediaRoutesObserver:
   void OnRoutesUpdated(const std::vector<media_router::MediaRoute>& routes,
@@ -111,9 +113,9 @@ class MediaRouterAction : public ToolbarActionViewController,
   // routes since |this| is an IssueObserver and MediaRoutesObserver.
   gfx::VectorIconId current_icon_;
 
-  // The current issue shown in the Media Router WebUI. Can be null. It is set
-  // in OnIssueUpdated(), which is called by the IssueManager.
-  std::unique_ptr<media_router::Issue> issue_;
+  // The current issue shown in the Media Router WebUI, set in OnIssue() and
+  // cleared in OnIssuesCleared().
+  std::unique_ptr<media_router::IssueInfo> current_issue_;
 
   // Whether a local displayable active route exists.
   bool has_local_display_route_;

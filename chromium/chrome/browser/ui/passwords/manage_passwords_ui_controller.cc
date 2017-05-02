@@ -114,25 +114,26 @@ void ManagePasswordsUIController::OnUpdatePasswordSubmitted(
 
 bool ManagePasswordsUIController::OnChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
-    std::vector<std::unique_ptr<autofill::PasswordForm>> federated_credentials,
     const GURL& origin,
     const ManagePasswordsState::CredentialsCallback& callback) {
-  DCHECK(!local_credentials.empty() || !federated_credentials.empty());
+  DCHECK(!local_credentials.empty());
   if (!HasBrowserWindow())
     return false;
-  PasswordDialogController::FormsVector locals =
-      CopyFormVector(local_credentials);
-  PasswordDialogController::FormsVector federations =
-      CopyFormVector(federated_credentials);
-  passwords_data_.OnRequestCredentials(
-      std::move(local_credentials), std::move(federated_credentials), origin);
+  // If |local_credentials| contains PSL matches they shouldn't be propagated to
+  // the state because PSL matches aren't saved for current page. This logic is
+  // implemented here because Android uses ManagePasswordsState as a data source
+  // for account chooser.
+  PasswordDialogController::FormsVector locals;
+  if (!local_credentials[0]->is_public_suffix_match)
+    locals = CopyFormVector(local_credentials);
+  passwords_data_.OnRequestCredentials(std::move(locals), origin);
   passwords_data_.set_credentials_callback(callback);
   dialog_controller_.reset(new PasswordDialogControllerImpl(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
       this));
   dialog_controller_->ShowAccountChooser(
       CreateAccountChooser(dialog_controller_.get()),
-      std::move(locals), std::move(federations));
+      std::move(local_credentials));
   UpdateBubbleAndIconVisibility();
   return true;
 }
@@ -254,11 +255,6 @@ ManagePasswordsUIController::GetCurrentForms() const {
   return passwords_data_.GetCurrentForms();
 }
 
-const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-ManagePasswordsUIController::GetFederatedForms() const {
-  return passwords_data_.federation_providers_forms();
-}
-
 const password_manager::InteractionsStats*
 ManagePasswordsUIController::GetCurrentInteractionStats() const {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, GetState());
@@ -285,16 +281,19 @@ void ManagePasswordsUIController::OnBubbleHidden() {
     UpdateBubbleAndIconVisibility();
 }
 
-void ManagePasswordsUIController::OnNoInteractionOnUpdate() {
-  if (GetState() != password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
+void ManagePasswordsUIController::OnNoInteraction() {
+  if (GetState() != password_manager::ui::PENDING_PASSWORD_UPDATE_STATE &&
+      GetState() != password_manager::ui::PENDING_PASSWORD_STATE) {
     // Do nothing if the state was changed. It can happen for example when the
-    // update bubble is active and a page navigation happens.
+    // bubble is active and a page navigation happens.
     return;
   }
+  bool is_update =
+      GetState() == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
   DCHECK(form_manager);
-  form_manager->OnNoInteractionOnUpdate();
+  form_manager->OnNoInteraction(is_update);
 }
 
 void ManagePasswordsUIController::OnNopeUpdateClicked() {
@@ -340,15 +339,6 @@ void ManagePasswordsUIController::ChooseCredential(
   passwords_data_.ChooseCredential(&copy_form);
   passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
   UpdateBubbleAndIconVisibility();
-}
-
-void ManagePasswordsUIController::NavigateToExternalPasswordManager() {
-  chrome::NavigateParams params(
-      chrome::FindBrowserWithWebContents(web_contents()),
-      GURL(password_manager::kPasswordManagerAccountDashboardURL),
-      ui::PAGE_TRANSITION_LINK);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  chrome::Navigate(&params);
 }
 
 void ManagePasswordsUIController::NavigateToSmartLockHelpPage() {
@@ -404,7 +394,7 @@ void ManagePasswordsUIController::NeverSavePasswordInternal() {
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
   DCHECK(form_manager);
-  form_manager->PermanentlyBlacklist();
+  form_manager->OnNeverClicked();
 }
 
 void ManagePasswordsUIController::UpdateBubbleAndIconVisibility() {

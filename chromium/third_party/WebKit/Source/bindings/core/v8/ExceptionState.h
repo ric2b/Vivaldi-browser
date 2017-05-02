@@ -83,7 +83,7 @@ class CORE_EXPORT ExceptionState {
                  ContextType contextType,
                  const char* interfaceName)
       : ExceptionState(isolate, contextType, interfaceName, nullptr) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     switch (m_context) {
       case ConstructionContext:
       case EnumerationContext:
@@ -94,21 +94,8 @@ class CORE_EXPORT ExceptionState {
       default:
         NOTREACHED();
     }
-#endif  // ENABLE(ASSERT)
+#endif  // DCHECK_IS_ON()
   }
-
-  ExceptionState(ContextType context,
-                 const char* propertyName,
-                 const char* interfaceName,
-                 const v8::Local<v8::Object>& creationContext,
-                 v8::Isolate* isolate)  // DEPRECATED
-      : ExceptionState(isolate, context, interfaceName, propertyName) {}
-
-  ExceptionState(ContextType context,
-                 const char* interfaceName,
-                 const v8::Local<v8::Object>& creationContext,
-                 v8::Isolate* isolate)  // DEPRECATED
-      : ExceptionState(isolate, context, interfaceName) {}
 
   ~ExceptionState() {
     if (!m_exception.isEmpty()) {
@@ -117,7 +104,7 @@ class CORE_EXPORT ExceptionState {
     }
   }
 
-  virtual void throwDOMException(const ExceptionCode&, const String& message);
+  virtual void throwDOMException(ExceptionCode, const String& message);
   virtual void throwRangeError(const String& message);
   virtual void throwSecurityError(const String& sanitizedMessage,
                                   const String& unsanitizedMessage = String());
@@ -159,7 +146,8 @@ class CORE_EXPORT ExceptionState {
   String m_message;
   const char* m_propertyName;
   const char* m_interfaceName;
-  // The exception is empty when it was thrown through TrackExceptionState.
+  // The exception is empty when it was thrown through
+  // DummyExceptionStateForTesting.
   ScopedPersistent<v8::Value> m_exception;
   v8::Isolate* m_isolate;
 };
@@ -168,44 +156,66 @@ class CORE_EXPORT ExceptionState {
 // Should be used if an exception must not be thrown.
 class CORE_EXPORT NonThrowableExceptionState final : public ExceptionState {
  public:
-  NonThrowableExceptionState()
-      : ExceptionState(nullptr,
-                       ExceptionState::UnknownContext,
-                       nullptr,
-                       nullptr) {}
+  NonThrowableExceptionState();
+  NonThrowableExceptionState(const char*, int);
 
-  void throwDOMException(const ExceptionCode&, const String& message) override;
+  void throwDOMException(ExceptionCode, const String& message) override;
   void throwTypeError(const String& message) override;
   void throwSecurityError(const String& sanitizedMessage,
                           const String& unsanitizedMessage) override;
   void throwRangeError(const String& message) override;
   void rethrowV8Exception(v8::Local<v8::Value>) override;
+  ExceptionState& returnThis() { return *this; }
+
+ private:
+  const char* m_file;
+  const int m_line;
 };
 
-// TrackExceptionState never actually throws an exception, but just records
-// whether a call site tried to throw an exception or not.  Should be used
-// if any exceptions must be ignored.
-class CORE_EXPORT TrackExceptionState final : public ExceptionState {
+// Syntax sugar for NonThrowableExceptionState.
+// This can be used as a default value of an ExceptionState parameter like this:
+//
+//     Node* removeChild(Node*, ExceptionState& = ASSERT_NO_EXCEPTION);
+#if DCHECK_IS_ON()
+#define ASSERT_NO_EXCEPTION \
+  (::blink::NonThrowableExceptionState(__FILE__, __LINE__).returnThis())
+#else
+#define ASSERT_NO_EXCEPTION \
+  (::blink::DummyExceptionStateForTesting().returnThis())
+#endif
+
+// DummyExceptionStateForTesting ignores all thrown exceptions. You should not
+// use DummyExceptionStateForTesting in production code, where you need to
+// handle all exceptions properly. If you really need to ignore exceptions in
+// production code for some special reason, explicitly call clearException().
+class CORE_EXPORT DummyExceptionStateForTesting final : public ExceptionState {
  public:
-  TrackExceptionState()
+  DummyExceptionStateForTesting()
       : ExceptionState(nullptr,
                        ExceptionState::UnknownContext,
                        nullptr,
                        nullptr) {}
-  ~TrackExceptionState() {
+  ~DummyExceptionStateForTesting() {
     // Prevent the base class throw an exception.
     if (hadException()) {
       clearException();
     }
   }
-
-  void throwDOMException(const ExceptionCode&, const String& message) override;
+  void throwDOMException(ExceptionCode, const String& message) override;
   void throwTypeError(const String& message) override;
   void throwSecurityError(const String& sanitizedMessage,
                           const String& unsanitizedMessage) override;
   void throwRangeError(const String& message) override;
   void rethrowV8Exception(v8::Local<v8::Value>) override;
+  ExceptionState& returnThis() { return *this; }
 };
+
+// Syntax sugar for DummyExceptionStateForTesting.
+// This can be used as a default value of an ExceptionState parameter like this:
+//
+//     Node* removeChild(Node*, ExceptionState& = IGNORE_EXCEPTION_FOR_TESTING);
+#define IGNORE_EXCEPTION_FOR_TESTING \
+  (::blink::DummyExceptionStateForTesting().returnThis())
 
 }  // namespace blink
 

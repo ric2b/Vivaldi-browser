@@ -40,17 +40,19 @@
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTableElement.h"
+#include "core/layout/LayoutBox.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/Histogram.h"
 #include "platform/SerializedResource.h"
 #include "platform/SharedBuffer.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/mhtml/MHTMLParser.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
-#include "platform/tracing/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
@@ -65,6 +67,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include "wtf/Assertions.h"
+#include "wtf/Deque.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
@@ -75,18 +78,30 @@ namespace blink {
 
 namespace {
 
+const int kPopupOverlayZIndexThreshold = 50;
+
 class MHTMLFrameSerializerDelegate final : public FrameSerializer::Delegate {
   WTF_MAKE_NONCOPYABLE(MHTMLFrameSerializerDelegate);
 
  public:
   explicit MHTMLFrameSerializerDelegate(
       WebFrameSerializer::MHTMLPartsGenerationDelegate&);
-  bool shouldIgnoreAttribute(const Attribute&) override;
+  bool shouldIgnoreElement(const Element&) override;
+  bool shouldIgnoreAttribute(const Element&, const Attribute&) override;
   bool rewriteLink(const Element&, String& rewrittenLink) override;
   bool shouldSkipResourceWithURL(const KURL&) override;
-  bool shouldSkipResource(const Resource&) override;
+  bool shouldSkipResource(
+      FrameSerializer::ResourceHasCacheControlNoStoreHeader) override;
+  Vector<Attribute> getCustomAttributes(const Element&) override;
 
  private:
+  bool shouldIgnoreHiddenElement(const Element&);
+  bool shouldIgnorePopupOverlayElement(const Element&);
+  void getCustomAttributesForImageElement(const HTMLImageElement&,
+                                          Vector<Attribute>*);
+  void getCustomAttributesForFormControlElement(const Element&,
+                                                Vector<Attribute>*);
+
   WebFrameSerializer::MHTMLPartsGenerationDelegate& m_webDelegate;
 };
 
@@ -94,13 +109,79 @@ MHTMLFrameSerializerDelegate::MHTMLFrameSerializerDelegate(
     WebFrameSerializer::MHTMLPartsGenerationDelegate& webDelegate)
     : m_webDelegate(webDelegate) {}
 
+bool MHTMLFrameSerializerDelegate::shouldIgnoreElement(const Element& element) {
+  if (shouldIgnoreHiddenElement(element))
+    return true;
+  if (m_webDelegate.removePopupOverlay() &&
+      shouldIgnorePopupOverlayElement(element)) {
+    return true;
+  }
+  return false;
+}
+
+bool MHTMLFrameSerializerDelegate::shouldIgnoreHiddenElement(
+    const Element& element) {
+  // Do not include elements that are are set to hidden without affecting layout
+  // by the page. For those elements that are hidden by default, they will not
+  // be excluded:
+  // 1) All elements that are head or part of head, including head, meta, style,
+  //    link and etc.
+  // 2) Some specific elements in body: meta, style, datalist, option and etc.
+  if (element.layoutObject())
+    return false;
+  if (isHTMLHeadElement(element) || isHTMLMetaElement(element) ||
+      isHTMLStyleElement(element) || isHTMLDataListElement(element) ||
+      isHTMLOptionElement(element)) {
+    return false;
+  }
+  Element* parent = element.parentElement();
+  return parent && !isHTMLHeadElement(parent);
+}
+
+bool MHTMLFrameSerializerDelegate::shouldIgnorePopupOverlayElement(
+    const Element& element) {
+  // The element should be visible.
+  LayoutBox* box = element.layoutBox();
+  if (!box)
+    return false;
+
+  // The bounding box of the element should contain center point of the
+  // viewport.
+  LocalDOMWindow* window = element.document().domWindow();
+  DCHECK(window);
+  LayoutPoint centerPoint(window->innerWidth() / 2, window->innerHeight() / 2);
+  if (!box->frameRect().contains(centerPoint))
+    return false;
+
+  // The z-index should be greater than the threshold.
+  if (box->style()->zIndex() < kPopupOverlayZIndexThreshold)
+    return false;
+
+  return true;
+}
+
 bool MHTMLFrameSerializerDelegate::shouldIgnoreAttribute(
+    const Element& element,
     const Attribute& attribute) {
   // TODO(fgorski): Presence of srcset attribute causes MHTML to not display
   // images, as only the value of src is pulled into the archive. Discarding
   // srcset prevents the problem. Long term we should make sure to MHTML plays
   // nicely with srcset.
-  return attribute.localName() == HTMLNames::srcsetAttr;
+  if (attribute.localName() == HTMLNames::srcsetAttr)
+    return true;
+
+  // If srcdoc attribute for frame elements will be rewritten as src attribute
+  // containing link instead of html contents, don't ignore the attribute.
+  // Bail out now to avoid the check in Element::isScriptingAttribute.
+  bool isSrcDocAttribute = isHTMLFrameElementBase(element) &&
+                           attribute.name() == HTMLNames::srcdocAttr;
+  String newLinkForTheElement;
+  if (isSrcDocAttribute && rewriteLink(element, newLinkForTheElement))
+    return false;
+
+  // Do not include attributes that contain javascript. This is because the
+  // script will not be executed when a MHTML page is being loaded.
+  return element.isScriptingAttribute(attribute);
 }
 
 bool MHTMLFrameSerializerDelegate::rewriteLink(const Element& element,
@@ -144,11 +225,76 @@ bool MHTMLFrameSerializerDelegate::shouldSkipResourceWithURL(const KURL& url) {
 }
 
 bool MHTMLFrameSerializerDelegate::shouldSkipResource(
-    const Resource& resource) {
+    FrameSerializer::ResourceHasCacheControlNoStoreHeader
+        hasCacheControlNoStoreHeader) {
   return m_webDelegate.cacheControlPolicy() ==
              WebFrameSerializerCacheControlPolicy::
                  SkipAnyFrameOrResourceMarkedNoStore &&
-         resource.hasCacheControlNoStoreHeader();
+         hasCacheControlNoStoreHeader ==
+             FrameSerializer::HasCacheControlNoStoreHeader;
+}
+
+Vector<Attribute> MHTMLFrameSerializerDelegate::getCustomAttributes(
+    const Element& element) {
+  Vector<Attribute> attributes;
+
+  if (isHTMLImageElement(element)) {
+    getCustomAttributesForImageElement(toHTMLImageElement(element),
+                                       &attributes);
+  } else if (element.isFormControlElement()) {
+    getCustomAttributesForFormControlElement(element, &attributes);
+  }
+
+  return attributes;
+}
+
+void MHTMLFrameSerializerDelegate::getCustomAttributesForImageElement(
+    const HTMLImageElement& element,
+    Vector<Attribute>* attributes) {
+  // Currently only the value of src is pulled into the archive and the srcset
+  // attribute is ignored (see shouldIgnoreAttribute() above). If the device
+  // has a higher DPR, a different image from srcset could be loaded instead.
+  // When this occurs, we should provide the rendering width and height for
+  // <img> element if not set.
+
+  // The image should be loaded and participate the layout.
+  ImageResourceContent* image = element.cachedImage();
+  if (!image || !image->hasImage() || image->errorOccurred() ||
+      !element.layoutObject()) {
+    return;
+  }
+
+  // The width and height attributes should not be set.
+  if (element.fastHasAttribute(HTMLNames::widthAttr) ||
+      element.fastHasAttribute(HTMLNames::heightAttr)) {
+    return;
+  }
+
+  // Check if different image is loaded. naturalWidth/naturalHeight will return
+  // the image size adjusted with current DPR.
+  if (((int)element.naturalWidth()) == image->getImage()->width() &&
+      ((int)element.naturalHeight()) == image->getImage()->height()) {
+    return;
+  }
+
+  Attribute widthAttribute(HTMLNames::widthAttr,
+                           AtomicString::number(element.layoutBoxWidth()));
+  attributes->push_back(widthAttribute);
+  Attribute heightAttribute(HTMLNames::heightAttr,
+                            AtomicString::number(element.layoutBoxHeight()));
+  attributes->push_back(heightAttribute);
+}
+
+void MHTMLFrameSerializerDelegate::getCustomAttributesForFormControlElement(
+    const Element& element,
+    Vector<Attribute>* attributes) {
+  // Disable all form elements in MTHML to tell the user that the form cannot be
+  // worked on. MHTML is loaded in full sandboxing mode which disable the form
+  // submission and script execution.
+  if (element.fastHasAttribute(HTMLNames::disabledAttr))
+    return;
+  Attribute disabledAttribute(HTMLNames::disabledAttr, "");
+  attributes->push_back(disabledAttribute);
 }
 
 bool cacheControlNoStoreHeaderPresent(
@@ -159,7 +305,7 @@ bool cacheControlNoStoreHeaderPresent(
     return true;
 
   const ResourceRequest& request =
-      webLocalFrameImpl.dataSource()->request().toResourceRequest();
+      webLocalFrameImpl.dataSource()->getRequest().toResourceRequest();
   return request.cacheControlContainsNoStore();
 }
 
@@ -232,7 +378,7 @@ WebThreadSafeData WebFrameSerializer::generateMHTMLParts(
   // Serialize.
   TRACE_EVENT_BEGIN0("page-serialization",
                      "WebFrameSerializer::generateMHTMLParts serializing");
-  Vector<SerializedResource> resources;
+  Deque<SerializedResource> resources;
   {
     SCOPED_BLINK_UMA_HISTOGRAM_TIMER(
         "PageSerialization.MhtmlGeneration.SerializationTime.SingleFrame");
@@ -240,31 +386,32 @@ WebThreadSafeData WebFrameSerializer::generateMHTMLParts(
     FrameSerializer serializer(resources, coreDelegate);
     serializer.serializeFrame(*frame);
   }
+
   TRACE_EVENT_END1("page-serialization",
                    "WebFrameSerializer::generateMHTMLParts serializing",
                    "resource count",
                    static_cast<unsigned long long>(resources.size()));
 
-  // Get Content-ID for the frame being serialized.
-  String frameContentID = webDelegate->getContentID(webFrame);
+  // There was an error serializing the frame (e.g. of an image resource).
+  if (resources.isEmpty())
+    return WebThreadSafeData();
 
-  // Encode serializer's output as MHTML.
+  // Encode serialized resources as MHTML.
   RefPtr<RawData> output = RawData::create();
   {
     SCOPED_BLINK_UMA_HISTOGRAM_TIMER(
         "PageSerialization.MhtmlGeneration.EncodingTime.SingleFrame");
-    bool isFirstResource = true;
-    for (const SerializedResource& resource : resources) {
+    // Frame is the 1st resource (see FrameSerializer::serializeFrame doc
+    // comment). Frames get a Content-ID header.
+    MHTMLArchive::generateMHTMLPart(
+        boundary, webDelegate->getContentID(webFrame), encodingPolicy,
+        resources.takeFirst(), *output->mutableData());
+    while (!resources.isEmpty()) {
       TRACE_EVENT0("page-serialization",
                    "WebFrameSerializer::generateMHTMLParts encoding");
-      // Frame is the 1st resource (see FrameSerializer::serializeFrame doc
-      // comment). Frames get a Content-ID header.
-      String contentID = isFirstResource ? frameContentID : String();
-
-      MHTMLArchive::generateMHTMLPart(boundary, contentID, encodingPolicy,
-                                      resource, *output->mutableData());
-
-      isFirstResource = false;
+      MHTMLArchive::generateMHTMLPart(boundary, String(), encodingPolicy,
+                                      resources.takeFirst(),
+                                      *output->mutableData());
     }
   }
   return output.release();

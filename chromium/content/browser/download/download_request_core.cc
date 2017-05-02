@@ -181,6 +181,14 @@ std::unique_ptr<net::URLRequest> DownloadRequestCore::CreateRequestOnIOThread(
         "If-Range", has_etag ? params->etag() : params->last_modified(), true);
   }
 
+  // Downloads are treated as top level navigations. Hence the first-party
+  // origin for cookies is always based on the target URL and is updated on
+  // redirects.
+  request->set_first_party_for_cookies(params->url());
+  request->set_first_party_url_policy(
+      net::URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT);
+  request->set_initiator(params->initiator());
+
   for (const auto& header : params->request_headers())
     request->SetExtraRequestHeaderByName(header.first, header.second,
                                          false /*overwrite*/);
@@ -194,7 +202,6 @@ DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
     : delegate_(delegate),
       request_(request),
       download_id_(DownloadItem::kInvalidId),
-      last_buffer_size_(0),
       bytes_read_(0),
       pause_count_(0),
       was_deferred_(false),
@@ -226,9 +233,6 @@ DownloadRequestCore::~DownloadRequestCore() {
   // Remove output stream callback if a stream exists.
   if (stream_writer_)
     stream_writer_->RegisterCallback(base::Closure());
-
-  UMA_HISTOGRAM_TIMES("SB2.DownloadDuration",
-                      base::TimeTicks::Now() - download_start_time_);
 }
 
 std::unique_ptr<DownloadCreateInfo>
@@ -340,6 +344,7 @@ bool DownloadRequestCore::OnResponseStarted(
 
   RecordDownloadMimeType(create_info->mime_type);
   RecordDownloadContentDisposition(create_info->content_disposition);
+  RecordDownloadSourcePageTransitionType(create_info->transition_type);
 
   delegate_->OnStart(std::move(create_info), std::move(stream_reader),
                      base::ResetAndReturn(&on_started_callback_));
@@ -368,7 +373,6 @@ bool DownloadRequestCore::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
   DCHECK(!read_buffer_.get());
 
   *buf_size = min_size < 0 ? kReadBufSize : min_size;
-  last_buffer_size_ = *buf_size;
   read_buffer_ = new net::IOBuffer(*buf_size);
   *buf = read_buffer_.get();
   return true;
@@ -378,20 +382,6 @@ bool DownloadRequestCore::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
 bool DownloadRequestCore::OnReadCompleted(int bytes_read, bool* defer) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(read_buffer_.get());
-
-  base::TimeTicks now(base::TimeTicks::Now());
-  if (!last_read_time_.is_null()) {
-    double seconds_since_last_read = (now - last_read_time_).InSecondsF();
-    if (now == last_read_time_)
-      // Use 1/10 ms as a "very small number" so that we avoid
-      // divide-by-zero error and still record a very high potential bandwidth.
-      seconds_since_last_read = 0.00001;
-
-    double actual_bandwidth = (bytes_read) / seconds_since_last_read;
-    double potential_bandwidth = last_buffer_size_ / seconds_since_last_read;
-    RecordBandwidth(actual_bandwidth, potential_bandwidth);
-  }
-  last_read_time_ = now;
 
   if (!bytes_read)
     return true;
@@ -403,7 +393,7 @@ bool DownloadRequestCore::OnReadCompleted(int bytes_read, bool* defer) {
   if (!stream_writer_->Write(read_buffer_, bytes_read)) {
     PauseRequest();
     *defer = was_deferred_ = true;
-    last_stream_pause_time_ = now;
+    last_stream_pause_time_ = base::TimeTicks::Now();
   }
 
   read_buffer_ = NULL;  // Drop our reference.
@@ -620,7 +610,7 @@ DownloadInterruptReason DownloadRequestCore::HandleSuccessfulServerResponse(
     int64_t first_byte = -1;
     int64_t last_byte = -1;
     int64_t length = -1;
-    if (!http_headers.GetContentRange(&first_byte, &last_byte, &length))
+    if (!http_headers.GetContentRangeFor206(&first_byte, &last_byte, &length))
       return DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT;
     DCHECK_GE(first_byte, 0);
 

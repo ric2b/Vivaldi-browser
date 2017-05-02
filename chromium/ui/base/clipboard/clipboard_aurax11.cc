@@ -18,7 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/singleton.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -678,7 +678,10 @@ ClipboardAuraX11::ClipboardAuraX11() : aurax11_details_(new AuraX11Details) {
 
 ClipboardAuraX11::~ClipboardAuraX11() {
   DCHECK(CalledOnValidThread());
+}
 
+void ClipboardAuraX11::OnPreShutdown() {
+  DCHECK(CalledOnValidThread());
   aurax11_details_->StoreCopyPasteDataAndWait();
 }
 

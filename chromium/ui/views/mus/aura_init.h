@@ -43,8 +43,12 @@ class VIEWS_MUS_EXPORT AuraInit {
     // Indicates AuraInit should target using aura with mus.
     AURA_MUS,
 
+    // Indicates AuraInit should target using aura with mus, for a Window
+    // Manager client.
+    AURA_MUS_WINDOW_MANAGER,
+
     // Indicates AuraInit should target using ui::Window.
-    UI,
+    UI
   };
 
   // |resource_file| is the file to load strings and 1x icons from.
@@ -71,8 +75,8 @@ class VIEWS_MUS_EXPORT AuraInit {
   const std::string resource_file_;
   const std::string resource_file_200_;
 
-  std::unique_ptr<MusClient> mus_client_;
   std::unique_ptr<aura::Env> env_;
+  std::unique_ptr<MusClient> mus_client_;
   std::unique_ptr<ViewsDelegate> views_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AuraInit);

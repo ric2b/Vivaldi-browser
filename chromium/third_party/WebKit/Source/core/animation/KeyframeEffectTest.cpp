@@ -67,6 +67,8 @@ class AnimationKeyframeEffectV8Test : public KeyframeEffectTest {
 
 TEST_F(AnimationKeyframeEffectV8Test, CanCreateAnAnimation) {
   V8TestingScope scope;
+  NonThrowableExceptionState exceptionState;
+
   Vector<Dictionary> jsKeyframes;
   v8::Local<v8::Object> keyframe1 = v8::Object::New(scope.isolate());
   v8::Local<v8::Object> keyframe2 = v8::Object::New(scope.isolate());
@@ -80,8 +82,8 @@ TEST_F(AnimationKeyframeEffectV8Test, CanCreateAnAnimation) {
   setV8ObjectPropertyAsString(scope.isolate(), keyframe2, "easing",
                               "cubic-bezier(1, 1, 0.3, 0.3)");
 
-  jsKeyframes.append(Dictionary(scope.isolate(), keyframe1));
-  jsKeyframes.append(Dictionary(scope.isolate(), keyframe2));
+  jsKeyframes.push_back(Dictionary(scope.isolate(), keyframe1, exceptionState));
+  jsKeyframes.push_back(Dictionary(scope.isolate(), keyframe2, exceptionState));
 
   String value1;
   ASSERT_TRUE(DictionaryHelper::get(jsKeyframes[0], "width", value1));
@@ -152,7 +154,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedGetters) {
   setV8ObjectPropertyAsString(scope.isolate(), timingInput, "easing",
                               "ease-in-out");
   KeyframeEffectOptions timingInputDictionary;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   V8KeyframeEffectOptions::toImpl(scope.isolate(), timingInput,
                                   timingInputDictionary, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
@@ -179,7 +181,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedDurationGetter) {
   setV8ObjectPropertyAsNumber(scope.isolate(), timingInputWithDuration,
                               "duration", 2.5);
   KeyframeEffectOptions timingInputDictionaryWithDuration;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   V8KeyframeEffectOptions::toImpl(scope.isolate(), timingInputWithDuration,
                                   timingInputDictionaryWithDuration,
                                   exceptionState);
@@ -220,7 +222,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedSetters) {
   Vector<Dictionary, 0> jsKeyframes;
   v8::Local<v8::Object> timingInput = v8::Object::New(scope.isolate());
   KeyframeEffectOptions timingInputDictionary;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   V8KeyframeEffectOptions::toImpl(scope.isolate(), timingInput,
                                   timingInputDictionary, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
@@ -270,7 +272,7 @@ TEST_F(AnimationKeyframeEffectV8Test, SetSpecifiedDuration) {
   Vector<Dictionary, 0> jsKeyframes;
   v8::Local<v8::Object> timingInput = v8::Object::New(scope.isolate());
   KeyframeEffectOptions timingInputDictionary;
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   V8KeyframeEffectOptions::toImpl(scope.isolate(), timingInput,
                                   timingInputDictionary, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());

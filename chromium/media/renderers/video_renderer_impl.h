@@ -79,6 +79,9 @@ class MEDIA_EXPORT VideoRendererImpl
   size_t frames_queued_for_testing() const {
     return algorithm_->frames_queued();
   }
+  size_t effective_frames_queued_for_testing() const {
+    return algorithm_->effective_frames_queued();
+  }
 
   // VideoRendererSink::RenderCallback implementation.
   scoped_refptr<VideoFrame> Render(base::TimeTicks deadline_min,
@@ -288,6 +291,10 @@ class MEDIA_EXPORT VideoRendererImpl
 
   // Indicates if we've painted the first valid frame after StartPlayingFrom().
   bool painted_first_frame_;
+
+  // Current maximum for buffered frames, increases up to a limit upon each
+  // call to OnTimeStopped() when we're in the BUFFERING_HAVE_NOTHING state.
+  size_t max_buffered_frames_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<VideoRendererImpl> weak_factory_;

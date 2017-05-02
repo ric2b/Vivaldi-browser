@@ -50,9 +50,10 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   ~TaskSchedulerImpl() override;
 
   // TaskScheduler:
-  void PostTaskWithTraits(const tracked_objects::Location& from_here,
-                          const TaskTraits& traits,
-                          const Closure& task) override;
+  void PostDelayedTaskWithTraits(const tracked_objects::Location& from_here,
+                                 const TaskTraits& traits,
+                                 const Closure& task,
+                                 TimeDelta delay) override;
   scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(
       const TaskTraits& traits) override;
   scoped_refptr<SequencedTaskRunner> CreateSequencedTaskRunnerWithTraits(
@@ -63,8 +64,8 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   void Shutdown() override;
   void FlushForTesting() override;
 
-  // Joins all threads of this scheduler. Tasks that are already running are
-  // allowed to complete their execution. This can only be called once.
+  // Joins all threads. Tasks that are already running are allowed to complete
+  // their execution. This can only be called once.
   void JoinForTesting();
 
  private:

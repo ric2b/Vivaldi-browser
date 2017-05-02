@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -50,12 +50,12 @@ class VrController {
 
   const gvr::Quatf Orientation();
 
-  bool IsTouchDown();
+  bool TouchDownHappened();
 
-  bool IsTouchUp();
+  bool TouchUpHappened();
 
-  bool IsButtonUp(gvr::ControllerButton button);
-  bool IsButtonDown(gvr::ControllerButton button);
+  bool ButtonUpHappened(gvr::ControllerButton button);
+  bool ButtonDownHappened(gvr::ControllerButton button);
 
   bool IsConnected();
 

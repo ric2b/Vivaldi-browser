@@ -7,6 +7,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/debug/lap_timer.h"
@@ -216,7 +217,6 @@ class TileManagerPerfTest : public TestLayerTreeHostBase {
 
     // Ensure that we start with blank trees and no tiles.
     host_impl()->ResetTreesForTesting();
-    tile_manager()->FreeResourcesAndCleanUpReleasedTilesForTesting();
 
     gfx::Size layer_bounds(width, height);
     gfx::Size viewport(width / 5, height / 5);

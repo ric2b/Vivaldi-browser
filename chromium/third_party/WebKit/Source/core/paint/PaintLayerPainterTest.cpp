@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "core/paint/PaintLayerPainter.h"
+
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/PaintControllerPaintTest.h"
@@ -29,6 +31,12 @@ class PaintLayerPainterTest
   PaintLayerPainterTest()
       : ScopedRootLayerScrollingForTest(GetParam().rootLayerScrolling),
         PaintControllerPaintTestBase(GetParam().slimmingPaintV2) {}
+
+ private:
+  void SetUp() override {
+    PaintControllerPaintTestBase::SetUp();
+    enableCompositing();
+  }
 };
 
 INSTANTIATE_TEST_CASE_P(
@@ -215,11 +223,6 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceForSVGRoot) {
   LayoutObject& rect = *document().getElementById("rect")->layoutObject();
   LayoutObject& div = *document().getElementById("div")->layoutObject();
 
-  DisplayItem::Type clipBoxBegin =
-      DisplayItem::paintPhaseToClipBoxType(PaintPhaseForeground);
-  DisplayItem::Type clipBoxEnd =
-      DisplayItem::clipTypeToEndClipType(clipBoxBegin);
-
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
       // SPv2 slips the clip box (see BoxClipper).
@@ -261,11 +264,12 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceForSVGRoot) {
         TestDisplayItem(layoutView(), documentBackgroundType),
         TestDisplayItem(htmlLayer, DisplayItem::kSubsequence),
         TestDisplayItem(svgLayer, DisplayItem::kSubsequence),
-        TestDisplayItem(svg, clipBoxBegin),
+        TestDisplayItem(svg, DisplayItem::kClipLayerForeground),
         TestDisplayItem(svg, DisplayItem::kBeginTransform),
         TestDisplayItem(rect, foregroundType),
         TestDisplayItem(svg, DisplayItem::kEndTransform),
-        TestDisplayItem(svg, clipBoxEnd),
+        TestDisplayItem(svg, DisplayItem::clipTypeToEndClipType(
+                                 DisplayItem::kClipLayerForeground)),
         TestDisplayItem(svgLayer, DisplayItem::kEndSubsequence),
         TestDisplayItem(htmlLayer, DisplayItem::kEndSubsequence));
   }
@@ -329,11 +333,12 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceForSVGRoot) {
         TestDisplayItem(layoutView(), documentBackgroundType),
         TestDisplayItem(htmlLayer, DisplayItem::kSubsequence),
         TestDisplayItem(svgLayer, DisplayItem::kSubsequence),
-        TestDisplayItem(svg, clipBoxBegin),
+        TestDisplayItem(svg, DisplayItem::kClipLayerForeground),
         TestDisplayItem(svg, DisplayItem::kBeginTransform),
         TestDisplayItem(rect, foregroundType),
         TestDisplayItem(svg, DisplayItem::kEndTransform),
-        TestDisplayItem(svg, clipBoxEnd),
+        TestDisplayItem(svg, DisplayItem::clipTypeToEndClipType(
+                                 DisplayItem::kClipLayerForeground)),
         TestDisplayItem(svgLayer, DisplayItem::kEndSubsequence),
         TestDisplayItem(div, backgroundType),
         TestDisplayItem(htmlLayer, DisplayItem::kEndSubsequence),
@@ -1002,6 +1007,57 @@ TEST_P(PaintLayerPainterTest,
                      "position: relative; border-collapse: collapse");
   document().view()->updateAllLifecyclePhases();
   EXPECT_TRUE(layer.needsPaintPhaseDescendantBlockBackgrounds());
+}
+
+TEST_P(PaintLayerPainterTest, DontPaintWithTinyOpacity) {
+  setBodyInnerHTML(
+      "<div id='target' style='background: blue; opacity: 0.0001'></div>");
+  PaintLayer* targetLayer =
+      toLayoutBox(getLayoutObjectByElementId("target"))->layer();
+  PaintLayerPaintingInfo paintingInfo(nullptr, LayoutRect(),
+                                      GlobalPaintNormalPhase, LayoutSize());
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    EXPECT_FALSE(
+        PaintLayerPainter(*targetLayer).paintedOutputInvisible(paintingInfo));
+  } else {
+    EXPECT_TRUE(
+        PaintLayerPainter(*targetLayer).paintedOutputInvisible(paintingInfo));
+  }
+}
+
+TEST_P(PaintLayerPainterTest, DontPaintWithTinyOpacityAndBackdropFilter) {
+  setBodyInnerHTML(
+      "<div id='target' style='background: blue; opacity: 0.0001;"
+      "  backdrop-filter: blur(2px);'></div>");
+  PaintLayer* targetLayer =
+      toLayoutBox(getLayoutObjectByElementId("target"))->layer();
+  PaintLayerPaintingInfo paintingInfo(nullptr, LayoutRect(),
+                                      GlobalPaintNormalPhase, LayoutSize());
+  EXPECT_FALSE(
+      PaintLayerPainter(*targetLayer).paintedOutputInvisible(paintingInfo));
+}
+
+TEST_P(PaintLayerPainterTest, DoPaintWithCompositedTinyOpacity) {
+  setBodyInnerHTML(
+      "<div id='target' style='background: blue; opacity: 0.0001;"
+      " will-change: transform'></div>");
+  PaintLayer* targetLayer =
+      toLayoutBox(getLayoutObjectByElementId("target"))->layer();
+  PaintLayerPaintingInfo paintingInfo(nullptr, LayoutRect(),
+                                      GlobalPaintNormalPhase, LayoutSize());
+  EXPECT_FALSE(
+      PaintLayerPainter(*targetLayer).paintedOutputInvisible(paintingInfo));
+}
+
+TEST_P(PaintLayerPainterTest, DoPaintWithNonTinyOpacity) {
+  setBodyInnerHTML(
+      "<div id='target' style='background: blue; opacity: 0.1'></div>");
+  PaintLayer* targetLayer =
+      toLayoutBox(getLayoutObjectByElementId("target"))->layer();
+  PaintLayerPaintingInfo paintingInfo(nullptr, LayoutRect(),
+                                      GlobalPaintNormalPhase, LayoutSize());
+  EXPECT_FALSE(
+      PaintLayerPainter(*targetLayer).paintedOutputInvisible(paintingInfo));
 }
 
 }  // namespace blink

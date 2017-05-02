@@ -27,6 +27,8 @@
 
 namespace device {
 
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
+
 namespace {
 
 int8_t ToInt8(BluetoothTest::TestRSSI rssi) {
@@ -38,6 +40,8 @@ int8_t ToInt8(BluetoothTest::TestTxPower tx_power) {
 }
 
 }  // namespace
+
+#endif
 
 using UUIDSet = BluetoothDevice::UUIDSet;
 using ServiceDataMap = BluetoothDevice::ServiceDataMap;
@@ -947,7 +951,7 @@ TEST_F(BluetoothTest, BluetoothGattConnection_DisconnectInProgress) {
   // Disconnect all CreateGattConnection objects & create a new connection.
   // But, don't yet simulate the device disconnecting:
   ResetEventCounts();
-  for (BluetoothGattConnection* connection : gatt_connections_)
+  for (const auto& connection : gatt_connections_)
     connection->Disconnect();
   EXPECT_EQ(1, gatt_disconnection_attempts_);
 
@@ -962,7 +966,7 @@ TEST_F(BluetoothTest, BluetoothGattConnection_DisconnectInProgress) {
 
   // Actually disconnect:
   SimulateGattDisconnection(device);
-  for (BluetoothGattConnection* connection : gatt_connections_)
+  for (const auto& connection : gatt_connections_)
     EXPECT_FALSE(connection->IsConnected());
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
@@ -985,7 +989,7 @@ TEST_F(BluetoothTest, BluetoothGattConnection_SimulateDisconnect) {
   EXPECT_EQ(1, gatt_connection_attempts_);
   SimulateGattDisconnection(device);
   EXPECT_EQ(BluetoothDevice::ERROR_FAILED, last_connect_error_code_);
-  for (BluetoothGattConnection* connection : gatt_connections_)
+  for (const auto& connection : gatt_connections_)
     EXPECT_FALSE(connection->IsConnected());
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
@@ -1038,7 +1042,7 @@ TEST_F(BluetoothTest,
   EXPECT_EQ(1, gatt_disconnection_attempts_);
   SimulateGattDisconnection(device);
   EXPECT_EQ(BluetoothDevice::ERROR_FAILED, last_connect_error_code_);
-  for (BluetoothGattConnection* connection : gatt_connections_)
+  for (const auto& connection : gatt_connections_)
     EXPECT_FALSE(connection->IsConnected());
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
@@ -1123,7 +1127,7 @@ TEST_F(BluetoothTest, BluetoothGattConnection_ErrorAfterConnection) {
 #else
   EXPECT_EQ(BluetoothDevice::ERROR_AUTH_FAILED, last_connect_error_code_);
 #endif
-  for (BluetoothGattConnection* connection : gatt_connections_)
+  for (const auto& connection : gatt_connections_)
     EXPECT_FALSE(connection->IsConnected());
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)

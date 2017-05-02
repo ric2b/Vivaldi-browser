@@ -25,10 +25,6 @@
 
 using base::ResetAndReturn;
 
-namespace base {
-class SingleThreadTaskRunner;
-}
-
 namespace media {
 
 typedef base::Callback<void(int)> BytesDecodedCB;
@@ -42,6 +38,9 @@ class FakeVideoDecoder : public VideoDecoder {
                    int max_parallel_decoding_requests,
                    const BytesDecodedCB& bytes_decoded_cb);
   ~FakeVideoDecoder() override;
+
+  // Enables encrypted config supported. Must be called before Initialize().
+  void EnableEncryptedConfigSupport();
 
   // VideoDecoder implementation.
   std::string GetDisplayName() const override;
@@ -102,6 +101,8 @@ class FakeVideoDecoder : public VideoDecoder {
   const size_t decoding_delay_;
   const int max_parallel_decoding_requests_;
   BytesDecodedCB bytes_decoded_cb_;
+
+  bool supports_encrypted_config_ = false;
 
   State state_;
 

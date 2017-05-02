@@ -161,14 +161,14 @@ cr.define('cr.ui', function() {
     createChangeEvent: function(eventName) {
       var e = new Event(eventName);
       var indexes = [this.selectedIndexBefore_, this.selectedIndex_];
-      e.changes = indexes.filter(function(index) {
-        return index != -1;
-      }).map(function(index) {
-        return {
-          index: index,
-          selected: index == this.selectedIndex_
-        };
-      }, this);
+      e.changes =
+          indexes
+              .filter(function(index) {
+                return index != -1;
+              })
+              .map(function(index) {
+                return {index: index, selected: index == this.selectedIndex_};
+              }, this);
 
       return e;
     },
@@ -242,7 +242,5 @@ cr.define('cr.ui', function() {
     }
   };
 
-  return {
-    ListSingleSelectionModel: ListSingleSelectionModel
-  };
+  return {ListSingleSelectionModel: ListSingleSelectionModel};
 });

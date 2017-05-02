@@ -2,22 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_TOOLS_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
-#define NET_QUIC_TOOLS_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
+#ifndef NET_TOOLS_QUIC_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
+#define NET_TOOLS_QUIC_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
 
 #include <stddef.h>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "net/base/ip_endpoint.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_packet_writer.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 
 namespace net {
 
-class IPAddress;
 class QuicBlockedWriterInterface;
 class UDPServerSocket;
 struct WriteResult;
@@ -36,15 +34,15 @@ class QuicSimpleServerPacketWriter : public QuicPacketWriter {
   // Wraps WritePacket, and ensures that |callback| is run on successful write.
   WriteResult WritePacketWithCallback(const char* buffer,
                                       size_t buf_len,
-                                      const IPAddress& self_address,
-                                      const IPEndPoint& peer_address,
+                                      const QuicIpAddress& self_address,
+                                      const QuicSocketAddress& peer_address,
                                       PerPacketOptions* options,
                                       WriteCallback callback);
 
   WriteResult WritePacket(const char* buffer,
                           size_t buf_len,
-                          const IPAddress& self_address,
-                          const IPEndPoint& peer_address,
+                          const QuicIpAddress& self_address,
+                          const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
 
   void OnWriteComplete(int rv);
@@ -53,7 +51,8 @@ class QuicSimpleServerPacketWriter : public QuicPacketWriter {
   bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
-  QuicByteCount GetMaxPacketSize(const IPEndPoint& peer_address) const override;
+  QuicByteCount GetMaxPacketSize(
+      const QuicSocketAddress& peer_address) const override;
 
  private:
   UDPServerSocket* socket_;
@@ -74,4 +73,4 @@ class QuicSimpleServerPacketWriter : public QuicPacketWriter {
 
 }  // namespace net
 
-#endif  // NET_QUIC_TOOLS_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_
+#endif  // NET_TOOLS_QUIC_QUIC_SIMPLE_SERVER_PACKET_WRITER_H_

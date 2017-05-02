@@ -33,6 +33,7 @@ const char kExtensionID[] = "extension-%" PRIuS;
 const char kNumExtensionsCount[] = "num-extensions";
 
 const char kShutdownType[] = "shutdown-type";
+const char kBrowserUnpinTrace[] = "browser-unpin-trace";
 
 #if !defined(OS_ANDROID)
 const char kGPUVendorID[] = "gpu-venid";
@@ -58,6 +59,8 @@ const char kHungRendererReason[] = "hung-reason";
 
 const char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
 const char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
+
+const char kEnrolledToDomain[] = "enrolled-to-domain";
 #endif
 
 const char kInputEventFilterSendFailure[] = "input-event-filter-send-failure";
@@ -66,6 +69,8 @@ const char kPrinterInfo[] = "prn-info-%" PRIuS;
 
 #if defined(OS_CHROMEOS)
 const char kNumberOfUsers[] = "num-users";
+// Temporary for https://crbug.com/660960
+const char kLastGoodCloseStack[] = "last-good-close-stack";
 #endif
 
 #if defined(OS_MACOSX)
@@ -81,6 +86,8 @@ const char kNSException[] = "nsexception";
 const char kNSExceptionTrace[] = "nsexception_bt";
 
 const char kSendAction[] = "sendaction";
+
+const char kNSEvent[] = "nsevent";
 
 }  // namespace mac
 #endif
@@ -98,10 +105,8 @@ size_t RegisterChromeCrashKeys() {
   // The following keys may be chunked by the underlying crash logging system,
   // but ultimately constitute a single key-value pair.
   //
-  // If you're adding keys here, please also add them to the following lists:
-  // 1. //blimp/engine/app/blimp_engine_crash_keys.cc and
-  // 2. //chrome/app/chrome_crash_reporter_client_win.cc::
-  //    RegisterCrashKeysHelper().
+  // If you're adding keys here, please also add them to the following list:
+  // chrome/app/chrome_crash_reporter_client_win.cc::RegisterCrashKeysHelper().
   base::debug::CrashKey fixed_keys[] = {
 #if defined(OS_MACOSX) || defined(OS_WIN)
     { kMetricsClientId, kSmallSize },
@@ -114,6 +119,7 @@ size_t RegisterChromeCrashKeys() {
     { kVariations, kLargeSize },
     { kNumExtensionsCount, kSmallSize },
     { kShutdownType, kSmallSize },
+    { kBrowserUnpinTrace, kMediumSize },
 #if !defined(OS_ANDROID)
     { kGPUVendorID, kSmallSize },
     { kGPUDeviceID, kSmallSize },
@@ -133,6 +139,7 @@ size_t RegisterChromeCrashKeys() {
     { "discardable-memory-allocated", kSmallSize },
     { "discardable-memory-free", kSmallSize },
     { kFontKeyName, kSmallSize},
+    { "mojo-message-error", kMediumSize },
     { "ppapi_path", kMediumSize },
     { "subresource_url", kLargeSize },
     { "total-discardable-memory-allocated", kSmallSize },
@@ -143,10 +150,13 @@ size_t RegisterChromeCrashKeys() {
     { kHungRendererReason, kSmallSize },
     { kThirdPartyModulesLoaded, kSmallSize },
     { kThirdPartyModulesNotLoaded, kSmallSize },
+    { kEnrolledToDomain, kSmallSize },
 #endif
     { kInputEventFilterSendFailure, kSmallSize },
 #if defined(OS_CHROMEOS)
     { kNumberOfUsers, kSmallSize },
+    // Temporary for https://crbug.com/660960
+    { kLastGoodCloseStack, kMediumSize },
 #endif
 #if defined(OS_MACOSX)
     { mac::kFirstNSException, kMediumSize },
@@ -156,6 +166,7 @@ size_t RegisterChromeCrashKeys() {
     { mac::kNSException, kMediumSize },
     { mac::kNSExceptionTrace, kMediumSize },
     { mac::kSendAction, kMediumSize },
+    { mac::kNSEvent, kMediumSize },
     { mac::kZombie, kMediumSize },
     { mac::kZombieTrace, kMediumSize },
     // content/:
@@ -179,6 +190,11 @@ size_t RegisterChromeCrashKeys() {
 
     // gin/:
     { "v8-ignition", kSmallSize },
+
+    // sandbox/:
+#if defined(OS_LINUX)
+    { "seccomp-sigsys", kMediumSize },
+#endif
 
     // Temporary for http://crbug.com/575245.
     { "swapout_frame_id", kSmallSize },
@@ -234,18 +250,11 @@ size_t RegisterChromeCrashKeys() {
     // Temporary for https://crbug.com/616149.
     { "existing_extension_pref_value_type", crash_keys::kSmallSize },
 
-    // Temporary for https://crbug.com/630495.
-    { "swdh_register_cannot_host_url", crash_keys::kLargeSize },
-    { "swdh_register_cannot_scope_url", crash_keys::kLargeSize },
-    { "swdh_register_cannot_script_url", crash_keys::kLargeSize },
-
-    // Temporary for https://crbug.com/619294.
-    { "swdh_unregister_cannot_host_url", crash_keys::kLargeSize },
-    { "swdh_unregister_cannot_scope_url", crash_keys::kLargeSize },
-
-    // Temporary for https://crbug.com/630496.
-    { "swdh_get_registration_cannot_host_url", crash_keys::kLargeSize },
-    { "swdh_get_registration_cannot_document_url", crash_keys::kLargeSize },
+    // Temporary for https://crbug.com/668633.
+    { "swdh_set_hosted_version_worker_pid", crash_keys::kSmallSize },
+    { "swdh_set_hosted_version_host_pid", crash_keys::kSmallSize },
+    { "swdh_set_hosted_version_is_new_process", crash_keys::kSmallSize },
+    { "swdh_set_hosted_version_restart_count", crash_keys::kSmallSize },
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

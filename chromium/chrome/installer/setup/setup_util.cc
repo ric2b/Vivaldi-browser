@@ -9,10 +9,15 @@
 #include <windows.h>
 #include <stddef.h>
 
+#include <tlhelp32.h>
+
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <set>
 #include <string>
+
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -22,12 +27,11 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
@@ -36,66 +40,54 @@
 #include "chrome/installer/setup/user_hive_visitor.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/google_update_constants.h"
+#include "chrome/installer/util/google_update_settings.h"
+#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/master_preferences_constants.h"
+#include "chrome/installer/util/non_updating_app_registration_data.h"
+#include "chrome/installer/util/updating_app_registration_data.h"
 #include "chrome/installer/util/util_constants.h"
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff/bsdiff.h"
+
+#include "base/strings/stringprintf.h"
 
 namespace installer {
 
 namespace {
 
-// Returns true if product |type| cam be meaningfully installed without the
-// --multi-install flag.
-bool SupportsSingleInstall(BrowserDistribution::Type type) {
-  return (type == BrowserDistribution::CHROME_BROWSER
-#ifndef OMIT_CHROME_FRAME
-	   || type == BrowserDistribution::CHROME_FRAME
+// Event log providers registry location.
+constexpr wchar_t kEventLogProvidersRegPath[] =
+    L"SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\";
+
+// TODO(grt): use install_static::InstallDetails::Get().install_full_name() when
+// InstallDetails is initialized in the installer.
+base::string16 InstallFullName() {
+#if defined(GOOGLE_CHROME_BUILD)
+  base::string16 reg_path(L"Chrome");
+  if (InstallUtil::IsChromeSxSProcess())
+    reg_path.append(L" SxS");
+  return reg_path;
+#elif defined(VIVALDI_BUILD)
+  return base::string16(L"Vivaldi");
+#else
+  return base::string16(L"Chromium");
 #endif
-	   );
 }
 
 // Returns true if the "lastrun" value in |root|\|key_path| (a path to Chrome's
 // ClientState key for a user) indicates that Chrome has been used within the
 // last 28 days.
 bool IsActivelyUsedIn(HKEY root, const wchar_t* key_path) {
-  // This duplicates some logic in GoogleUpdateSettings::GetLastRunTime, which
-  // is suitable for use from the context of Chrome but not from the installer
-  // because it was implemented with the assumption that
-  // BrowserDistribution::GetDistribution() will always be the right thing.
-  // This is true in Chrome, but not in the installer in a multi-install world.
-  // Once multi-install goes away, this assumption will once again become true
-  // for the installer, and this new code here can then be deleted.
   VLOG(1) << "IsActivelyUsedIn probing " << root << "\\" << key_path;
-  base::win::RegKey key;
-  LONG result = key.Open(root, key_path, KEY_WOW64_32KEY | KEY_QUERY_VALUE);
-  if (result != ERROR_SUCCESS) {
-    ::SetLastError(result);
-    PLOG_IF(ERROR, result != ERROR_FILE_NOT_FOUND) << "Failed opening " << root
-                                                   << "\\" << key_path;
-    return false;
+  int days_ago_last_run = GoogleUpdateSettings::GetLastRunTime();
+  if (days_ago_last_run >= 0) {
+    VLOG(1) << "Found a user that last ran Chrome " << days_ago_last_run
+            << " days ago.";
+    return days_ago_last_run <= 28;
   }
-  base::string16 last_run_time_string;
-  result =
-      key.ReadValue(google_update::kRegLastRunTimeField, &last_run_time_string);
-  if (result != ERROR_SUCCESS) {
-    ::SetLastError(result);
-    PLOG_IF(ERROR, result != ERROR_FILE_NOT_FOUND)
-        << "Failed reading " << root << "\\" << key_path << "@"
-        << google_update::kRegLastRunTimeField;
-    return false;
-  }
-  int64_t last_run_time_value = 0;
-  if (!base::StringToInt64(last_run_time_string, &last_run_time_value))
-    return false;
-  base::Time last_run_time = base::Time::FromInternalValue(last_run_time_value);
-  int days_ago_last_run =
-      (base::Time::NowFromSystemTime() - last_run_time).InDays();
-  VLOG(1) << "Found a user that last ran Chrome " << days_ago_last_run
-          << " days ago.";
-  return days_ago_last_run <= 28;
+  return false;
 }
 
 // A visitor for user hives, run by VisitUserHives. |client_state_path| is the
@@ -113,6 +105,153 @@ bool OnUserHive(const base::string16& client_state_path,
   // Stop the iteration.
   *is_used = true;
   return false;
+}
+
+// "The binaries" once referred to the on-disk footprint of Chrome and/or Chrome
+// Frame when the products were configured to share such on-disk bits. Support
+// for this mode of install was dropped from ToT in December 2016. Remove any
+// stray bits in the registry leftover from such installs.
+void RemoveBinariesVersionKey(const InstallerState& installer_state) {
+  base::string16 path(MakeBinariesRegistrationData()->GetVersionKey());
+  if (base::win::RegKey(installer_state.root_key(), path.c_str(),
+                        KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+          .Valid()) {
+    const bool success = InstallUtil::DeleteRegistryKey(
+        installer_state.root_key(), path, KEY_WOW64_32KEY);
+    UMA_HISTOGRAM_BOOLEAN("Setup.Install.DeleteBinariesClientsKey", success);
+  }
+}
+
+// Remove leftover traces of multi-install Chrome Frame, if present. Once upon a
+// time, Google Chrome Frame could be co-installed with Chrome such that they
+// shared the same binaries on disk. Support for new installs of GCF was dropped
+// from ToT in December 2013. Remove any stray bits in the registry leftover
+// from an old multi-install GCF.
+void RemoveMultiChromeFrame(const InstallerState& installer_state) {
+// There never was a "Chromium Frame".
+#if defined(GOOGLE_CHROME_BUILD)
+  // To maximize cleanup, unconditionally delete GCF's Clients and ClientState
+  // keys unless single-install GCF is present. This condition is satisfied if
+  // both keys exist, Clients\pv contains a value, and
+  // ClientState\UninstallString contains a path including "\Chrome Frame\".
+  // Multi-install GCF would have had "\Chrome\", and anything else is garbage.
+
+  UpdatingAppRegistrationData gcf_data(
+      L"{8BA986DA-5100-405E-AA35-86F34A02ACBF}");
+  base::win::RegKey clients_key;
+  base::win::RegKey client_state_key;
+
+  const bool has_clients_key =
+      clients_key.Open(installer_state.root_key(),
+                       gcf_data.GetVersionKey().c_str(),
+                       KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS;
+  const bool has_client_state_key =
+      client_state_key.Open(installer_state.root_key(),
+                            gcf_data.GetStateKey().c_str(),
+                            KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS;
+  if (!has_clients_key && !has_client_state_key)
+    return;  // Nothing to check or to clean.
+
+  base::string16 value;
+  if (has_clients_key && has_client_state_key &&
+      clients_key.ReadValue(google_update::kRegVersionField, &value) ==
+          ERROR_SUCCESS &&
+      !value.empty() &&
+      client_state_key.ReadValue(kUninstallStringField, &value) ==
+          ERROR_SUCCESS &&
+      value.find(L"\\Chrome Frame\\") != base::string16::npos) {
+    return;  // Single-install Chrome Frame found.
+  }
+  client_state_key.Close();
+  clients_key.Close();
+
+  // Remnants of multi-install GCF or of a malformed GCF are present. Remove the
+  // Clients and ClientState keys so that Google Update ceases to check for
+  // updates, and the Programs and Features control panel entry to reduce user
+  // confusion.
+  constexpr int kOperations = 3;
+  int success_count = 0;
+
+  if (InstallUtil::DeleteRegistryKey(installer_state.root_key(),
+                                     gcf_data.GetVersionKey(),
+                                     KEY_WOW64_32KEY)) {
+    ++success_count;
+  }
+  if (InstallUtil::DeleteRegistryKey(installer_state.root_key(),
+                                     gcf_data.GetStateKey(), KEY_WOW64_32KEY)) {
+    ++success_count;
+  }
+  if (InstallUtil::DeleteRegistryKey(
+          installer_state.root_key(),
+          L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"
+          L"Google Chrome Frame",
+          KEY_WOW64_32KEY)) {
+    ++success_count;
+  }
+  DCHECK_LE(success_count, kOperations);
+
+  // Used for a histogram; do not reorder.
+  enum MultiChromeFrameRemovalResult {
+    ALL_FAILED = 0,
+    PARTIAL_SUCCESS = 1,
+    SUCCESS = 2,
+    NUM_RESULTS
+  };
+  MultiChromeFrameRemovalResult result =
+      (success_count == kOperations ? SUCCESS : (success_count ? PARTIAL_SUCCESS
+                                                               : ALL_FAILED));
+  UMA_HISTOGRAM_ENUMERATION("Setup.Install.MultiChromeFrameRemoved", result,
+                            NUM_RESULTS);
+#endif  // GOOGLE_CHROME_BUILD
+}
+
+void RemoveAppLauncherVersionKey(const InstallerState& installer_state) {
+// The app launcher was only registered for Google Chrome.
+#if defined(GOOGLE_CHROME_BUILD)
+  UpdatingAppRegistrationData reg_data(
+      L"{FDA71E6F-AC4C-4a00-8B70-9958A68906BF}");
+
+  base::string16 path(reg_data.GetVersionKey());
+  if (base::win::RegKey(installer_state.root_key(), path.c_str(),
+                        KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+          .Valid()) {
+    const bool succeeded = InstallUtil::DeleteRegistryKey(
+        installer_state.root_key(), path, KEY_WOW64_32KEY);
+    UMA_HISTOGRAM_BOOLEAN("Setup.Install.DeleteAppLauncherClientsKey",
+                          succeeded);
+  }
+#endif  // GOOGLE_CHROME_BUILD
+}
+
+void RemoveAppHostExe(const InstallerState& installer_state) {
+// The app host was only installed for Google Chrome.
+#if defined(GOOGLE_CHROME_BUILD)
+  base::FilePath app_host(
+      installer_state.target_path().Append(FILE_PATH_LITERAL("app_host.exe")));
+
+  if (base::PathExists(app_host)) {
+    const bool succeeded = base::DeleteFile(app_host, false);
+    UMA_HISTOGRAM_BOOLEAN("Setup.Install.DeleteAppHost", succeeded);
+  }
+#endif  // GOOGLE_CHROME_BUILD
+}
+
+void RemoveLegacyChromeAppCommands(const InstallerState& installer_state) {
+// These app commands were only registered for Google Chrome.
+#if defined(GOOGLE_CHROME_BUILD)
+  base::string16 path(GetRegistrationDataCommandKey(
+      installer_state.product().distribution()->GetAppRegistrationData(),
+      L"install-extension"));
+
+  if (base::win::RegKey(installer_state.root_key(), path.c_str(),
+                        KEY_QUERY_VALUE | KEY_WOW64_32KEY)
+          .Valid()) {
+    const bool succeeded = InstallUtil::DeleteRegistryKey(
+        installer_state.root_key(), path, KEY_WOW64_32KEY);
+    UMA_HISTOGRAM_BOOLEAN("Setup.Install.DeleteInstallExtensionCommand",
+                          succeeded);
+  }
+#endif  // GOOGLE_CHROME_BUILD
 }
 
 }  // namespace
@@ -207,8 +346,7 @@ base::FilePath FindArchiveToPatch(const InstallationState& original_state,
   // can't be found using that, fallback to using the newest version present.
   base::FilePath patch_source;
   const ProductState* product =
-      original_state.GetProductState(installer_state.system_install(),
-                                     installer_state.state_type());
+      original_state.GetProductState(installer_state.system_install());
   if (product) {
     patch_source = installer_state.GetInstallerDirectory(product->version())
         .Append(installer::kChromeArchive);
@@ -285,32 +423,6 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
   return ok != FALSE;
 }
 
-// There are 4 disjoint cases => return values {false,true}:
-// (1) Product is being uninstalled => false.
-// (2) Product is being installed => true.
-// (3) Current operation ignores product, product is absent => false.
-// (4) Current operation ignores product, product is present => true.
-bool WillProductBePresentAfterSetup(
-    const installer::InstallerState& installer_state,
-    const installer::InstallationState& machine_state,
-    BrowserDistribution::Type type) {
-  DCHECK(SupportsSingleInstall(type) || installer_state.is_multi_install());
-
-  const ProductState* product_state =
-      machine_state.GetProductState(installer_state.system_install(), type);
-
-  // Determine if the product is present prior to the current operation.
-  bool is_present = (product_state != NULL);
-  bool is_uninstall = installer_state.operation() == InstallerState::UNINSTALL;
-
-  // Determine if current operation affects the product.
-  const Product* product = installer_state.FindProduct(type);
-  bool is_affected = (product != NULL);
-
-  // Decide among {(1),(2),(3),(4)}.
-  return is_affected ? !is_uninstall : is_present;
-}
-
 bool AdjustProcessPriority() {
   if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
     DWORD priority_class = ::GetPriorityClass(::GetCurrentProcess());
@@ -325,76 +437,6 @@ bool AdjustProcessPriority() {
     }
   }
   return false;
-}
-
-void MigrateGoogleUpdateStateMultiToSingle(
-    bool system_level,
-    BrowserDistribution::Type to_migrate,
-    const installer::InstallationState& machine_state) {
-  const HKEY root = system_level ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  const ProductState* product = NULL;
-  BrowserDistribution* dist = NULL;
-  LONG result = ERROR_SUCCESS;
-  base::win::RegKey state_key;
-
-  Product product_to_migrate(
-      BrowserDistribution::GetSpecificDistribution(to_migrate));
-
-  // Copy usagestats from the binaries to the product's ClientState key.
-  product = machine_state.GetProductState(system_level,
-                                          BrowserDistribution::CHROME_BINARIES);
-  DWORD usagestats = 0;
-  if (product && product->GetUsageStats(&usagestats)) {
-    dist = product_to_migrate.distribution();
-    result = state_key.Open(root, dist->GetStateKey().c_str(),
-                            KEY_SET_VALUE);
-    if (result != ERROR_SUCCESS) {
-      LOG(ERROR) << "Failed opening ClientState key for "
-                 << dist->GetDisplayName() << " to migrate usagestats.";
-    } else {
-      state_key.WriteValue(google_update::kRegUsageStatsField, usagestats);
-    }
-  }
-
-  // Remove the migrating product from the "ap" value of other multi-install
-  // products.
-  for (int i = 0; i < BrowserDistribution::NUM_TYPES; ++i) {
-    BrowserDistribution::Type type =
-        static_cast<BrowserDistribution::Type>(i);
-    if (type == to_migrate)
-      continue;
-    product = machine_state.GetProductState(system_level, type);
-    if (product && product->is_multi_install()) {
-      installer::ChannelInfo channel_info;
-      dist = BrowserDistribution::GetSpecificDistribution(type);
-      result = state_key.Open(root, dist->GetStateKey().c_str(),
-                              KEY_QUERY_VALUE | KEY_SET_VALUE);
-      if (result == ERROR_SUCCESS &&
-          channel_info.Initialize(state_key) &&
-          product_to_migrate.SetChannelFlags(false, &channel_info)) {
-        VLOG(1) << "Moving " << dist->GetDisplayName()
-                << " to channel: " << channel_info.value();
-        channel_info.Write(&state_key);
-      }
-    }
-  }
-
-  // Remove -multi, all product modifiers, and everything else but the channel
-  // name from the "ap" value of the product to migrate.
-  dist = product_to_migrate.distribution();
-  result = state_key.Open(root, dist->GetStateKey().c_str(),
-                          KEY_QUERY_VALUE | KEY_SET_VALUE);
-  if (result == ERROR_SUCCESS) {
-    installer::ChannelInfo channel_info;
-    if (!channel_info.Initialize(state_key)) {
-      LOG(ERROR) << "Failed reading " << dist->GetDisplayName()
-                 << " channel info.";
-    } else if (channel_info.RemoveAllModifiersAndSuffixes()) {
-      VLOG(1) << "Moving " << dist->GetDisplayName()
-              << " to channel: " << channel_info.value();
-      channel_info.Write(&state_key);
-    }
-  }
 }
 
 bool IsUninstallSuccess(InstallStatus install_status) {
@@ -618,9 +660,7 @@ bool IsDowngradeAllowed(const MasterPreferences& prefs) {
 }
 
 bool IsChromeActivelyUsed(const InstallerState& installer_state) {
-  BrowserDistribution* chrome_dist =
-      BrowserDistribution::GetSpecificDistribution(
-          BrowserDistribution::CHROME_BROWSER);
+  BrowserDistribution* chrome_dist = BrowserDistribution::GetDistribution();
   if (!installer_state.system_install()) {
     return IsActivelyUsedIn(HKEY_CURRENT_USER,
                             chrome_dist->GetStateKey().c_str());
@@ -661,6 +701,167 @@ void RecordUnPackMetrics(UnPackStatus unpack_status,
       std::string(kUnPackNTSTATUSMetricsName) + "_" + consumer_name,
       base::HistogramBase::kUmaTargetedHistogramFlag)
       ->Add(status);
+}
+
+void RegisterEventLogProvider(const base::FilePath& install_directory,
+                              const base::Version& version) {
+  base::string16 reg_path(kEventLogProvidersRegPath);
+  reg_path.append(InstallFullName());
+  VLOG(1) << "Registering Chrome's event log provider at " << reg_path;
+
+  std::unique_ptr<WorkItemList> work_item_list(WorkItem::CreateWorkItemList());
+  work_item_list->set_log_message("Register event log provider");
+
+  work_item_list->AddCreateRegKeyWorkItem(HKEY_LOCAL_MACHINE, reg_path,
+                                          WorkItem::kWow64Default);
+  // Speicifes the number of event categories defined in the dll.
+  work_item_list->AddSetRegValueWorkItem(
+      HKEY_LOCAL_MACHINE, reg_path, WorkItem::kWow64Default, L"CategoryCount",
+      static_cast<DWORD>(1), true);
+  // Specifies the event type emitted by this event source.
+  work_item_list->AddSetRegValueWorkItem(
+      HKEY_LOCAL_MACHINE, reg_path, WorkItem::kWow64Default, L"TypesSupported",
+      static_cast<DWORD>(EVENTLOG_ERROR_TYPE | EVENTLOG_INFORMATION_TYPE |
+                         EVENTLOG_WARNING_TYPE),
+      true);
+
+  const base::FilePath provider(
+      install_directory.AppendASCII(version.GetString())
+          .Append(FILE_PATH_LITERAL("eventlog_provider.dll")));
+
+  static constexpr const wchar_t* kFileKeys[] = {
+      L"CategoryMessageFile", L"EventMessageFile", L"ParameterMessageFile",
+  };
+  for (const wchar_t* file_key : kFileKeys) {
+    work_item_list->AddSetRegValueWorkItem(HKEY_LOCAL_MACHINE, reg_path,
+                                           WorkItem::kWow64Default, file_key,
+                                           provider.value(), true);
+  }
+
+  // if the operation fails we log the error but still continue because none of
+  // these are critical for the proper operation of the browser.
+  if (!work_item_list->Do())
+    work_item_list->Rollback();
+}
+
+void DeRegisterEventLogProvider() {
+  base::string16 reg_path(kEventLogProvidersRegPath);
+  reg_path.append(InstallFullName());
+
+  // TODO(http://crbug.com/668120): If the Event Viewer is open the provider dll
+  // will fail to get deleted. This doesn't fail the uninstallation altogether
+  // but leaves files behind.
+  InstallUtil::DeleteRegistryKey(HKEY_LOCAL_MACHINE, reg_path,
+                                 WorkItem::kWow64Default);
+}
+
+std::unique_ptr<AppRegistrationData> MakeBinariesRegistrationData() {
+#if defined(GOOGLE_CHROME_BUILD)
+  return base::MakeUnique<UpdatingAppRegistrationData>(
+      L"{4DC8B4CA-1BDA-483e-B5FA-D3C12E15B62D}");
+#else
+  return base::MakeUnique<NonUpdatingAppRegistrationData>(
+      L"Software\\Chromium Binaries");
+#endif
+}
+
+bool AreBinariesInstalled(const InstallerState& installer_state) {
+  if (InstallUtil::IsChromeSxSProcess())
+    return false;
+
+  base::win::RegKey key;
+  base::string16 pv;
+
+  // True if the "pv" value exists and isn't empty.
+  return key.Open(installer_state.root_key(),
+                  MakeBinariesRegistrationData()->GetVersionKey().c_str(),
+                  KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS &&
+         key.ReadValue(google_update::kRegVersionField, &pv) == ERROR_SUCCESS &&
+         !pv.empty();
+}
+
+void DoLegacyCleanups(const InstallerState& installer_state,
+                      InstallStatus install_status) {
+  // Do no harm if the install didn't succeed.
+  if (InstallUtil::GetInstallReturnCode(install_status))
+    return;
+
+  // The cleanups below only apply to normal Chrome, not side-by-side (canary).
+  if (InstallUtil::IsChromeSxSProcess())
+    return;
+
+  RemoveBinariesVersionKey(installer_state);
+  RemoveMultiChromeFrame(installer_state);
+  RemoveAppLauncherVersionKey(installer_state);
+  RemoveAppHostExe(installer_state);
+  RemoveLegacyChromeAppCommands(installer_state);
+}
+
+std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
+    const base::FilePath& path) {
+  std::vector<base::win::ScopedHandle> processes;
+
+  if (path.empty())
+    return processes;
+
+  PROCESSENTRY32 entry = {sizeof(PROCESSENTRY32)};
+  base::win::ScopedHandle snapshot(
+      CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+  if (!snapshot.IsValid() || Process32First(snapshot.Get(), &entry) == FALSE)
+    return processes;
+  do {
+    if (!base::FilePath::CompareEqualIgnoreCase(
+            entry.szExeFile, path.BaseName().value()))  // vivaldi.exe
+      continue;
+    base::win::ScopedHandle process(
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                    entry.th32ProcessID));
+    if (!process.IsValid())
+      continue;
+
+    // Check if process is dead already.
+    if (WaitForSingleObject(process.Get(), 0) == WAIT_TIMEOUT)
+      continue;
+
+    wchar_t process_image_name[MAX_PATH];
+    DWORD size = arraysize(process_image_name);
+    if (QueryFullProcessImageName(process.Get(), 0, process_image_name,
+                                  &size) == FALSE)
+      continue;
+
+    if (!base::FilePath::CompareEqualIgnoreCase(path.value(),
+                                                process_image_name))
+      continue;
+
+    processes.push_back(std::move(process));
+  } while (Process32Next(snapshot.Get(), &entry) != FALSE);
+
+  return processes;
+}
+
+void KillProcesses(const std::vector<base::win::ScopedHandle>& processes) {
+  base::string16 cmd_line_string(L"taskkill.exe /F");
+  std::vector<DWORD>::iterator it;
+  for (auto& process : processes) {
+    DCHECK(process.IsValid());
+    cmd_line_string +=
+        base::StringPrintf(L" /PID %u", GetProcessId(process.Get()));
+  }
+
+  WCHAR* cmd_line = new WCHAR[cmd_line_string.length() + 1];
+  std::copy(cmd_line_string.begin(), cmd_line_string.end(), cmd_line);
+  cmd_line[cmd_line_string.length()] = 0;
+
+  STARTUPINFO si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+
+  if (CreateProcess(NULL, cmd_line, NULL, NULL, FALSE,
+                    CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  delete[] cmd_line;
 }
 
 ScopedTokenPrivilege::ScopedTokenPrivilege(const wchar_t* privilege_name)

@@ -501,7 +501,7 @@ void Verify206Response(const std::string& response, int start, int end) {
 
   int64_t range_start, range_end, object_size;
   ASSERT_TRUE(
-      headers->GetContentRange(&range_start, &range_end, &object_size));
+      headers->GetContentRangeFor206(&range_start, &range_end, &object_size));
   int64_t content_length = headers->GetContentLength();
 
   int length = end - start + 1;
@@ -1219,6 +1219,50 @@ TEST(HttpCache, SimpleGET_LoadValidateCache_Implicit) {
   EXPECT_EQ(2, cache.network_layer()->transaction_count());
   EXPECT_EQ(1, cache.disk_cache()->open_count());
   EXPECT_EQ(1, cache.disk_cache()->create_count());
+}
+
+// Tests that |unused_since_prefetch| is updated accordingly (e.g. it is set to
+// true after a prefetch and set back to false when the prefetch is used).
+TEST(HttpCache, SimpleGET_UnusedSincePrefetch) {
+  MockHttpCache cache;
+  HttpResponseInfo response_info;
+
+  // A normal load does not have |unused_since_prefetch| set.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), kSimpleGET_Transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_FALSE(response_info.unused_since_prefetch);
+  EXPECT_FALSE(response_info.was_cached);
+
+  // The prefetch itself does not have |unused_since_prefetch| set.
+  MockTransaction prefetch_transaction(kSimpleGET_Transaction);
+  prefetch_transaction.load_flags |= LOAD_PREFETCH;
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), prefetch_transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_FALSE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+
+  // A duplicated prefetch has |unused_since_prefetch| set.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), prefetch_transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_TRUE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+
+  // |unused_since_prefetch| is still true after two prefetches in a row.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), kSimpleGET_Transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_TRUE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+
+  // The resource has now been used, back to normal behavior.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), kSimpleGET_Transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_FALSE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
 }
 
 static void PreserveRequestHeaders_Handler(const HttpRequestInfo* request,
@@ -7694,6 +7738,7 @@ TEST(HttpCache, NetworkBytesRange) {
 
 class HttpCachePrefetchValidationTest : public ::testing::Test {
  protected:
+  static const int kNumSecondsPerMinute = 60;
   static const int kMaxAgeSecs = 100;
   static const int kRequireValidationSecs = kMaxAgeSecs + 1;
 

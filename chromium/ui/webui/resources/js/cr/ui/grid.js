@@ -245,16 +245,14 @@ cr.define('cr.ui', function() {
       var firstIndex =
           this.autoExpands ? 0 : this.getIndexForListOffset_(scrollTop);
       var columns = this.columns;
-      var count = this.autoExpands_ ? this.dataModel.length : Math.max(
-          columns * (Math.ceil(clientHeight / itemHeight) + 1),
-          this.countItemsInRange_(firstIndex, scrollTop + clientHeight));
+      var count = this.autoExpands_ ?
+          this.dataModel.length :
+          Math.max(
+              columns * (Math.ceil(clientHeight / itemHeight) + 1),
+              this.countItemsInRange_(firstIndex, scrollTop + clientHeight));
       count = columns * Math.ceil(count / columns);
       count = Math.min(count, this.dataModel.length - firstIndex);
-      return {
-        first: firstIndex,
-        length: count,
-        last: firstIndex + count - 1
-      };
+      return {first: firstIndex, length: count, last: firstIndex + count - 1};
     },
 
     /**
@@ -301,7 +299,7 @@ cr.define('cr.ui', function() {
 
       function isSpacer(child) {
         return child.classList.contains('spacer') &&
-               child != afterFiller;  // Must not be removed.
+            child != afterFiller;  // Must not be removed.
       }
     },
 
@@ -329,7 +327,7 @@ cr.define('cr.ui', function() {
     isItem: function(child) {
       // Non-items are before-, afterFiller and spacers added in mergeItems.
       return child.nodeType == Node.ELEMENT_NODE &&
-             !child.classList.contains('spacer');
+          !child.classList.contains('spacer');
     },
 
     redraw: function() {
@@ -371,8 +369,8 @@ cr.define('cr.ui', function() {
      */
     isAccessibilityEnabled: function() {
       return window.cvox && window.cvox.Api &&
-             window.cvox.Api.isChromeVoxActive &&
-             window.cvox.Api.isChromeVoxActive();
+          window.cvox.Api.isChromeVoxActive &&
+          window.cvox.Api.isChromeVoxActive();
     },
 
     /**

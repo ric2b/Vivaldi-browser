@@ -30,6 +30,7 @@
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine_impl/cycle/directory_type_debug_info_emitter.h"
+#include "components/sync/engine_impl/loopback_server/loopback_connection_manager.h"
 #include "components/sync/engine_impl/model_type_connector_proxy.h"
 #include "components/sync/engine_impl/net/sync_server_connection_manager.h"
 #include "components/sync/engine_impl/sync_scheduler.h"
@@ -47,9 +48,6 @@
 #include "components/sync/syncable/write_node.h"
 #include "components/sync/syncable/write_transaction.h"
 
-#if defined(OS_WIN)
-#include "components/sync/engine_impl/loopback_server/loopback_connection_manager.h"
-#endif
 
 using base::TimeDelta;
 using sync_pb::GetUpdatesCallerInfo;
@@ -184,9 +182,6 @@ ModelTypeSet SyncManagerImpl::GetTypesWithEmptyProgressMarkerToken(
 void SyncManagerImpl::ConfigureSyncer(
     ConfigureReason reason,
     ModelTypeSet to_download,
-    ModelTypeSet to_purge,
-    ModelTypeSet to_journal,
-    ModelTypeSet to_unapply,
     const ModelSafeRoutingInfo& new_routing_info,
     const base::Closure& ready_task,
     const base::Closure& retry_task) {
@@ -194,24 +189,16 @@ void SyncManagerImpl::ConfigureSyncer(
   DCHECK(!ready_task.is_null());
   DCHECK(initialized_);
 
+  // Don't download non-blocking types that have already completed initial sync.
+  to_download.RemoveAll(
+      model_type_registry_->GetInitialSyncDoneNonBlockingTypes());
+
   DVLOG(1) << "Configuring -"
            << "\n\t"
            << "current types: "
            << ModelTypeSetToString(GetRoutingInfoTypes(new_routing_info))
            << "\n\t"
-           << "types to download: " << ModelTypeSetToString(to_download)
-           << "\n\t"
-           << "types to purge: " << ModelTypeSetToString(to_purge) << "\n\t"
-           << "types to journal: " << ModelTypeSetToString(to_journal) << "\n\t"
-           << "types to unapply: " << ModelTypeSetToString(to_unapply);
-  if (!PurgeDisabledTypes(to_purge, to_journal, to_unapply)) {
-    // We failed to cleanup the types. Invoke the ready task without actually
-    // configuring any types. The caller should detect this as a configuration
-    // failure and act appropriately.
-    ready_task.Run();
-    return;
-  }
-
+           << "types to download: " << ModelTypeSetToString(to_download);
   ConfigurationParams params(GetSourceFromReason(reason), to_download,
                              new_routing_info, ready_task, retry_task);
 
@@ -223,9 +210,11 @@ void SyncManagerImpl::Init(InitArgs* args) {
   CHECK(!initialized_);
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(args->post_factory.get());
-  DCHECK(!args->credentials.account_id.empty());
-  DCHECK(!args->credentials.sync_token.empty());
-  DCHECK(!args->credentials.scope_set.empty());
+  if (!args->enable_local_sync_backend) {
+    DCHECK(!args->credentials.account_id.empty());
+    DCHECK(!args->credentials.sync_token.empty());
+    DCHECK(!args->credentials.scope_set.empty());
+  }
   DCHECK(args->cancelation_signal);
   DVLOG(1) << "SyncManager starting Init...";
 
@@ -287,13 +276,11 @@ void SyncManagerImpl::Init(InitArgs* args) {
   }
 
   if (args->enable_local_sync_backend) {
-#if defined(OS_WIN)
     VLOG(1) << "Running against local sync backend.";
+    allstatus_.SetLocalBackendFolder(
+        args->local_sync_backend_folder.AsUTF8Unsafe());
     connection_manager_ = base::MakeUnique<LoopbackConnectionManager>(
         args->cancelation_signal, args->local_sync_backend_folder);
-#else
-    NOTREACHED();
-#endif  // defined(OS_WIN)
   } else {
     connection_manager_ = base::MakeUnique<SyncServerConnectionManager>(
         args->service_url.host() + args->service_url.path(),
@@ -311,10 +298,8 @@ void SyncManagerImpl::Init(InitArgs* args) {
   DVLOG(1) << "Setting invalidator client ID: " << args->invalidator_client_id;
   allstatus_.SetInvalidatorClientId(args->invalidator_client_id);
 
-  // TODO(crbug.com/658002): Pass in the real USS migrator function once initial
-  // GetUpdates issues are addressed.
   model_type_registry_ = base::MakeUnique<ModelTypeRegistry>(
-      args->workers, &share_, this, UssMigrator());
+      args->workers, &share_, this, base::Bind(&MigrateDirectoryData));
   sync_encryption_handler_->AddObserver(model_type_registry_.get());
 
   // Build a SyncCycleContext and store the worker in it.
@@ -327,17 +312,22 @@ void SyncManagerImpl::Init(InitArgs* args) {
       listeners, &debug_info_event_listener_, model_type_registry_.get(),
       args->invalidator_client_id);
   scheduler_ = args->engine_components_factory->BuildScheduler(
-      name_, cycle_context_.get(), args->cancelation_signal);
+      name_, cycle_context_.get(), args->cancelation_signal,
+      args->enable_local_sync_backend);
 
   scheduler_->Start(SyncScheduler::CONFIGURATION_MODE, base::Time());
 
   initialized_ = true;
 
-  net::NetworkChangeNotifier::AddIPAddressObserver(this);
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
-  observing_network_connectivity_changes_ = true;
+  if (!args->enable_local_sync_backend) {
+    net::NetworkChangeNotifier::AddIPAddressObserver(this);
+    net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
+    observing_network_connectivity_changes_ = true;
 
-  UpdateCredentials(args->credentials);
+    UpdateCredentials(args->credentials);
+  } else {
+    scheduler_->OnCredentialsUpdated();
+  }
 
   NotifyInitializationSuccess();
 }
@@ -456,13 +446,11 @@ bool SyncManagerImpl::OpenDirectory(const std::string& username) {
   // trigger the migration logic before the backend is initialized, resulting
   // in crashes. We therefore detect and purge any partially synced types as
   // part of initialization.
-  if (!PurgePartiallySyncedTypes())
-    return false;
-
+  PurgePartiallySyncedTypes();
   return true;
 }
 
-bool SyncManagerImpl::PurgePartiallySyncedTypes() {
+void SyncManagerImpl::PurgePartiallySyncedTypes() {
   ModelTypeSet partially_synced_types = ModelTypeSet::All();
   partially_synced_types.RemoveAll(directory()->InitialSyncEndedTypes());
   partially_synced_types.RemoveAll(
@@ -472,21 +460,22 @@ bool SyncManagerImpl::PurgePartiallySyncedTypes() {
            << ModelTypeSetToString(partially_synced_types);
   UMA_HISTOGRAM_COUNTS("Sync.PartiallySyncedTypes",
                        partially_synced_types.Size());
-  if (partially_synced_types.Empty())
-    return true;
-  return directory()->PurgeEntriesWithTypeIn(partially_synced_types,
-                                             ModelTypeSet(), ModelTypeSet());
+  directory()->PurgeEntriesWithTypeIn(partially_synced_types, ModelTypeSet(),
+                                      ModelTypeSet());
 }
 
-bool SyncManagerImpl::PurgeDisabledTypes(ModelTypeSet to_purge,
+void SyncManagerImpl::PurgeDisabledTypes(ModelTypeSet to_purge,
                                          ModelTypeSet to_journal,
                                          ModelTypeSet to_unapply) {
-  if (to_purge.Empty())
-    return true;
-  DVLOG(1) << "Purging disabled types " << ModelTypeSetToString(to_purge);
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(initialized_);
+  DVLOG(1) << "Purging disabled types:\n\t"
+           << "types to purge: " << ModelTypeSetToString(to_purge) << "\n\t"
+           << "types to journal: " << ModelTypeSetToString(to_journal) << "\n\t"
+           << "types to unapply: " << ModelTypeSetToString(to_unapply);
   DCHECK(to_purge.HasAll(to_journal));
   DCHECK(to_purge.HasAll(to_unapply));
-  return directory()->PurgeEntriesWithTypeIn(to_purge, to_journal, to_unapply);
+  directory()->PurgeEntriesWithTypeIn(to_purge, to_journal, to_unapply);
 }
 
 void SyncManagerImpl::UpdateCredentials(const SyncCredentials& credentials) {
@@ -1018,6 +1007,10 @@ void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch,
   DCHECK(thread_checker_.CalledOnValidThread());
   cycle_context_->set_cookie_jar_mismatch(account_mismatch);
   cycle_context_->set_cookie_jar_empty(empty_jar);
+}
+
+void SyncManagerImpl::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
+  directory()->OnMemoryDump(pmd);
 }
 
 }  // namespace syncer

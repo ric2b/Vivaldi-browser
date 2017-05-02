@@ -28,19 +28,19 @@
 #define SuspendableTimer_h
 
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
-#include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/SuspendableObject.h"
 #include "platform/Timer.h"
 
 namespace blink {
 
-class CORE_EXPORT SuspendableTimer : public TimerBase, public ActiveDOMObject {
+class CORE_EXPORT SuspendableTimer : public TimerBase,
+                                     public SuspendableObject {
  public:
   explicit SuspendableTimer(ExecutionContext*, TaskType);
   ~SuspendableTimer() override;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // SuspendableObject
+  void contextDestroyed(ExecutionContext*) override;
   void suspend() final;
   void resume() final;
 
@@ -51,8 +51,8 @@ class CORE_EXPORT SuspendableTimer : public TimerBase, public ActiveDOMObject {
 
   double m_nextFireInterval;
   double m_repeatInterval;
-#if ENABLE(ASSERT)
-  bool m_suspended;
+#if DCHECK_IS_ON()
+  bool m_suspended = false;
 #endif
 };
 

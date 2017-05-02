@@ -13,7 +13,7 @@
 #include "ios/web/public/webui/web_ui_ios_controller.h"
 #include "ios/web/public/webui/web_ui_ios_controller_factory.h"
 #include "ios/web/public/webui/web_ui_ios_message_handler.h"
-#include "ios/web/web_state/web_state_impl.h"
+#import "ios/web/web_state/web_state_impl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -143,11 +143,12 @@ void WebUIIOSImpl::ProcessWebUIIOSMessage(const GURL& source_url,
 // WebUIIOSImpl, protected:
 // -------------------------------------------------------
 
-void WebUIIOSImpl::AddMessageHandler(WebUIIOSMessageHandler* handler) {
+void WebUIIOSImpl::AddMessageHandler(
+    std::unique_ptr<WebUIIOSMessageHandler> handler) {
   DCHECK(!handler->web_ui());
   handler->set_web_ui(this);
   handler->RegisterMessages();
-  handlers_.push_back(handler);
+  handlers_.push_back(std::move(handler));
 }
 
 void WebUIIOSImpl::ExecuteJavascript(const base::string16& javascript) {

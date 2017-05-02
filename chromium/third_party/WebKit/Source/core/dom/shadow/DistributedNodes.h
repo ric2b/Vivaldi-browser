@@ -43,8 +43,8 @@ class DistributedNodes final {
  public:
   DistributedNodes() {}
 
-  Node* first() const { return m_nodes.first(); }
-  Node* last() const { return m_nodes.last(); }
+  Node* first() const { return m_nodes.front(); }
+  Node* last() const { return m_nodes.back(); }
   Node* at(size_t index) const { return m_nodes.at(index); }
 
   size_t size() const { return m_nodes.size(); }

@@ -26,7 +26,7 @@
 
 #include "platform/SharedBuffer.h"
 
-#include "platform/tracing/web_process_memory_dump.h"
+#include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "wtf/text/UTF8.h"
 #include "wtf/text/Unicode.h"
 
@@ -107,9 +107,9 @@ void SharedBuffer::appendInternal(const char* data, size_t length) {
   char* segment;
   if (!positionInSegment) {
     segment = allocateSegment();
-    m_segments.append(segment);
+    m_segments.push_back(segment);
   } else
-    segment = m_segments.last() + positionInSegment;
+    segment = m_segments.back() + positionInSegment;
 
   size_t segmentFreeSpace = kSegmentSize - positionInSegment;
   size_t bytesToCopy = std::min(length, segmentFreeSpace);
@@ -122,7 +122,7 @@ void SharedBuffer::appendInternal(const char* data, size_t length) {
     length -= bytesToCopy;
     data += bytesToCopy;
     segment = allocateSegment();
-    m_segments.append(segment);
+    m_segments.push_back(segment);
     bytesToCopy = std::min(length, static_cast<size_t>(kSegmentSize));
   }
 }

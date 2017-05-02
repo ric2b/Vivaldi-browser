@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.partnercustomizations;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.PopupMenu;
@@ -68,8 +68,7 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
         }
     }
 
-    private void waitForParentalControlsEnabledState(final boolean parentalControlsEnabled)
-            throws InterruptedException {
+    private void waitForParentalControlsEnabledState(final boolean parentalControlsEnabled) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {

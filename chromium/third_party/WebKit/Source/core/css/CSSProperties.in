@@ -23,13 +23,36 @@
 // The property is a shorthand for several other properties.
 
 
-// keyword_only
+// - api_class[=classname]
+// Specifies the existance (and optionally name) of a CSSPropertyAPI
+// implementation for the property to be used by make_css_property_descriptor.py.
+// See core/css/properties/CSSPropertyAPI.h for API details.
+// * Add this flag if the API has been implemented for this property.
+// * If the classname for this is different to the name of the property, specify a
+//   value for this flag. e.g. api_class=CSSPropertyAPIWebkitPadding
+// TODO(aazzam): When most properties have been implemented, modify this so that
+// properties with default classnames do not get this flag, and introduce a
+// 'not_implemented' flag instead.
+
+
+// - keyword_only
 // These properties only store keyword values. This is used when
 // generating the ComputedStyle storage for the property. The initial
-// value for this property on a ComputedStyle is the first keyword in
-// the specified list of keywords.
+// value for this property on a ComputedStyle is specified with the
+// initial_keyword flag below.
+// TODO(sashab): Rename this to field_type=keyword once we support
+// multiple types of generatable fields in ComputedStyle
 // TODO(sashab, meade): Remove this once TypedOM types are specified for
 // every property, since this value can be inferred from that.
+
+
+// - field_storage_type=path/to/Type
+// For properties that have generated field storage in ComputedStyle,
+// this optional argument will override the field's generated type with
+// an external one specified at the given path. The type must be defined
+// in a header file at that path, and have the same name as the file.
+// Currently, only enum types are supported, and the enum's only values
+// must be CamelCase values of the keywords of the property.
 
 
 // - keywords=[keyword1|keyword2]
@@ -38,13 +61,18 @@
 // CSSValueKeywords.in and use this list instead.
 
 
+// - initial_keyword
+// This specifies the initial keyword value for the keyword_only
+// property.
+
+
 // Flags which go into CSSOMTypes:
 // - typedom_types=[Type|OtherType]
 // The property can take types specified in typedom_types for CSS Typed OM.
 // Keyword does not need to be specified as every property can take keywords.
 // - keywords=[keyword1|keyword2]
 // The property can take these keywords.
-// - supports_multiple
+// - repeated
 // The property supports a list of values.
 // - supports_percentage
 // The property supports percentage types.
@@ -114,46 +142,52 @@
 // This property resolves to a different property based on the current direction
 // and writing mode.
 
+// - priority=High
+// The priority level for computing the property. Valid values are
+// "Animation" (highest), "High" and "Low". Properties with the same
+// priority level are grouped and computed in alphabetical order. The
+// default value is "Low".
 
 // Properties with StyleBuilder handling
 
 // Animation Priority properties
-animation-delay custom_all
-animation-direction custom_all
-animation-duration custom_all
-animation-fill-mode custom_all
-animation-iteration-count keywords=[infinite], supports_multiple, custom_all
-animation-name custom_all
-animation-play-state custom_all
-animation-timing-function custom_all
-transition-delay custom_all
-transition-duration custom_all
-transition-property custom_all
-transition-timing-function custom_all
+animation-delay custom_all, priority=Animation
+animation-direction keywords=[normal|reverse|alternate|alternate-reverse], repeated, custom_all, priority=Animation
+animation-duration custom_all, priority=Animation
+animation-fill-mode custom_all, priority=Animation
+animation-iteration-count keywords=[infinite], repeated, custom_all, priority=Animation
+animation-name custom_all, priority=Animation
+animation-play-state custom_all, priority=Animation
+animation-timing-function custom_all, priority=Animation
+transition-delay custom_all, priority=Animation
+transition-duration custom_all, priority=Animation
+transition-property custom_all, priority=Animation
+transition-timing-function custom_all, priority=Animation
 
 // High Priority and all other font properties.
 // Other properties can depend upon high priority properties (e.g. font-size / ems)
-color interpolable, inherited, custom_all
-direction inherited, custom_value
-font-family inherited, font, type_name=FontDescription::FamilyDescription, name_for_methods=FamilyDescription, converter=convertFontFamily
-font-kerning inherited, font, type_name=FontDescription::Kerning, name_for_methods=Kerning
-font-size interpolable, inherited, font, name_for_methods=Size, getter=getSize, converter=convertFontSize
-font-size-adjust runtime_flag=CSSFontSizeAdjust, interpolable, inherited, font, name_for_methods=SizeAdjust, converter=convertFontSizeAdjust
-font-stretch inherited, font, type_name=FontStretch, name_for_methods=Stretch
-font-style inherited, font, type_name=FontStyle, name_for_methods=Style
-font-variant-ligatures inherited, font, type_name=VariantLigatures, name_for_methods=VariantLigatures, converter=convertFontVariantLigatures
-font-variant-caps inherited, font, name_for_methods=VariantCaps, converter=convertFontVariantCaps
-font-variant-numeric inherited, font, name_for_methods=VariantNumeric, converter=convertFontVariantNumeric
-font-weight interpolable, inherited, font, type_name=FontWeight, name_for_methods=Weight, converter=convertFontWeight
-font-feature-settings inherited, font, name_for_methods=FeatureSettings, converter=convertFontFeatureSettings
--webkit-font-smoothing inherited, font, type_name=FontSmoothingMode
--webkit-locale inherited, font, custom_value
-text-orientation inherited, custom_value, type_name=TextOrientation
--webkit-text-orientation inherited, custom_value, type_name=TextOrientation
-writing-mode inherited, custom_value, type_name=WritingMode
--webkit-writing-mode inherited, custom_value, type_name=WritingMode
-text-rendering inherited, font, type_name=TextRenderingMode
-zoom custom_all
+color interpolable, inherited, custom_all, priority=High
+direction inherited, custom_value, keyword_only, keywords=[ltr|rtl], initial_keyword=ltr, field_storage_type=platform/text/TextDirection, priority=High
+font-family inherited, font, type_name=FontDescription::FamilyDescription, name_for_methods=FamilyDescription, converter=convertFontFamily, priority=High
+font-kerning inherited, font, type_name=FontDescription::Kerning, name_for_methods=Kerning, priority=High
+font-size interpolable, inherited, font, name_for_methods=Size, getter=getSize, converter=convertFontSize, priority=High
+font-size-adjust runtime_flag=CSSFontSizeAdjust, interpolable, inherited, font, name_for_methods=SizeAdjust, converter=convertFontSizeAdjust, api_class, priority=High
+font-stretch inherited, font, type_name=FontStretch, name_for_methods=Stretch, priority=High
+font-style inherited, font, type_name=FontStyle, name_for_methods=Style, priority=High
+font-variant-ligatures inherited, font, type_name=VariantLigatures, name_for_methods=VariantLigatures, converter=convertFontVariantLigatures, priority=High, api_class
+font-variant-caps inherited, font, name_for_methods=VariantCaps, converter=convertFontVariantCaps, priority=High, api_class
+font-variant-numeric inherited, font, name_for_methods=VariantNumeric, converter=convertFontVariantNumeric, priority=High
+font-weight interpolable, inherited, font, type_name=FontWeight, name_for_methods=Weight, converter=convertFontWeight, priority=High
+font-feature-settings inherited, font, name_for_methods=FeatureSettings, converter=convertFontFeatureSettings, priority=High
+font-variation-settings runtime_flag=CSSVariableFonts, inherited, font, name_for_methods=VariationSettings, converter=convertFontVariationSettings, api_class, priority=High
+-webkit-font-smoothing inherited, font, type_name=FontSmoothingMode, priority=High
+-webkit-locale inherited, font, custom_value, priority=High
+text-orientation inherited, custom_value, type_name=TextOrientation, priority=High
+-webkit-text-orientation inherited, custom_value, type_name=TextOrientation, priority=High
+writing-mode inherited, custom_value, type_name=WritingMode, keyword_only, keywords=[horizontal-tb|vertical-rl|vertical-lr], initial_keyword=horizontal-tb, field_storage_type=platform/text/WritingMode, priority=High
+-webkit-writing-mode inherited, custom_value, type_name=WritingMode, priority=High
+text-rendering inherited, font, type_name=TextRenderingMode, priority=High
+zoom custom_all, api_class, priority=High
 
 align-content initial=initialContentAlignment, converter=convertContentAlignmentData
 align-items initial=initialDefaultAlignment, converter=convertSelfOrDefaultAlignmentData
@@ -174,11 +208,11 @@ background-repeat-y custom_all
 background-size interpolable, custom_all
 baseline-shift interpolable, svg, custom_inherit, custom_value
 border-bottom-color interpolable, custom_all
-border-bottom-left-radius interpolable, initial=initialBorderRadius, converter=convertRadius
-border-bottom-right-radius interpolable, initial=initialBorderRadius, converter=convertRadius
+border-bottom-left-radius interpolable, initial=initialBorderRadius, converter=convertRadius, api_class=CSSPropertyAPIBorderRadius
+border-bottom-right-radius interpolable, initial=initialBorderRadius, converter=convertRadius, api_class=CSSPropertyAPIBorderRadius
 border-bottom-style type_name=EBorderStyle, initial=initialBorderStyle
 border-bottom-width interpolable, initial=initialBorderWidth, converter=convertLineWidth<unsigned>
-border-collapse inherited
+border-collapse inherited, independent, keyword_only, keywords=[separate|collapse], initial_keyword=separate
 border-image-outset interpolable, custom_all
 border-image-repeat custom_all
 border-image-slice interpolable, custom_all
@@ -191,51 +225,52 @@ border-right-color interpolable, custom_all
 border-right-style type_name=EBorderStyle, initial=initialBorderStyle
 border-right-width interpolable, initial=initialBorderWidth, converter=convertLineWidth<unsigned>
 border-top-color interpolable, custom_all
-border-top-left-radius interpolable, initial=initialBorderRadius, converter=convertRadius
-border-top-right-radius interpolable, initial=initialBorderRadius, converter=convertRadius
+border-top-left-radius interpolable, initial=initialBorderRadius, converter=convertRadius, api_class=CSSPropertyAPIBorderRadius
+border-top-right-radius interpolable, initial=initialBorderRadius, converter=convertRadius, api_class=CSSPropertyAPIBorderRadius
 border-top-style type_name=EBorderStyle, initial=initialBorderStyle
 border-top-width interpolable, initial=initialBorderWidth, converter=convertLineWidth<unsigned>, typedom_types=[Length], keywords=[thin|medium|thick], supports_percentage
 bottom typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
-box-shadow interpolable, converter=convertShadow
+box-shadow interpolable, converter=convertShadowList
 box-sizing
 break-after type_name=EBreak
 break-before type_name=EBreak
 break-inside type_name=EBreak
 buffered-rendering svg
-caption-side inherited
+caption-side inherited, keyword_only, independent, keywords=[top|bottom|left|right], initial_keyword=top
+caret-color interpolable, inherited, custom_all, api_class
 clear
-clip interpolable, converter=convertClip, custom_all
+clip interpolable, converter=convertClip, custom_all, api_class
 clip-path interpolable, converter=convertClipPath
 clip-rule inherited, svg, type_name=WindRule
 color-interpolation inherited, svg
 color-interpolation-filters inherited, svg, type_name=EColorInterpolation
 color-rendering inherited, svg
 column-fill type_name=ColumnFill
-contain runtime_flag=CSSContainment, converter=convertFlags<Containment>
-content custom_all, typedom_types=[Image], supports_multiple
+contain runtime_flag=CSSContainment, converter=convertFlags<Containment>, api_class
+content custom_all, typedom_types=[Image], repeated, api_class
 counter-increment custom_all
 counter-reset custom_all
-cursor inherited, custom_all
+cursor inherited, custom_all, api_class
 cx interpolable, svg, converter=convertLength
 cy interpolable, svg, converter=convertLength
 d interpolable, svg, converter=convertPathOrNone
 display
 dominant-baseline inherited, svg
-empty-cells inherited, type_name=EEmptyCells, keyword_only, keywords=[show|hide]
-fill interpolable, inherited, svg, setter=setFillPaint, custom_all
+empty-cells inherited, independent, type_name=EEmptyCells, keyword_only, keywords=[show|hide], initial_keyword=show
+fill interpolable, inherited, svg, setter=setFillPaint, custom_all, api_class=CSSPropertyAPIPaintStroke
 fill-opacity interpolable, inherited, svg, converter=convertNumberOrPercentage
 fill-rule inherited, svg, type_name=WindRule
 filter interpolable, converter=convertFilterOperations
-flex-basis interpolable, converter=convertLengthOrAuto
+flex-basis interpolable, converter=convertLengthOrAuto, api_class
 flex-direction
 flex-grow interpolable, type_name=float
 flex-shrink interpolable, type_name=float
 flex-wrap
-float type_name=EFloat, name_for_methods=Floating, keyword_only, keywords=[none|left|right]
+float type_name=EFloat, name_for_methods=Floating, keyword_only, keywords=[none|left|right], initial_keyword=none
 flood-color interpolable, svg, converter=convertColor
 flood-opacity interpolable, svg, converter=convertNumberOrPercentage
 grid-auto-columns runtime_flag=CSSGridLayout, converter=convertGridTrackSizeList
-grid-auto-flow runtime_flag=CSSGridLayout, converter=convertGridAutoFlow, type_name=GridAutoFlow
+grid-auto-flow runtime_flag=CSSGridLayout, converter=convertGridAutoFlow, type_name=GridAutoFlow, api_class
 grid-auto-rows runtime_flag=CSSGridLayout, converter=convertGridTrackSizeList
 grid-column-end runtime_flag=CSSGridLayout, converter=convertGridPosition
 grid-column-gap runtime_flag=CSSGridLayout, converter=convertLength
@@ -255,12 +290,12 @@ justify-content initial=initialContentAlignment, converter=convertContentAlignme
 justify-items runtime_flag=CSSGridLayout, initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
 justify-self runtime_flag=CSSGridLayout, initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
 left typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
-letter-spacing interpolable, inherited, initial=initialLetterWordSpacing, converter=convertSpacing
+letter-spacing interpolable, inherited, initial=initialLetterWordSpacing, converter=convertSpacing, api_class=CSSPropertyAPILetterAndWordSpacing
 lighting-color interpolable, svg, converter=convertColor
 line-height interpolable, inherited, getter=specifiedLineHeight, converter=convertLineHeight
 list-style-image interpolable, inherited, custom_value, typedom_types=[Image]
-list-style-position inherited
-list-style-type inherited
+list-style-position inherited, independent, keyword_only, keywords=[outside|inside], initial_keyword=outside
+list-style-type inherited, keyword_only, keywords=[disc|circle|square|decimal|decimal-leading-zero|arabic-indic|bengali|cambodian|khmer|devanagari|gujarati|gurmukhi|kannada|lao|malayalam|mongolian|myanmar|oriya|persian|urdu|telugu|tibetan|thai|lower-roman|upper-roman|lower-greek|lower-alpha|lower-latin|upper-alpha|upper-latin|cjk-earthly-branch|cjk-heavenly-stem|ethiopic-halehame|ethiopic-halehame-am|ethiopic-halehame-ti-er|ethiopic-halehame-ti-et|hangul|hangul-consonant|korean-hangul-formal|korean-hanja-formal|korean-hanja-informal|hebrew|armenian|lower-armenian|upper-armenian|georgian|cjk-ideographic|simp-chinese-formal|simp-chinese-informal|trad-chinese-formal|trad-chinese-informal|hiragana|katakana|hiragana-iroha|katakana-iroha|none], initial_keyword=disc
 margin-bottom interpolable, initial=initialMargin, converter=convertQuirkyLength
 margin-left interpolable, initial=initialMargin, converter=convertQuirkyLength
 margin-right interpolable, initial=initialMargin, converter=convertQuirkyLength
@@ -284,14 +319,14 @@ object-position interpolable, converter=convertPosition
 offset-anchor runtime_flag=CSSOffsetPositionAnchor, interpolable, converter=convertPositionOrAuto
 offset-distance interpolable, converter=convertLength
 offset-path converter=convertPathOrNone
-offset-position runtime_flag=CSSOffsetPositionAnchor, interpolable, converter=convertPositionOrAuto
-offset-rotate runtime_flag=CSSOffsetRotate, interpolable, converter=convertOffsetRotation
-offset-rotation runtime_flag=CSSOffsetRotation, interpolable, converter=convertOffsetRotation
+offset-position runtime_flag=CSSOffsetPositionAnchor, interpolable, converter=convertPositionOrAuto, api_class
+offset-rotate runtime_flag=CSSOffsetRotate, interpolable, converter=convertOffsetRotate
+offset-rotation runtime_flag=CSSOffsetRotation, interpolable, converter=convertOffsetRotate
 opacity interpolable, type_name=float
 order type_name=int
 orphans interpolable, inherited, type_name=short
-outline-color interpolable, custom_all
-outline-offset interpolable, converter=convertComputedLength<int>
+outline-color interpolable, custom_all, api_class
+outline-offset interpolable, converter=convertComputedLength<int>, api_class
 outline-style custom_all
 outline-width interpolable, converter=convertLineWidth<unsigned short>
 overflow-anchor runtime_flag=ScrollAnchoring, type_name=EOverflowAnchor
@@ -302,12 +337,12 @@ padding-bottom interpolable, initial=initialPadding, converter=convertLength
 padding-left interpolable, initial=initialPadding, converter=convertLength
 padding-right interpolable, initial=initialPadding, converter=convertLength
 padding-top interpolable, initial=initialPadding, converter=convertLength
-paint-order inherited, svg, converter=convertPaintOrder
+paint-order inherited, svg, converter=convertPaintOrder, api_class
 perspective interpolable, converter=convertPerspective
 perspective-origin interpolable, converter=convertPosition
-pointer-events inherited, independent
+pointer-events inherited, independent, keyword_only, keywords=[none|auto|stroke|fill|painted|visible|visibleStroke|visibleFill|visiblePainted|bounding-box|all], initial_keyword=auto
 position custom_inherit
-quotes inherited, converter=convertQuotes
+quotes inherited, converter=convertQuotes, api_class
 resize custom_value
 right typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 r interpolable, svg, converter=convertLength
@@ -318,18 +353,18 @@ scroll-snap-type runtime_flag=CSSScrollSnapPoints, type_name=ScrollSnapType
 scroll-snap-points-x runtime_flag=CSSScrollSnapPoints, converter=convertSnapPoints
 scroll-snap-points-y runtime_flag=CSSScrollSnapPoints, converter=convertSnapPoints
 scroll-snap-destination runtime_flag=CSSScrollSnapPoints, converter=convertPosition
-scroll-snap-coordinate runtime_flag=CSSScrollSnapPoints, converter=convertSnapCoordinates
+scroll-snap-coordinate runtime_flag=CSSScrollSnapPoints, converter=convertSnapCoordinates, api_class
 shape-image-threshold interpolable, type_name=float
-shape-margin interpolable, converter=convertLength
+shape-margin interpolable, converter=convertLength, api_class
 shape-outside interpolable, converter=convertShapeValue, typedom_types=[Image]
 shape-rendering inherited, svg
-size custom_all
+size custom_all, api_class
 snap-height runtime_flag=CSSSnapSize, inherited, custom_all
 speak inherited
 stop-color interpolable, svg, converter=convertColor
 stop-opacity interpolable, svg, converter=convertNumberOrPercentage
-stroke interpolable, inherited, svg, setter=setStrokePaint, custom_all
-stroke-dasharray interpolable, inherited, svg, name_for_methods=StrokeDashArray, converter=convertStrokeDasharray
+stroke interpolable, inherited, svg, setter=setStrokePaint, custom_all, api_class=CSSPropertyAPIPaintStroke
+stroke-dasharray interpolable, inherited, svg, name_for_methods=StrokeDashArray, converter=convertStrokeDasharray, api_class
 stroke-dashoffset interpolable, inherited, svg, name_for_methods=StrokeDashOffset, converter=convertLength
 stroke-linecap svg, inherited, type_name=LineCap, name_for_methods=CapStyle
 stroke-linejoin svg, inherited, type_name=LineJoin, name_for_methods=JoinStyle
@@ -337,36 +372,36 @@ stroke-miterlimit interpolable, inherited, svg, type_name=float, name_for_method
 stroke-opacity interpolable, inherited, svg, converter=convertNumberOrPercentage
 stroke-width interpolable, inherited, svg, converter=convertUnzoomedLength
 table-layout
-tab-size inherited, converter=convertLengthOrTabSpaces, type_name=TabSize
-text-align inherited, custom_value
+tab-size inherited, converter=convertLengthOrTabSpaces, type_name=TabSize, api_class
+text-align inherited, custom_value, keyword_only, keywords=[left|right|center|justify|webkitLeft|webkitRight|webkitCenter|start|end], initial_keyword=start
 text-align-last inherited, type_name=TextAlignLast
 text-anchor inherited, svg
 text-combine-upright inherited, type_name=TextCombine, name_for_methods=TextCombine
 // FIXME: We shouldn't switch between shorthand/not shorthand based on a runtime flag
 text-decoration use_handlers_for=CSSPropertyTextDecorationLine, longhands=text-decoration-line;text-decoration-style;text-decoration-color
-text-decoration-color runtime_flag=CSS3TextDecorations, interpolable, custom_all
+text-decoration-color runtime_flag=CSS3TextDecorations, interpolable, custom_all, api_class
 text-decoration-line runtime_flag=CSS3TextDecorations, name_for_methods=TextDecoration, type_name=TextDecoration, converter=convertFlags<TextDecoration>
-text-decoration-skip runtime_flag=CSS3TextDecorations, inherited, type_name=TextDecorationSkip, converter=convertFlags<TextDecorationSkip>
+text-decoration-skip runtime_flag=CSS3TextDecorations, inherited, type_name=TextDecorationSkip, converter=convertFlags<TextDecorationSkip>, api_class
 text-decoration-style runtime_flag=CSS3TextDecorations, type_name=TextDecorationStyle
-text-indent interpolable, inherited, custom_all
+text-indent interpolable, inherited, custom_all, api_class
 text-justify runtime_flag=CSS3Text, inherited, type_name=TextJustify
 text-overflow type_name=TextOverflow
-text-shadow interpolable, inherited, converter=convertShadow
-text-size-adjust inherited, converter=convertTextSizeAdjust, type_name=TextSizeAdjust
-text-transform inherited
-text-underline-position runtime_flag=CSS3TextDecorations, inherited, type_name=TextUnderlinePosition
+text-shadow interpolable, inherited, converter=convertShadowList
+text-size-adjust inherited, converter=convertTextSizeAdjust, type_name=TextSizeAdjust, api_class
+text-transform inherited, independent, keyword_only, keywords=[capitalize|uppercase|lowercase|none], initial_keyword=none
+text-underline-position runtime_flag=CSS3TextDecorations, inherited, type_name=TextUnderlinePosition, api_class
 top typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 touch-action converter=convertFlags<TouchAction>, type_name=TouchAction
 transform typedom_types=[Transform], keywords=[none], interpolable, converter=convertTransformOperations
-transform-origin interpolable, converter=convertTransformOrigin
+transform-origin interpolable, converter=convertTransformOrigin, api_class
 transform-style name_for_methods=TransformStyle3D
-translate runtime_flag=CSSIndependentTransformProperties, converter=convertTranslate, interpolable
-rotate runtime_flag=CSSIndependentTransformProperties, converter=convertRotate, interpolable
-scale runtime_flag=CSSIndependentTransformProperties, converter=convertScale, interpolable
-unicode-bidi
+translate runtime_flag=CSSIndependentTransformProperties, converter=convertTranslate, interpolable, api_class
+rotate runtime_flag=CSSIndependentTransformProperties, converter=convertRotate, interpolable, api_class
+scale runtime_flag=CSSIndependentTransformProperties, converter=convertScale, interpolable, api_class
+unicode-bidi type_name=UnicodeBidi, keyword_only, keywords=[normal|embed|bidi-override|isolate|plaintext|isolate-override], initial_keyword=normal, field_storage_type=platform/text/UnicodeBidi
 vector-effect svg
-vertical-align interpolable, custom_inherit, custom_value
-visibility interpolable, inherited, independent, keyword_only, keywords=[visible|hidden|collapse]
+vertical-align interpolable, custom_inherit, custom_value, api_class
+visibility interpolable, inherited, independent, keyword_only, keywords=[visible|hidden|collapse], initial_keyword=visible
 x interpolable, svg, converter=convertLength
 y interpolable, svg, converter=convertLength
 -webkit-appearance type_name=ControlPart
@@ -378,25 +413,25 @@ y interpolable, svg, converter=convertLength
 -webkit-border-vertical-spacing interpolable, inherited, name_for_methods=VerticalBorderSpacing, converter=convertComputedLength<short>
 -webkit-box-align type_name=EBoxAlignment
 -webkit-box-decoration-break
--webkit-box-direction inherited
+-webkit-box-direction inherited, independent, keyword_only, keywords=[normal|reverse], initial_keyword=normal
 -webkit-box-flex type_name=float
--webkit-box-flex-group type_name=unsigned int
+-webkit-box-flex-group type_name=unsigned int, api_class
 -webkit-box-lines
 -webkit-box-ordinal-group type_name=unsigned int
 -webkit-box-orient
 -webkit-box-pack
 -webkit-box-reflect converter=convertBoxReflect
 column-count interpolable, type_name=unsigned short, custom_all
-column-gap interpolable, converter=convertComputedLength<float>, custom_all
+column-gap interpolable, converter=convertComputedLength<float>, custom_all, api_class
 column-rule-color interpolable, custom_all
 column-rule-style type_name=EBorderStyle, initial=initialBorderStyle
 column-rule-width interpolable, converter=convertLineWidth<unsigned short>
 column-span type_name=ColumnSpan
 column-width interpolable, converter=convertComputedLength<float>, custom_all
--webkit-highlight inherited, converter=convertString<CSSValueNone>
+-webkit-highlight inherited, converter=convertString<CSSValueNone>, api_class
 -webkit-hyphenate-character inherited, name_for_methods=HyphenationString, converter=convertString<CSSValueAuto>
 -webkit-line-break inherited, type_name=LineBreak
--webkit-line-clamp type_name=LineClampValue
+-webkit-line-clamp type_name=LineClampValue, api_class
 -webkit-margin-after-collapse type_name=EMarginCollapse
 -webkit-margin-before-collapse type_name=EMarginCollapse
 -webkit-margin-bottom-collapse type_name=EMarginCollapse, name_for_methods=MarginAfterCollapse
@@ -417,33 +452,41 @@ column-width interpolable, converter=convertComputedLength<float>, custom_all
 -webkit-mask-size interpolable, custom_all
 -webkit-perspective-origin-x interpolable, converter=convertLength
 -webkit-perspective-origin-y interpolable, converter=convertLength
--webkit-print-color-adjust inherited, type_name=PrintColorAdjust
--webkit-rtl-ordering inherited, type_name=Order, setter=setRTLOrdering, initial=initialRTLOrdering
+-webkit-print-color-adjust inherited, independent, keyword_only, keywords=[economy|exact], initial_keyword=economy
+-webkit-rtl-ordering inherited, independent, type_name=EOrder, setter=setRtlOrdering, initial=initialRtlOrdering, keyword_only, keywords=[logical|visual], initial_keyword=logical
 -webkit-ruby-position inherited, type_name=RubyPosition
 -webkit-tap-highlight-color inherited, converter=convertColor
 -webkit-text-combine inherited, type_name=TextCombine, name_for_methods=TextCombine
 -webkit-text-emphasis-color inherited, custom_all
 -webkit-text-emphasis-position inherited, type_name=TextEmphasisPosition
--webkit-text-emphasis-style inherited, custom_all
+-webkit-text-emphasis-style inherited, custom_all, api_class
 -webkit-text-fill-color inherited, custom_all
 -webkit-text-security inherited
 -webkit-text-stroke-color interpolable, inherited, custom_all
 -webkit-text-stroke-width inherited, converter=convertTextStrokeWidth
 -webkit-transform-origin-x interpolable, converter=convertLength
 -webkit-transform-origin-y interpolable, converter=convertLength
--webkit-transform-origin-z interpolable, converter=convertComputedLength<float>
+-webkit-transform-origin-z interpolable, converter=convertComputedLength<float>, api_class
 -webkit-user-drag
 -webkit-user-modify inherited
 user-select inherited
-white-space inherited
+white-space inherited, independent, keyword_only, keywords=[normal|pre|pre-wrap|pre-line|nowrap|-webkit-nowrap], initial_keyword=normal
 widows interpolable, inherited, type_name=short
 width interpolable, initial=initialSize, converter=convertLengthSizing, typedom_types=[Length], keywords=[auto], supports_percentage
-will-change custom_all
+will-change custom_all, api_class
 word-break inherited
-word-spacing interpolable, inherited, initial=initialLetterWordSpacing, converter=convertSpacing
+word-spacing interpolable, inherited, initial=initialLetterWordSpacing, converter=convertSpacing, api_class=CSSPropertyAPILetterAndWordSpacing
 // UAs must treat 'word-wrap' as an alternate name for the 'overflow-wrap' property. So using the same handlers.
 word-wrap inherited, name_for_methods=OverflowWrap
-z-index interpolable, type_name=int, custom_all
+z-index interpolable, type_name=int, custom_all, api_class
+
+// CSS logical props
+inline-size direction_aware
+block-size direction_aware
+min-inline-size direction_aware
+min-block-size direction_aware
+max-inline-size direction_aware
+max-block-size direction_aware
 
 // Non-standard direction aware properties
 
@@ -463,10 +506,10 @@ z-index interpolable, type_name=int, custom_all
 -webkit-margin-start direction_aware
 -webkit-margin-before direction_aware
 -webkit-margin-after direction_aware
--webkit-padding-end direction_aware
--webkit-padding-start direction_aware
--webkit-padding-before direction_aware
--webkit-padding-after direction_aware
+-webkit-padding-end direction_aware, api_class=CSSPropertyAPIWebkitPadding
+-webkit-padding-start direction_aware, api_class=CSSPropertyAPIWebkitPadding
+-webkit-padding-before direction_aware, api_class=CSSPropertyAPIWebkitPadding
+-webkit-padding-after direction_aware, api_class=CSSPropertyAPIWebkitPadding
 -webkit-logical-width direction_aware
 -webkit-logical-height direction_aware
 -webkit-min-logical-width direction_aware
@@ -478,7 +521,7 @@ z-index interpolable, type_name=int, custom_all
 // TODO(timloh): This seems wrong, most of these shouldn't reach the StyleBuilder
 
 all builder_skip
-page builder_skip
+page builder_skip, api_class
 -webkit-font-size-delta builder_skip
 -webkit-text-decorations-in-effect inherited, builder_skip
 

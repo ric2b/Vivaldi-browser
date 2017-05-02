@@ -106,6 +106,10 @@ ui::ContextFactory* ViewsDelegate::GetContextFactory() {
   return nullptr;
 }
 
+ui::ContextFactoryPrivate* ViewsDelegate::GetContextFactoryPrivate() {
+  return nullptr;
+}
+
 std::string ViewsDelegate::GetApplicationName() {
   base::FilePath program = base::CommandLine::ForCurrentProcess()->GetProgram();
   return program.BaseName().AsUTF8Unsafe();
@@ -129,6 +133,19 @@ gfx::Insets ViewsDelegate::GetDialogButtonInsets() {
 
 int ViewsDelegate::GetDialogRelatedButtonHorizontalSpacing() {
   return kRelatedButtonHSpacing;
+}
+
+int ViewsDelegate::GetDialogRelatedControlVerticalSpacing() {
+  return kRelatedControlVerticalSpacing;
+}
+
+gfx::Insets ViewsDelegate::GetDialogFrameViewInsets() {
+  return gfx::Insets(kPanelVertMargin, kButtonHEdgeMarginNew, 0,
+                     kButtonHEdgeMarginNew);
+}
+
+gfx::Insets ViewsDelegate::GetBubbleDialogMargins() {
+  return gfx::Insets(kPanelVertMargin, kPanelHorizMargin);
 }
 
 ViewsDelegate::ViewsDelegate()

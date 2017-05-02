@@ -7,18 +7,18 @@
 #include <memory>
 
 #include "base/stl_util.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "net/quic/core/crypto/crypto_framer.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/crypto/crypto_utils.h"
 #include "net/quic/core/quic_socket_address_coder.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_text_utils.h"
 
+using base::ContainsKey;
 using base::StringPiece;
 using base::StringPrintf;
 using std::string;
-using std::vector;
 
 namespace net {
 
@@ -112,7 +112,7 @@ bool CryptoHandshakeMessage::GetStringPiece(QuicTag tag,
 }
 
 bool CryptoHandshakeMessage::HasStringPiece(QuicTag tag) const {
-  return base::ContainsKey(tag_value_map_, tag);
+  return ContainsKey(tag_value_map_, tag);
 }
 
 QuicErrorCode CryptoHandshakeMessage::GetNthValue24(QuicTag tag,
@@ -212,11 +212,11 @@ QuicErrorCode CryptoHandshakeMessage::GetPOD(QuicTag tag,
 }
 
 string CryptoHandshakeMessage::DebugStringInternal(size_t indent) const {
-  string ret = string(2 * indent, ' ') + QuicUtils::TagToString(tag_) + "<\n";
+  string ret = string(2 * indent, ' ') + QuicTagToString(tag_) + "<\n";
   ++indent;
   for (QuicTagValueMap::const_iterator it = tag_value_map_.begin();
        it != tag_value_map_.end(); ++it) {
-    ret += string(2 * indent, ' ') + QuicUtils::TagToString(it->first) + ": ";
+    ret += string(2 * indent, ' ') + QuicTagToString(it->first) + ": ";
 
     bool done = false;
     switch (it->first) {
@@ -234,7 +234,7 @@ string CryptoHandshakeMessage::DebugStringInternal(size_t indent) const {
         if (it->second.size() == 4) {
           uint32_t value;
           memcpy(&value, it->second.data(), sizeof(value));
-          ret += base::UintToString(value);
+          ret += QuicTextUtils::Uint64ToString(value);
           done = true;
         }
         break;
@@ -243,7 +243,7 @@ string CryptoHandshakeMessage::DebugStringInternal(size_t indent) const {
         if (it->second.size() == 8) {
           uint64_t value;
           memcpy(&value, it->second.data(), sizeof(value));
-          ret += base::Uint64ToString(value);
+          ret += QuicTextUtils::Uint64ToString(value);
           done = true;
         }
         break;
@@ -261,7 +261,7 @@ string CryptoHandshakeMessage::DebugStringInternal(size_t indent) const {
             if (j > 0) {
               ret += ",";
             }
-            ret += "'" + QuicUtils::TagToString(tag) + "'";
+            ret += "'" + QuicTagToString(tag) + "'";
           }
           done = true;
         }
@@ -286,7 +286,7 @@ string CryptoHandshakeMessage::DebugStringInternal(size_t indent) const {
         if (!it->second.empty()) {
           QuicSocketAddressCoder decoder;
           if (decoder.Decode(it->second.data(), it->second.size())) {
-            ret += IPAddressToStringWithPort(decoder.ip(), decoder.port());
+            ret += QuicSocketAddress(decoder.ip(), decoder.port()).ToString();
             done = true;
           }
         }
@@ -319,7 +319,7 @@ string CryptoHandshakeMessage::DebugStringInternal(size_t indent) const {
     if (!done) {
       // If there's no specific format for this tag, or the value is invalid,
       // then just use hex.
-      ret += "0x" + QuicUtils::HexEncode(it->second);
+      ret += "0x" + QuicTextUtils::HexEncode(it->second);
     }
     ret += "\n";
   }
